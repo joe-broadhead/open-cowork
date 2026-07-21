@@ -17,7 +17,7 @@
 | --- | --- | --- | --- |
 | 1 | **Quality signal** | JOE-918; JOE-924, JOE-925, JOE-926, JOE-933 | **Done** (commits on branch) |
 | 2 | **Security residuals** | JOE-920; JOE-952, JOE-957, JOE-946, JOE-962 | **Mostly done** (946 CSP locked docs; deeper CSP optional residual) |
-| 3 | **God-module budgets** | JOE-919; JOE-951, JOE-942 (+ further splits) | **In progress** (budgets + work-store extracts; façade ~3903) |
+| 3 | **God-module budgets** | JOE-919; JOE-951, JOE-942 (+ further splits) | **In progress** (budgets + work-store extracts; façade ~2954) |
 | 4 | **Channel kernel** | JOE-923; JOE-929, JOE-934, JOE-932 | **Foundation done**; full body migrate progressive |
 | 5 | **OpenCode kernel** | JOE-916; JOE-940, JOE-945, JOE-943, JOE-937, JOE-966 | **Foundation done**; Durable V2 progressive |
 | 6 | **HA / claim gates** | JOE-931; JOE-963 | **Design + gates done**; not multi-AZ HA |
@@ -35,7 +35,7 @@ ea28479c refactor(JOE-942): supervisor + project-binding helpers
 
 ## Next unfinished work (when continuing)
 
-1. **JOE-942** — further work-store domain extracts until ≤2000 LOC (façade ~3903; next: task dispatch, run lifecycle, mutate/sync core).  
+1. **JOE-942** — further work-store domain extracts until ≤2000 LOC (façade ~2954; next: mutate/sync/row upserts, event list queries, remaining public APIs).  
 2. **JOE-936** etc. — other named god modules under JOE-919.  
 3. Progressive: channel body migrate, OpenCode Durable V2, wiki P2s.  
 4. **Open single PR** when ready to burn Actions once.

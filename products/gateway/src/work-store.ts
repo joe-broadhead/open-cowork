@@ -1,17 +1,16 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { getConfig, type HumanGateTimeoutAction } from './config.js'
 import { cleanupFailedEnvironmentRun, environmentControllerForBackend, finalizeEnvironmentRun, normalizeEnvironmentSelector, redactEnvironmentRecord, type EnvironmentRunRecord, type EnvironmentSelector } from './environments.js'
-import { buildRuntimeLifecycleDiagnostics, summarizeRuntimeIsolationProfile } from './runtime-isolation.js'
-import { decideNextTaskState, normalizeTaskQualitySpec, type RunStatus, type StageResult, type WorkflowDecision, type WorkStatus } from './workflow.js'
+import { normalizeTaskQualitySpec, type RunStatus, type StageResult, type WorkStatus } from './workflow.js'
 import { type AuditLedgerQueryOptions } from './audit-ledger.js'
-import { closeWorkDb, currentWorkDbLeadershipEpoch, getRow, markWorkDbActive, openWorkDb, parseJSON, queryRows, resetWorkDbInitState, unmarkWorkDbActive, withWorkDb, withWorkDbReadOnly, workStatePath } from './work-store/db.js'
-import { isDependencyRecord, isProjectBindingRecord, isRoadmapCompletionProposalRecord, isRoadmapRecord, isRoadmapSupervisorRecord, isRunRecord, isTaskRecord, normalizeProjectBindingRecord, normalizeRoadmapQualitySpec, rowToAuditLedger, rowToDelegationReceipt, rowToDependency, rowToEvent, rowToHumanGate, rowToProjectBinding, rowToRoadmap, rowToRoadmapCompletionProposal, rowToRoadmapSupervisor, rowToRun, rowToSupervisorWakeupReceipt, rowToTask, rowToTaskDispatchReceipt } from './work-store/row-mappers.js'
-import { normalizeJsonObject, normalizeOptionalIsoTime, normalizeOptionalString, normalizePriority, normalizeProjectAlias, normalizeRequiredString, normalizeStage, normalizeStringList, normalizeThreadId } from './work-store/validators.js'
+import { closeWorkDb, getRow, markWorkDbActive, openWorkDb, parseJSON, queryRows, resetWorkDbInitState, unmarkWorkDbActive, withWorkDb, withWorkDbReadOnly, workStatePath } from './work-store/db.js'
+import { isDependencyRecord, isProjectBindingRecord, isRoadmapCompletionProposalRecord, isRoadmapRecord, isRoadmapSupervisorRecord, isRunRecord, isTaskRecord, normalizeProjectBindingRecord, normalizeRoadmapQualitySpec, rowToAuditLedger, rowToDependency, rowToEvent, rowToHumanGate, rowToProjectBinding, rowToRoadmap, rowToRoadmapCompletionProposal, rowToRoadmapSupervisor, rowToRun, rowToSupervisorWakeupReceipt, rowToTask, rowToTaskDispatchReceipt } from './work-store/row-mappers.js'
+import { normalizeOptionalIsoTime, normalizeOptionalString, normalizePriority, normalizeProjectAlias, normalizeRequiredString, normalizeStage, normalizeStringList, normalizeThreadId } from './work-store/validators.js'
 import { redactSensitiveText } from './security.js'
-import { isActiveRunStatus, isTaskActiveStatus, isTaskRunOwnershipTerminalStatus, shouldAbortActiveRunForTaskStatus } from './runtime-state-machine.js'
+import { isActiveRunStatus, isTaskActiveStatus, shouldAbortActiveRunForTaskStatus } from './runtime-state-machine.js'
 import { writeRunArtifactManifest } from './artifacts.js'
 
 export type { WorkStoreSchemaInspection } from './work-store/schema.js'
@@ -116,6 +115,57 @@ import {
   normalizeWorkTaskAction,
   recomputeRoadmapStatusInState,
 } from './work-store/task-helpers.js'
+
+import {
+  assertNoUnsettledTaskDispatchAcquisitions,
+  upsertTaskDispatchAcquisitionRow,
+  upsertTaskDispatchReceiptRow,
+} from './work-store/task-dispatch.js'
+export {
+  reserveTaskDispatchStart,
+  attachTaskDispatchEnvironment,
+  journalTaskDispatchAcquisitionIntent,
+  attachTaskDispatchSession,
+  markTaskDispatchAcquisitionSettled,
+  listTaskDispatchAcquisitions,
+  markTaskDispatchStarted,
+  markTaskDispatchPromptSubmitted,
+  markTaskDispatchFailed,
+  recoverExpiredTaskDispatchStarts,
+  countActiveTaskDispatchStarts,
+  listTaskDispatchReceipts,
+} from './work-store/task-dispatch.js'
+
+import {
+  findDelegationReceiptInDb,
+  upsertDelegationReceiptRow,
+  appendDelegationProgressForTask,
+  appendDelegationProgressForRoadmap,
+  appendDelegationProgressRow,
+  receiptLinks,
+  nextDelegationSchedulerAction,
+  delegationProgressKey,
+} from './work-store/delegation-helpers.js'
+import {
+  environmentViewForRun,
+  isExpiredLease,
+  runLeaseExpectationFailure,
+  recoverRunsInState,
+  normalizeActiveRunControlAction,
+  activeRunControlSnapshot,
+  lastOperatorActionForRun,
+  restartBehaviorForAction,
+  activeRunControlNextAction,
+  abortActiveRunInState,
+  activeRunSessionIdsForTasks,
+  finishRunInState,
+  collectRunEnvironmentArtifacts,
+  applyRunAttribution,
+  runAttributionKey,
+  runTokens,
+  applyStageResultInState,
+} from './work-store/run-helpers.js'
+export { abortActiveRunInState } from './work-store/run-helpers.js'
 export {
   createRun,
   listWorkTaskViews,
@@ -129,7 +179,6 @@ import {
   WORK_EVENT_TYPE_QUERY_LIMIT,
 } from './work-store/types.js'
 import type {
-  ActiveRunControlAction,
   ActiveRunControlInput,
   ActiveRunControlOutcome,
   ActiveRunControlReason,
@@ -138,7 +187,6 @@ import type {
   AuditEventInput,
   AuditLedgerRecord,
   DelegatedWorkMutationInput,
-  DelegatedWorkProgressKind,
   DelegatedWorkReceipt,
   DelegationProgressRouteReceiptRecord,
   HumanGateDecisionInput,
@@ -174,11 +222,6 @@ import type {
   SupervisedProjectCreateResult,
   SupervisorWakeupReceiptRecord,
   SupervisorWakeupReceiptStatus,
-  TaskDispatchAcquisitionKind,
-  TaskDispatchAcquisitionRecord,
-  TaskDispatchAcquisitionStatus,
-  TaskDispatchReceiptRecord,
-  TaskDispatchReceiptStatus,
   WorkDependencyInput,
   WorkDependencyRecord,
   WorkDependencyType,
@@ -1616,21 +1659,6 @@ function cleanupDeletedTaskReferences(db: DatabaseSync, taskIds: Set<string>): v
   }
 }
 
-function assertNoUnsettledTaskDispatchAcquisitions(db: DatabaseSync, taskIds: Set<string>): void {
-  if (!taskIds.size) return
-  const read = db.prepare('SELECT status, acquisition_journal_json FROM task_dispatch_receipts WHERE task_id = ?')
-  const unsettled: string[] = []
-  for (const taskId of taskIds) {
-    const rows = read.all(taskId) as Array<{ status?: unknown; acquisition_journal_json?: unknown }>
-    if (rows.some(row => row.status !== 'started' && normalizeStoredTaskDispatchAcquisitions(parseJSON(row.acquisition_journal_json, []))
-      .some(acquisition => acquisition.status === 'intent' || acquisition.status === 'acquired'))) {
-      unsettled.push(taskId)
-    }
-  }
-  if (unsettled.length) {
-    throw new Error(`task deletion refused while external acquisitions remain unsettled: ${unsettled.join(', ')}`)
-  }
-}
 
 function updateDelegationReceiptsForDeletion(
   db: DatabaseSync,
@@ -1666,292 +1694,6 @@ function updateDelegationReceiptsForDeletion(
   }
 }
 
-export function reserveTaskDispatchStart(input: { taskId: string; stage: string; profile?: string; leaseOwner?: string; leaseMs?: number; idempotencyKey?: string; now?: number }, filePath = workStatePath()): TaskDispatchReceiptRecord | undefined {
-  assertNoStorageOperationInProgress(filePath)
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const nowMs = input.now || Date.now()
-      const now = new Date(nowMs).toISOString()
-      const stage = normalizeStage(input.stage, 'stage')
-      const idempotencyKey = normalizeOptionalString(input.idempotencyKey, 240)
-      if (idempotencyKey) {
-        const existing = rowToTaskDispatchReceipt(db.prepare('SELECT * FROM task_dispatch_receipts WHERE idempotency_key = ?').get(idempotencyKey))
-        if (existing) {
-          db.exec('ROLLBACK')
-          return existing
-        }
-      }
-      const task = rowToTask(db.prepare('SELECT * FROM tasks WHERE id = ?').get(input.taskId))
-      if (!task || task.status !== 'pending' || task.currentRunId || (task.currentStage || task.pipeline[0] || 'implement') !== stage) {
-        db.exec('ROLLBACK')
-        return undefined
-      }
-      const active = rowToTaskDispatchReceipt(db.prepare("SELECT * FROM task_dispatch_receipts WHERE task_id = ? AND stage = ? AND status = 'starting' AND lease_expires_at > ? ORDER BY created_at DESC, id DESC LIMIT 1").get(input.taskId, stage, now))
-      if (active) {
-        db.exec('ROLLBACK')
-        return undefined
-      }
-      const leaseMs = Math.max(60 * 1000, Math.min(input.leaseMs || 60 * 60 * 1000, 24 * 60 * 60 * 1000))
-      const receipt: TaskDispatchReceiptRecord = {
-        id: `dispatch_${randomUUID()}`,
-        taskId: input.taskId,
-        stage,
-        profile: normalizeOptionalString(input.profile, 120),
-        idempotencyKey: idempotencyKey || `dispatch:${input.taskId}:${stage}:${input.leaseOwner || 'scheduler'}:${now}`,
-        leaseOwner: normalizeOptionalString(input.leaseOwner, 200) || `scheduler-${process.pid}`,
-        leaseExpiresAt: new Date(nowMs + leaseMs).toISOString(),
-        status: 'starting',
-        createdAt: now,
-        updatedAt: now,
-      }
-      upsertTaskDispatchReceiptRow(db, receipt)
-      appendWorkEventRow(db, 'task.dispatch.starting', input.taskId, { dispatchId: receipt.id, stage, leaseOwner: receipt.leaseOwner, leaseExpiresAt: receipt.leaseExpiresAt }, now)
-      db.exec('COMMIT')
-      return receipt
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally {
-    db.close()
-  }
-}
-
-export function attachTaskDispatchEnvironment(dispatchId: string, environment: EnvironmentRunRecord, filePath = workStatePath()): TaskDispatchReceiptRecord | undefined {
-  return updateTaskDispatchReceipt(dispatchId, filePath, receipt => {
-    if (receipt.status !== 'starting') return false
-    receipt.environment = environment
-    return true
-  }, (receipt, db, now) => {
-    upsertTaskDispatchAcquisitionRow(db, receipt, {
-      kind: 'environment',
-      status: 'acquired',
-      provider: environment.backend,
-      resourceId: environment.leaseId || environment.id,
-      resource: environment as unknown as Record<string, unknown>,
-    }, now)
-  })
-}
-
-export function journalTaskDispatchAcquisitionIntent(
-  dispatchId: string,
-  input: { kind: TaskDispatchAcquisitionKind; provider: string; idempotencyKey?: string; metadata?: Record<string, unknown> },
-  filePath = workStatePath(),
-): TaskDispatchAcquisitionRecord | undefined {
-  let acquisition: TaskDispatchAcquisitionRecord | undefined
-  updateTaskDispatchReceipt(dispatchId, filePath, (receipt, db, now) => {
-    if (receipt.status !== 'starting') return false
-    acquisition = upsertTaskDispatchAcquisitionRow(db, receipt, {
-      kind: input.kind,
-      status: 'intent',
-      provider: normalizeRequiredString(input.provider, 'acquisition.provider', 120),
-      idempotencyKey: normalizeOptionalString(input.idempotencyKey, 240) || `${dispatchId}:${input.kind}`,
-      metadata: normalizeJsonObject(input.metadata || {}, 'acquisition.metadata'),
-    }, now)
-    return true
-  })
-  return acquisition
-}
-
-export function attachTaskDispatchSession(dispatchId: string, sessionId: string, filePath = workStatePath()): TaskDispatchAcquisitionRecord | undefined {
-  let acquisition: TaskDispatchAcquisitionRecord | undefined
-  updateTaskDispatchReceipt(dispatchId, filePath, (receipt, db, now) => {
-    if (receipt.status !== 'starting') return false
-    receipt.sessionId = normalizeRequiredString(sessionId, 'sessionId', 200)
-    acquisition = upsertTaskDispatchAcquisitionRow(db, receipt, {
-      kind: 'session',
-      status: 'acquired',
-      provider: 'opencode',
-      resourceId: receipt.sessionId,
-      resource: { sessionId: receipt.sessionId },
-    }, now)
-    return true
-  })
-  return acquisition
-}
-
-export function markTaskDispatchAcquisitionSettled(
-  dispatchId: string,
-  kind: TaskDispatchAcquisitionKind,
-  input: { status: 'released' | 'failed'; error?: string } = { status: 'released' },
-  filePath = workStatePath(),
-): TaskDispatchAcquisitionRecord | undefined {
-  let acquisition: TaskDispatchAcquisitionRecord | undefined
-  updateTaskDispatchReceipt(dispatchId, filePath, (receipt, db, now) => {
-    acquisition = upsertTaskDispatchAcquisitionRow(db, receipt, {
-      kind,
-      status: input.status,
-      provider: kind === 'session' ? 'opencode' : receipt.environment?.backend || 'environment',
-      error: normalizeOptionalString(input.error, 1000),
-    }, now)
-    return true
-  })
-  return acquisition
-}
-
-export function listTaskDispatchAcquisitions(filePath = workStatePath()): TaskDispatchAcquisitionRecord[] {
-  return withWorkDb(filePath, db => {
-    const rows = queryRows(db, `SELECT id, task_id, stage, lease_owner, status, lease_expires_at, acquisition_journal_json
-      FROM task_dispatch_receipts
-      WHERE acquisition_journal_json IS NOT NULL AND acquisition_journal_json != '[]'
-      ORDER BY created_at ASC, id ASC`)
-    return rows.flatMap(row => taskDispatchAcquisitionRows(row))
-  })
-}
-
-export function markTaskDispatchStarted(dispatchId: string, input: { runId: string; sessionId: string }, filePath = workStatePath()): TaskDispatchReceiptRecord | undefined {
-  return updateTaskDispatchReceipt(dispatchId, filePath, (receipt, db, now) => {
-    if (receipt.status !== 'starting') return false
-    receipt.status = 'started'
-    receipt.runId = input.runId
-    receipt.sessionId = input.sessionId
-    appendWorkEventRow(db, 'task.dispatch.started', receipt.taskId, { dispatchId: receipt.id, runId: input.runId, sessionId: input.sessionId, stage: receipt.stage }, now)
-    return true
-  })
-}
-
-export function markTaskDispatchPromptSubmitted(dispatchId: string, filePath = workStatePath()): TaskDispatchReceiptRecord | undefined {
-  return updateTaskDispatchReceipt(dispatchId, filePath, (receipt, db, now) => {
-    if (receipt.status !== 'started') return false
-    receipt.promptSubmittedAt = receipt.promptSubmittedAt || now
-    appendWorkEventRow(db, 'task.dispatch.prompt_submitted', receipt.runId || receipt.taskId, { dispatchId: receipt.id, taskId: receipt.taskId, stage: receipt.stage, sessionId: receipt.sessionId, runId: receipt.runId, promptSubmittedAt: receipt.promptSubmittedAt }, now)
-    return true
-  })
-}
-
-export function markTaskDispatchFailed(dispatchId: string | undefined, reason: string, filePath = workStatePath()): TaskDispatchReceiptRecord | undefined {
-  if (!dispatchId) return undefined
-  return updateTaskDispatchReceipt(dispatchId, filePath, (receipt, db, now) => {
-    if (receipt.status !== 'starting') return false
-    receipt.status = 'failed'
-    receipt.failureReason = normalizeOptionalString(reason, 1000) || 'dispatch failed'
-    appendWorkEventRow(db, 'task.dispatch.failed', receipt.taskId, { dispatchId: receipt.id, stage: receipt.stage, reason: receipt.failureReason }, now)
-    return true
-  })
-}
-
-export function recoverExpiredTaskDispatchStarts(filePath = workStatePath(), now = Date.now()): { recovered: number; dispatchIds: string[] } {
-  assertNoStorageOperationInProgress(filePath)
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const nowIso = new Date(now).toISOString()
-      const expired = listTaskDispatchReceiptsFromDb(db, { status: 'starting' })
-        .filter(receipt => Date.parse(receipt.leaseExpiresAt) <= now)
-      for (const receipt of expired) {
-        let environmentRecovery: Record<string, unknown> | undefined
-        if (receipt.environment && receipt.environment.status !== 'released') {
-          const before = receipt.environment
-          try {
-            receipt.environment = environmentControllerForBackend(before.backend).release(before)
-            upsertTaskDispatchAcquisitionRow(db, receipt, {
-              kind: 'environment',
-              status: 'released',
-              provider: before.backend,
-              resourceId: before.leaseId || before.id,
-              resource: receipt.environment as unknown as Record<string, unknown>,
-            }, nowIso)
-            environmentRecovery = { eventType: 'environment.released', environmentId: receipt.environment.id, status: receipt.environment.status, cleanup: receipt.environment.cleanup.state }
-            appendWorkEventRow(db, 'environment.released', receipt.taskId, {
-              dispatchId: receipt.id,
-              environmentId: receipt.environment.id,
-              action: 'release',
-              actor: 'scheduler',
-              note: 'expired dispatch-start recovery',
-              environment: redactEnvironmentRecord(receipt.environment),
-            }, nowIso)
-          } catch (err: any) {
-            receipt.environment = cleanupFailedEnvironmentRun(before, err?.message || String(err))
-            upsertTaskDispatchAcquisitionRow(db, receipt, {
-              kind: 'environment',
-              status: 'failed',
-              provider: before.backend,
-              resourceId: before.leaseId || before.id,
-              resource: receipt.environment as unknown as Record<string, unknown>,
-              error: err?.message || String(err),
-            }, nowIso)
-            environmentRecovery = { eventType: 'environment.cleanup_failed', environmentId: receipt.environment.id, status: receipt.environment.status, cleanup: receipt.environment.cleanup.state }
-            appendWorkEventRow(db, 'environment.cleanup_failed', receipt.taskId, {
-              dispatchId: receipt.id,
-              environmentId: receipt.environment.id,
-              action: 'release',
-              actor: 'scheduler',
-              note: 'expired dispatch-start recovery',
-              environment: redactEnvironmentRecord(receipt.environment),
-            }, nowIso)
-          }
-        }
-        receipt.status = 'failed'
-        receipt.failureReason = 'Dispatch start lease expired before run start.'
-        receipt.updatedAt = nowIso
-        upsertTaskDispatchReceiptRow(db, receipt)
-        appendWorkEventRow(db, 'task.dispatch.start_expired', receipt.taskId, {
-          dispatchId: receipt.id,
-          stage: receipt.stage,
-          profile: receipt.profile,
-          leaseOwner: receipt.leaseOwner,
-          leaseExpiresAt: receipt.leaseExpiresAt,
-          environmentRecovery,
-          recovered: true,
-        }, nowIso)
-      }
-      db.exec('COMMIT')
-      return { recovered: expired.length, dispatchIds: expired.map(receipt => receipt.id) }
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally {
-    db.close()
-  }
-}
-
-export function countActiveTaskDispatchStarts(filter: { stage?: string; profile?: string } = {}, filePath = workStatePath(), now = Date.now()): number {
-  return withWorkDb(filePath, db => {
-    const clauses = ["status = 'starting'", 'lease_expires_at > ?']
-    const params: unknown[] = [new Date(now).toISOString()]
-    if (filter.stage) {
-      clauses.push('stage = ?')
-      params.push(filter.stage)
-    }
-    if (filter.profile) {
-      clauses.push('profile = ?')
-      params.push(filter.profile)
-    }
-    const row = db.prepare(`SELECT COUNT(*) AS count FROM task_dispatch_receipts WHERE ${clauses.join(' AND ')}`).get(...params) as any
-    return Number(row?.count || 0)
-  })
-}
-
-export function listTaskDispatchReceipts(filter: { taskId?: string; status?: TaskDispatchReceiptStatus; stage?: string; profile?: string } = {}, filePath = workStatePath()): TaskDispatchReceiptRecord[] {
-  return withWorkDb(filePath, db => listTaskDispatchReceiptsFromDb(db, filter))
-}
-
-function listTaskDispatchReceiptsFromDb(db: DatabaseSync, filter: { taskId?: string; status?: TaskDispatchReceiptStatus; stage?: string; profile?: string } = {}): TaskDispatchReceiptRecord[] {
-  const clauses: string[] = []
-  const params: unknown[] = []
-  if (filter.taskId) {
-    clauses.push('task_id = ?')
-    params.push(filter.taskId)
-  }
-  if (filter.status) {
-    clauses.push('status = ?')
-    params.push(filter.status)
-  }
-  if (filter.stage) {
-    clauses.push('stage = ?')
-    params.push(filter.stage)
-  }
-  if (filter.profile) {
-    clauses.push('profile = ?')
-    params.push(filter.profile)
-  }
-  const rows = queryRows(db, `SELECT * FROM task_dispatch_receipts${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY created_at ASC, id ASC`, ...params)
-  return rows.map(rowToTaskDispatchReceipt).filter(Boolean) as TaskDispatchReceiptRecord[]
-}
 
 export function startWorkTaskRun(id: string, stage: string, sessionId: string, profile: string, filePath = workStatePath(), lease: { owner?: string; leaseMs?: number; generation?: string } = {}, resolution: RunResolutionInput = {}): WorkTaskRunStartResult | undefined {
   return mutateWorkState(filePath, (state, db) => startWorkTaskRunInState(state, db, id, stage, sessionId, profile, lease, resolution, new Date()))
@@ -2241,94 +1983,6 @@ export function reconcileWorkEnvironments(filePath = workStatePath()): { checked
   return summary
 }
 
-function environmentViewForRun(run: RunRecord, task?: WorkTaskRecord): WorkEnvironmentView | undefined {
-  const environment = run.environment
-  if (!environment) return undefined
-  const imageDigest = typeof environment.metadata?.['imageDigest'] === 'string' ? environment.metadata['imageDigest'] : undefined
-  const expiresAt = Number.isFinite(Date.parse(environment.startedAt)) ? new Date(Date.parse(environment.startedAt) + environment.ttlMs).toISOString() : undefined
-  return {
-    id: environment.id,
-    runId: run.id,
-    taskId: run.taskId,
-    roadmapId: task?.roadmapId,
-    taskTitle: task?.title,
-    stage: run.stage,
-    sessionId: run.sessionId,
-    runStatus: run.status,
-    name: environment.name,
-    backend: environment.backend,
-    status: environment.status,
-    provider: environment.provider,
-    class: environment.class,
-    image: environment.image,
-    imageDigest,
-    runtime: environment.runtime,
-    leaseId: environment.leaseId,
-    runEnvironmentId: environment.runId,
-    workdir: environment.workdir,
-    ttlMs: environment.ttlMs,
-    startedAt: environment.startedAt,
-    updatedAt: environment.updatedAt,
-    expiresAt,
-    cleanup: environment.cleanup,
-    preflight: environment.preflight,
-    resources: environment.resources,
-    network: environment.network,
-    runtimeProfile: summarizeRuntimeIsolationProfile(run.runtimeProfile, environment),
-    lifecycleDiagnostics: buildRuntimeLifecycleDiagnostics(environment),
-    artifacts: environment.artifacts.slice(),
-    costUsd: run.costUsd,
-    metadata: redactEnvironmentRecord(environment.metadata) as Record<string, unknown>,
-  }
-}
-
-function isExpiredLease(value: string | undefined, now: number): boolean {
-  const expiresAt = Date.parse(value || '')
-  return !Number.isFinite(expiresAt) || expiresAt <= now
-}
-
-function runLeaseExpectationFailure(run: RunRecord, expected: RunLeaseExpectation = {}): ActiveRunControlReason | undefined {
-  if (!expected.owner && !expected.generation) return undefined
-  if (!run.leaseOwner || !run.leaseExpiresAt) return 'lease_missing'
-  const now = expected.now || Date.now()
-  if (isExpiredLease(run.leaseExpiresAt, now)) return 'lease_expired'
-  if (expected.owner && expected.owner !== run.leaseOwner) return 'lease_owner_mismatch'
-  if (expected.generation && expected.generation !== run.schedulerGeneration) return 'scheduler_generation_mismatch'
-  return undefined
-}
-
-function recoverRunsInState(state: WorkState, db: DatabaseSync, retryLimit: number, now: number, predicate: (run: RunRecord) => boolean, eventType: string, summary: string): { recovered: number; blocked: number; runIds: string[] } {
-  let recovered = 0
-  let blocked = 0
-  const runIds: string[] = []
-  const nowIso = new Date(now).toISOString()
-  for (const run of state.runs.filter(run => isActiveRunStatus(run.status) && predicate(run))) {
-    const task = state.tasks.find(row => row.id === run.taskId)
-    if (!task || task.currentRunId !== run.id) continue
-    run.status = 'errored'
-    run.completedAt = nowIso
-    const runtimeMs = Date.parse(nowIso) - Date.parse(run.startedAt)
-    run.runtimeMs = Number.isFinite(runtimeMs) && runtimeMs >= 0 ? runtimeMs : undefined
-    run.result = { status: 'blocked', summary, feedback: `${summary}: ${run.sessionId}`, artifacts: [], raw: summary }
-    run.environment = finalizeEnvironmentRun(run.environment, false)
-    task.currentRunId = undefined
-    if ((task.attempts[run.stage] || run.attempt || 1) <= retryLimit) {
-      task.status = 'pending'
-      task.currentStage = run.stage
-      task.note = `${summary} for ${run.stage}; task is eligible to retry.`
-      recovered++
-    } else {
-      task.status = 'blocked'
-      task.currentStage = undefined
-      task.note = `${summary} for ${run.stage} exceeded retry policy.`
-      blocked++
-    }
-    task.updatedAt = nowIso
-    runIds.push(run.id)
-    appendWorkEventRow(db, eventType, task.id, { runId: run.id, stage: run.stage, sessionId: run.sessionId, recovered: task.status === 'pending' }, nowIso)
-  }
-  return { recovered, blocked, runIds }
-}
 
 export function completeWorkTaskRun(runId: string, result: StageResult, retryLimit: number, filePath = workStatePath(), attribution: RunAttributionInput = {}, expectedLease: RunLeaseExpectation = {}): WorkTaskRunCompleteResult | undefined {
   return mutateWorkState(filePath, (state, db) => {
@@ -2638,407 +2292,7 @@ export function mutateWorkState<T>(filePath: string, fn: (state: WorkState, db: 
   }
 }
 
-function findDelegationReceiptInDb(db: DatabaseSync, idempotencyKey: string): DelegatedWorkReceipt | undefined {
-  const receiptRow = db.prepare('SELECT * FROM delegation_receipts WHERE idempotency_key = ?').get(idempotencyKey) as any
-  return receiptRow?.idempotency_key ? rowToDelegationReceipt(receiptRow) : undefined
-}
 
-function upsertDelegationReceiptRow(db: DatabaseSync, receipt: DelegatedWorkReceipt, now: string): void {
-  db.prepare(`INSERT INTO delegation_receipts (
-    idempotency_key, target_type, task_ids_json, roadmap_id, supervisor_id, project_binding_id,
-    parent_session_id, links_json, next_scheduler_action, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  ON CONFLICT(idempotency_key) DO UPDATE SET
-    target_type = excluded.target_type,
-    task_ids_json = excluded.task_ids_json,
-    roadmap_id = excluded.roadmap_id,
-    supervisor_id = excluded.supervisor_id,
-    project_binding_id = excluded.project_binding_id,
-    parent_session_id = excluded.parent_session_id,
-    links_json = excluded.links_json,
-    next_scheduler_action = excluded.next_scheduler_action,
-    updated_at = excluded.updated_at`)
-    .run(
-      receipt.idempotencyKey,
-      receipt.targetType,
-      JSON.stringify(receipt.taskIds),
-      receipt.roadmapId || null,
-      receipt.supervisorId || null,
-      receipt.projectBindingId || null,
-      receipt.parentSessionId || null,
-      JSON.stringify(receipt.links || {}),
-      receipt.nextSchedulerAction,
-      now,
-      now,
-    )
-}
-
-function appendDelegationProgressForTask(db: DatabaseSync, task: WorkTaskRecord, progress: DelegatedWorkProgressKind, details: Record<string, unknown>, now: string, ...keyParts: Array<string | undefined>): void {
-  for (const context of delegationContextsForTask(db, task)) {
-    appendDelegationProgressRow(db, context['idempotencyKey'], progress, task.id, {
-      ...context,
-      ...details,
-      taskId: task.id,
-      roadmapId: task.roadmapId,
-      links: { ...context['links'], task: `/tasks/${task.id}`, roadmap: `/roadmaps/${task.roadmapId}` },
-      progressKey: delegationProgressKey(context['idempotencyKey'], progress, task.id, ...keyParts),
-    }, now)
-  }
-}
-
-function appendDelegationProgressForRoadmap(db: DatabaseSync, roadmapId: string, progress: DelegatedWorkProgressKind, subjectId: string, details: Record<string, unknown>, now: string): void {
-  for (const context of delegationContextsForRoadmap(db, roadmapId)) {
-    appendDelegationProgressRow(db, context['idempotencyKey'], progress, subjectId, {
-      ...context,
-      ...details,
-      roadmapId,
-      links: { ...context['links'], roadmap: `/roadmaps/${roadmapId}` },
-      progressKey: delegationProgressKey(context['idempotencyKey'], progress, subjectId),
-    }, now)
-  }
-}
-
-function appendDelegationProgressRow(db: DatabaseSync, idempotencyKey: string, progress: DelegatedWorkProgressKind, subjectId: string | undefined, payload: Record<string, unknown>, now: string): void {
-  const progressKey = typeof payload['progressKey'] === 'string' ? payload['progressKey'] : delegationProgressKey(idempotencyKey, progress, subjectId)
-  if (!reserveDelegationProgressReceipt(db, progressKey, idempotencyKey, progress, subjectId, now)) return
-  const eventId = appendWorkEventRow(db, 'delegation.progress', idempotencyKey, {
-    ...payload,
-    idempotencyKey,
-    progress,
-    progressKey,
-    subjectId,
-  }, now)
-  db.prepare('UPDATE delegation_progress_receipts SET event_id = ? WHERE progress_key = ?').run(eventId, progressKey)
-}
-
-function delegationContextsForTask(db: DatabaseSync, task: WorkTaskRecord): Array<Record<string, any>> {
-  return delegationContexts(db, delegationPayloadLike(task.id)).filter(context => {
-    const taskIds = Array.isArray(context['taskIds']) ? context['taskIds'] : []
-    return taskIds.includes(task.id)
-  })
-}
-
-function delegationContextsForRoadmap(db: DatabaseSync, roadmapId: string): Array<Record<string, any>> {
-  return delegationContexts(db, delegationPayloadLike(roadmapId)).filter(context => context['roadmapId'] === roadmapId)
-}
-
-/**
- * SQL LIKE prefilter for delegation payload scans. Delegation events are
- * durable (never pruned), so per-transition context lookups must not JSON
- * parse every payload ever recorded. The LIKE match runs inside SQLite as a
- * cheap substring scan and may over-match; callers always re-verify on the
- * parsed payload, so the prefilter only needs to never under-match a payload
- * whose JSON contains the quoted id.
- */
-function delegationPayloadLike(id: string): string {
-  return `%${JSON.stringify(String(id))}%`
-}
-
-function delegationContexts(db: DatabaseSync, payloadLike: string): Array<Record<string, any>> {
-  const rows = db.prepare("SELECT payload_json FROM events WHERE type = 'delegation.mapped' AND payload_json LIKE ? ORDER BY id ASC").all(payloadLike) as any[]
-  if (!rows.length) return []
-  const contexts: Array<Record<string, any>> = []
-  const keys = new Set<string>()
-  for (const row of rows) {
-    const payload = parseJSON<Record<string, any>>(row.payload_json, {})
-    const idempotencyKey = typeof payload['idempotencyKey'] === 'string' ? payload['idempotencyKey'] : ''
-    if (!idempotencyKey) continue
-    keys.add(idempotencyKey)
-    contexts.push({ ...payload, idempotencyKey })
-  }
-
-  const accepted = new Map<string, Record<string, unknown>>()
-  for (const key of keys) {
-    const acceptedRows = db.prepare("SELECT payload_json FROM events WHERE type = 'delegation.accepted' AND payload_json LIKE ? ORDER BY id ASC").all(delegationPayloadLike(key)) as any[]
-    for (const row of acceptedRows) {
-      const payload = parseJSON<Record<string, unknown>>(row.payload_json, {})
-      if (payload['idempotencyKey'] === key) accepted.set(key, payload)
-    }
-  }
-
-  return contexts.map(payload => {
-    const acceptedPayload = accepted.get(payload['idempotencyKey']) || {}
-    return {
-      ...payload,
-      parentSessionId: typeof payload['parentSessionId'] === 'string' ? payload['parentSessionId'] : acceptedPayload['parentSessionId'],
-      notificationTarget: payload['notificationTarget'] || acceptedPayload['notificationTarget'],
-      objective: payload['objective'] || acceptedPayload['objective'],
-    }
-  })
-}
-
-function reserveDelegationProgressReceipt(db: DatabaseSync, progressKey: string, idempotencyKey: string, progress: DelegatedWorkProgressKind, subjectId: string | undefined, now: string): boolean {
-  const result = db.prepare(`INSERT OR IGNORE INTO delegation_progress_receipts (
-    progress_key, idempotency_key, progress, subject_id, event_id, created_at
-  ) VALUES (?, ?, ?, ?, NULL, ?)`).run(progressKey, idempotencyKey, progress, subjectId || null, now) as any
-  return Number(result?.changes || 0) > 0
-}
-
-function delegationProgressKey(...parts: Array<string | undefined>): string {
-  return createHash('sha256').update(parts.filter(Boolean).join('\n')).digest('hex').slice(0, 32)
-}
-
-function receiptLinks(roadmap: RoadmapRecord | undefined, tasks: WorkTaskRecord[], supervisor: RoadmapSupervisorRecord | undefined, binding: ProjectBindingRecord | undefined): Record<string, string> {
-  const links: Record<string, string> = {}
-  if (roadmap) links['roadmap'] = `/roadmaps/${roadmap.id}`
-  if (tasks.length === 1) links['task'] = `/tasks/${tasks[0]!.id}`
-  if (tasks.length > 1) links['tasks'] = `/tasks?roadmapId=${roadmap?.id || ''}`
-  if (supervisor) links['supervisor'] = `/roadmap-supervisors/${supervisor.supervisorId}`
-  if (binding) links['projectBinding'] = `/project-bindings/${binding.id}`
-  return links
-}
-
-function nextDelegationSchedulerAction(tasks: WorkTaskRecord[], supervisor?: RoadmapSupervisorRecord): string {
-  if (tasks.some(task => task.manualGate)) return 'await_human_gate'
-  if (tasks.some(task => task.earliestStartAt && Date.parse(task.earliestStartAt) > Date.now())) return 'scheduled_for_earliest_start'
-  if (tasks.length) return 'dispatch_when_scheduler_runs'
-  if (supervisor) return 'roadmap_supervisor_review_when_due'
-  return 'none'
-}
-
-
-function normalizeActiveRunControlAction(action: ActiveRunControlAction): ActiveRunControlAction {
-  if (action === 'cancel' || action === 'stop' || action === 'retry' || action === 'restart') return action
-  throw new Error(`active run control action must be cancel, stop, retry, or restart: ${String(action)}`)
-}
-
-function activeRunControlSnapshot(state: WorkState, run: RunRecord, now: number, lastOperatorAction?: ActiveRunControlSnapshot['lastOperatorAction']): ActiveRunControlSnapshot | undefined {
-  const task = state.tasks.find(row => row.id === run.taskId)
-  if (!task) return undefined
-  const leaseExpiresAt = Date.parse(run.leaseExpiresAt || '')
-  const heartbeatFreshness = !run.leaseOwner || !run.leaseExpiresAt
-    ? 'missing'
-    : Number.isFinite(leaseExpiresAt) && leaseExpiresAt <= now
-      ? 'expired'
-      : Number.isFinite(leaseExpiresAt) && leaseExpiresAt - now < 5 * 60 * 1000
-        ? 'stale'
-        : 'fresh'
-  const heartbeatAgeMs = Number.isFinite(leaseExpiresAt) ? Math.max(0, now - leaseExpiresAt) : undefined
-  const activeAndOwned = isActiveRunStatus(run.status) && isTaskActiveStatus(task.status) && task.currentRunId === run.id
-  return {
-    runId: run.id,
-    taskId: task.id,
-    taskTitle: task.title,
-    taskStatus: task.status,
-    stage: run.stage,
-    status: run.status,
-    sessionId: run.sessionId,
-    profile: run.profile,
-    attempt: run.attempt,
-    startedAt: run.startedAt,
-    leaseOwner: run.leaseOwner,
-    leaseExpiresAt: run.leaseExpiresAt,
-    schedulerGeneration: run.schedulerGeneration,
-    heartbeatFreshness,
-    heartbeatAgeMs,
-    cancellable: activeAndOwned && heartbeatFreshness !== 'expired' && heartbeatFreshness !== 'missing',
-    restartable: activeAndOwned && heartbeatFreshness !== 'expired' && heartbeatFreshness !== 'missing',
-    lastOperatorAction,
-  }
-}
-
-function lastOperatorActionForRun(events: WorkEventRecord[], runId: string): ActiveRunControlSnapshot['lastOperatorAction'] | undefined {
-  for (let index = events.length - 1; index >= 0; index--) {
-    const event = events[index]!
-    if (event.type !== 'task.run.operator_controlled') continue
-    if (String(event.payload?.['runId'] || '') !== runId) continue
-    const action = event.payload?.['action'] === 'cancel' || event.payload?.['action'] === 'stop' || event.payload?.['action'] === 'retry' || event.payload?.['action'] === 'restart'
-      ? event.payload['action']
-      : 'cancel'
-    const outcome = event.payload?.['outcome'] === 'applied' || event.payload?.['outcome'] === 'no_op' || event.payload?.['outcome'] === 'denied'
-      ? event.payload['outcome']
-      : 'denied'
-    return {
-      action,
-      outcome,
-      reason: typeof event.payload?.['reason'] === 'string' ? event.payload['reason'] as ActiveRunControlReason : 'run_not_found',
-      actor: String(event.payload?.['actor'] || 'local-operator'),
-      source: String(event.payload?.['source'] || 'operator-control'),
-      at: event.createdAt,
-    }
-  }
-  return undefined
-}
-
-function restartBehaviorForAction(action: ActiveRunControlAction, applied: boolean): ActiveRunControlResult['restartBehavior'] {
-  if (!applied) return 'not_applicable'
-  if (action === 'restart') return 'new_opencode_session_on_next_scheduler_dispatch'
-  if (action === 'retry') return 'durable_requeue_only'
-  return 'not_applicable'
-}
-
-function activeRunControlNextAction(action: ActiveRunControlAction, reason: ActiveRunControlReason): string {
-  if (reason === 'applied') {
-    if (action === 'restart') return 'Scheduler will create a fresh OpenCode session on the next dispatch for this task.'
-    if (action === 'retry') return 'Scheduler will retry durable Gateway work for the same stage without reusing the current session.'
-    if (action === 'stop') return 'Inspect the blocked task note before resuming or retrying.'
-    return 'The task is cancelled; create or retry separate work only with an explicit operator decision.'
-  }
-  if (reason === 'run_not_active') return 'No mutation was needed because this run is already terminal.'
-  if (reason === 'lease_expired' || reason === 'lease_missing') return 'Run `opencode-gateway operator recover` before cancel/restart so Gateway does not mutate stale ownership.'
-  if (reason === 'lease_owner_mismatch' || reason === 'scheduler_generation_mismatch') return 'Refresh active run status and retry only against the current lease owner/generation.'
-  if (reason === 'task_not_owned_by_run') return 'Refresh active run status; the task no longer points at this run.'
-  return 'Refresh operator status and choose an active run before applying a control.'
-}
-
-export function abortActiveRunInState(state: WorkState, db: DatabaseSync, task: WorkTaskRecord, action: string, note: string | undefined, now: string): string | undefined {
-  const activeRun = task.currentRunId ? state.runs.find(run => run.id === task.currentRunId && isActiveRunStatus(run.status)) : undefined
-  if (!activeRun) return undefined
-  activeRun.status = 'errored'
-  activeRun.completedAt = now
-  const runtimeMs = Date.parse(now) - Date.parse(activeRun.startedAt)
-  activeRun.runtimeMs = Number.isFinite(runtimeMs) && runtimeMs >= 0 ? runtimeMs : undefined
-  activeRun.result = {
-    status: 'blocked',
-    summary: `${action} requested by Gateway`,
-    feedback: note,
-    artifacts: [],
-    raw: `${action} requested by Gateway`,
-  }
-  activeRun.environment = finalizeEnvironmentRun(activeRun.environment, false)
-  task.currentRunId = undefined
-  appendWorkEventRow(db, 'task.run.aborted', task.id, {
-    runId: activeRun.id,
-    stage: activeRun.stage,
-    sessionId: activeRun.sessionId,
-    action,
-    note: note ? redactSensitiveText(note) : undefined,
-    runStatus: activeRun.status,
-  }, now)
-  return activeRun.sessionId
-}
-
-function activeRunSessionIdsForTasks(state: WorkState, taskIds: Set<string>): string[] {
-  const sessionIds = new Set<string>()
-  for (const task of state.tasks) {
-    if (!taskIds.has(task.id)) continue
-    const activeRun = task.currentRunId ? state.runs.find(run => run.id === task.currentRunId && isActiveRunStatus(run.status)) : undefined
-    if (activeRun?.sessionId) sessionIds.add(activeRun.sessionId)
-  }
-  for (const run of state.runs) {
-    if (taskIds.has(run.taskId) && isActiveRunStatus(run.status)) sessionIds.add(run.sessionId)
-  }
-  return [...sessionIds]
-}
-
-function finishRunInState(run: RunRecord, result: StageResult, now: string, attribution: RunAttributionInput = {}): void {
-  run.status = result.status === 'pass' ? 'passed' : result.status === 'blocked' ? 'blocked' : 'failed'
-  run.completedAt = now
-  applyRunAttribution(run, attribution)
-  const runtimeMs = Date.parse(now) - Date.parse(run.startedAt)
-  run.runtimeMs = Number.isFinite(runtimeMs) && runtimeMs >= 0 ? runtimeMs : undefined
-  run.result = result
-  run.environment = finalizeEnvironmentRun(run.environment, result.status === 'pass')
-}
-
-function collectRunEnvironmentArtifacts(run: RunRecord, result: StageResult, filePath: string): StageResult {
-  if (!run.environment) return result
-  try {
-    const collection = environmentControllerForBackend(run.environment.backend).collectArtifacts(run.environment)
-    if (!collection.ok) return result
-    const environmentArtifacts = persistFileArtifactRefs(run.id, collection.artifacts, filePath)
-    const artifacts = uniqueResultStrings([...(result.artifacts || []), ...environmentArtifacts])
-    run.environment = { ...run.environment, artifacts: uniqueResultStrings([...(run.environment.artifacts || []), ...environmentArtifacts]) }
-    if (!environmentArtifacts.length || !collection.evidence.length) return { ...result, artifacts }
-    const evidence = [
-      ...(result.evidence || []),
-      ...collection.evidence.map(summary => ({ type: 'log' as const, ref: environmentArtifacts[0] || run.environment!.id, summary })),
-    ]
-    return { ...result, artifacts, evidence }
-  } catch {
-    return result
-  }
-}
-
-function persistFileArtifactRefs(runId: string, refs: string[], filePath: string): string[] {
-  const artifactDir = path.join(path.dirname(filePath), 'artifacts', runId)
-  const copied = new Map<string, string>()
-  const out: string[] = []
-  for (const ref of refs) {
-    const source = fileArtifactPath(ref)
-    if (!source || !fs.existsSync(source) || !fs.statSync(source).isFile()) {
-      out.push(ref)
-      continue
-    }
-    fs.mkdirSync(artifactDir, { recursive: true })
-    const target = path.join(artifactDir, `${artifactHash(source).slice(0, 12)}-${path.basename(source)}`)
-    fs.copyFileSync(source, target)
-    copied.set(source, target)
-    out.push(`file:${target}`)
-  }
-  for (const target of copied.values()) rewriteCapturedMetadata(target, copied)
-  return uniqueResultStrings(out)
-}
-
-function fileArtifactPath(ref: string): string | undefined {
-  if (!ref.startsWith('file:')) return undefined
-  const value = ref.slice('file:'.length)
-  return value ? path.resolve(value) : undefined
-}
-
-function rewriteCapturedMetadata(target: string, copied: Map<string, string>): void {
-  if (!target.endsWith('.json')) return
-  try {
-    const parsed = JSON.parse(fs.readFileSync(target, 'utf-8'))
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return
-    for (const key of ['stdoutPath', 'stderrPath']) {
-      const value = typeof parsed[key] === 'string' ? path.resolve(parsed[key]) : undefined
-      if (value && copied.has(value)) parsed[key] = copied.get(value)
-    }
-    fs.writeFileSync(target, JSON.stringify(parsed, null, 2))
-  } catch {}
-}
-
-function artifactHash(value: string): string {
-  return createHash('sha256').update(value).digest('hex')
-}
-
-function uniqueResultStrings(values: unknown[]): string[] {
-  return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))]
-}
-
-function applyRunAttribution(run: RunRecord, attribution: RunAttributionInput = {}): void {
-  run.costUsd = normalizeMetric(attribution.costUsd)
-  run.inputTokens = normalizeMetric(attribution.inputTokens)
-  run.outputTokens = normalizeMetric(attribution.outputTokens)
-  run.reasoningTokens = normalizeMetric(attribution.reasoningTokens)
-  run.cacheReadTokens = normalizeMetric(attribution.cacheReadTokens)
-  run.cacheWriteTokens = normalizeMetric(attribution.cacheWriteTokens)
-}
-
-function runAttributionKey(run: RunRecord): string {
-  return [run.costUsd || 0, run.inputTokens || 0, run.outputTokens || 0, run.reasoningTokens || 0, run.cacheReadTokens || 0, run.cacheWriteTokens || 0].join(':')
-}
-
-function runTokens(run: RunRecord): number {
-  return Number(run.inputTokens || 0) + Number(run.outputTokens || 0) + Number(run.reasoningTokens || 0) + Number(run.cacheReadTokens || 0) + Number(run.cacheWriteTokens || 0)
-}
-
-function normalizeMetric(value: unknown): number | undefined {
-  const number = Number(value || 0)
-  return Number.isFinite(number) && number > 0 ? number : undefined
-}
-
-function applyStageResultInState(state: WorkState, task: WorkTaskRecord, run: RunRecord, result: StageResult, retryLimit: number, now: string): WorkflowDecision {
-  task.currentRunId = undefined
-  task.attempts[run.stage] = run.attempt
-  const decision = decideNextTaskState(task, run.stage, result, retryLimit)
-  if (result.status === 'pass' && decision.retryStage && decision.note?.startsWith('Quality gate missing required evidence')) {
-    run.status = 'failed'
-    run.result = { ...result, status: 'fail', feedback: decision.note, failureClass: result.failureClass || 'verification_failed' }
-    run.environment = finalizeEnvironmentRun(run.environment, false)
-  }
-  task.status = decision.taskStatus
-  task.note = decision.note || task.note
-  task.updatedAt = now
-
-  if (decision.nextStage) task.currentStage = decision.nextStage
-  else if (decision.retryStage) task.currentStage = decision.retryStage
-  else task.currentStage = undefined
-
-  if (isTaskRunOwnershipTerminalStatus(task.status)) recomputeRoadmapStatusInState(state, task.roadmapId, now)
-  return decision
-}
 
 
 /**
@@ -3676,209 +2930,6 @@ function upsertDependencyRow(db: DatabaseSync, dependency: WorkDependencyRecord)
     .run(dependency.taskId, dependency.dependsOnTaskId, dependency.type, dependency.createdAt)
 }
 
-function updateTaskDispatchReceipt(
-  dispatchId: string,
-  filePath: string,
-  fn: (receipt: TaskDispatchReceiptRecord, db: DatabaseSync, now: string) => boolean,
-  afterChange?: (receipt: TaskDispatchReceiptRecord, db: DatabaseSync, now: string) => void,
-): TaskDispatchReceiptRecord | undefined {
-  assertNoStorageOperationInProgress(filePath)
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const receipt = rowToTaskDispatchReceipt(db.prepare('SELECT * FROM task_dispatch_receipts WHERE id = ?').get(dispatchId))
-      if (!receipt) {
-        db.exec('ROLLBACK')
-        return undefined
-      }
-      const now = new Date().toISOString()
-      const changed = fn(receipt, db, now)
-      if (!changed) {
-        db.exec('ROLLBACK')
-        return undefined
-      }
-      afterChange?.(receipt, db, now)
-      receipt.updatedAt = now
-      upsertTaskDispatchReceiptRow(db, receipt)
-      db.exec('COMMIT')
-      return receipt
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally {
-    db.close()
-  }
-}
-
-interface StoredTaskDispatchAcquisition {
-  kind: TaskDispatchAcquisitionKind
-  status: TaskDispatchAcquisitionStatus
-  provider: string
-  idempotencyKey: string
-  resourceId?: string
-  resource?: Record<string, unknown>
-  metadata: Record<string, unknown>
-  leadershipScope?: string
-  leaderId?: string
-  fencingToken?: string
-  createdAt: string
-  updatedAt: string
-  error?: string
-}
-
-function upsertTaskDispatchAcquisitionRow(
-  db: DatabaseSync,
-  receipt: TaskDispatchReceiptRecord,
-  input: {
-    kind: TaskDispatchAcquisitionKind
-    status: TaskDispatchAcquisitionStatus
-    provider: string
-    idempotencyKey?: string
-    resourceId?: string
-    resource?: Record<string, unknown>
-    metadata?: Record<string, unknown>
-    error?: string
-  },
-  now: string,
-): TaskDispatchAcquisitionRecord {
-  const raw = db.prepare('SELECT acquisition_journal_json FROM task_dispatch_receipts WHERE id = ?').get(receipt.id) as { acquisition_journal_json?: unknown } | undefined
-  const journal = normalizeStoredTaskDispatchAcquisitions(parseJSON(raw?.acquisition_journal_json, []))
-  const index = journal.findIndex(row => row.kind === input.kind)
-  const previous = index >= 0 ? journal[index] : undefined
-  const epoch = currentWorkDbLeadershipEpoch()
-  const preserveAcquired = input.status === 'intent' && previous && previous.status !== 'failed' && previous.status !== 'released'
-  const next: StoredTaskDispatchAcquisition = preserveAcquired
-    ? { ...previous, updatedAt: now }
-    : {
-        kind: input.kind,
-        status: input.status,
-        provider: input.provider || previous?.provider || 'unknown',
-        idempotencyKey: input.idempotencyKey || previous?.idempotencyKey || `${receipt.id}:${input.kind}`,
-        resourceId: input.resourceId || previous?.resourceId,
-        resource: input.resource || previous?.resource,
-        metadata: { ...(previous?.metadata || {}), ...(input.metadata || {}) },
-        leadershipScope: previous?.leadershipScope || epoch?.scope,
-        leaderId: previous?.leaderId || epoch?.leaderId,
-        fencingToken: previous?.fencingToken || epoch?.fencingToken,
-        createdAt: previous?.createdAt || now,
-        updatedAt: now,
-        error: input.error || (input.status === 'acquired' || input.status === 'released' ? undefined : previous?.error),
-      }
-  if (index >= 0) journal[index] = next
-  else journal.push(next)
-  db.prepare('UPDATE task_dispatch_receipts SET acquisition_journal_json = ? WHERE id = ?').run(JSON.stringify(journal), receipt.id)
-  return taskDispatchAcquisitionRecord(receipt, next)
-}
-
-function normalizeStoredTaskDispatchAcquisitions(value: unknown): StoredTaskDispatchAcquisition[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap(raw => {
-    const row = raw as Partial<StoredTaskDispatchAcquisition> | null
-    if (
-      (row?.kind !== 'environment' && row?.kind !== 'session') ||
-      (row.status !== 'intent' && row.status !== 'acquired' && row.status !== 'released' && row.status !== 'failed') ||
-      typeof row.provider !== 'string' ||
-      typeof row.idempotencyKey !== 'string' ||
-      typeof row.createdAt !== 'string' ||
-      typeof row.updatedAt !== 'string'
-    ) return []
-    return [{
-      kind: row.kind,
-      status: row.status,
-      provider: row.provider,
-      idempotencyKey: row.idempotencyKey,
-      resourceId: typeof row.resourceId === 'string' ? row.resourceId : undefined,
-      resource: row.resource && typeof row.resource === 'object' && !Array.isArray(row.resource) ? row.resource : undefined,
-      metadata: row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata) ? row.metadata : {},
-      leadershipScope: typeof row.leadershipScope === 'string' ? row.leadershipScope : undefined,
-      leaderId: typeof row.leaderId === 'string' ? row.leaderId : undefined,
-      fencingToken: typeof row.fencingToken === 'string' ? row.fencingToken : undefined,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      error: typeof row.error === 'string' ? row.error : undefined,
-    }]
-  })
-}
-
-function taskDispatchAcquisitionRows(row: Record<string, unknown>): TaskDispatchAcquisitionRecord[] {
-  const receipt: TaskDispatchReceiptRecord = {
-    id: String(row['id'] || ''),
-    taskId: String(row['task_id'] || ''),
-    stage: String(row['stage'] || ''),
-    idempotencyKey: '',
-    leaseOwner: String(row['lease_owner'] || ''),
-    leaseExpiresAt: String(row['lease_expires_at'] || ''),
-    status: row['status'] === 'started' || row['status'] === 'failed' ? row['status'] : 'starting',
-    createdAt: '',
-    updatedAt: '',
-  }
-  return normalizeStoredTaskDispatchAcquisitions(parseJSON(row['acquisition_journal_json'], []))
-    .map(acquisition => taskDispatchAcquisitionRecord(receipt, acquisition))
-}
-
-function taskDispatchAcquisitionRecord(receipt: TaskDispatchReceiptRecord, acquisition: StoredTaskDispatchAcquisition): TaskDispatchAcquisitionRecord {
-  return {
-    dispatchId: receipt.id,
-    taskId: receipt.taskId,
-    stage: receipt.stage,
-    leaseOwner: receipt.leaseOwner,
-    kind: acquisition.kind,
-    status: acquisition.status,
-    provider: acquisition.provider,
-    idempotencyKey: acquisition.idempotencyKey,
-    resourceId: acquisition.resourceId,
-    resource: acquisition.resource,
-    metadata: acquisition.metadata,
-    leadershipScope: acquisition.leadershipScope,
-    leaderId: acquisition.leaderId,
-    fencingToken: acquisition.fencingToken,
-    leaseExpiresAt: receipt.leaseExpiresAt,
-    dispatchStatus: receipt.status,
-    createdAt: acquisition.createdAt,
-    updatedAt: acquisition.updatedAt,
-    error: acquisition.error,
-  }
-}
-
-function upsertTaskDispatchReceiptRow(db: DatabaseSync, receipt: TaskDispatchReceiptRecord): void {
-  db.prepare(`INSERT INTO task_dispatch_receipts (
-    id, task_id, stage, profile, idempotency_key, lease_owner, lease_expires_at, status,
-    run_id, session_id, environment_json, prompt_submitted_at, failure_reason, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  ON CONFLICT(id) DO UPDATE SET
-    task_id = excluded.task_id,
-    stage = excluded.stage,
-    profile = excluded.profile,
-    idempotency_key = excluded.idempotency_key,
-    lease_owner = excluded.lease_owner,
-    lease_expires_at = excluded.lease_expires_at,
-    status = excluded.status,
-    run_id = excluded.run_id,
-    session_id = excluded.session_id,
-    environment_json = excluded.environment_json,
-    prompt_submitted_at = excluded.prompt_submitted_at,
-    failure_reason = excluded.failure_reason,
-    created_at = excluded.created_at,
-    updated_at = excluded.updated_at`).run(
-    receipt.id,
-    receipt.taskId,
-    receipt.stage,
-    receipt.profile || null,
-    receipt.idempotencyKey,
-    receipt.leaseOwner,
-    receipt.leaseExpiresAt,
-    receipt.status,
-    receipt.runId || null,
-    receipt.sessionId || null,
-    receipt.environment ? JSON.stringify(receipt.environment) : null,
-    receipt.promptSubmittedAt || null,
-    receipt.failureReason || null,
-    receipt.createdAt,
-    receipt.updatedAt,
-  )
-}
 
 function emptyState(): WorkState {
   return { version: 1, savedAt: new Date().toISOString(), roadmaps: [], supervisors: [], projectBindings: [], completionProposals: [], tasks: [], runs: [], dependencies: [] }
