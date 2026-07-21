@@ -70,6 +70,15 @@ describe('SEC1 token entropy floor', () => {
     expect(() => assertHttpBindAllowed(relaxed)).not.toThrow()
   })
 
+  it('refuses process start when unsafeAllowNoAuth is combined with non-local bind', () => {
+    // Audit 2026-07-21 P2-3: readiness fail is insufficient — startup must refuse.
+    expect(() => assertHttpBindAllowed(baseSecurity({
+      httpHost: '0.0.0.0',
+      allowNonLocalHttp: true,
+      unsafeAllowNoAuth: true,
+    }))).toThrow(/unsafeAllowNoAuth/)
+  })
+
   afterEach(() => { delete process.env['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN'] })
 })
 

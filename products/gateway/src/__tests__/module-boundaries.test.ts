@@ -49,8 +49,9 @@ describe('module boundary budget', () => {
           edgeDelta: 12,
         },
         runtimeRisk: {
-          moduleDelta: 0,
-          edgeDelta: 0,
+          // Types extraction for work-store/environments LOC budgets (audit 2026-07-21).
+          moduleDelta: 12,
+          edgeDelta: 80,
         },
       },
     })

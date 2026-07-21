@@ -570,8 +570,8 @@ ready, a prompt streams and an approval resolves offline, the admin surface
 renders for an authorized role, an artifact/chart renders, and a light/dark
 visual-regression check). They run via `pnpm test:e2e:evals` — which uses the
 same smoke runner but a `tests/*.eval.test.ts` pattern — and are kept out of
-the fast PR gate. The `.github/workflows/nightly-evals.yml` workflow runs them
-nightly on a virtual display (`xvfb`), captures per-flow screenshot evidence,
+the fast PR gate. The `.github/workflows/monthly-evals.yml` workflow runs them
+monthly (1st of each month, plus workflow_dispatch) on a virtual display (`xvfb`), captures per-flow screenshot evidence,
 and uploads it as an artifact. See
 `apps/desktop/tests/visual-baselines/README.md` for how visual baselines are
 seeded and accepted.

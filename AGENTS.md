@@ -170,6 +170,7 @@ Common commands:
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:gateway   # Durable Gateway (cowork-gateway); not included in root `pnpm test`
 pnpm test:e2e
 pnpm docs:build
 git diff --check

@@ -14,6 +14,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
+    "./opencode-client-kernel": {
+      "types": "./dist/opencode-client-kernel.d.ts",
+      "import": "./dist/opencode-client-kernel.js"
+    },
+
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"

@@ -32,6 +32,12 @@ export function assertPrivateOpenCodeEndpoint(
         { cause: error },
       );
     }
+    if (message.includes("instance-metadata") || message.includes("169.254.169.254")) {
+      throw new Error(
+        "Refusing cloud instance-metadata OpenCode endpoint; use loopback/private networking.",
+        { cause: error },
+      );
+    }
     throw error;
   }
 }

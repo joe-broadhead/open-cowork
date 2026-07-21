@@ -133,7 +133,11 @@ function redactLocalPaths(value: string) {
     .replace(/[A-Z]:\\Users\\[^\s"'`:]+/gi, 'C:\\Users\\[redacted]')
 }
 
+/**
+ * Credential diagnostics: length-only fingerprint (no live secret material).
+ * Partial prefix/suffix reveal was removed (audit 2026-07-21 P2-2 / SEC-2).
+ */
 function redactSecret(value: string | null | undefined) {
   if (!value) return null
-  return value.length <= 8 ? '[redacted]' : `${value.slice(0, 4)}...[redacted]...${value.slice(-4)}`
+  return `[redacted:${value.length} chars]`
 }

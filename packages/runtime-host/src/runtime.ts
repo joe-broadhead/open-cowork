@@ -1,9 +1,6 @@
 import { buildModelInfoSnapshot } from './model-info-utils.js'
-import {
-  createOpencodeClient,
-  type OpencodeClient as V2OpencodeClient,
-  type OpencodeClientConfig,
-} from '@opencode-ai/sdk/v2'
+import type { OpencodeClient as V2OpencodeClient, OpencodeClientConfig } from '@opencode-ai/sdk/v2'
+import { createOpencodeV2Client } from './opencode-client-kernel.js'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -341,7 +338,7 @@ async function createManagedOpencode(
     },
     opencodeBinPath,
   })
-  const managedClient = createOpencodeClient(buildManagedOpencodeClientConfig(server.url, auth))
+  const managedClient = createOpencodeV2Client(buildManagedOpencodeClientConfig(server.url, auth))
   return {
     client: managedClient,
     server,
@@ -596,7 +593,7 @@ export function getClientForDirectory(directory?: string | null): V2OpencodeClie
     cache: runtimeState.getDirectoryClientCacheForRuntime(),
     maxEntries: MAX_DIRECTORY_CLIENTS,
     createClient: (baseUrl, scopedDirectory) =>
-      createOpencodeClient(serverAuth
+      createOpencodeV2Client(serverAuth
         ? buildManagedOpencodeClientConfig(baseUrl, serverAuth, scopedDirectory)
         : { baseUrl, directory: scopedDirectory }),
     onCreate: (scopedClient, scopedDirectory) => {

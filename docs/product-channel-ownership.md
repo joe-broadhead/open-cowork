@@ -29,3 +29,18 @@ local `channels/*`. That is a large product change and is **out of band** for
 the security/SDK DRY fix PR. Track as a dedicated epic when ready.
 
 Until then, this freeze document is the source of truth for dual-stack ownership.
+
+## Dual-stack security checklist (required on channel security PRs)
+
+Any PR that changes **channel security or protocol** (webhook signature verify,
+SSRF/callback URL policy, bearer/HMAC compares, rate limits, trusted-target
+allowlists, credential redaction for channel diagnostics) must:
+
+1. Identify which stack owns the bug (matrix above).
+2. Check the **other** stack for the same class of defect.
+3. Prefer fixing shared primitives in `packages/gateway-channel` or
+   `@open-cowork/shared` when both stacks need the behavior.
+4. Tick the dual-channel checklist in `.github/pull_request_template.md`.
+
+Do not land a security fix in only one stack without an explicit “other stack
+N/A / follow-up” note in the PR body.

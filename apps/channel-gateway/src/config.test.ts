@@ -176,15 +176,21 @@ test('gateway config loads explicit provider credentials and redacts secrets', (
   assert.equal(config.providers[0]?.credentials.botToken, 'telegram-token-1234567890')
 
   const redacted = redactGatewayConfig(config)
-  assert.deepEqual((redacted.cloud as Record<string, unknown>).serviceToken, 'serv...[redacted]...7890')
+  // Length-only fingerprints — no live secret prefix/suffix (audit 2026-07-21).
+  assert.equal((redacted.cloud as Record<string, unknown>).serviceToken, `[redacted:${'service-token-1234567890'.length} chars]`)
   const providers = redacted.providers as Array<{ credentials: Record<string, unknown>, settings: Record<string, unknown> }>
-  assert.equal(providers[0]?.credentials.botToken, 'tele...[redacted]...7890')
-  assert.equal(providers[0]?.credentials.webhookSecret, 'tele...[redacted]...7890')
-  assert.equal(providers[0]?.credentials.apiKey, 'tele...[redacted]...7890')
-  assert.equal(providers[0]?.settings.callbackSecret, 'prov...[redacted]...7890')
-  assert.equal(providers[0]?.settings.privateKey, 'prov...[redacted]...7890')
+  assert.equal(providers[0]?.credentials.botToken, `[redacted:${'telegram-token-1234567890'.length} chars]`)
+  assert.equal(providers[0]?.credentials.webhookSecret, `[redacted:${'telegram-secret-1234567890'.length} chars]`)
+  assert.equal(providers[0]?.credentials.apiKey, `[redacted:${'telegram-api-key-1234567890'.length} chars]`)
+  assert.equal(providers[0]?.settings.callbackSecret, `[redacted:${'provider-secret-1234567890'.length} chars]`)
+  assert.equal(providers[0]?.settings.privateKey, `[redacted:${'provider-private-key-1234567890'.length} chars]`)
   assert.equal(providers[0]?.settings.deliveryUrl, 'https://webhook.example.test/out?token=[redacted]')
   assert.equal(providers[0]?.settings.workspacePath, '/Users/[redacted]')
+  // Partial live secret material must never appear (prefix…suffix form removed).
+  const redactedJson = JSON.stringify(redacted)
+  assert.doesNotMatch(redactedJson, /\.\.\.\[redacted\]\.\.\./)
+  assert.doesNotMatch(redactedJson, /telegram-token-1234567890/)
+  assert.doesNotMatch(redactedJson, /service-token-1234567890/)
 })
 
 test('gateway config resolves public branding from config and env JSON', () => {
@@ -259,11 +265,12 @@ test('gateway env redaction catches token and secret names', () => {
     OPEN_COWORK_GATEWAY_PROVIDERS: '[{"credentials":{"botToken":"telegram-token-1234567890"}}]',
     CUSTOM_PASSWORD_VALUE: 'password-1234567890',
   })
-  assert.equal(redacted.OPEN_COWORK_GATEWAY_SERVICE_TOKEN, 'toke...[redacted]...7890')
+  assert.equal(redacted.OPEN_COWORK_GATEWAY_SERVICE_TOKEN, `[redacted:${'token-1234567890'.length} chars]`)
   assert.equal(redacted.OPEN_COWORK_GATEWAY_MODE, 'self-host')
-  assert.equal(redacted.CUSTOM_PASSWORD_VALUE, 'pass...[redacted]...7890')
+  assert.equal(redacted.CUSTOM_PASSWORD_VALUE, `[redacted:${'password-1234567890'.length} chars]`)
+  // PROVIDERS is a secret env key — entire value becomes a length fingerprint.
   assert.equal(redacted.OPEN_COWORK_GATEWAY_PROVIDERS?.includes('telegram-token'), false)
-  assert.match(redacted.OPEN_COWORK_GATEWAY_PROVIDERS || '', /\[redacted\]/)
+  assert.match(redacted.OPEN_COWORK_GATEWAY_PROVIDERS || '', /^\[redacted:\d+ chars\]$/)
 })
 
 test('gateway diagnostics default to self-host only unless explicitly enabled', () => {

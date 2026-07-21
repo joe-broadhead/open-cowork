@@ -51,7 +51,8 @@ please PR" is the fastest path to a green merge.
 
 ```bash
 pnpm typecheck    # TypeScript strict mode across all workspaces
-pnpm test         # repo unit/integration test suite
+pnpm test         # repo unit/integration test suite (packages, channel/standalone gateway, monorepo tests)
+pnpm test:gateway # Durable Gateway unit suite (`products/gateway` / cowork-gateway)
 pnpm test:renderer # Vitest/jsdom renderer component suite
 pnpm lint         # ESLint + security rules + repo-specific checks
 pnpm perf:check   # Regression gate against the matching perf baseline

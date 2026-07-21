@@ -15,7 +15,9 @@ The daemon binds to `127.0.0.1` and rejects non-local HTTP hosts, origins, and r
 
 Gateway does not turn the local daemon into hosted/team RBAC. Authorization is local capability policy: scoped bearer tokens map to route capabilities (`read`, `operator`, `asset_write`, `admin`, `webhook`), channel commands require trusted targets plus per-sender actor preflight, and `src/security-policy.ts` returns reason-coded allow/deny/requires-human decisions with redacted audit events. An earlier multi-operator/tenant-preview authorization evaluator was removed in the v1.3.0 consolidation. Hosted control-plane, SaaS, multi-tenant production, compliance-certified, and organization-wide RBAC remain unsupported until later evidence-backed decisions.
 
-If you expose any route beyond localhost, use one of the explicit exposed modes below and put the route behind infrastructure that authenticates the caller. `unsafeAllowNoAuth` is still a local/test escape hatch, not an authorization grant.
+If you expose any route beyond localhost, use one of the explicit exposed modes below and put the route behind infrastructure that authenticates the caller.
+
+**`unsafeAllowNoAuth` is not a production posture.** Combining `security.unsafeAllowNoAuth=true` with a non-local HTTP bind is **refused at process start** (`assertHttpBindAllowed`) as well as flagged critical by readiness. Use loopback-only binds for lab/test networks, or configure scoped Gateway HTTP tokens / `publicWebhookMode` for webhook-only exposure.
 
 ## Local Writer Leadership
 
@@ -85,9 +87,31 @@ For a public webhook tunnel, prefer keeping Gateway bound locally and configure 
 /webhooks/discord
 ```
 
-If Gateway itself must bind to a non-local host for webhook ingress, set `security.publicWebhookMode=true`. This unauthenticated exception applies only to documented webhook routes. Non-webhook routes still require a bearer token with the route's required capability unless `security.unsafeAllowNoAuth=true` is set. `unsafeAllowNoAuth` should only be used for isolated test networks.
+If Gateway itself must bind to a non-local host for webhook ingress, set `security.publicWebhookMode=true`. This unauthenticated exception applies only to documented webhook routes. Non-webhook routes still require a bearer token with the route's required capability. `unsafeAllowNoAuth` is refused for non-local binds at startup (see above).
 
-Readiness and doctor output report HTTP auth posture as counts and capability names only. They never include token values.
+Readiness and doctor output report HTTP auth posture as counts and capability names only. They never include token values. Channel and Gateway diagnostic credential fields use **length-only fingerprints** (no live secret prefix/suffix material).
+
+## High-sensitivity diagnostics and unredacted exports
+
+The following surfaces are **operator high-sensitivity** and must never be exposed on untrusted networks:
+
+| Surface | Default | Elevated access |
+| --- | --- | --- |
+| Redacted config / evidence export | Safe for authenticated read | — |
+| `GET /config?redact=false` | Denied without admin | Admin (+ local intent where required) |
+| Evidence/session export `unredacted=true` / `redact=false` | Denied without admin | Admin; some paths also require `localAdmin=true` |
+| Channel diagnostic credential fields | Length-only fingerprints | Never return live secret material |
+
+**Operator rules:**
+
+1. Treat admin tokens as production secrets (mTLS/VPN/localhost only for admin paths when possible).
+2. Prefer redacted evidence bundles for sharing; unredacted export is for private ops review only.
+3. Audit events record unredacted export intent — review them in incident response.
+4. Never put Gateway admin HTTP on a public ingress without authenticating infrastructure in front.
+
+## Multi-writer / HA limits (operator)
+
+Durable Gateway is a **single-writer** control plane per state directory. Helm charts refuse `replicaCount > 1` unless `gateway.experimentalDistributedOwnership=true`. Process-local stream/replay maps and JSON sidecars (`sessions.json`, `channel-sync.json`, `events.json`) are **not** multi-writer safe. See [Multi-Daemon Scaling](../concepts/multi-daemon-scaling.md). Do not claim multi-AZ HA for Durable Gateway until distributed ownership is proven.
 
 Route, MCP, trusted-channel-command, and CLI capability classification is enforced in code by `src/security.ts` (`httpCapabilityForRequest`, `evaluateHttpRequestSecurity`) and `src/security-policy.ts`, covering local daemon routes, MCP groups, trusted-channel command groups, CLI groups, binding requirements, OpenCode-owned decision routing, and exposed-mode fail-closed invariants. Focused tests fail when a new surface is not classified. This is local evidence for the current single-operator boundary; it is not hosted/team RBAC certification.
 

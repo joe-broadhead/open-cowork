@@ -9,7 +9,7 @@ import { normalizeEnvironmentSelector, normalizeGatewayEnvironmentConfig, type E
 import { ConfigError } from './errors.js'
 import { gatewayEnv, type EnvSource } from './env.js'
 import { setTrustedOpenCodePeerHosts } from './opencode-peer-hosts.js'
-import { writeFileAtomic } from '@open-cowork/shared/node'
+import { isCloudMetadataHost, writeFileAtomic } from '@open-cowork/shared/node'
 
 const zStringRecord = <Schema extends z.ZodTypeAny>(schema: Schema) => z.record(z.string(), schema)
 
@@ -1144,7 +1144,9 @@ function isLoopbackIp(value: string): boolean {
 function isForbiddenPeerHost(host: string): boolean {
   const value = String(host || '').trim().toLowerCase().replace(/^\[(.*)\]$/, '$1').replace(/\.$/, '')
   if (!value) return true
-  if (value === 'metadata.google.internal' || value === 'metadata') return true
+  // Shared IMDS denylist (audit 2026-07-21) — keep Durable Gateway peers aligned
+  // with monorepo private-host / webhook metadata policy.
+  if (isCloudMetadataHost(value)) return true
   // Parse numerically rather than pattern-match the serialized string: a
   // link-local/metadata target can hide behind decimal/hex IPv4 forms or an
   // IPv4-mapped IPv6 literal (e.g. [::ffff:169.254.169.254], which WHATWG URL

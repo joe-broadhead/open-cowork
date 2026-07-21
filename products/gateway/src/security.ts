@@ -189,8 +189,14 @@ export function assertHttpBindAllowed(security: GatewayConfig['security']): void
   const host = security?.httpHost || '127.0.0.1'
   if (isLocalHostname(extractHostname(host))) return
   if (!security.allowNonLocalHttp) throw new Error(`Refusing to bind Gateway daemon to non-local host ${host}; set security.allowNonLocalHttp=true to acknowledge exposed HTTP mode`)
-  if (!hasHttpAuthTokens() && !security.publicWebhookMode && !security.unsafeAllowNoAuth) {
-    throw new Error('Refusing exposed HTTP mode without a Gateway HTTP token, security.publicWebhookMode, or security.unsafeAllowNoAuth=true')
+  // Production footgun: unsafeAllowNoAuth + non-local bind is never a supported
+  // startup posture (audit 2026-07-21 P2-3). Lab/test networks must bind local
+  // or use scoped HTTP tokens / publicWebhookMode instead.
+  if (security.unsafeAllowNoAuth) {
+    throw new Error('Refusing exposed HTTP mode with security.unsafeAllowNoAuth=true; disable unsafeAllowNoAuth or bind to loopback only')
+  }
+  if (!hasHttpAuthTokens() && !security.publicWebhookMode) {
+    throw new Error('Refusing exposed HTTP mode without a Gateway HTTP token or security.publicWebhookMode=true')
   }
   // Token-entropy floor: an exposed bearer token is the only credential standing
   // between the public internet and Gateway admin, so reject startup when it is
