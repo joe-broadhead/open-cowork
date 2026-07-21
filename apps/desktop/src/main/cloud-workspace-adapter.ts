@@ -1,4 +1,3 @@
-import type { WorkspaceSessionPort } from './workspace-session-port.ts'
 import type {
   ArtifactIndexPayload,
   ArtifactIndexRequest,
@@ -82,7 +81,7 @@ export type CloudPromptInput = {
 }
 
 /**
- * Cloud workspace session adapter. Structurally aligns with {@link WorkspaceSessionPort}
+ * Cloud workspace session adapter. Structurally aligns with `WorkspaceSessionPort`
  * for shared session/workflow methods (audit 2026-07-21 P2-8); optional members are
  * cloud-only extensions.
  */

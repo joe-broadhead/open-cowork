@@ -24,21 +24,20 @@ if (existsSync(pkg)) {
 }
 
 // Source-less tree (dist leftovers, node_modules residue, empty dirs).
-let entries = []
+let names = []
 try {
-  entries = readdirSync(ghost)
-} catch {
-  entries = []
+  names = readdirSync(ghost).filter((name) => name !== '.DS_Store')
+} catch (error) {
+  console.error(`[ghost-apps-gateway] FAILED: cannot read apps/gateway: ${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
 }
 
-const meaningful = entries.filter((name) => name !== '.DS_Store')
-if (meaningful.length === 0) {
+if (names.length === 0) {
   console.error('[ghost-apps-gateway] FAILED: empty apps/gateway directory — remove it (use apps/channel-gateway).')
   process.exit(1)
 }
 
-// Any presence without package.json is a ghost.
-const listing = meaningful.map((name) => {
+const listing = names.map((name) => {
   const p = join(ghost, name)
   try {
     return statSync(p).isDirectory() ? `${name}/` : name
@@ -46,5 +45,6 @@ const listing = meaningful.map((name) => {
     return name
   }
 })
+
 console.error(`[ghost-apps-gateway] FAILED: source-less apps/gateway residue: ${listing.join(', ')}. Remove apps/gateway; Channel Gateway is apps/channel-gateway.`)
 process.exit(1)
