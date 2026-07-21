@@ -31,6 +31,8 @@ Files:
 - `private-beta-go-no-go.public.md`: current public-safe go/no-go summary. It
   remains `no-go` for managed private beta until private evidence is attached
   and redacted summaries are approved.
+- Public campaign package (validators + explicit private gaps with owners):
+  `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` (JOE-922).
 
 These examples are provider-neutral. They use placeholder domains such as
 `cowork.example.com`, placeholder secret refs such as

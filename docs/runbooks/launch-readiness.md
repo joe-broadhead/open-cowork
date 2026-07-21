@@ -59,6 +59,18 @@ environment: load/soak reports, restore drills, failover drills, BYOK provider
 validation, billing/entitlement evidence, support ownership, and cost/SLO
 notes. Store that evidence outside this public repository.
 
+### Private-beta ops package (public side)
+
+The public-repo operator package for private-beta campaign prep is:
+
+- `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` (JOE-922)
+- `deploy/private-beta/private-beta-go-no-go.public.md` (hosted decision remains
+  `no-go` until private records pass)
+- `docs/runbooks/launch-readiness-report.md` (release evidence template)
+
+Public validators and the private-beta load **plan** can be green without a
+hosted `go`. Do not market managed private-beta readiness from those alone.
+
 ## Required Environment
 
 Set these for deployed load and soak runs:
