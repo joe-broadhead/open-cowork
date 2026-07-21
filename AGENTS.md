@@ -172,6 +172,7 @@ pnpm typecheck
 pnpm test
 pnpm test:gateway   # Durable Gateway (cowork-gateway); not included in root `pnpm test`
 pnpm test:e2e
+pnpm test:e2e:evals # Monthly UI journeys (admin/approvals/charts); needs display or xvfb
 pnpm docs:build
 git diff --check
 ```
@@ -180,6 +181,7 @@ Use extra targeted checks when relevant:
 - `pnpm perf:check` for renderer/runtime performance-sensitive changes
 - `pnpm audit:prod` / `pnpm audit:full` for dependency/security work
 - `pnpm --dir apps/desktop dist:ci` for packaging / release-path changes
+- Monthly UI evals: `.github/workflows/monthly-evals.yml` (cron + workflow_dispatch). Not a required release check; consecutive failures open a GitHub issue (`scripts/monthly-eval-failure-alert.mjs`). Operator notes: `docs/packaging-and-releases.md` → Monthly UI eval flows.
 
 ## Branch and repo conventions
 

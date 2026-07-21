@@ -562,7 +562,7 @@ file or a macOS `.app` bundle with a resolvable executable under
 tests to skip can use `pnpm test:e2e:packaged:optional`; do not use the
 optional command in release or branch-protection gates.
 
-## Nightly UI eval flows
+## Monthly UI eval flows
 
 Beyond the PR-gate smoke suite, a heavier set of real-Electron user-journey
 "eval flows" lives in `apps/desktop/tests/*.eval.test.ts` (onboarding reaches
@@ -570,11 +570,43 @@ ready, a prompt streams and an approval resolves offline, the admin surface
 renders for an authorized role, an artifact/chart renders, and a light/dark
 visual-regression check). They run via `pnpm test:e2e:evals` — which uses the
 same smoke runner but a `tests/*.eval.test.ts` pattern — and are kept out of
-the fast PR gate. The `.github/workflows/monthly-evals.yml` workflow runs them
-monthly (1st of each month, plus workflow_dispatch) on a virtual display (`xvfb`), captures per-flow screenshot evidence,
-and uploads it as an artifact. See
-`apps/desktop/tests/visual-baselines/README.md` for how visual baselines are
-seeded and accepted.
+the fast PR gate (Actions cost; schedule is monthly).
+
+### Schedule and re-run
+
+- Workflow: `.github/workflows/monthly-evals.yml`
+- Cron: `17 6 1 * *` (06:17 UTC on the 1st of each month)
+- Ad-hoc: Actions → **Monthly UI Evals** → **Run workflow** (`workflow_dispatch`)
+- Local (needs a display or `xvfb`): `pnpm test:e2e:evals`
+- Evidence artifact: `monthly-eval-evidence` (30-day retention)
+
+### Stable UI contracts
+
+If you rename these, update the evals in the same change:
+
+| Surface | Contract |
+| --- | --- |
+| Admin nav | `[data-nav-view="admin"]` (Sidebar `ADMIN_NAV_ITEM`) |
+| Approvals nav | `[data-nav-view="approvals"]` |
+
+Admin + offline approval flows use the smoke E2E seam (`OPEN_COWORK_E2E=1`):
+preload exposes `window.__openCoworkEval` so tests can grant admin permissions
+and inject synthetic permission requests without mutating the frozen
+`contextBridge` API. See `apps/desktop/tests/eval-helpers.ts`.
+
+### Failure alerting (JOE-926)
+
+Monthly evals are **not** a required release check. After **2** consecutive
+completed failures on a branch, `scripts/monthly-eval-failure-alert.mjs` opens
+(or comments on) a GitHub issue so the signal cannot stay dead silently.
+Threshold: `OPEN_COWORK_EVAL_FAIL_STREAK` (default `2`). Silence by closing the
+issue after a green run or accepted residual risk.
+
+### Visual baselines
+
+See `apps/desktop/tests/visual-baselines/README.md` for how baselines are
+seeded and accepted. Workflow input `update_baselines` re-seeds and uploads
+`monthly-eval-visual-baselines` for review.
 
 ## Download / adoption statistics
 
