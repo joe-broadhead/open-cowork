@@ -26,7 +26,10 @@ import {
   translateOpencodeEvent,
 } from '@open-cowork/shared'
 import type { OpencodeClient, OpencodeClientConfig } from '@opencode-ai/sdk/v2'
-import { createOpencodeV2Client } from '@open-cowork/runtime-host/opencode-client-kernel'
+import {
+  buildAuthenticatedOpencodeV2ClientConfig,
+  createOpencodeV2Client,
+} from '@open-cowork/runtime-host/opencode-client-kernel'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -1070,12 +1073,8 @@ export function buildNodeOpencodeCloudRuntimeClientConfig(
   baseUrl: string,
   auth: ManagedOpencodeServerAuth,
 ): OpencodeClientConfig {
-  return {
-    baseUrl,
-    headers: {
-      Authorization: auth.authorizationHeader,
-    },
-  }
+  // JOE-943: shared kernel owns authenticated V2 client config shape.
+  return buildAuthenticatedOpencodeV2ClientConfig(baseUrl, auth)
 }
 
 function ensureNodeRuntimeDirs(paths: PathProvider) {

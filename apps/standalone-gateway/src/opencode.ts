@@ -73,6 +73,9 @@ export function createSdkOpenCodeAdapter(options: {
   const pendingInterrupts = new Map<string, Promise<void>>();
 
   const createClient = async (): Promise<SdkV2Client> => {
+    // JOE-966: Standalone intentionally constructs V2 via @opencode-ai/sdk/v2
+    // directly (same factory as the monorepo kernel) rather than depending on
+    // runtime-host. loadSdk() injection keeps adapter tests hermetic.
     const sdk = await loadSdk();
     if (typeof sdk.createOpencodeClient !== "function") {
       throw new Error("OpenCode SDK v2 is unavailable.");

@@ -1,6 +1,9 @@
 import { buildModelInfoSnapshot } from './model-info-utils.js'
 import type { OpencodeClient as V2OpencodeClient, OpencodeClientConfig } from '@opencode-ai/sdk/v2'
-import { createOpencodeV2Client } from './opencode-client-kernel.js'
+import {
+  buildAuthenticatedOpencodeV2ClientConfig,
+  createOpencodeV2Client,
+} from './opencode-client-kernel.js'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -351,13 +354,8 @@ export function buildManagedOpencodeClientConfig(
   auth: ManagedOpencodeServerAuth,
   directory?: string | null,
 ): OpencodeClientConfig & { directory?: string } {
-  return {
-    baseUrl,
-    headers: {
-      Authorization: auth.authorizationHeader,
-    },
-    ...(directory ? { directory } : {}),
-  }
+  // JOE-943: shared kernel owns authenticated V2 client config shape.
+  return buildAuthenticatedOpencodeV2ClientConfig(baseUrl, auth, directory)
 }
 
 export function shouldEnableNativeWebSearch() {
