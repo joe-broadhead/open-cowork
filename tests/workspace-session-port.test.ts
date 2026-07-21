@@ -150,7 +150,8 @@ test('CloudWorkspaceAdapter instance satisfies WorkspaceSessionPort (shipped cla
     transport: portTransport(),
     cache: null,
   })
-  assertWorkspaceSessionPort(adapter)
+  // Full surface — CloudWorkspaceAdapter implements every port method.
+  assertWorkspaceSessionPort(adapter, { mode: 'full' })
   // Drive real port methods on the shipped instance.
   const port: WorkspaceSessionPort = adapter
   const policy = await port.policy()
@@ -164,28 +165,26 @@ test('CloudWorkspaceAdapter instance satisfies WorkspaceSessionPort (shipped cla
   assert.ok(Array.isArray(view.messages))
   await port.promptSession('session-1', { text: 'hi' })
   await port.abortSession('session-1')
-  await port.replyToQuestion('session-1', 'q1', ['a'])
-  await port.rejectQuestion('session-1', 'q1')
-  await port.respondToPermission('session-1', 'p1', false)
-  const workflows = await port.listWorkflows()
+  assert.equal(typeof port.replyToQuestion, 'function')
+  await port.replyToQuestion!('session-1', 'q1', ['a'])
+  await port.rejectQuestion!('session-1', 'q1')
+  await port.respondToPermission!('session-1', 'p1', false)
+  const workflows = await port.listWorkflows!()
   assert.ok(Array.isArray(workflows.workflows) || workflows !== null)
-  await port.getWorkflow('wf-1')
-  await port.runWorkflow('wf-1')
-  await port.pauseWorkflow('wf-1')
-  await port.resumeWorkflow('wf-1')
-  await port.archiveWorkflow('wf-1')
+  await port.getWorkflow!('wf-1')
+  await port.runWorkflow!('wf-1')
+  await port.pauseWorkflow!('wf-1')
+  await port.resumeWorkflow!('wf-1')
+  await port.archiveWorkflow!('wf-1')
 })
 
 test('createCloudWorkspaceAdapter factory returns a WorkspaceSessionPort instance', () => {
-  // Factory uses real transport default only when not overridden; construct via
-  // class with mock transport then re-assert the factory path with a stub that
-  // still goes through assertWorkspaceSessionPort.
   const adapter = createCloudWorkspaceAdapter(connection, 'token', { cache: null })
-  // Without a mock transport the HTTP client is real — still must implement port methods.
-  assertWorkspaceSessionPort(adapter)
+  assertWorkspaceSessionPort(adapter, { mode: 'full' })
   assert.equal(typeof adapter.listSessions, 'function')
   assert.equal(typeof adapter.promptSession, 'function')
   assert.equal(typeof adapter.listWorkflows, 'function')
+  assert.equal(typeof adapter.replyToQuestion, 'function')
 })
 
 test('workspace-gateway cloudSessionPort returns WorkspaceSessionPort from factory', async () => {

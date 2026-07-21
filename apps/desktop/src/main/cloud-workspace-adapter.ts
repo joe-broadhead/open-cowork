@@ -940,6 +940,6 @@ export function createCloudWorkspaceAdapter(
   })
   // Fail closed: every factory-produced cloud adapter must satisfy the shared
   // workspace session port (audit 2026-07-21 P2-8).
-  assertWorkspaceSessionPort(adapter)
+  assertWorkspaceSessionPort(adapter, { mode: 'full' })
   return adapter
 }
