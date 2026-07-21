@@ -73,39 +73,28 @@ import {
   type CloudWorkspaceCacheEncryptionFallback,
   type CloudWorkspaceCacheMode,
 } from './cloud-workspace-cache.ts'
+import {
+  assertWorkspaceSessionPort,
+  type WorkspaceSessionPort,
+  type WorkspaceSessionPromptInput,
+} from './workspace-session-port.ts'
 
-export type CloudPromptInput = {
-  text: string
-  agent?: string | null
-  attachments?: MessageAttachment[]
-}
+/** Cloud prompt payload — same contract as the shared workspace session port. */
+export type CloudPromptInput = WorkspaceSessionPromptInput
 
 /**
- * Cloud workspace session adapter. Structurally aligns with `WorkspaceSessionPort`
- * for shared session/workflow methods (audit 2026-07-21 P2-8); optional members are
- * cloud-only extensions.
+ * Cloud workspace session adapter.
+ * Extends {@link WorkspaceSessionPort} so desktop cloud and Durable Gateway
+ * bridges share one session/workflow surface (audit 2026-07-21 P2-8). Optional
+ * members below are cloud-only extensions.
  */
-export type CloudWorkspaceSessionAdapter = {
-  policy(): Promise<WorkspacePolicy>
+export type CloudWorkspaceSessionAdapter = WorkspaceSessionPort & {
   sync?(): Promise<void>
-  listSessions(): Promise<SessionInfo[]>
   createSession(input?: { projectSource?: CloudProjectSourceInput | null }): Promise<SessionInfo>
   validateProjectSource?(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict>
   uploadProjectSnapshot?(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult>
   importSession(input: SessionImportRequest): Promise<{ session: SessionInfo, view: SessionView }>
-  getSessionInfo(sessionId: string): Promise<SessionInfo | null>
-  getSessionView(sessionId: string): Promise<SessionView>
-  promptSession(sessionId: string, input: CloudPromptInput): Promise<void>
-  abortSession(sessionId: string): Promise<void>
-  replyToQuestion?(sessionId: string, requestId: string, answers: unknown[]): Promise<void>
-  rejectQuestion?(sessionId: string, requestId: string): Promise<void>
-  respondToPermission?(sessionId: string, permissionId: string, allowed: boolean): Promise<void>
-  listWorkflows?(input?: WorkflowListRequest): Promise<WorkflowListPayload>
-  getWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
-  runWorkflow?(workflowId: string): Promise<WorkflowRun | null>
-  pauseWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
-  resumeWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
-  archiveWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
+  listWorkflows(input?: WorkflowListRequest): Promise<WorkflowListPayload>
   searchThreads?(query?: ThreadSearchQuery): Promise<ThreadSearchResult>
   threadFacets?(query?: ThreadSearchQuery): Promise<ThreadFacetSummary>
   listThreadTags?(): Promise<ThreadTag[]>
@@ -268,7 +257,7 @@ async function retrySyncRefresh(task: () => Promise<unknown>) {
   }
 }
 
-export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
+export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, WorkspaceSessionPort {
   private readonly transport: CloudTransportAdapter
   private readonly connection: CloudWorkspaceConnectionRecord
   private readonly cache: CloudWorkspaceCache | null
@@ -450,7 +439,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
     }
   }
 
-  async promptSession(sessionId: string, input: CloudPromptInput): Promise<void> {
+  async promptSession(sessionId: string, input: WorkspaceSessionPromptInput): Promise<void> {
     if (input.attachments && input.attachments.length > 0) {
       throw new Error('Cloud workspace prompts do not support local attachments yet.')
     }
@@ -942,12 +931,16 @@ export function createCloudWorkspaceAdapter(
     cacheMode?: CloudWorkspaceCacheMode
     cacheEncryptionFallback?: CloudWorkspaceCacheEncryptionFallback
   } = {},
-) {
-  return new CloudWorkspaceAdapter({
+): CloudWorkspaceAdapter {
+  const adapter = new CloudWorkspaceAdapter({
     connection,
     accessToken,
     cache: options.cache,
     cacheMode: options.cacheMode,
     cacheEncryptionFallback: options.cacheEncryptionFallback,
   })
+  // Fail closed: every factory-produced cloud adapter must satisfy the shared
+  // workspace session port (audit 2026-07-21 P2-8).
+  assertWorkspaceSessionPort(adapter)
+  return adapter
 }

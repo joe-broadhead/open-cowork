@@ -59,6 +59,10 @@ import {
   type CloudWorkspaceSessionAdapter,
 } from './cloud-workspace-adapter.ts'
 import {
+  assertWorkspaceSessionPort,
+  type WorkspaceSessionPort,
+} from './workspace-session-port.ts'
+import {
   createCloudWorkspaceDesktopAuthenticator,
   type CloudWorkspaceLoginResult,
 } from './cloud-workspace-auth.ts'
@@ -1447,6 +1451,10 @@ export class WorkspaceGateway {
     return null
   }
 
+  /**
+   * Resolve the cloud session adapter for a workspace.
+   * Guarantees the shared {@link WorkspaceSessionPort} contract (audit P2-8).
+   */
   private async requireCloudAdapter(workspace: WorkspaceRegistration): Promise<CloudWorkspaceSessionAdapter> {
     if (workspace.kind !== 'cloud') throw new Error('This action requires a Cloud workspace.')
     const connection = this.cloudConnections.get(workspace.id)
@@ -1457,10 +1465,20 @@ export class WorkspaceGateway {
       throw new Error(latestWorkspace.error || 'Cloud workspace is not available.')
     }
     const existing = this.cloudAdapters.get(workspace.id)
-    if (existing) return existing
+    if (existing) {
+      assertWorkspaceSessionPort(existing)
+      return existing
+    }
     const adapter = this.cloudAdapterFactory(connection, accessToken)
+    assertWorkspaceSessionPort(adapter)
     this.cloudAdapters.set(workspace.id, adapter)
     return adapter
+  }
+
+  /** Public session-port accessor for cloud workspaces (shared local/cloud contract). */
+  async cloudSessionPort(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<WorkspaceSessionPort> {
+    const workspace = this.resolveWorkspace(event, workspaceIdInput)
+    return this.requireCloudAdapter(workspace)
   }
 
   private requireGatewayAdapter(workspace: WorkspaceRegistration): GatewayWorkspaceStatusAdapter {
