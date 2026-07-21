@@ -242,7 +242,7 @@ export function clearChannelBindingsForTest(filePath = workStatePath()): void {
   finally { db.close() }
 }
 
-function upsertChannelBindingRow(db: DatabaseSync, input: { provider: string; chatId: string; threadId?: string; sessionId: string; mode?: ChannelBindingMode; roadmapId?: string; taskId?: string; title?: string; createdAt?: string }, now: string): void {
+export function upsertChannelBindingRow(db: DatabaseSync, input: { provider: string; chatId: string; threadId?: string; sessionId: string; mode?: ChannelBindingMode; roadmapId?: string; taskId?: string; title?: string; createdAt?: string }, now: string): void {
   db.prepare(`INSERT INTO channel_bindings (
     provider, chat_id, thread_id, session_id, mode, roadmap_id, task_id, title, created_at, updated_at
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

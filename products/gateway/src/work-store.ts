@@ -8,8 +8,8 @@ import { buildRuntimeLifecycleDiagnostics, summarizeRuntimeIsolationProfile } fr
 import { decideNextTaskState, defaultPipeline, normalizeTaskQualitySpec, type RunStatus, type StageResult, type WorkflowDecision, type WorkStatus } from './workflow.js'
 import { type AuditLedgerQueryOptions } from './audit-ledger.js'
 import { closeWorkDb, currentWorkDbLeadershipEpoch, getRow, markWorkDbActive, openWorkDb, parseJSON, queryRows, resetWorkDbInitState, unmarkWorkDbActive, withWorkDb, withWorkDbReadOnly, workStatePath } from './work-store/db.js'
-import { isDependencyRecord, isProjectBindingRecord, isRoadmapCompletionProposalRecord, isRoadmapRecord, isRoadmapSupervisorRecord, isRunRecord, isTaskRecord, normalizeProjectBindingRecord, normalizeRoadmapQualitySpec, rowToAlert, rowToAuditLedger, rowToDelegationReceipt, rowToDependency, rowToEvent, rowToHumanGate, rowToProjectBinding, rowToRoadmap, rowToRoadmapCompletionProposal, rowToRoadmapSupervisor, rowToRun, rowToSupervisorWakeupReceipt, rowToTask, rowToTaskDispatchReceipt } from './work-store/row-mappers.js'
-import { normalizeJsonObject, normalizeOptionalEventId, normalizeOptionalIdentifier, normalizeOptionalIsoTime, normalizeOptionalString, normalizePriority, normalizeProjectAlias, normalizeRequiredString, normalizeStage, normalizeStringList, normalizeThreadId } from './work-store/validators.js'
+import { isDependencyRecord, isProjectBindingRecord, isRoadmapCompletionProposalRecord, isRoadmapRecord, isRoadmapSupervisorRecord, isRunRecord, isTaskRecord, normalizeProjectBindingRecord, normalizeRoadmapQualitySpec, rowToAuditLedger, rowToDelegationReceipt, rowToDependency, rowToEvent, rowToHumanGate, rowToProjectBinding, rowToRoadmap, rowToRoadmapCompletionProposal, rowToRoadmapSupervisor, rowToRun, rowToSupervisorWakeupReceipt, rowToTask, rowToTaskDispatchReceipt } from './work-store/row-mappers.js'
+import { normalizeJsonObject, normalizeOptionalIdentifier, normalizeOptionalIsoTime, normalizeOptionalString, normalizePriority, normalizeProjectAlias, normalizeRequiredString, normalizeStage, normalizeStringList, normalizeThreadId } from './work-store/validators.js'
 import { redactSensitiveText } from './security.js'
 import { isActiveRunStatus, isTaskActiveStatus, isTaskRunOwnershipTerminalStatus, shouldAbortActiveRunForTaskStatus } from './runtime-state-machine.js'
 import { writeRunArtifactManifest } from './artifacts.js'
@@ -53,7 +53,34 @@ export {
   listChannelClaimCodesReadOnly,
   updateChannelClaimCodeStatus,
   clearChannelBindingsForTest,
+  upsertChannelBindingRow,
 } from './work-store/channel-bindings.js'
+import { upsertChannelBindingRow } from './work-store/channel-bindings.js'
+import { appendWorkEventRow, appendAuditLedgerRowForWorkEvent, upsertDelegationProgressRouteReceiptFromEvent, rowToDelegationProgressRouteReceipt } from './work-store/event-append.js'
+import {
+  applyRoadmapSupervisorUpdate,
+  compareRoadmapSupervisors,
+  completeSupervisorWakeupReceiptRow,
+  createRoadmapSupervisorInState,
+  defaultRoadmapSupervisor,
+  nextSupervisorReviewAt,
+  reconcileDefaultSupervisorInState,
+  supervisorEligibleForWakeup,
+  supervisorWakeupIdempotencyKey,
+  supervisorWakeupReason,
+  upsertSupervisorWakeupReceiptRow,
+} from './work-store/supervisor-helpers.js'
+import {
+  approveRoadmapCompletionProposalInState,
+  compareProjectBindings,
+  compareRoadmapCompletionProposals,
+  completionAutoBlockers,
+  deleteProjectBindingChannelRow,
+  projectBindingChannelChanged,
+  resolvedProjectContext,
+  upsertProjectBindingInState,
+} from './work-store/project-binding-helpers.js'
+export { appendWorkEventRow } from './work-store/event-append.js'
 
 import {
   INBOX_ROADMAP_ID,
@@ -67,10 +94,8 @@ import type {
   ActiveRunControlReason,
   ActiveRunControlResult,
   ActiveRunControlSnapshot,
-  AlertRecord,
   AuditEventInput,
   AuditLedgerRecord,
-  ChannelBindingMode,
   DelegatedWorkMutationInput,
   DelegatedWorkProgressKind,
   DelegatedWorkReceipt,
@@ -89,7 +114,6 @@ import type {
   ProjectBindingScope,
   ProjectBindingUpdateInput,
   ProjectContextResolution,
-  ProjectNotificationMode,
   RoadmapArchiveResult,
   RoadmapCompletionProposalDecisionInput,
   RoadmapCompletionProposalDecisionResult,
@@ -114,7 +138,6 @@ import type {
   RunResolutionInput,
   SupervisedProjectCreateInput,
   SupervisedProjectCreateResult,
-  SupervisorWakeReason,
   SupervisorWakeupReceiptRecord,
   SupervisorWakeupReceiptStatus,
   TaskDispatchAcquisitionKind,
@@ -2791,459 +2814,6 @@ function createWorkTaskInState(state: WorkState, db: DatabaseSync, input: WorkTa
   return task
 }
 
-function createRoadmapSupervisorInState(state: WorkState, input: RoadmapSupervisorCreateInput, now: string): RoadmapSupervisorRecord {
-  const roadmapId = normalizeRequiredString(input.roadmapId, 'roadmapId', 120)
-  assertRoadmapAcceptsSupervisors(state, roadmapId)
-  const status = normalizeRoadmapSupervisorStatus(input.status || 'active')
-  if (status === 'archived') throw new Error('cannot create an archived roadmap supervisor')
-  const profile = normalizeOptionalIdentifier(input.profile, 'profile') || 'supervisor'
-  assertProfileExists(profile)
-  const supervisor: RoadmapSupervisorRecord = {
-    supervisorId: `supervisor_${randomUUID()}`,
-    roadmapId,
-    sessionId: normalizeRequiredString(input.sessionId, 'sessionId', 200),
-    profile,
-    status,
-    isDefault: input.isDefault === true,
-    cadence: normalizeJsonObject(input.cadence, 'cadence'),
-    eventTriggers: normalizeJsonObject(input.eventTriggers, 'eventTriggers'),
-    lastReviewedEventId: normalizeOptionalEventId(input.lastReviewedEventId, 'lastReviewedEventId'),
-    lastReviewAt: normalizeOptionalIsoTime(input.lastReviewAt, 'lastReviewAt'),
-    nextReviewAt: normalizeOptionalIsoTime(input.nextReviewAt, 'nextReviewAt'),
-    completionPolicy: normalizeJsonObject(input.completionPolicy, 'completionPolicy'),
-    notificationPolicyRef: normalizeOptionalString(input.notificationPolicyRef, 200),
-    note: normalizeOptionalString(input.note, 5000),
-    createdAt: now,
-    updatedAt: now,
-  }
-  state.supervisors.push(supervisor)
-  return supervisor
-}
-
-function applyRoadmapSupervisorUpdate(state: WorkState, supervisor: RoadmapSupervisorRecord, input: RoadmapSupervisorUpdateInput, now: string): void {
-  const roadmap = state.roadmaps.find(row => row.id === supervisor.roadmapId)
-  if (!roadmap) throw new Error(`roadmap not found: ${supervisor.roadmapId}`)
-  if (roadmap.status === 'archived' && (supervisor.status !== 'archived' || (input.status !== undefined && input.status !== 'archived'))) throw new Error(`roadmap is archived: ${supervisor.roadmapId}`)
-  if (input.sessionId !== undefined) supervisor.sessionId = normalizeRequiredString(input.sessionId, 'sessionId', 200)
-  if (input.profile !== undefined) {
-    const profile = normalizeOptionalIdentifier(input.profile, 'profile') || 'supervisor'
-    assertProfileExists(profile)
-    supervisor.profile = profile
-  }
-  if (input.status !== undefined) {
-    const status = normalizeRoadmapSupervisorStatus(input.status)
-    if (status === 'archived') throw new Error('use roadmap_supervisor_archive to archive a supervisor')
-    supervisor.status = status
-  }
-  if (input.isDefault !== undefined) supervisor.isDefault = Boolean(input.isDefault)
-  if (input.cadence !== undefined) supervisor.cadence = normalizeJsonObject(input.cadence, 'cadence')
-  if (input.eventTriggers !== undefined) supervisor.eventTriggers = normalizeJsonObject(input.eventTriggers, 'eventTriggers')
-  if (input.lastReviewedEventId !== undefined) supervisor.lastReviewedEventId = normalizeOptionalEventId(input.lastReviewedEventId, 'lastReviewedEventId')
-  if (input.lastReviewAt !== undefined) supervisor.lastReviewAt = normalizeOptionalIsoTime(input.lastReviewAt, 'lastReviewAt')
-  if (input.nextReviewAt !== undefined) supervisor.nextReviewAt = normalizeOptionalIsoTime(input.nextReviewAt, 'nextReviewAt')
-  if (input.completionPolicy !== undefined) supervisor.completionPolicy = normalizeJsonObject(input.completionPolicy, 'completionPolicy')
-  if (input.notificationPolicyRef !== undefined) supervisor.notificationPolicyRef = normalizeOptionalString(input.notificationPolicyRef, 200)
-  if (input.note !== undefined) supervisor.note = normalizeOptionalString(input.note, 5000)
-  if (input.lastResultHash !== undefined) supervisor.lastResultHash = normalizeOptionalString(input.lastResultHash, 200)
-  if (input.lastResultAt !== undefined) supervisor.lastResultAt = normalizeOptionalIsoTime(input.lastResultAt, 'lastResultAt')
-  if (input.lastResultStatus !== undefined) supervisor.lastResultStatus = normalizeOptionalString(input.lastResultStatus, 80)
-  if (input.lastResultSummary !== undefined) supervisor.lastResultSummary = normalizeOptionalString(input.lastResultSummary, 2000)
-  supervisor.updatedAt = now
-}
-
-function reconcileDefaultSupervisorInState(state: WorkState, roadmapId: string, preferredSupervisorId: string | undefined, now: string): void {
-  const active = state.supervisors.filter(supervisor => supervisor.roadmapId === roadmapId && supervisor.status === 'active')
-  const preferred = preferredSupervisorId ? active.find(supervisor => supervisor.supervisorId === preferredSupervisorId) : undefined
-  const existingDefault = active.filter(supervisor => supervisor.isDefault).sort(compareRoadmapSupervisors)[0]
-  const selected = preferred || existingDefault || active.sort(compareRoadmapSupervisors)[0]
-  for (const supervisor of state.supervisors.filter(row => row.roadmapId === roadmapId)) {
-    const nextDefault = Boolean(selected && supervisor.supervisorId === selected.supervisorId)
-    if (supervisor.isDefault !== nextDefault) {
-      supervisor.isDefault = nextDefault
-      supervisor.updatedAt = now
-    }
-  }
-}
-
-function defaultRoadmapSupervisor(state: WorkState, roadmapId: string): RoadmapSupervisorRecord | undefined {
-  return state.supervisors
-    .filter(supervisor => supervisor.roadmapId === roadmapId && supervisor.status === 'active')
-    .sort(compareRoadmapSupervisors)[0]
-}
-
-function compareRoadmapSupervisors(a: RoadmapSupervisorRecord, b: RoadmapSupervisorRecord): number {
-  const roadmap = a.roadmapId.localeCompare(b.roadmapId)
-  if (roadmap !== 0) return roadmap
-  if (a.status === 'active' && b.status !== 'active') return -1
-  if (a.status !== 'active' && b.status === 'active') return 1
-  if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
-  const created = Date.parse(a.createdAt) - Date.parse(b.createdAt)
-  if (Number.isFinite(created) && created !== 0) return created
-  return a.supervisorId.localeCompare(b.supervisorId)
-}
-
-function supervisorEligibleForWakeup(supervisor: RoadmapSupervisorRecord, nowMs: number): boolean {
-  if (supervisor.status !== 'active' || !supervisor.isDefault) return false
-  const policy = supervisorWakeTriggerPolicy(supervisor)
-  if (policy['enabled'] === false || policy['quiet'] === true || policy['disabled'] === true) return false
-  const leaseExpires = Date.parse(supervisor.wakeLeaseExpiresAt || '')
-  return !Number.isFinite(leaseExpires) || leaseExpires <= nowMs
-}
-
-interface SupervisorWakeupCandidate {
-  reason: string
-  wakeReason: SupervisorWakeReason
-  reasonDetail: string
-  events: WorkEventRecord[]
-  cursorEventId: number
-  windowKey: string
-}
-
-function supervisorWakeupReason(state: WorkState, supervisor: RoadmapSupervisorRecord, events: WorkEventRecord[], nowMs: number): SupervisorWakeupCandidate | undefined {
-  const policy = supervisorWakeTriggerPolicy(supervisor)
-  const cursor = supervisor.lastReviewedEventId || 0
-  const matchingEvents = events.filter(event => event.id > cursor && eventTriggersSupervisor(state, supervisor, event, policy))
-  const latestEventId = matchingEvents.length ? matchingEvents[matchingEvents.length - 1]!.id : cursor
-  if (matchingEvents.length) {
-    const latest = matchingEvents[matchingEvents.length - 1]!
-    const detail = eventTriggerCategory(latest, state, supervisor) || 'workflow'
-    return { reason: `event:${detail}`, wakeReason: supervisorWakeReasonForEvent(latest, detail), reasonDetail: detail, events: matchingEvents, cursorEventId: latestEventId, windowKey: `events:${matchingEvents.map(event => event.id).join(',')}` }
-  }
-
-  const pendingProposal = state.completionProposals.find(proposal => proposal.roadmapId === supervisor.roadmapId && proposal.status === 'pending' && Date.parse(proposal.createdAt) > Date.parse(supervisor.lastReviewAt || ''))
-  if (pendingProposal && policy['completionProposal'] !== false) return { reason: 'completion_proposal', wakeReason: 'completion_proposal', reasonDetail: pendingProposal.id, events: [], cursorEventId: cursor, windowKey: `completion:${pendingProposal.id}` }
-
-  const nextReview = Date.parse(supervisor.nextReviewAt || '')
-  if (policy['cadence'] !== false && Number.isFinite(nextReview) && nextReview <= nowMs) return { reason: 'cadence', wakeReason: 'schedule', reasonDetail: 'nextReviewAt', events: [], cursorEventId: cursor, windowKey: `nextReviewAt:${supervisor.nextReviewAt}` }
-
-  const intervalMs = supervisorCadenceMs(supervisor)
-  const lastReview = Date.parse(supervisor.lastReviewAt || supervisor.createdAt)
-  if (policy['cadence'] !== false && intervalMs > 0 && Number.isFinite(lastReview) && lastReview + intervalMs <= nowMs) return { reason: 'cadence', wakeReason: 'schedule', reasonDetail: 'cadence.intervalMs', events: [], cursorEventId: cursor, windowKey: `cadence:${lastReview + intervalMs}:${intervalMs}` }
-  return undefined
-}
-
-function eventTriggersSupervisor(state: WorkState, supervisor: RoadmapSupervisorRecord, event: WorkEventRecord, policy: Record<string, any>): boolean {
-  const category = eventTriggerCategory(event, state, supervisor)
-  if (!category || policy[category] === false) return false
-  if (category === 'criticalAlertActive') return true
-  if (category === 'opencodeQuestionPending' || category === 'opencodePermissionPending') return String(event.payload?.['sessionId'] || '') === supervisor.sessionId
-  const roadmapId = eventRoadmapId(event, state)
-  return roadmapId === supervisor.roadmapId
-}
-
-function eventTriggerCategory(event: WorkEventRecord, state: WorkState, supervisor: RoadmapSupervisorRecord): string | undefined {
-  const roadmapId = eventRoadmapId(event, state)
-  const roadmapTasks = roadmapId === supervisor.roadmapId ? state.tasks.filter(task => task.roadmapId === roadmapId) : []
-  if ((event.type === 'task.done' || event.type === 'task.done.manual' || (event.type === 'task.run.completed' && event.payload?.['taskStatus'] === 'done')) && roadmapTasks.length && roadmapTasks.every(task => task.status === 'done')) return 'allRoadmapTasksDone'
-  if ((event.type === 'task.done' || event.type === 'task.done.manual') || (event.type === 'task.run.completed' && event.payload?.['taskStatus'] === 'done')) return 'taskDone'
-  if (event.type === 'task.block' || event.type === 'task.run.prompt_failed' || event.type === 'human_gate.blocked_task' || (event.type === 'task.run.completed' && event.payload?.['taskStatus'] === 'blocked')) return 'taskBlocked'
-  if (event.type === 'task.run.prompt_failed' || event.type === 'task.run.lease_expired' || (event.type === 'task.run.completed' && ['failed', 'errored', 'blocked'].includes(String(event.payload?.['runStatus'] || '')))) return 'runFailed'
-  if (event.type === 'human_gate.created' || event.type === 'human_gate.escalated') return 'humanGatePending'
-  if (event.type === 'opencode.request.notified' && event.payload?.['kind'] === 'question') return 'opencodeQuestionPending'
-  if (event.type === 'opencode.request.notified' && event.payload?.['kind'] === 'permission') return 'opencodePermissionPending'
-  if (event.type === 'alert.detected' && event.payload?.['severity'] === 'critical') return 'criticalAlertActive'
-  if (event.type === 'roadmap.completion.proposed' || event.type === 'roadmap.completion.rejected') return 'completionProposal'
-  if (event.type === 'roadmap.supervisor.review_requested') return 'manualPoke'
-  if (event.type === 'delegation.progress' || event.type === 'delegation.completed') return 'delegatedProgress'
-  if (event.type === 'delegation.blocked' || event.type === 'delegation.failed') return 'delegatedProgress'
-  if (event.type === 'channel.mention' || event.type === 'channel.inbound_mention') return 'channelMention'
-  return undefined
-}
-
-function supervisorWakeReasonForEvent(event: WorkEventRecord, detail: string): SupervisorWakeReason {
-  if (detail === 'allRoadmapTasksDone' || detail === 'taskDone') return 'issue_completed'
-  if (detail === 'taskBlocked') return event.type === 'task.run.lease_expired' ? 'stale_run' : 'blocked_work'
-  if (detail === 'runFailed') return event.type === 'task.run.lease_expired' ? 'stale_run' : 'failure_alert'
-  if (detail === 'humanGatePending' || detail === 'opencodeQuestionPending' || detail === 'opencodePermissionPending') return 'gate_requested'
-  if (detail === 'criticalAlertActive') return 'failure_alert'
-  if (detail === 'completionProposal') return 'completion_proposal'
-  if (detail === 'manualPoke') return 'manual_poke'
-  if (detail === 'delegatedProgress') return 'delegated_progress'
-  if (detail === 'channelMention') return 'channel_mention'
-  return 'delegated_progress'
-}
-
-function supervisorWakeupIdempotencyKey(supervisor: RoadmapSupervisorRecord, wakeup: SupervisorWakeupCandidate): string {
-  return artifactHash(['supervisor-wakeup-v1', supervisor.supervisorId, supervisor.roadmapId, wakeup.wakeReason, wakeup.windowKey, wakeup.cursorEventId].join('\n')).slice(0, 32)
-}
-
-function upsertSupervisorWakeupReceiptRow(db: DatabaseSync, supervisor: RoadmapSupervisorRecord, wakeup: SupervisorWakeupCandidate, lease: { idempotencyKey: string; leaseOwner: string; leaseExpiresAt: string }, now: string): SupervisorWakeupReceiptRecord {
-  const triggerEventIds = wakeup.events.map(event => event.id)
-  const inspectedInputs = inspectedInputsForWakeup(supervisor, wakeup)
-  const existing = db.prepare('SELECT * FROM supervisor_wakeup_receipts WHERE idempotency_key = ?').get(lease.idempotencyKey) as any
-  const id = existing?.id ? String(existing.id) : `supervisor_wakeup_${randomUUID()}`
-  if (existing?.id) {
-    db.prepare(`UPDATE supervisor_wakeup_receipts
-      SET supervisor_id = ?, roadmap_id = ?, wake_reason = ?, reason_detail = ?, window_key = ?, cursor_event_id = ?, trigger_event_ids_json = ?, lease_owner = ?, lease_expires_at = ?, status = 'leased', inspected_inputs_json = ?, completed_at = NULL, updated_at = ?
-      WHERE id = ?`)
-      .run(supervisor.supervisorId, supervisor.roadmapId, wakeup.wakeReason, wakeup.reasonDetail, wakeup.windowKey, wakeup.cursorEventId, JSON.stringify(triggerEventIds), lease.leaseOwner, lease.leaseExpiresAt, JSON.stringify(inspectedInputs), now, id)
-  } else {
-    db.prepare(`INSERT INTO supervisor_wakeup_receipts (
-      id, supervisor_id, roadmap_id, wake_reason, reason_detail, idempotency_key, window_key, cursor_event_id, trigger_event_ids_json, lease_owner, lease_expires_at, status, summary, inspected_inputs_json, changed_object_ids_json, recommendation, next_action, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'leased', NULL, ?, '[]', NULL, NULL, ?, ?)`)
-      .run(id, supervisor.supervisorId, supervisor.roadmapId, wakeup.wakeReason, wakeup.reasonDetail, lease.idempotencyKey, wakeup.windowKey, wakeup.cursorEventId, JSON.stringify(triggerEventIds), lease.leaseOwner, lease.leaseExpiresAt, JSON.stringify(inspectedInputs), now, now)
-  }
-  const row = db.prepare('SELECT * FROM supervisor_wakeup_receipts WHERE id = ?').get(id) as any
-  return rowToSupervisorWakeupReceipt(row)!
-}
-
-function completeSupervisorWakeupReceiptRow(db: DatabaseSync, supervisor: RoadmapSupervisorRecord, input: { leaseOwner?: string; status: SupervisorWakeupReceiptStatus; summary?: string; inspectedInputs?: string[]; changedObjectIds?: string[]; recommendation?: string; nextAction?: string; cursorEventId: number; nextWakeAt?: string }, now: string): SupervisorWakeupReceiptRecord | undefined {
-  const leaseOwner = input.leaseOwner || supervisor.wakeLeaseOwner
-  const row = leaseOwner
-    ? db.prepare("SELECT * FROM supervisor_wakeup_receipts WHERE supervisor_id = ? AND lease_owner = ? AND status = 'leased' ORDER BY created_at DESC, id DESC LIMIT 1").get(supervisor.supervisorId, leaseOwner) as any
-    : db.prepare("SELECT * FROM supervisor_wakeup_receipts WHERE supervisor_id = ? AND status = 'leased' ORDER BY created_at DESC, id DESC LIMIT 1").get(supervisor.supervisorId) as any
-  if (!row?.id) return undefined
-  const summary = normalizeOptionalString(input.summary, 2000)
-  const inspectedInputs = uniqueResultStrings([
-    ...normalizeStringList(parseJSON(row.inspected_inputs_json, []), 500),
-    ...normalizeStringList(input.inspectedInputs || [], 500),
-  ])
-  const changedObjectIds = uniqueResultStrings(normalizeStringList(input.changedObjectIds || [], 500))
-  const recommendation = normalizeOptionalString(input.recommendation, 2000)
-  const nextAction = normalizeOptionalString(input.nextAction, 2000)
-  db.prepare(`UPDATE supervisor_wakeup_receipts
-    SET status = ?, summary = ?, inspected_inputs_json = ?, changed_object_ids_json = ?, recommendation = ?, next_action = ?, cursor_event_id = ?, next_wake_at = ?, completed_at = ?, updated_at = ?
-    WHERE id = ?`)
-    .run(input.status, summary || null, JSON.stringify(inspectedInputs), JSON.stringify(changedObjectIds), recommendation || null, nextAction || null, input.cursorEventId, input.nextWakeAt || null, now, now, row.id)
-  const updated = db.prepare('SELECT * FROM supervisor_wakeup_receipts WHERE id = ?').get(row.id) as any
-  return rowToSupervisorWakeupReceipt(updated) || undefined
-}
-
-function inspectedInputsForWakeup(supervisor: RoadmapSupervisorRecord, wakeup: SupervisorWakeupCandidate): string[] {
-  return uniqueResultStrings([
-    `supervisor:${supervisor.supervisorId}`,
-    `roadmap:${supervisor.roadmapId}`,
-    `cursor:${wakeup.cursorEventId}`,
-    `window:${wakeup.windowKey}`,
-    ...wakeup.events.map(event => `event:${event.id}:${event.type}`),
-  ])
-}
-
-function eventRoadmapId(event: WorkEventRecord, state: WorkState): string | undefined {
-  if (typeof event.payload?.['roadmapId'] === 'string') return event.payload['roadmapId']
-  if (typeof event.subjectId === 'string' && state.roadmaps.some(roadmap => roadmap.id === event.subjectId)) return event.subjectId
-  const taskId = typeof event.subjectId === 'string' ? event.subjectId : typeof event.payload?.['taskId'] === 'string' ? event.payload['taskId'] : undefined
-  return taskId ? state.tasks.find(task => task.id === taskId)?.roadmapId : undefined
-}
-
-function supervisorWakeTriggerPolicy(supervisor: RoadmapSupervisorRecord): Record<string, any> {
-  return {
-    taskDone: true,
-    taskBlocked: true,
-    runFailed: true,
-    humanGatePending: true,
-    opencodeQuestionPending: true,
-    opencodePermissionPending: true,
-    criticalAlertActive: true,
-    allRoadmapTasksDone: true,
-    completionProposal: true,
-    manualPoke: true,
-    delegatedProgress: true,
-    channelMention: true,
-    cadence: true,
-    ...supervisor.eventTriggers,
-  }
-}
-
-function supervisorCadenceMs(supervisor: RoadmapSupervisorRecord): number {
-  const raw = Number((supervisor.cadence as any)?.intervalMs || 0)
-  return Number.isFinite(raw) && raw > 0 ? Math.max(60 * 1000, Math.min(raw, 30 * 24 * 60 * 60 * 1000)) : 0
-}
-
-function nextSupervisorReviewAt(supervisor: RoadmapSupervisorRecord, nowMs: number): string | undefined {
-  const intervalMs = supervisorCadenceMs(supervisor)
-  return intervalMs > 0 ? new Date(nowMs + intervalMs).toISOString() : undefined
-}
-
-function upsertProjectBindingInState(state: WorkState, input: ProjectBindingInput, now: string, bindingId?: string): ProjectBindingRecord {
-  const alias = normalizeProjectAlias(input.alias)
-  const scope = normalizeProjectBindingScope(input.scope, input.provider)
-  const provider = normalizeProjectBindingProvider(input.provider, scope)
-  const chatId = normalizeProjectBindingChatId(input.chatId, scope)
-  const threadId = normalizeThreadId(input.threadId)
-  const roadmapId = normalizeRequiredString(input.roadmapId, 'roadmapId', 120)
-  const sessionId = normalizeRequiredString(input.sessionId, 'sessionId', 200)
-  const allowRebind = input.allowRebind === true
-  const roadmap = state.roadmaps.find(row => row.id === roadmapId)
-  if (!roadmap) throw new Error(`roadmap not found: ${roadmapId}`)
-  if (roadmap.status === 'archived') throw new Error(`roadmap is archived: ${roadmapId}`)
-
-  const aliasConflict = state.projectBindings.find(binding => binding.id !== bindingId && binding.alias === alias && binding.scope === scope)
-  const surfaceKey = scope === 'global' ? undefined : projectBindingSurfaceKey({ scope, provider, chatId, threadId, sessionId } as ProjectBindingRecord)
-  const surfaceConflict = surfaceKey ? state.projectBindings.find(binding => binding.id !== bindingId && projectBindingSurfaceKey(binding) === surfaceKey) : undefined
-  for (const conflict of [aliasConflict, surfaceConflict].filter(Boolean) as ProjectBindingRecord[]) {
-    if (!allowRebind && !sameProjectBindingTarget(conflict, { alias, roadmapId, sessionId, scope, provider, chatId, threadId })) {
-      if (conflict === aliasConflict) throw new Error(`project alias already bound for ${scope}: ${alias}`)
-      throw new Error(`project surface already bound: ${projectBindingSurfaceKey(conflict)}`)
-    }
-  }
-
-  const existing = bindingId ? state.projectBindings.find(binding => binding.id === bindingId) : undefined
-  if (bindingId && !existing) throw new Error(`project binding not found: ${bindingId}`)
-  const reusable = existing || (allowRebind ? aliasConflict || surfaceConflict : aliasConflict)
-  const conflicts = new Set([aliasConflict, surfaceConflict].filter(Boolean).map(binding => binding!.id))
-  if (reusable) conflicts.delete(reusable.id)
-  if (conflicts.size) state.projectBindings = state.projectBindings.filter(binding => !conflicts.has(binding.id))
-
-  const record: ProjectBindingRecord = {
-    id: reusable?.id || `project_binding_${randomUUID()}`,
-    alias,
-    roadmapId,
-    sessionId,
-    scope,
-    provider,
-    chatId,
-    threadId: threadId || undefined,
-    title: normalizeOptionalString(input.title, 200) || roadmap.title,
-    notificationMode: normalizeProjectNotificationMode(input.notificationMode || reusable?.notificationMode),
-    mutedUntil: normalizeOptionalIsoTime(input.mutedUntil ?? reusable?.mutedUntil, 'mutedUntil'),
-    quietHours: normalizeJsonObject(input.quietHours ?? reusable?.quietHours, 'quietHours'),
-    lastDigestAt: normalizeOptionalIsoTime(input.lastDigestAt ?? reusable?.lastDigestAt, 'lastDigestAt'),
-    createdAt: reusable?.createdAt || now,
-    updatedAt: now,
-  }
-  if (reusable) {
-    const index = state.projectBindings.findIndex(binding => binding.id === reusable.id)
-    state.projectBindings[index] = record
-  } else {
-    state.projectBindings.push(record)
-  }
-  return record
-}
-
-function resolvedProjectContext(state: WorkState, binding: ProjectBindingRecord, reason: string): ProjectContextResolution {
-  const roadmap = state.roadmaps.find(row => row.id === binding.roadmapId)
-  if (!roadmap) return { status: 'not_found', reason: `Roadmap not found for binding ${binding.id}: ${binding.roadmapId}`, binding }
-  return { status: 'resolved', reason, binding, roadmap, supervisor: defaultRoadmapSupervisor(state, roadmap.id) }
-}
-
-function normalizeProjectBindingScope(value: unknown, provider?: string): ProjectBindingScope {
-  if (value === undefined || value === null || value === '') {
-    if (provider === 'telegram' || provider === 'whatsapp' || provider === 'discord') return provider
-    return 'global'
-  }
-  if (value === 'global' || value === 'opencode' || value === 'telegram' || value === 'whatsapp' || value === 'discord') return value
-  throw new Error(`project binding scope must be global, opencode, telegram, whatsapp, or discord: ${String(value)}`)
-}
-
-function normalizeProjectBindingProvider(value: unknown, scope: ProjectBindingScope): string | undefined {
-  if (scope === 'telegram' || scope === 'whatsapp' || scope === 'discord') {
-    const provider = normalizeRequiredString(value || scope, 'provider', 40)
-    if (provider !== scope) throw new Error(`provider must match project binding scope: ${scope}`)
-    return provider
-  }
-  if (value !== undefined && value !== null && value !== '') throw new Error(`provider is only valid for channel project bindings`)
-  return undefined
-}
-
-function normalizeProjectNotificationMode(value: unknown): ProjectNotificationMode {
-  if (value === undefined || value === null || value === '') return 'immediate'
-  if (value === 'immediate' || value === 'digest' || value === 'muted') return value
-  throw new Error(`project notification mode must be immediate, digest, or muted: ${String(value)}`)
-}
-
-
-function normalizeProjectBindingChatId(value: unknown, scope: ProjectBindingScope): string | undefined {
-  if (scope === 'telegram' || scope === 'whatsapp' || scope === 'discord') return normalizeRequiredString(value, 'chatId', 200)
-  if (value !== undefined && value !== null && value !== '') throw new Error('chatId is only valid for channel project bindings')
-  return undefined
-}
-
-function projectBindingSurfaceKey(input: Pick<ProjectBindingRecord, 'scope' | 'provider' | 'chatId' | 'threadId' | 'sessionId'>): string {
-  if (input.scope === 'telegram' || input.scope === 'whatsapp' || input.scope === 'discord') return `${input.scope}:${input.provider || ''}:${input.chatId || ''}:${normalizeThreadId(input.threadId)}`
-  if (input.scope === 'opencode') return `opencode:${input.sessionId}`
-  return `global:${input.scope}`
-}
-
-function sameProjectBindingTarget(binding: ProjectBindingRecord, input: Pick<ProjectBindingRecord, 'alias' | 'roadmapId' | 'sessionId' | 'scope' | 'provider' | 'chatId' | 'threadId'>): boolean {
-  return binding.alias === input.alias && binding.roadmapId === input.roadmapId && binding.sessionId === input.sessionId && binding.scope === input.scope && (binding.provider || '') === (input.provider || '') && (binding.chatId || '') === (input.chatId || '') && (binding.threadId || '') === normalizeThreadId(input.threadId)
-}
-
-function projectBindingChannelChanged(previous: ProjectBindingRecord, next: ProjectBindingRecord): boolean {
-  return Boolean(previous.provider && previous.chatId && ((previous.provider || '') !== (next.provider || '') || (previous.chatId || '') !== (next.chatId || '') || normalizeThreadId(previous.threadId) !== normalizeThreadId(next.threadId)))
-}
-
-function deleteProjectBindingChannelRow(db: DatabaseSync, binding: ProjectBindingRecord): void {
-  if (!binding.provider || !binding.chatId) return
-  // The channel key may have been independently rebound after this project row
-  // was mirrored. Delete only the exact mirror generation we created; a newer
-  // chat/task/roadmap binding at the same provider target must survive.
-  db.prepare(`DELETE FROM channel_bindings
-    WHERE provider = ? AND chat_id = ? AND thread_id = ?
-      AND mode = 'roadmap' AND roadmap_id = ? AND session_id = ?`)
-    .run(binding.provider, binding.chatId, normalizeThreadId(binding.threadId), binding.roadmapId, binding.sessionId)
-}
-
-function approveRoadmapCompletionProposalInState(_state: WorkState, db: DatabaseSync, proposal: RoadmapCompletionProposalRecord, roadmap: RoadmapRecord, decision: { actor: string; source: string; note?: string }, now: string): void {
-  proposal.status = 'approved'
-  proposal.decisionBy = decision.actor
-  proposal.decisionNote = decision.note
-  proposal.updatedAt = now
-  roadmap.status = 'done'
-  roadmap.updatedAt = now
-  appendWorkEventRow(db, 'roadmap.completion.approved', proposal.id, { roadmapId: roadmap.id, actor: decision.actor, source: decision.source, note: decision.note }, now)
-  appendWorkEventRow(db, 'audit.human_decision', roadmap.id, { actor: decision.actor, source: decision.source, operation: 'roadmap_completion.approve', target: proposal.id, result: 'ok', note: decision.note }, now)
-}
-
-function completionAutoBlockers(state: WorkState, db: DatabaseSync, roadmap: RoadmapRecord, proposal: RoadmapCompletionProposalRecord): string[] {
-  const blockers: string[] = []
-  if (state.tasks.some(task => task.roadmapId === roadmap.id && task.status === 'blocked')) blockers.push('blocked tasks exist')
-  const gates = queryRows(db, "SELECT * FROM human_gates WHERE roadmap_id = ? AND status IN ('pending', 'escalated')", roadmap.id).map(rowToHumanGate).filter(Boolean) as HumanGateRecord[]
-  if (gates.length) blockers.push('open required gates exist')
-  const criticalAlerts = queryRows(db, "SELECT * FROM alerts WHERE severity = 'critical' AND status IN ('active', 'acknowledged')").map(rowToAlert).filter(Boolean) as AlertRecord[]
-  if (criticalAlerts.length) blockers.push('active critical alerts exist')
-  const required = [...(roadmap.qualitySpec?.evidenceRequirements || []), ...(roadmap.qualitySpec?.requiredArtifacts || [])]
-  if (required.length) {
-    const evidenceText = proposal.evidence.join('\n').toLowerCase()
-    const missing = required.filter(item => !evidenceText.includes(item.toLowerCase()))
-    if (missing.length) blockers.push(`missing required evidence: ${missing.join(', ')}`)
-  }
-  if (proposal.unresolvedRisks.length) blockers.push('unresolved risks exist')
-  return blockers
-}
-
-function compareProjectBindings(a: ProjectBindingRecord, b: ProjectBindingRecord): number {
-  const scope = scopeRank(a.scope) - scopeRank(b.scope)
-  if (scope !== 0) return scope
-  const alias = a.alias.localeCompare(b.alias)
-  if (alias !== 0) return alias
-  const created = Date.parse(a.createdAt) - Date.parse(b.createdAt)
-  if (Number.isFinite(created) && created !== 0) return created
-  return a.id.localeCompare(b.id)
-}
-
-function compareRoadmapCompletionProposals(a: RoadmapCompletionProposalRecord, b: RoadmapCompletionProposalRecord): number {
-  const status = completionProposalStatusRank(a.status) - completionProposalStatusRank(b.status)
-  if (status !== 0) return status
-  const created = Date.parse(b.createdAt) - Date.parse(a.createdAt)
-  if (Number.isFinite(created) && created !== 0) return created
-  return a.id.localeCompare(b.id)
-}
-
-function completionProposalStatusRank(status: RoadmapCompletionProposalStatus): number {
-  return status === 'pending' ? 0 : status === 'approved' ? 1 : status === 'rejected' ? 2 : 3
-}
-
-function scopeRank(scope: ProjectBindingScope): number {
-  if (scope === 'telegram' || scope === 'whatsapp' || scope === 'discord') return 0
-  if (scope === 'opencode') return 1
-  return 2
-}
-
-export function upsertChannelBindingRow(db: DatabaseSync, input: { provider: string; chatId: string; threadId?: string; sessionId: string; mode?: ChannelBindingMode; roadmapId?: string; taskId?: string; title?: string; createdAt?: string }, now: string): void {
-  db.prepare(`INSERT INTO channel_bindings (
-    provider, chat_id, thread_id, session_id, mode, roadmap_id, task_id, title, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  ON CONFLICT(provider, chat_id, thread_id) DO UPDATE SET
-    session_id = excluded.session_id,
-    mode = excluded.mode,
-    roadmap_id = excluded.roadmap_id,
-    task_id = excluded.task_id,
-    title = excluded.title,
-    updated_at = excluded.updated_at`)
-    .run(input.provider, input.chatId, normalizeThreadId(input.threadId), input.sessionId, input.mode || 'chat', input.roadmapId || null, input.taskId || null, input.title || null, input.createdAt || now, now)
-}
-
 function validateTaskUpdate(state: WorkState, task: WorkTaskRecord, input: WorkTaskUpdateInput): void {
   if (input.status !== undefined && normalizeWorkStatus(input.status) === 'running') throw new Error('running status is reserved for scheduler run dispatch')
   const roadmapId = input.roadmapId ?? task.roadmapId
@@ -3283,11 +2853,6 @@ function assertRoadmapAcceptsTasks(state: WorkState, roadmapId: string): void {
   if (roadmap.status === 'archived') throw new Error(`roadmap is archived: ${roadmapId}`)
 }
 
-function assertRoadmapAcceptsSupervisors(state: WorkState, roadmapId: string, options: { allowArchivedSupervisor?: boolean } = {}): void {
-  const roadmap = state.roadmaps.find(row => row.id === roadmapId)
-  if (!roadmap) throw new Error(`roadmap not found: ${roadmapId}`)
-  if (!options.allowArchivedSupervisor && roadmap.status === 'archived') throw new Error(`roadmap is archived: ${roadmapId}`)
-}
 
 function assertProfileExists(profile: string): void {
   if (!getConfig().profiles[profile]) throw new Error(`profile not found: ${profile}`)
@@ -3361,10 +2926,6 @@ function normalizeRoadmapStatus(value: unknown): RoadmapStatus {
   throw new Error(`roadmap status must be active, done, blocked, or archived: ${String(value)}`)
 }
 
-function normalizeRoadmapSupervisorStatus(value: unknown): RoadmapSupervisorStatus {
-  if (value === 'active' || value === 'paused' || value === 'blocked' || value === 'completed' || value === 'archived') return value
-  throw new Error(`roadmap supervisor status must be active, paused, blocked, completed, or archived: ${String(value)}`)
-}
 
 function normalizeWorkStatus(value: unknown): WorkStatus {
   if (value === 'pending' || value === 'running' || value === 'done' || value === 'blocked' || value === 'paused' || value === 'cancelled' || value === 'archived') return value
@@ -3568,9 +3129,6 @@ export function mutateWorkState<T>(filePath: string, fn: (state: WorkState, db: 
     db.close()
   }
 }
-
-import { appendWorkEventRow, appendAuditLedgerRowForWorkEvent, upsertDelegationProgressRouteReceiptFromEvent, rowToDelegationProgressRouteReceipt } from './work-store/event-append.js'
-export { appendWorkEventRow } from './work-store/event-append.js'
 
 function findDelegationReceiptInDb(db: DatabaseSync, idempotencyKey: string): DelegatedWorkReceipt | undefined {
   const receiptRow = db.prepare('SELECT * FROM delegation_receipts WHERE idempotency_key = ?').get(idempotencyKey) as any
