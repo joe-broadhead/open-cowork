@@ -740,30 +740,33 @@
  "fileLocBudgets": [
   {
    "path": "src/work-store.ts",
-   "maxLines": 5800,
+   "maxLines": 5489,
    "owner": "work_store",
-   "note": "Fa\u00e7ade after types extraction (audit 2026-07-21)"
+   "note": "Hard LOC budget (JOE-919); current 5382 lines; ratchet toward 2000"
   },
   {
    "path": "src/environments.ts",
-   "maxLines": 2350,
+   "maxLines": 2320,
    "owner": "environments",
-   "note": "After types extraction (audit 2026-07-21)"
+   "note": "Hard LOC budget (JOE-919); current 2275 lines; ratchet toward 2000"
   },
   {
    "path": "src/config.ts",
-   "maxLines": 2000,
-   "owner": "config"
+   "maxLines": 1820,
+   "owner": "config",
+   "note": "Hard LOC budget (JOE-919); current 1780 lines; ratchet toward 2000"
   },
   {
    "path": "src/scheduler.ts",
-   "maxLines": 2000,
-   "owner": "scheduler_replay"
+   "maxLines": 1840,
+   "owner": "scheduler_replay",
+   "note": "Hard LOC budget (JOE-919); current 1800 lines; ratchet toward 2000"
   },
   {
    "path": "src/daemon-routes/work.ts",
-   "maxLines": 2100,
-   "owner": "scheduler_replay"
+   "maxLines": 1980,
+   "owner": "scheduler_replay",
+   "note": "Hard LOC budget (JOE-919); current 1940 lines; ratchet toward 2000"
   }
  ]
 }

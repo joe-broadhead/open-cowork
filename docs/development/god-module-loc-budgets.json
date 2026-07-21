@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "description": "Hard per-file LOC budgets for monorepo god modules outside products/gateway (JOE-919 / audit P1-4). Soft target 1500; hard max must ratchet down toward 2000.",
+  "files": [
+    {
+      "path": "packages/cloud-server/src/http-server.ts",
+      "maxLines": 1970,
+      "owner": "cloud-server",
+      "note": "HTTP edge + SSE"
+    },
+    {
+      "path": "packages/cloud-server/src/app.ts",
+      "maxLines": 1900,
+      "owner": "cloud-server",
+      "note": "App composition + runtime routing"
+    },
+    {
+      "path": "apps/desktop/src/main/workspace-gateway.ts",
+      "maxLines": 1730,
+      "owner": "desktop",
+      "note": "Desktop workspace bridge; prefer WorkspaceSessionPort extraction"
+    }
+  ]
+}
