@@ -17,11 +17,12 @@ import {
 //     live announcer. The placeholder credential means no real model responds,
 //     so the STREAM machinery (pending state, transcript announcer) is what we
 //     assert — no network dependency, no flakiness on model output.
-//  2. Approval resolution. A synthetic, content-free PermissionRequest is fed
-//     through the app's own `on.permissionRequest` subscriber (via the eval
-//     bridge), the real Approvals queue renders it, and resolving it records a
-//     `permission.respond` call. If the hardened bridge can't be wrapped, the
-//     flow falls back to asserting the real (empty) Approvals surface renders.
+//  2. Approval resolution. A synthetic, content-free PermissionRequest is
+//     broadcast via main `permission:request` IPC (E2E eval seam), the app's
+//     real `on.permissionRequest` subscriber receives it, the Approvals queue
+//     renders it, and resolving records a `permission.respond` offline. If the
+//     E2E seam is unavailable, the flow falls back to asserting the real
+//     (empty) Approvals surface renders.
 test('eval:prompt-approval — prompt streams and an approval resolves offline', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
@@ -73,10 +74,10 @@ test('eval:prompt-approval — prompt streams and an approval resolves offline',
       await approveButton.click()
 
       await page.waitForFunction(() => {
-        const state = (window as unknown as {
-          __coworkEval?: { permissionResponses: Array<{ id: string; allowed: boolean }> }
-        }).__coworkEval
-        return (state?.permissionResponses.length ?? 0) > 0
+        const evalApi = (window as unknown as {
+          __openCoworkEval?: { getPermissionResponses: () => Array<{ id: string; allowed: boolean }> }
+        }).__openCoworkEval
+        return (evalApi?.getPermissionResponses().length ?? 0) > 0
       }, undefined, { timeout: 10_000 })
 
       const resolved = await getEvalBridgeState(page)

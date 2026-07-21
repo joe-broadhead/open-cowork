@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  AdminAccess,
+  AdminEntitlements,
   CoworkAPI,
   McpStatus,
   PermissionRequest,
@@ -10,6 +12,25 @@ import type {
   UpdateInstallEvent,
   WorkspaceSessionsUpdatedEvent,
 } from '@open-cowork/shared'
+
+// Smoke/eval harness flag (set by apps/desktop/tests/smoke-helpers.ts). Never set
+// in production packaging. When enabled, preload builds admin overrides and
+// permission-response capture into the API *before* contextBridge freezes it.
+const E2E_EVAL_ENABLED = process.env.OPEN_COWORK_E2E === '1'
+
+type EvalAdminAccessOverride = AdminAccess
+type EvalEntitlementsOverride = AdminEntitlements
+type EvalPermissionResponse = { id: string; allowed: boolean }
+
+const e2eEvalState: {
+  adminAccessOverride: EvalAdminAccessOverride | null
+  entitlementsOverride: EvalEntitlementsOverride | null
+  permissionResponses: EvalPermissionResponse[]
+} = {
+  adminAccessOverride: null,
+  entitlementsOverride: null,
+  permissionResponses: [],
+}
 
 const PRELOAD_INVOKE_CHANNELS = [
   'workspace:list',
@@ -236,6 +257,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'capabilities:skills',
   'capabilities:skill-bundle',
   'capabilities:skill-bundle-file',
+  // E2E/eval only (main handler rejects unless OPEN_COWORK_E2E is enabled).
+  'eval:emit-permission-request',
 ] as const
 
 const PRELOAD_SEND_CHANNELS = [
@@ -400,7 +423,15 @@ const api: CoworkAPI = {
     run: (sessionId, name) => invoke('command:run', sessionId, name),
   },
   permission: {
-    respond: (id, allowed, sessionId, options) => invoke('permission:respond', id, allowed, sessionId, options),
+    respond: (id, allowed, sessionId, options) => {
+      // Offline UI evals: record the resolution without requiring a live OpenCode
+      // permission ticket (synthetic requests never hit the runtime).
+      if (E2E_EVAL_ENABLED) {
+        e2eEvalState.permissionResponses.push({ id, allowed })
+        return Promise.resolve()
+      }
+      return invoke('permission:respond', id, allowed, sessionId, options)
+    },
   },
   question: {
     reply: (sessionId, requestId, answers, options) => invoke('question:reply', sessionId, requestId, answers, options),
@@ -538,8 +569,18 @@ const api: CoworkAPI = {
     reindex: (sessionIds) => invoke('threads:reindex', sessionIds),
   },
   admin: {
-    access: () => invoke('admin:access'),
-    entitlements: () => invoke('admin:entitlements'),
+    access: () => {
+      if (E2E_EVAL_ENABLED && e2eEvalState.adminAccessOverride) {
+        return Promise.resolve(e2eEvalState.adminAccessOverride)
+      }
+      return invoke('admin:access')
+    },
+    entitlements: () => {
+      if (E2E_EVAL_ENABLED && e2eEvalState.entitlementsOverride) {
+        return Promise.resolve(e2eEvalState.entitlementsOverride)
+      }
+      return invoke('admin:entitlements')
+    },
     overview: () => invoke('admin:overview'),
     members: {
       list: (input) => input ? invoke('admin:members:list', input) : invoke('admin:members:list'),
@@ -685,3 +726,28 @@ const api: CoworkAPI = {
 // config and the UI reflects their label while the internal plumbing
 // stays stable.
 contextBridge.exposeInMainWorld('coworkApi', api)
+
+// E2E/eval control surface. Built into preload (not a post-hoc wrap of the
+// frozen coworkApi) so monthly UI evals can grant admin access and inject
+// synthetic permission requests without fighting contextBridge immutability.
+// Only functional when OPEN_COWORK_E2E=1 (smoke harness).
+if (E2E_EVAL_ENABLED) {
+  contextBridge.exposeInMainWorld('__openCoworkEval', {
+    enabled: true as const,
+    setAdminAccess(access: EvalAdminAccessOverride | null) {
+      e2eEvalState.adminAccessOverride = access
+    },
+    setEntitlements(entitlements: EvalEntitlementsOverride | null) {
+      e2eEvalState.entitlementsOverride = entitlements
+    },
+    getPermissionResponses(): EvalPermissionResponse[] {
+      return e2eEvalState.permissionResponses.slice()
+    },
+    clearPermissionResponses() {
+      e2eEvalState.permissionResponses.length = 0
+    },
+    emitPermissionRequest(request: PermissionRequest): Promise<number> {
+      return invoke('eval:emit-permission-request', request) as Promise<number>
+    },
+  })
+}

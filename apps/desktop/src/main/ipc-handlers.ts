@@ -39,6 +39,7 @@ import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
 import { registerAdminHandlers } from './ipc/admin-handlers.ts'
+import { registerE2EEvalHandlers } from './ipc/e2e-eval-handlers.ts'
 import { registerWorkspaceHandlers } from './ipc/workspace-handlers.ts'
 import { registerDesktopPairingHandlers } from './ipc/desktop-pairing-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
@@ -415,6 +416,14 @@ export function setupIpcHandlers(
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
   registerExplorerHandlers(context)
+
+  // Smoke/eval only: synthetic permission broadcast (see e2e-eval-handlers.ts).
+  registerE2EEvalHandlers(ipcMain, () => {
+    const windows: BrowserWindow[] = []
+    const main = getMainWindow()
+    if (main) windows.push(main)
+    return windows
+  })
 }
 
 export { trackPermission, clearPermissionsForSession }
