@@ -6,8 +6,8 @@
  "sourceRoot": "src",
  "dependencyBudget": {
   "includeTests": false,
-  "maxModuleCount": 228,
-  "maxEdgeCount": 970,
+  "maxModuleCount": 240,
+  "maxEdgeCount": 1050,
   "maxCycleComponents": 0,
   "maxCycleComponentSize": 4,
   "knownCycles": []
@@ -694,6 +694,30 @@
     "growthKind": "evidence_only",
     "rationale": "M59-1 imports the M58 final decision, shared redaction scanning, and the release CLI edge so scope-gate evidence is generated, redacted, and operator-visible through release-ops-only paths.",
     "consolidationPath": "If more M59 planning artifacts appear, consolidate static scope-gate composition into manifest/template helpers instead of adding new release-ops imports."
+   },
+   {
+    "id": "audit_2026_07_21_types_extraction_modules",
+    "issue": "AUDIT-2026-07-21",
+    "metric": "module_count",
+    "previous": 228,
+    "current": 240,
+    "delta": 12,
+    "ownerCategory": "runtime_storage",
+    "growthKind": "runtime",
+    "rationale": "Extract work-store and environments type modules under file LOC budgets (audit P1-4) without expanding release claims.",
+    "consolidationPath": "Continue splitting god fa\u00e7ades into work-store/* and environments/* ports; lower maxModuleCount after orphan modules are deleted."
+   },
+   {
+    "id": "audit_2026_07_21_types_extraction_edges",
+    "issue": "AUDIT-2026-07-21",
+    "metric": "edge_count",
+    "previous": 970,
+    "current": 1050,
+    "delta": 80,
+    "ownerCategory": "runtime_storage",
+    "growthKind": "runtime",
+    "rationale": "Type-module re-exports and imports from work-store/environments fa\u00e7ades increase graph edges during LOC budget extraction.",
+    "consolidationPath": "Collapse re-export edges by having consumers import work-store/types and environments/types directly where safe."
    }
   ],
   "directionalImportPilots": [
@@ -712,5 +736,34 @@
     "rationale": "The validation gate selector may classify changed repo paths but must not import mutable runtime, storage, scheduler, channel, daemon, dashboard, MCP, CI, or package side effects."
    }
   ]
- }
+ },
+ "fileLocBudgets": [
+  {
+   "path": "src/work-store.ts",
+   "maxLines": 5800,
+   "owner": "work_store",
+   "note": "Fa\u00e7ade after types extraction (audit 2026-07-21)"
+  },
+  {
+   "path": "src/environments.ts",
+   "maxLines": 2350,
+   "owner": "environments",
+   "note": "After types extraction (audit 2026-07-21)"
+  },
+  {
+   "path": "src/config.ts",
+   "maxLines": 2000,
+   "owner": "config"
+  },
+  {
+   "path": "src/scheduler.ts",
+   "maxLines": 2000,
+   "owner": "scheduler_replay"
+  },
+  {
+   "path": "src/daemon-routes/work.ts",
+   "maxLines": 2100,
+   "owner": "scheduler_replay"
+  }
+ ]
 }

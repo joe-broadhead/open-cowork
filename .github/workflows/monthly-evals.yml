@@ -1,15 +1,16 @@
-name: Nightly Evals
+name: Monthly UI Evals
 
-# Nightly, real-Electron UI eval flows. These are heavier than the PR-gate
+# Monthly, real-Electron UI eval flows. These are heavier than the PR-gate
 # smoke suite (they drive full user journeys and capture visual evidence), so
-# they run on a schedule instead of on every push. Kept as a standalone
-# workflow — its job names are intentionally NOT part of the required-checks
-# set enforced by scripts/verify-release-checks.mjs.
+# they run on a schedule instead of on every push. Moved from daily to monthly
+# to reduce GitHub Actions cost (audit 2026-07-21 P0-2). Still
+# workflow_dispatch-able for ad-hoc runs. Job names are intentionally NOT part
+# of the required-checks set enforced by scripts/verify-release-checks.mjs.
 
 on:
   schedule:
-    # 06:17 UTC daily.
-    - cron: '17 6 * * *'
+    # 06:17 UTC on the 1st of each month (once per month).
+    - cron: '17 6 1 * *'
   workflow_dispatch:
     inputs:
       update_baselines:
@@ -24,7 +25,7 @@ env:
   TZ: UTC
 
 concurrency:
-  group: nightly-evals-${{ github.ref }}
+  group: monthly-evals-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -56,7 +57,7 @@ jobs:
       # apps/desktop/test-artifacts/evals/<flow>/, and the visual-regression
       # flow diffs Home + Team (light + dark) against committed baselines
       # (seeding any that are missing on first run).
-      - name: Run nightly UI eval flows + visual regression (xvfb)
+      - name: Run monthly UI eval flows + visual regression (xvfb)
         run: xvfb-run -a pnpm test:e2e:evals
         env:
           OPEN_COWORK_EVAL_UPDATE_BASELINES: ${{ inputs.update_baselines && '1' || '0' }}
@@ -65,10 +66,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: nightly-eval-evidence
+          name: monthly-eval-evidence
           path: apps/desktop/test-artifacts/evals/**
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 30
 
       # On first run (or an explicit re-seed) the visual baselines are written
       # into the tree but not committed. Upload them so a maintainer can review
@@ -77,7 +78,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: nightly-eval-visual-baselines
+          name: monthly-eval-visual-baselines
           path: apps/desktop/tests/visual-baselines/**
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 30

@@ -25,3 +25,14 @@ test("private OpenCode policy rejects public endpoints and wildcard hosts", () =
   assert.throws(() => assertPrivateOpenCodeEndpoint("ftp://127.0.0.1"), /HTTP or HTTPS/);
   assert.throws(() => assertPrivateBindHost("gateway.example.com"), /loopback\/private/);
 });
+
+test("private OpenCode policy refuses cloud instance-metadata endpoints", () => {
+  assert.throws(
+    () => assertPrivateOpenCodeEndpoint("http://169.254.169.254/latest/meta-data/"),
+    /instance-metadata|metadata/,
+  );
+  assert.throws(
+    () => assertPrivateOpenCodeEndpoint("http://metadata.google.internal/"),
+    /instance-metadata|metadata/,
+  );
+});

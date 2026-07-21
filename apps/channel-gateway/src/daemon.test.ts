@@ -256,13 +256,13 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     assert.match(metricsText, /open_cowork_gateway_webhook_requests_total 0/)
 
     const diagnostics = await readJson(await fetch(`${url}/diagnostics`, { headers: adminHeaders }))
-    assert.equal((diagnostics.config as { cloud: { serviceToken: string } }).cloud.serviceToken, 'serv...[redacted]...7890')
+    assert.equal((diagnostics.config as { cloud: { serviceToken: string } }).cloud.serviceToken, `[redacted:${'service-token-1234567890'.length} chars]`)
     const diagnosticProvider = ((diagnostics.config as { providers: Array<{
       credentials: Record<string, string>
       settings: Record<string, string>
     }> }).providers)[0]
-    assert.equal(diagnosticProvider?.credentials.apiKey, 'prov...[redacted]...7890')
-    assert.equal(diagnosticProvider?.settings.callbackSecret, 'prov...[redacted]...7890')
+    assert.equal(diagnosticProvider?.credentials.apiKey, `[redacted:${'provider-api-key-1234567890'.length} chars]`)
+    assert.equal(diagnosticProvider?.settings.callbackSecret, `[redacted:${'provider-callback-secret-1234567890'.length} chars]`)
     assert.equal(diagnosticProvider?.settings.deliveryUrl, 'https://example.test/deliver?token=[redacted]')
     assert.equal(diagnosticProvider?.settings.workspacePath, '/home/[redacted]')
 

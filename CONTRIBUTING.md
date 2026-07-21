@@ -57,7 +57,8 @@ pnpm install
 Product partitions (independent of Desktop release):
 
 ```bash
-pnpm --filter cowork-gateway build && pnpm --filter cowork-gateway test
+pnpm test:gateway
+# equivalent: pnpm --filter cowork-gateway build && pnpm --filter cowork-gateway test
 pnpm --filter cowork-wiki-workspace test
 node products/gateway/scripts/standalone-smoke.mjs
 node products/wiki/scripts/standalone-smoke.mjs

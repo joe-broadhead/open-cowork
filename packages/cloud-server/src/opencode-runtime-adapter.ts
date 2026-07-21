@@ -25,11 +25,8 @@ import {
   sanitizeCloudToolOutput,
   translateOpencodeEvent,
 } from '@open-cowork/shared'
-import {
-  createOpencodeClient,
-  type OpencodeClient,
-  type OpencodeClientConfig,
-} from '@opencode-ai/sdk/v2'
+import type { OpencodeClient, OpencodeClientConfig } from '@opencode-ai/sdk/v2'
+import { createOpencodeV2Client } from '@open-cowork/runtime-host/opencode-client-kernel'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -1153,7 +1150,7 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
   } finally {
     cleanupEphemeralConfig?.()
   }
-  const client = createOpencodeClient(buildNodeOpencodeCloudRuntimeClientConfig(server.url, auth))
+  const client = createOpencodeV2Client(buildNodeOpencodeCloudRuntimeClientConfig(server.url, auth))
   const adapter = createSdkCloudRuntimeAdapter(client, {
     directory: options.cwd || options.paths.getRuntimeHomeDir(),
   })

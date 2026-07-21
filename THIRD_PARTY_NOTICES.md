@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `10ba05339d4ba5175a99c9a41153bb5a02476da5865b36dedc4b1dba5d3ce1d8`
+- pnpm lockfile SHA-256: `c7197f6c98b0b033ba72c494d881a9de4c407a14413e1d3713350c5c7e9197de`
 - Production package entries: 403
 - Bundled license directories: 388 (15 package entries have no standalone license file or are workspace links)
 
@@ -247,7 +247,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | is-promise | 4.0.0 | MIT | THIRD_PARTY_LICENSES/is-promise@4.0.0/ | https://github.com/then/is-promise.git |
 | isexe | 2.0.0 | ISC | THIRD_PARTY_LICENSES/isexe@2.0.0/ | git+https://github.com/isaacs/isexe.git |
 | jose | 6.2.2 | MIT | THIRD_PARTY_LICENSES/jose@6.2.2/ | panva/jose |
-| js-yaml | 4.2.0 | MIT | THIRD_PARTY_LICENSES/js-yaml@4.2.0/ | nodeca/js-yaml |
+| js-yaml | 4.3.0 | MIT | THIRD_PARTY_LICENSES/js-yaml@4.3.0/ | nodeca/js-yaml |
 | json-bigint | 1.0.0 | MIT | THIRD_PARTY_LICENSES/json-bigint@1.0.0/ | git@github.com:sidorares/json-bigint.git |
 | json-schema-traverse | 1.0.0 | MIT | THIRD_PARTY_LICENSES/json-schema-traverse@1.0.0/ | git+https://github.com/epoberezkin/json-schema-traverse.git |
 | json-schema-typed | 8.0.2 | BSD-2-Clause | THIRD_PARTY_LICENSES/json-schema-typed@8.0.2/ | https://github.com/RemyRylan/json-schema-typed.git |

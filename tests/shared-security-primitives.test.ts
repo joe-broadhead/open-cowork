@@ -6,9 +6,11 @@ import {
   redactSecretTextForLog,
 } from '@open-cowork/shared'
 import {
+  assertPrivateHttpEndpoint,
   constantTimeEquals,
   constantTimeEqualsDigest,
   fetchWithTimeout,
+  isCloudMetadataHost,
   isLoopbackOrPrivateHost,
   withDeadline,
 } from '@open-cowork/shared/node'
@@ -54,6 +56,27 @@ test('isLoopbackOrPrivateHost covers RFC1918 and localhost', () => {
   assert.equal(isLoopbackOrPrivateHost('8.8.8.8'), false)
   assert.equal(isLoopbackOrPrivateHost('example.com'), false)
   assert.equal(isLoopbackOrPrivateHost('host.docker.internal'), true)
+})
+
+test('isCloudMetadataHost and assertPrivateHttpEndpoint refuse IMDS targets', () => {
+  assert.equal(isCloudMetadataHost('169.254.169.254'), true)
+  assert.equal(isCloudMetadataHost('metadata.google.internal'), true)
+  assert.equal(isCloudMetadataHost('metadata'), true)
+  assert.equal(isCloudMetadataHost('fd00:ec2::254'), true)
+  assert.equal(isCloudMetadataHost('10.0.0.1'), false)
+  assert.equal(isCloudMetadataHost('127.0.0.1'), false)
+
+  assert.throws(
+    () => assertPrivateHttpEndpoint('http://169.254.169.254/latest/meta-data/'),
+    /instance-metadata/,
+  )
+  assert.throws(
+    () => assertPrivateHttpEndpoint('http://metadata.google.internal/computeMetadata/v1/'),
+    /instance-metadata/,
+  )
+  // Lab OpenCode on plain RFC1918 remains allowed.
+  const privateUrl = assertPrivateHttpEndpoint('http://10.0.0.5:4096/')
+  assert.equal(privateUrl.hostname, '10.0.0.5')
 })
 
 test('withDeadline rejects after timeout', async () => {

@@ -100,6 +100,28 @@ for (const violation of forbiddenImportViolations) {
   fail(`${violation.ruleId}: ${violation.from} imports ${violation.to}`)
 }
 
+// Per-file LOC budgets for god-module façades (audit 2026-07-21 P1-4).
+const fileLocBudgets = Array.isArray(budget.fileLocBudgets) ? budget.fileLocBudgets : []
+const fileLocResults = []
+for (const entry of fileLocBudgets) {
+  const rel = String(entry.path || '')
+  const maxLines = Number(entry.maxLines)
+  if (!rel || !Number.isFinite(maxLines)) {
+    fail(`fileLocBudgets entry invalid: ${JSON.stringify(entry)}`)
+    continue
+  }
+  const abs = path.join(root, rel)
+  if (!fs.existsSync(abs)) {
+    fail(`fileLocBudgets path missing: ${rel}`)
+    continue
+  }
+  const lineCount = fs.readFileSync(abs, 'utf-8').split(/\r?\n/).length
+  fileLocResults.push({ path: rel, lineCount, maxLines, owner: entry.owner || null })
+  if (lineCount > maxLines) {
+    fail(`file LOC budget exceeded: ${rel} has ${lineCount} lines (max ${maxLines})`)
+  }
+}
+
 const report = {
   schemaVersion: 1,
   status: failures.length === 0 ? 'pass' : 'fail',
@@ -119,6 +141,7 @@ const report = {
   ownerSummary,
   growthPolicy,
   forbiddenImportViolations,
+  fileLocBudgets: fileLocResults,
   unresolvedRelativeImports,
   failures,
 }

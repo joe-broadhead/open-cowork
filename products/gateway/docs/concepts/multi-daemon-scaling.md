@@ -4,6 +4,8 @@ Status: accepted design record; implementation is future work. (This record date
 
 Gateway is currently a local, single-operator control plane. It can run unattended and recover work after restarts, but it is not yet a multi-host or hosted/team scheduler. This record defines what is true today, what architecture Gateway should grow toward next, and which state must become durable before more than one daemon can safely participate.
 
+**Operator runbook (audit 2026-07-21):** Never run two full daemons against one state directory. The open-cowork Helm chart fails closed when `replicaCount > 1` unless experimental distributed ownership is explicitly enabled. Chart fail-closed must not be bypassed for production.
+
 ## Decision
 
 Gateway should keep local personal mode as the default product and should not support active-active multi-daemon operation in the current local beta.

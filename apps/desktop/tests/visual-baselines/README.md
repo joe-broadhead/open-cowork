@@ -8,7 +8,7 @@ Each file is a key surface captured in a specific color scheme, e.g.
 
 Baselines are **seeded on first run**, not hand-authored:
 
-1. The nightly `Nightly Evals` workflow runs the eval suite on a display.
+1. The monthly `Monthly UI Evals` workflow (`.github/workflows/monthly-evals.yml`) runs the eval suite on a display.
 2. For any surface with no committed baseline, `compareToBaseline`
    (`apps/desktop/tests/eval-helpers.ts`) writes the current capture here and
    passes the check with a `seeded` note.

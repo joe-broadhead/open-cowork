@@ -92,6 +92,7 @@ const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
   'workspace-gateway-cloud-threads.ts',
   'workspace-gateway-cloud-workflows.ts',
   'workspace-gateway.ts',
+  'workspace-session-port.ts',
 ]
 
 function listDomainFolders() {

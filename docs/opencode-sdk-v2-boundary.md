@@ -82,6 +82,7 @@ Desktop residual seams and removal plan: [desktop-composition-shell.md](desktop-
 - `packages/runtime-host/src/agent-config.ts`
 - `packages/runtime-host/src/agent-prompts.ts`
 - `packages/runtime-host/src/opencode-adapter.ts`
+- `packages/runtime-host/src/opencode-client-kernel.ts`
 - `packages/runtime-host/src/opencode-v2.ts`
 - `packages/runtime-host/src/permission-config.ts`
 - `packages/runtime-host/src/provider-utils.ts`
