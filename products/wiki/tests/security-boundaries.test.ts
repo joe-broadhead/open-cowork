@@ -212,6 +212,57 @@ test("security boundaries reject unsafe YAML keys and symlinked managed write di
   });
 });
 
+test("security boundaries refuse process-wide role on non-loopback and auth disable on public origin", async () => {
+  await withWorkspace("openwiki-security-serve-policy-", async (root) => {
+    await assert.rejects(
+      startHttpApi({ root, host: "0.0.0.0", port: 0, defaultPolicy: { role: "admin" } }),
+      /Process-wide serve --role/,
+    );
+    await assert.rejects(
+      startHttpApi({ root, host: "0.0.0.0", port: 0, defaultPolicy: { scopes: ["wiki:admin"] } }),
+      /Process-wide serve --role/,
+    );
+
+    const previousRequireAuth = process.env.OPENWIKI_REQUIRE_AUTH;
+    const previousPublicOrigin = process.env.OPENWIKI_PUBLIC_ORIGIN;
+    const previousQueue = process.env.OPENWIKI_QUEUE_BACKEND;
+    try {
+      process.env.OPENWIKI_REQUIRE_AUTH = "false";
+      process.env.OPENWIKI_PUBLIC_ORIGIN = "https://wiki.example.com";
+      await assert.rejects(
+        startHttpApi({ root, port: 0 }),
+        /OPENWIKI_REQUIRE_AUTH=false is not allowed when OPENWIKI_PUBLIC_ORIGIN/,
+      );
+      delete process.env.OPENWIKI_PUBLIC_ORIGIN;
+      process.env.OPENWIKI_QUEUE_BACKEND = "postgres";
+      await assert.rejects(
+        startHttpApi({ root, port: 0 }),
+        /OPENWIKI_REQUIRE_AUTH=false is not allowed with hosted Postgres/,
+      );
+    } finally {
+      if (previousRequireAuth === undefined) {
+        delete process.env.OPENWIKI_REQUIRE_AUTH;
+      } else {
+        process.env.OPENWIKI_REQUIRE_AUTH = previousRequireAuth;
+      }
+      if (previousPublicOrigin === undefined) {
+        delete process.env.OPENWIKI_PUBLIC_ORIGIN;
+      } else {
+        process.env.OPENWIKI_PUBLIC_ORIGIN = previousPublicOrigin;
+      }
+      if (previousQueue === undefined) {
+        delete process.env.OPENWIKI_QUEUE_BACKEND;
+      } else {
+        process.env.OPENWIKI_QUEUE_BACKEND = previousQueue;
+      }
+    }
+
+    // Loopback process-wide role remains allowed for single-user local agents.
+    const local = await startHttpApi({ root, host: "127.0.0.1", port: 0, defaultPolicy: { role: "viewer" } });
+    await local.close();
+  });
+});
+
 test("security boundaries reject trusted-header spoofing and cross-origin writes", async () => {
   await withWorkspace("openwiki-security-http-", async (root) => {
     await assert.rejects(

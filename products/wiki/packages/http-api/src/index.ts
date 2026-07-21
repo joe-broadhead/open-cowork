@@ -1,7 +1,10 @@
 export {
   handleHttpRequest,
+  isLoopbackBindHost,
   routeHttpRequest,
   startHttpApi,
+  validateHostedAuthConfiguration,
+  validateProcessWideDefaultPolicy,
   validateTrustedHeaderRuntime,
 } from "./server.ts";
 export { resetHttpOperationalStateForTests } from "./operational.ts";

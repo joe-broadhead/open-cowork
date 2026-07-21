@@ -99,6 +99,12 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and .Values.persistence.enabled .Values.worker.enabled (gt (int .Values.worker.replicaCount) 1) (has "ReadWriteOnce" .Values.persistence.accessModes) -}}
 {{- fail "worker.replicaCount > 1 requires persistence.accessModes without ReadWriteOnce or an external shared runtime store" -}}
 {{- end -}}
+{{- if and (gt (int .Values.replicaCount) 1) (ne .Values.openwiki.operationalStateBackend "postgres") -}}
+{{- fail "replicaCount > 1 requires openwiki.operationalStateBackend=postgres for shared MCP sessions and rate limits" -}}
+{{- end -}}
+{{- if and .Values.openwiki.role (ne .Values.openwiki.host "127.0.0.1") (ne .Values.openwiki.host "localhost") (ne .Values.openwiki.host "::1") -}}
+{{- fail "openwiki.role process-wide elevation is only allowed with openwiki.host loopback; map roles per request via trusted headers or tokens" -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "openwiki.env" -}}
