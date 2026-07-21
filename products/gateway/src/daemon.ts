@@ -11,6 +11,7 @@ import { subscribeToOpenCodeEvents, addLiveClient, closeAllLiveClients, removeLi
 import { telegramChannel } from './channels/telegram.js'
 import { whatsappChannel } from './channels/whatsapp.js'
 import { discordChannel } from './channels/discord.js'
+import { claimInboundWebhookRateLimit, inboundWebhookRateKey, noteInboundWebhookAuthFailure } from './channels/webhook-rate-limit.js'
 import { actionDeliveryForCapabilities } from './channels/capabilities.js'
 import { resolveAgent } from './routing.js'
 import { TransientInboundError, assertHttpBindAllowed, channelTargetFingerprint, channelTargetLabel, evaluateExposedHttpGuard, evaluateHttpRequestSecurity, exposedHttpGuardKeys, isLocalOrigin, isTransientInboundError, isTrustedChannelActor, isTrustedChannelTarget, listChannelAllowlistActorGaps, recordExposedHttpAuthResult, redactSensitiveText, redactedChannelTargetLabel, resolveHttpClientAddress } from './security.js'
@@ -602,8 +603,16 @@ ev.onerror = () => {
       }
 
       if (req.method === 'GET' && url.pathname === '/webhooks/whatsapp') {
+        const rateKey = inboundWebhookRateKey('whatsapp', req)
+        const rate = claimInboundWebhookRateLimit(rateKey)
+        if (!rate.ok) {
+          res.setHeader('Retry-After', String(Math.max(1, Math.ceil(rate.retryAfterMs / 1000))))
+          res.writeHead(429)
+          return res.end(JSON.stringify({ error: 'whatsapp webhook rate limited' }))
+        }
         const challenge = whatsappChannel.verifyWebhook(url)
         if (challenge === null) {
+          noteInboundWebhookAuthFailure(rateKey)
           res.writeHead(403)
           return res.end(JSON.stringify({ error: 'invalid whatsapp verify token' }))
         }
@@ -614,8 +623,16 @@ ev.onerror = () => {
 
       if (req.method === 'POST' && url.pathname === '/webhooks/whatsapp') {
         if (!canCurrentDaemonWrite()) return sendStandbyWebhookResponse(res)
+        const rateKey = inboundWebhookRateKey('whatsapp', req)
+        const rate = claimInboundWebhookRateLimit(rateKey)
+        if (!rate.ok) {
+          res.setHeader('Retry-After', String(Math.max(1, Math.ceil(rate.retryAfterMs / 1000))))
+          res.writeHead(429)
+          return res.end(JSON.stringify({ error: 'whatsapp webhook rate limited' }))
+        }
         const body = await readBody(req)
         if (!whatsappChannel.verifySignature(req.headers['x-hub-signature-256'], body)) {
+          noteInboundWebhookAuthFailure(rateKey)
           res.writeHead(403)
           return res.end(JSON.stringify({ error: 'invalid whatsapp signature' }))
         }
@@ -635,11 +652,19 @@ ev.onerror = () => {
 
       if (req.method === 'POST' && url.pathname === '/webhooks/discord') {
         if (!canCurrentDaemonWrite()) return sendStandbyWebhookResponse(res)
+        const rateKey = inboundWebhookRateKey('discord', req)
+        const rate = claimInboundWebhookRateLimit(rateKey)
+        if (!rate.ok) {
+          res.setHeader('Retry-After', String(Math.max(1, Math.ceil(rate.retryAfterMs / 1000))))
+          res.writeHead(429)
+          return res.end(JSON.stringify({ error: 'discord webhook rate limited' }))
+        }
         const body = await readBody(req)
         const response = await discordChannel.handleInteraction(body, {
           'x-signature-ed25519': req.headers['x-signature-ed25519'],
           'x-signature-timestamp': req.headers['x-signature-timestamp'],
         })
+        if (response.status === 401) noteInboundWebhookAuthFailure(rateKey)
         res.writeHead(response.status)
         return res.end(JSON.stringify(response.body))
       }

@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { createHmac, createPublicKey, timingSafeEqual, verify as verifySignature } from 'node:crypto'
-import { constantTimeEqualsDigest } from './constant-time.js'
+import { constantTimeEquals, constantTimeEqualsDigest } from './constant-time.js'
 
 /**
  * Shared channel webhook security primitives (audit P1-1 / JOE-934).
@@ -74,4 +74,34 @@ export function verifyTelegramWebhookSecretToken(
   providedSecret: string | null | undefined,
 ): boolean {
   return constantTimeEqualsDigest(String(expectedSecret || ''), String(providedSecret || ''))
+}
+
+const DEFAULT_SLACK_SIGNATURE_MAX_SKEW_SECONDS = 60 * 5
+
+/**
+ * Slack Events / Interactions: `X-Slack-Signature: v0=<hex>` over
+ * `v0:{timestamp}:{rawBody}` with the app signing secret.
+ *
+ * Also enforces timestamp skew (default 5 minutes). Replay caches remain
+ * product-local (providers keep their own seen-signature maps).
+ */
+export function verifySlackRequestSignature(
+  signingSecret: string | null | undefined,
+  signatureHeader: string | string[] | null | undefined,
+  timestampHeader: string | string[] | null | undefined,
+  rawBody: string,
+  options: { maxSkewSeconds?: number; nowMs?: number } = {},
+): boolean {
+  const secret = String(signingSecret || '')
+  const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader
+  const timestamp = Array.isArray(timestampHeader) ? timestampHeader[0] : timestampHeader
+  if (!secret || !signature || !timestamp || !rawBody) return false
+  if (!signature.startsWith('v0=')) return false
+  const timestampSeconds = Number(timestamp)
+  if (!Number.isFinite(timestampSeconds)) return false
+  const nowMs = options.nowMs ?? Date.now()
+  const maxSkewSeconds = options.maxSkewSeconds ?? DEFAULT_SLACK_SIGNATURE_MAX_SKEW_SECONDS
+  if (Math.abs(nowMs / 1000 - timestampSeconds) > maxSkewSeconds) return false
+  const expected = `v0=${createHmac('sha256', secret).update(`v0:${timestamp}:${rawBody}`).digest('hex')}`
+  return constantTimeEquals(signature, expected)
 }

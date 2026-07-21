@@ -5,6 +5,7 @@ import {
   verifyDiscordInteractionSignature,
   verifyMetaHubSignature256,
   verifyMetaHubVerifyToken,
+  verifySlackRequestSignature,
   verifyTelegramWebhookSecretToken,
 } from '@open-cowork/shared/node'
 
@@ -39,4 +40,17 @@ test('verifyTelegramWebhookSecretToken rejects missing secrets', () => {
   assert.equal(verifyTelegramWebhookSecretToken('secret', 'secret'), true)
   assert.equal(verifyTelegramWebhookSecretToken('secret', 'other'), false)
   assert.equal(verifyTelegramWebhookSecretToken(null, 'secret'), false)
+})
+
+test('verifySlackRequestSignature accepts valid Slack signatures within skew', () => {
+  const secret = 'slack-signing-secret'
+  const timestamp = '1710000000'
+  const body = '{"type":"event_callback"}'
+  const signature = `v0=${createHmac('sha256', secret).update(`v0:${timestamp}:${body}`).digest('hex')}`
+  const nowMs = Number(timestamp) * 1000
+  assert.equal(verifySlackRequestSignature(secret, signature, timestamp, body, { nowMs }), true)
+  assert.equal(verifySlackRequestSignature(secret, signature, timestamp, body, { nowMs: nowMs + 10 * 60 * 1000 }), false)
+  assert.equal(verifySlackRequestSignature(secret, `v0=${'00'.repeat(32)}`, timestamp, body, { nowMs }), false)
+  assert.equal(verifySlackRequestSignature('', signature, timestamp, body, { nowMs }), false)
+  assert.equal(verifySlackRequestSignature(secret, signature.slice(3), timestamp, body, { nowMs }), false)
 })

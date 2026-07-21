@@ -752,21 +752,21 @@
   },
   {
    "path": "src/config.ts",
-   "maxLines": 1820,
+   "maxLines": 1800,
    "owner": "config",
-   "note": "Hard LOC budget (JOE-919); current 1780 lines; ratchet toward 2000"
+   "note": "Hard LOC budget (JOE-919); current 1780 lines; under 2000"
   },
   {
    "path": "src/scheduler.ts",
-   "maxLines": 1840,
+   "maxLines": 1820,
    "owner": "scheduler_replay",
-   "note": "Hard LOC budget (JOE-919); current 1800 lines; ratchet toward 2000"
+   "note": "Hard LOC budget (JOE-919); current 1800 lines; under 2000"
   },
   {
    "path": "src/daemon-routes/work.ts",
-   "maxLines": 1980,
+   "maxLines": 1960,
    "owner": "scheduler_replay",
-   "note": "Hard LOC budget (JOE-919); current 1940 lines; ratchet toward 2000"
+   "note": "Hard LOC budget (JOE-919); current 1940 lines; under 2000"
   }
  ]
 }
