@@ -1,5 +1,5 @@
-import { createPublicKey, verify as verifySignature } from 'node:crypto'
 import type { ChannelAdapter, ChannelMessage } from './provider.js'
+import { verifyDiscordInteractionSignature } from '@open-cowork/shared/node'
 import { DISCORD_ALPHA_CAPABILITIES, discordAdapterCapabilities } from './capabilities.js'
 import { planNativeActionDelivery, renderStructuredMessage, type ChannelCapabilities, type MessageAction, type NativeActionDeliveryItem, type RichMessageBlock, type StructuredGatewayMessage } from './renderer.js'
 import { getConfig } from '../config.js'
@@ -18,7 +18,6 @@ const DISCORD_CUSTOM_ID_LIMIT = 100
 const DISCORD_COMPONENT_ROW_LIMIT = 5
 const DISCORD_COMPONENTS_PER_ROW = 5
 const DISCORD_INTERACTION_MAX_SKEW_MS = 5 * 60 * 1000
-const ED25519_SPKI_DER_PREFIX = '302a300506032b6570032100'
 const DISCORD_API_TIMEOUT_MS = 10_000
 
 let handler: ((msg: ChannelMessage) => Promise<void>) | null = null
@@ -274,15 +273,7 @@ export function buildDiscordActionRows(actions: MessageAction[]): any[] {
 }
 
 export function verifyDiscordSignature(publicKeyHex: string, signatureHex: string, timestamp: string, rawBody: string): boolean {
-  try {
-    const keyBytes = Buffer.from(publicKeyHex, 'hex')
-    const signature = Buffer.from(signatureHex, 'hex')
-    if (keyBytes.length !== 32 || signature.length !== 64) return false
-    const key = createPublicKey({ key: Buffer.concat([Buffer.from(ED25519_SPKI_DER_PREFIX, 'hex'), keyBytes]), format: 'der', type: 'spki' })
-    return verifySignature(null, Buffer.from(timestamp + rawBody), key, signature)
-  } catch {
-    return false
-  }
+  return verifyDiscordInteractionSignature(publicKeyHex, signatureHex, timestamp, rawBody)
 }
 
 function isFreshDiscordTimestamp(timestamp: string): boolean {

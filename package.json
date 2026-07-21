@@ -115,7 +115,7 @@
     "changeset:version": "changeset version",
     "build:channel-gateway": "pnpm --filter @open-cowork/channel-gateway build",
     "typecheck:channel-gateway": "pnpm --filter @open-cowork/channel-gateway typecheck",
-    "boundaries:check": "node scripts/check-product-boundaries.mjs && node scripts/check-no-ghost-apps-gateway.mjs && node scripts/check-god-module-loc.mjs && pnpm --filter cowork-gateway boundaries:check",
+    "boundaries:check": "node scripts/check-product-boundaries.mjs && node scripts/check-no-ghost-apps-gateway.mjs && node scripts/check-god-module-loc.mjs && node scripts/check-dual-channel-security.mjs && pnpm --filter cowork-gateway boundaries:check",
     "smoke:gateway-standalone": "node products/gateway/scripts/standalone-smoke.mjs",
     "smoke:wiki-standalone": "node products/wiki/scripts/standalone-smoke.mjs",
     "archive:readiness": "node scripts/check-product-archive-readiness.mjs",

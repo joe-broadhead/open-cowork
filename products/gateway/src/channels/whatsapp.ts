@@ -3,8 +3,7 @@ import { WHATSAPP_CAPABILITIES } from './capabilities.js'
 import { planNativeActionDelivery, renderStructuredMessage, type MessageAction, type NativeActionDeliveryItem, type StructuredGatewayMessage } from './renderer.js'
 import { getConfig } from '../config.js'
 import { queueEvent } from '../wakeup.js'
-import { createHmac, timingSafeEqual } from 'node:crypto'
-import { constantTimeEqualsDigest } from '@open-cowork/shared/node'
+import { verifyMetaHubSignature256, verifyMetaHubVerifyToken } from '@open-cowork/shared/node'
 import { appendChannelInboundDenialAudit } from '../channel-audit.js'
 import { appendWorkEvent } from '../work-store.js'
 import { isTransientInboundError, isTrustedChannelTarget, redactedChannelTargetLabel, redactSensitiveText } from '../security.js'
@@ -110,19 +109,13 @@ export const whatsappChannel: ChannelAdapter & {
     const cfg = getWhatsAppConfig()
     if (!cfg.verifyToken) return null
     if (url.searchParams.get('hub.mode') !== 'subscribe') return null
-    if (!constantTimeTextEquals(url.searchParams.get('hub.verify_token') || '', cfg.verifyToken)) return null
+    if (!verifyMetaHubVerifyToken(cfg.verifyToken, url.searchParams.get('hub.verify_token') || '')) return null
     return url.searchParams.get('hub.challenge') || ''
   },
 
   verifySignature(signatureHeader: string | string[] | undefined, rawBody: string): boolean {
     const cfg = getWhatsAppConfig()
-    const header = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader
-    if (!cfg.appSecret || !header?.startsWith('sha256=')) return false
-    const expected = createHmac('sha256', cfg.appSecret).update(rawBody).digest('hex')
-    const actual = header.slice('sha256='.length)
-    const expectedBuffer = Buffer.from(expected, 'hex')
-    const actualBuffer = Buffer.from(actual, 'hex')
-    return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer)
+    return verifyMetaHubSignature256(cfg.appSecret, signatureHeader, rawBody)
   },
 
   async handleWebhook(payload: any): Promise<number> {
@@ -297,10 +290,6 @@ async function safeResponseText(res: Response): Promise<string> {
 function cleanText(value: string, maxLength: number): string {
   const text = String(value || '').replace(/[\u0000-\u001f\u007f]/g, ch => ch === '\n' ? '\n' : ' ').trim()
   return text.length <= maxLength ? text : text.substring(0, maxLength)
-}
-
-function constantTimeTextEquals(a: string, b: string): boolean {
-  return constantTimeEqualsDigest(String(a), String(b))
 }
 
 function asArray(value: any): any[] {
