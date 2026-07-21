@@ -106,7 +106,10 @@ Local loopback + no process-wide role is safe. Multi-tenant hosted with `OPENWIK
 
 **Evidence:** `resolveHttpPolicy` treats `parseScopes(token)` as `authMethod: "scope-token"` without a registered service account. Hosted `requireAuthenticatedHttpPolicy` still demands actor/principals, so this does not satisfy hosted auth alone—but it is a sharp edge for local/defaultPolicy token misuse.
 
-**Fix:** Prefer deprecating scope-tokens for anything non-loopback; require SA/OAuth for non-loopback tokens (follow-up).
+**Fix (JOE-972, 2026-07-22):** Scope-tokens are **loopback-only** by default
+(`scopeTokenAuthAllowed` / `remoteAddress` on `resolveHttpPolicy`). Non-loopback
+clients get no elevation from pure scope-list bearers. Override only via
+`OPENWIKI_ALLOW_SCOPE_TOKEN=1`. Documented in `docs/deployment/auth-boundaries.md`.
 
 ### P2-3 — Hosted readiness evidence is not a monorepo PR CI gate
 
@@ -154,7 +157,7 @@ Local loopback + no process-wide role is safe. Multi-tenant hosted with `OPENWIK
 | P1-3 | JOE-974 | High | Done (this PR) |
 | P1-4 | JOE-978 | High | In Progress (claim gate until JOE-959) |
 | P2-1 | JOE-977 | Medium | Backlog |
-| P2-2 | JOE-972 | Low | Backlog |
+| P2-2 | JOE-972 | Low | Done (loopback-only scope-tokens) |
 | P2-3 | JOE-975 | Low | Backlog |
 | P2-4 | JOE-980 | Low | Backlog |
 | P2-5 | JOE-979 | Low | Backlog |

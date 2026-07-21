@@ -21,7 +21,7 @@
 | 4 | **Channel kernel** | JOE-923; JOE-929, JOE-934, JOE-932 | **Foundation + Slack kernel + Durable rate-limit**; body migrate still progressive |
 | 5 | **OpenCode kernel** | JOE-916; JOE-940, JOE-945, JOE-943, JOE-937, JOE-966 | **Inventory + pin lockstep + standalone decision done**; V2 migrate / spawn kernel progressive |
 | 6 | **HA / claim gates** | JOE-931; JOE-963 | **Design + gates done**; not multi-AZ HA |
-| 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **P0/P1 done**; P2 children open |
+| 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **P0/P1 done**; P2-2 scope-token **done**; other P2 progressive |
 | 8 | **Private-beta ops package** | JOE-922 | **Done** (public package + gaps) |
 | 9 | **WorkspaceSessionPort** | JOE-921 | **Done** |
 | 10 | **Audit pointer hygiene** | JOE-964 | **Done** |
@@ -38,7 +38,7 @@ ea28479c refactor(JOE-942): supervisor + project-binding helpers
 1. **JOE-942 / JOE-936 / JOE-919** — named god façades ≤2000 **done** (ratchets enforced).  
 2. **JOE-923 progressive** — Slack shared verify + Durable webhook rate-limit **done**; full provider body migrate still residual.  
 3. **JOE-940 / JOE-945 / JOE-966** — Durable classic inventory, pin lockstep CI, standalone adapter decision **done**.  
-4. Progressive: JOE-941 Durable V2 (pin-gated), JOE-943 spawn/event-pump kernel, wiki P2s.  
+4. Progressive: JOE-941 Durable V2 (pin-gated), JOE-943 spawn/event-pump kernel, wiki P2-1/3/4/5.  
 5. **Open single PR** when ready to burn Actions once.
 
 ## Non-claims

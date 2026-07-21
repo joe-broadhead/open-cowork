@@ -7,6 +7,12 @@ export {
   validateProcessWideDefaultPolicy,
   validateTrustedHeaderRuntime,
 } from "./server.ts";
+export {
+  isLoopbackRemoteAddress,
+  resolveHttpPolicy,
+  scopeTokenAuthAllowed,
+} from "./auth.ts";
+export type { ResolveHttpPolicyOptions } from "./auth.ts";
 export { resetHttpOperationalStateForTests } from "./operational.ts";
 export type {
   HttpApiOptions,

@@ -72,6 +72,25 @@ The web UI displays an identity chip when OpenWiki receives trusted actor, role,
 scope, principal, or service-account data. If no trusted identity is present, the
 UI shows a neutral local or anonymous state.
 
+## Scope-list bearer tokens (local only)
+
+A Bearer value that is **only** a comma/space-separated scope list
+(for example `wiki:read,wiki:write`) is treated as a **scope-token**: it elevates
+scopes without a registered principal. That is a local/dev convenience.
+
+| Client remote address | Default behavior |
+| --- | --- |
+| Loopback (`127.0.0.1`, `::1`) or in-process (no socket) | Scope-tokens accepted |
+| Non-loopback | Scope-tokens **ignored** (no elevation); use service-account or OAuth |
+
+Override with `OPENWIKI_ALLOW_SCOPE_TOKEN=1` only when you intentionally accept
+scope-list bearers off loopback (not recommended for hosted). Set
+`OPENWIKI_ALLOW_SCOPE_TOKEN=0` to disable even on loopback.
+
+Hosted deployments that require authentication still need an actor/principal
+(`requireAuthenticatedHttpPolicy`); a scope-token alone never satisfies that
+gate.
+
 ## Agent Behavior
 
 Use service-account bearer tokens for HTTP MCP when agents connect directly to

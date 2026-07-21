@@ -273,12 +273,92 @@ function booleanFromEnv(value: string | undefined): boolean | undefined {
   throw new Error("OPENWIKI_REQUIRE_AUTH must be true or false");
 }
 
-export async function resolveHttpPolicy(root: string, policy: HttpPolicyOptions): Promise<HttpPolicyOptions> {
+export type ResolveHttpPolicyOptions = {
+  /**
+   * When true, allow raw bearer scope lists (`wiki:read,wiki:write`) as an auth method.
+   * When false, refuse that path (service-account/OAuth still work).
+   * When omitted, defaults from remote address + OPENWIKI_ALLOW_SCOPE_TOKEN (JOE-972).
+   */
+  allowScopeToken?: boolean;
+  /** Client remote address used to decide loopback-only scope-token default. */
+  remoteAddress?: string;
+};
+
+/**
+ * Scope-tokens are a local/dev convenience: a Bearer value that is only a
+ * comma/space-separated scope list elevates scopes without a principal.
+ * They must not be accepted from non-loopback clients unless explicitly enabled
+ * via OPENWIKI_ALLOW_SCOPE_TOKEN=1 (JOE-972 / wiki audit P2-2).
+ */
+export function scopeTokenAuthAllowed(options: {
+  allowScopeToken?: boolean;
+  remoteAddress?: string;
+  env?: NodeJS.ProcessEnv;
+} = {}): boolean {
+  if (options.allowScopeToken === true) {
+    return true;
+  }
+  if (options.allowScopeToken === false) {
+    return false;
+  }
+  const env = options.env ?? process.env;
+  const explicit = optionalBooleanEnv(env.OPENWIKI_ALLOW_SCOPE_TOKEN);
+  if (explicit === true) {
+    return true;
+  }
+  if (explicit === false) {
+    return false;
+  }
+  // In-process callers (no socket) keep historical local behavior.
+  if (options.remoteAddress === undefined || options.remoteAddress === "") {
+    return true;
+  }
+  return isLoopbackRemoteAddress(options.remoteAddress);
+}
+
+export function isLoopbackRemoteAddress(address: string | undefined): boolean {
+  if (!address) {
+    return false;
+  }
+  const normalized = address.trim().toLowerCase().replace(/^::ffff:/, "");
+  return (
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized === "[::1]" ||
+    normalized === "localhost"
+  );
+}
+
+function optionalBooleanEnv(value: string | undefined): boolean | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === undefined || normalized === "") {
+    return undefined;
+  }
+  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  throw new Error("OPENWIKI_ALLOW_SCOPE_TOKEN must be true or false");
+}
+
+export async function resolveHttpPolicy(
+  root: string,
+  policy: HttpPolicyOptions,
+  options: ResolveHttpPolicyOptions = {},
+): Promise<HttpPolicyOptions> {
   if (policy.scopes !== undefined || policy.role !== undefined || policy.token === undefined) {
     return policy;
   }
   const tokenScopes = parseScopes(policy.token);
   if (tokenScopes.length > 0) {
+    if (!scopeTokenAuthAllowed(options)) {
+      // Do not elevate scopes from a raw scope list off-loopback. SA/OAuth paths
+      // below still apply if the token is a registered secret (scope parse is
+      // usually empty for those). Pure scope-list tokens remain unresolved.
+      return policy;
+    }
     return { ...policy, scopes: tokenScopes, authMethod: "scope-token" };
   }
   const config = await readConfig(root);

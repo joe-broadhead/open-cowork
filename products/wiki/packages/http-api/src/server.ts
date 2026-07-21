@@ -275,7 +275,9 @@ export async function handleHttpRequest(
       return;
     }
     const requestPolicy = await policyOptionsFromRequest(root, request, httpTrustsRequestHeaders(defaultPolicy, request));
-    const policy = await resolveHttpPolicy(root, mergeHttpPolicy(defaultPolicy, requestPolicy));
+    const policy = await resolveHttpPolicy(root, mergeHttpPolicy(defaultPolicy, requestPolicy), {
+      remoteAddress: context.remoteAddress,
+    });
     const authenticationFailure = await requireAuthenticatedHttpPolicy(root, policy);
     if (authenticationFailure !== undefined) {
       writeRouteResult(response, authenticationFailure);
@@ -309,7 +311,9 @@ export async function handleHttpRequest(
   const eventStream = eventStreamUrl(request.url ?? "/");
   if (method === "GET" && eventStream) {
     const requestPolicy = await policyOptionsFromRequest(root, request, httpTrustsRequestHeaders(defaultPolicy, request));
-    const policy = await resolveHttpPolicy(root, mergeHttpPolicy(defaultPolicy, requestPolicy));
+    const policy = await resolveHttpPolicy(root, mergeHttpPolicy(defaultPolicy, requestPolicy), {
+      remoteAddress: context.remoteAddress,
+    });
     const authenticationFailure = await requireAuthenticatedHttpPolicy(root, policy);
     if (authenticationFailure !== undefined) {
       writeRouteResult(response, authenticationFailure);
@@ -364,7 +368,9 @@ export async function routeHttpRequest(
   let rateLimited = false;
   try {
     const policyResolved = shouldResolvePolicyForOperationalRoute(method, url);
-    effectivePolicy = policyResolved ? await resolveHttpPolicy(root, policy) : policy;
+    effectivePolicy = policyResolved
+      ? await resolveHttpPolicy(root, policy, { remoteAddress: context.remoteAddress })
+      : policy;
     if (route.bucket !== undefined && url.pathname !== "/mcp") {
       const decision = await checkRateLimit(root, route, effectivePolicy, context);
       if (!decision.allowed) {
