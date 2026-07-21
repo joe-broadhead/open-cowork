@@ -4,7 +4,6 @@ import type {
   ArtifactStatusUpdateRequest,
   LaunchpadFeedPayload,
   LaunchpadFeedRequest,
-  MessageAttachment,
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
