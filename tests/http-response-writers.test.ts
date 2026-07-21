@@ -125,6 +125,9 @@ test('writeBrowserRendererHtml keeps connect-src self when no object-store origi
   // Script stays strict; style relaxed for the runtime-injected stylesheet.
   assert.match(csp, /script-src 'self'/)
   assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/)
+  // JOE-946: parent SPA must NOT allow unsafe-eval — Vega runs only in the
+  // sandboxed chart iframe (writeBrowserRendererChartFrameHtml).
+  assert.doesNotMatch(csp, /script-src[^;]*'unsafe-eval'/)
   assert.match(csp, /style-src 'self' 'unsafe-inline'/)
   // SEC img-src: same-origin + data: only (attachment/branding images are data: URLs).
   // No external-host wildcard, which closes a markdown-image beacon/exfil vector.
