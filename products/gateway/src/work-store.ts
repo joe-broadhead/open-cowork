@@ -5,11 +5,11 @@ import { DatabaseSync } from 'node:sqlite'
 import { getConfig, type HumanGateTimeoutAction } from './config.js'
 import { cleanupFailedEnvironmentRun, environmentControllerForBackend, finalizeEnvironmentRun, normalizeEnvironmentSelector, redactEnvironmentRecord, type EnvironmentRunRecord, type EnvironmentSelector } from './environments.js'
 import { buildRuntimeLifecycleDiagnostics, summarizeRuntimeIsolationProfile } from './runtime-isolation.js'
-import { decideNextTaskState, defaultPipeline, normalizeTaskQualitySpec, type RunStatus, type StageResult, type WorkflowDecision, type WorkStatus } from './workflow.js'
+import { decideNextTaskState, normalizeTaskQualitySpec, type RunStatus, type StageResult, type WorkflowDecision, type WorkStatus } from './workflow.js'
 import { type AuditLedgerQueryOptions } from './audit-ledger.js'
 import { closeWorkDb, currentWorkDbLeadershipEpoch, getRow, markWorkDbActive, openWorkDb, parseJSON, queryRows, resetWorkDbInitState, unmarkWorkDbActive, withWorkDb, withWorkDbReadOnly, workStatePath } from './work-store/db.js'
 import { isDependencyRecord, isProjectBindingRecord, isRoadmapCompletionProposalRecord, isRoadmapRecord, isRoadmapSupervisorRecord, isRunRecord, isTaskRecord, normalizeProjectBindingRecord, normalizeRoadmapQualitySpec, rowToAuditLedger, rowToDelegationReceipt, rowToDependency, rowToEvent, rowToHumanGate, rowToProjectBinding, rowToRoadmap, rowToRoadmapCompletionProposal, rowToRoadmapSupervisor, rowToRun, rowToSupervisorWakeupReceipt, rowToTask, rowToTaskDispatchReceipt } from './work-store/row-mappers.js'
-import { normalizeJsonObject, normalizeOptionalIdentifier, normalizeOptionalIsoTime, normalizeOptionalString, normalizePriority, normalizeProjectAlias, normalizeRequiredString, normalizeStage, normalizeStringList, normalizeThreadId } from './work-store/validators.js'
+import { normalizeJsonObject, normalizeOptionalIsoTime, normalizeOptionalString, normalizePriority, normalizeProjectAlias, normalizeRequiredString, normalizeStage, normalizeStringList, normalizeThreadId } from './work-store/validators.js'
 import { redactSensitiveText } from './security.js'
 import { isActiveRunStatus, isTaskActiveStatus, isTaskRunOwnershipTerminalStatus, shouldAbortActiveRunForTaskStatus } from './runtime-state-machine.js'
 import { writeRunArtifactManifest } from './artifacts.js'
@@ -80,10 +80,51 @@ import {
   resolvedProjectContext,
   upsertProjectBindingInState,
 } from './work-store/project-binding-helpers.js'
+
+import {
+  insertHumanGateRow,
+  normalizeHumanGateDecision,
+  normalizeHumanGateScope,
+  humanGateInputForManualTask,
+  manualGateReason,
+} from './work-store/human-gates.js'
+export {
+  listHumanGates,
+  listHumanGatesReadOnly,
+  getHumanGate,
+  createHumanGate,
+  ensureHumanGate,
+  insertHumanGateRow,
+  normalizeHumanGateDecision,
+  normalizeHumanGateScope,
+} from './work-store/human-gates.js'
+import {
+  createRun,
+  listWorkTaskViews,
+  calculateTaskReadiness,
+  applyTaskUpdate,
+  createRoadmapInState,
+  createWorkTaskInState,
+  validateTaskUpdate,
+  addWorkDependencyInState,
+  assertRoadmapAcceptsTasks,
+  assertStageInPipeline,
+  normalizeOptionalAgentTeam,
+  normalizeTaskCreateList,
+  normalizeTaskUpdateList,
+  normalizeRoadmapStatus,
+  normalizeWorkTaskAction,
+  recomputeRoadmapStatusInState,
+} from './work-store/task-helpers.js'
+export {
+  createRun,
+  listWorkTaskViews,
+  calculateTaskReadiness,
+  recomputeRoadmapStatusInState,
+} from './work-store/task-helpers.js'
 export { appendWorkEventRow } from './work-store/event-append.js'
 
 import {
-  INBOX_ROADMAP_ID,
   OPEN_HUMAN_GATE_STATUSES,
   WORK_EVENT_TYPE_QUERY_LIMIT,
 } from './work-store/types.js'
@@ -100,15 +141,9 @@ import type {
   DelegatedWorkProgressKind,
   DelegatedWorkReceipt,
   DelegationProgressRouteReceiptRecord,
-  HumanGateDecision,
   HumanGateDecisionInput,
   HumanGateDecisionResult,
-  HumanGateInput,
-  HumanGateRecord,
-  HumanGateScope,
   HumanGateStatus,
-  HumanGateType,
-  ManualGate,
   ProjectBindingInput,
   ProjectBindingRecord,
   ProjectBindingScope,
@@ -123,7 +158,6 @@ import type {
   RoadmapDeleteResult,
   RoadmapQualitySpec,
   RoadmapRecord,
-  RoadmapStatus,
   RoadmapSupervisorCreateInput,
   RoadmapSupervisorRecord,
   RoadmapSupervisorResultApplyInput,
@@ -160,7 +194,6 @@ import type {
   WorkTaskCreateInput,
   WorkTaskDeleteResult,
   WorkTaskReadiness,
-  WorkTaskReadinessStatus,
   WorkTaskRecord,
   WorkTaskRunCompleteResult,
   WorkTaskRunFailResult,
@@ -217,76 +250,6 @@ function assertFullWorkStateForReplace(state: WorkState): void {
   }
 }
 
-export function createRun(task: WorkTaskRecord, stage: string, sessionId: string, profile: string, now = new Date(), lease: { owner?: string; leaseMs?: number; generation?: string } = {}, resolution: RunResolutionInput = {}): RunRecord {
-  const attempt = (task.attempts[stage] || 0) + 1
-  const leaseMs = lease.leaseMs || 60 * 60 * 1000
-  return {
-    id: `run_${randomUUID()}`,
-    taskId: task.id,
-    stage,
-    sessionId,
-    profile,
-    agentTeam: normalizeOptionalString(resolution.agentTeam, 120),
-    agentTeamVersion: normalizeOptionalString(resolution.agentTeamVersion, 120),
-    resolvedProfile: normalizeOptionalString(resolution.resolvedProfile, 120),
-    resolvedAgent: normalizeOptionalString(resolution.resolvedAgent, 120),
-    environment: resolution.environment,
-    runtimeProfile: resolution.runtimeProfile,
-    status: 'running',
-    attempt,
-    startedAt: now.toISOString(),
-    leaseOwner: lease.owner,
-    leaseExpiresAt: new Date(now.getTime() + leaseMs).toISOString(),
-    schedulerGeneration: lease.generation,
-  }
-}
-
-export function listWorkTaskViews(state: WorkState): WorkTaskView[] {
-  const dependencies = state.dependencies || []
-  const tasksById = new Map(state.tasks.map(task => [task.id, task]))
-  const dependenciesByTask = new Map<string, WorkDependencyRecord[]>()
-  for (const dep of dependencies) {
-    const rows = dependenciesByTask.get(dep.taskId) || []
-    rows.push(dep)
-    dependenciesByTask.set(dep.taskId, rows)
-  }
-  const runsByTask = new Map<string, RunRecord[]>()
-  for (const run of state.runs) {
-    const rows = runsByTask.get(run.taskId) || []
-    rows.push(run)
-    runsByTask.set(run.taskId, rows)
-  }
-  for (const runs of runsByTask.values()) runs.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-  const now = Date.now()
-  return state.tasks.map(task => {
-    const runs = runsByTask.get(task.id) || []
-    const taskDependencies = dependenciesByTask.get(task.id) || []
-    return { ...task, activeRun: runs.find(run => isActiveRunStatus(run.status)), lastRun: runs[0], dependencies: taskDependencies, readiness: calculateTaskReadiness(task, state, now, { tasksById, dependenciesByTask }) }
-  }).sort(compareTaskReadiness)
-}
-
-interface WorkTaskReadinessIndexes {
-  tasksById: Map<string, WorkTaskRecord>
-  dependenciesByTask: Map<string, WorkDependencyRecord[]>
-}
-
-export function calculateTaskReadiness(task: WorkTaskRecord, state: WorkState, now = Date.now(), indexes?: WorkTaskReadinessIndexes): WorkTaskReadiness {
-  if (task.status === 'done' || task.status === 'cancelled' || task.status === 'archived') return { status: 'done', reason: `Task is ${task.status}`, blockers: [] }
-  if (isTaskActiveStatus(task.status)) return { status: 'running', reason: 'Task already has an active run', blockers: task.currentRunId ? [task.currentRunId] : [] }
-  if (task.status === 'paused') return { status: 'paused', reason: task.note || 'Task is paused', blockers: [] }
-  if (task.status === 'blocked') return { status: 'blocked', reason: task.note || 'Task is blocked', blockers: [] }
-  if (task.manualGate) return { status: 'waiting', reason: manualGateReason(task.manualGate), blockers: [task.manualGate] }
-  const earliest = Date.parse(task.earliestStartAt || '')
-  if (Number.isFinite(earliest) && earliest > now) return { status: 'scheduled', reason: `Scheduled for ${task.earliestStartAt}`, blockers: [task.earliestStartAt!] }
-  const tasksById = indexes?.tasksById || new Map(state.tasks.map(row => [row.id, row]))
-  const blockers = blockingDependenciesForTask(task.id, state, indexes)
-    .filter(dep => tasksById.get(dep.dependsOnTaskId)?.status !== 'done')
-  if (blockers.length) {
-    const labels = blockers.map(dep => tasksById.get(dep.dependsOnTaskId)?.title || dep.dependsOnTaskId)
-    return { status: 'blocked', reason: `Waiting for dependency: ${labels.join(', ')}`, blockers: blockers.map(dep => dep.dependsOnTaskId) }
-  }
-  return { status: 'runnable', reason: 'Ready to dispatch', blockers: [] }
-}
 
 export function getWorkTaskReadiness(taskId: string, filePath = workStatePath()): WorkTaskReadiness | undefined {
   const state = loadWorkState(filePath)
@@ -299,76 +262,6 @@ export function listWorkDependencies(taskId?: string, filePath = workStatePath()
   return taskId ? deps.filter(dep => dep.taskId === taskId) : deps
 }
 
-export function listHumanGates(filter: { status?: HumanGateStatus | 'open'; taskId?: string; roadmapId?: string } = {}, filePath = workStatePath()): HumanGateRecord[] {
-  return withWorkDb(filePath, db => listHumanGatesFromDb(db, filter))
-}
-
-export function listHumanGatesReadOnly(filter: { status?: HumanGateStatus | 'open'; taskId?: string; roadmapId?: string } = {}, filePath = workStatePath()): HumanGateRecord[] {
-  return withWorkDbReadOnly(filePath, db => listHumanGatesFromDb(db, filter))
-}
-
-function listHumanGatesFromDb(db: DatabaseSync, filter: { status?: HumanGateStatus | 'open'; taskId?: string; roadmapId?: string } = {}): HumanGateRecord[] {
-  // Filter in SQL so idx_human_gates_status / idx_human_gates_task serve the
-  // hot dashboard/alert-engine queries instead of loading every gate row.
-  const clauses: string[] = []
-  const params: unknown[] = []
-  if (filter.status === 'open') {
-    clauses.push(`status IN (${OPEN_HUMAN_GATE_STATUSES.map(() => '?').join(', ')})`)
-    params.push(...OPEN_HUMAN_GATE_STATUSES)
-  } else if (filter.status) {
-    clauses.push('status = ?')
-    params.push(filter.status)
-  }
-  if (filter.taskId) {
-    clauses.push('task_id = ?')
-    params.push(filter.taskId)
-  }
-  if (filter.roadmapId) {
-    clauses.push('roadmap_id = ?')
-    params.push(filter.roadmapId)
-  }
-  const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''
-  const rows = queryRows(db, `SELECT * FROM human_gates${where} ORDER BY requested_at ASC`, ...params)
-  return rows.map(rowToHumanGate).filter(Boolean) as HumanGateRecord[]
-}
-
-export function getHumanGate(id: string, filePath = workStatePath()): HumanGateRecord | undefined {
-  return withWorkDb(filePath, db => rowToHumanGate(db.prepare('SELECT * FROM human_gates WHERE id = ?').get(id)) || undefined)
-}
-
-export function createHumanGate(input: HumanGateInput, filePath = workStatePath()): HumanGateRecord {
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const gate = insertHumanGateRow(db, input, new Date().toISOString(), { force: true })!
-      db.exec('COMMIT')
-      return gate
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally {
-    db.close()
-  }
-}
-
-export function ensureHumanGate(input: HumanGateInput, filePath = workStatePath()): HumanGateRecord | undefined {
-  const db = openWorkDb(filePath)
-  try {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      const gate = insertHumanGateRow(db, input, new Date().toISOString(), { force: false })
-      db.exec('COMMIT')
-      return gate
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  } finally {
-    db.close()
-  }
-}
 
 export function decideHumanGate(id: string, input: HumanGateDecisionInput, filePath = workStatePath()): HumanGateDecisionResult | undefined {
   return mutateWorkState(filePath, (state, db) => {
@@ -2713,391 +2606,6 @@ export function withWorkDbTransactionForTest(filePath: string, fn: (db: Database
   mutateWorkState(filePath, (_state, db) => { fn(db) })
 }
 
-function applyTaskUpdate(task: WorkTaskRecord, input: WorkTaskUpdateInput): void {
-  if (input.title !== undefined) task.title = normalizeRequiredString(input.title, 'title', 120)
-  if (input.description !== undefined) task.description = normalizeRequiredString(input.description, 'description', 10000)
-  if (input.roadmapId !== undefined) task.roadmapId = input.roadmapId
-  if (input.priority !== undefined) task.priority = normalizePriority(input.priority)
-  if (input.agent !== undefined) task.agent = normalizeOptionalIdentifier(input.agent, 'agent') || task.agent
-  if (input.agentTeam !== undefined) task.agentTeam = normalizeOptionalAgentTeam(input.agentTeam, 'agentTeam')
-  if (input.stageProfiles !== undefined) task.stageProfiles = normalizeStageProfileOverrides(input.stageProfiles, 'stageProfiles')
-  if (input.environment !== undefined) task.environment = input.environment === null ? undefined : normalizeEnvironmentSelector(input.environment, 'task.environment')
-  if (input.pipeline !== undefined) task.pipeline = normalizeTaskPipeline(input.pipeline, task.pipeline)
-  if (input.currentStage !== undefined) task.currentStage = input.currentStage ? normalizeStage(input.currentStage, 'currentStage') : undefined
-  else if (input.pipeline !== undefined && task.currentStage && !task.pipeline.includes(task.currentStage)) task.currentStage = task.pipeline[0] || undefined
-  if (input.note !== undefined) task.note = normalizeOptionalString(input.note, 5000)
-  if (input.earliestStartAt !== undefined) task.earliestStartAt = normalizeOptionalIsoTime(input.earliestStartAt, 'earliestStartAt')
-  if (input.deadlineAt !== undefined) task.deadlineAt = normalizeOptionalIsoTime(input.deadlineAt, 'deadlineAt')
-  if (input.recurrence !== undefined) task.recurrence = normalizeOptionalString(input.recurrence, 200)
-  if (input.manualGate !== undefined) task.manualGate = normalizeManualGate(input.manualGate)
-  if (input.slaClass !== undefined) task.slaClass = normalizeOptionalString(input.slaClass, 80)
-  if (input.qualitySpec !== undefined) task.qualitySpec = normalizeTaskQualitySpec(input.qualitySpec)
-  if (input.status !== undefined) {
-    const status = normalizeWorkStatus(input.status)
-    task.status = status
-    if (!isTaskActiveStatus(status)) task.currentRunId = undefined
-    if (isTaskRunOwnershipTerminalStatus(status)) {
-      if (status !== 'blocked') task.currentStage = undefined
-    }
-    if (status === 'pending' && !task.currentStage) task.currentStage = task.pipeline[0] || 'implement'
-  }
-  task.updatedAt = new Date().toISOString()
-}
-
-function createRoadmapInState(state: WorkState, db: DatabaseSync, input: { title: string; priority?: 'HIGH' | 'MEDIUM' | 'LOW'; agentTeam?: string; environment?: EnvironmentSelector; qualitySpec?: RoadmapQualitySpec }, now: string): RoadmapRecord {
-  const title = normalizeRequiredString(input.title, 'title', 200)
-  const roadmap: RoadmapRecord = {
-    id: `roadmap_${randomUUID()}`,
-    title,
-    status: 'active',
-    priority: normalizePriority(input.priority),
-    agentTeam: normalizeOptionalAgentTeam(input.agentTeam, 'agentTeam'),
-    environment: normalizeEnvironmentSelector(input.environment, 'roadmap.environment'),
-    qualitySpec: normalizeRoadmapQualitySpec(input.qualitySpec),
-    createdAt: now,
-    updatedAt: now,
-  }
-  state.roadmaps.push(roadmap)
-  appendWorkEventRow(db, 'roadmap.created', roadmap.id, { title: roadmap.title, agentTeam: roadmap.agentTeam }, now)
-  return roadmap
-}
-
-function createWorkTaskInState(state: WorkState, db: DatabaseSync, input: WorkTaskCreateInput, now: string): WorkTaskRecord {
-  const pipeline = normalizeTaskPipeline(input.pipeline)
-  const roadmapId = input.roadmapId || ensureInboxRoadmap(state, new Date(now)).id
-  assertRoadmapAcceptsTasks(state, roadmapId)
-  const title = normalizeRequiredString(input.title, 'title', 120)
-  // Idempotent externally-triggered creation: when the caller supplies a dedupe
-  // key, a repeated create with the same (sourceType, sourceKey) returns the
-  // existing task rather than inserting a duplicate. The check runs against the
-  // in-transaction WorkState (readWorkState already loaded every task), which is
-  // the read-modify-write equivalent of ON CONFLICT(source_type, source_key) DO
-  // NOTHING + re-select inside the BEGIN IMMEDIATE window.
-  const idempotencyKey = normalizeOptionalString(input.idempotencyKey, 200)
-  const sourceType = idempotencyKey ? (normalizeOptionalString(input.sourceType, 80) || 'external') : 'manual'
-  const sourceKey = idempotencyKey || undefined
-  if (idempotencyKey) {
-    const existing = state.tasks.find(row => row.sourceType === sourceType && row.sourceKey === sourceKey)
-    if (existing) return existing
-  }
-  const task: WorkTaskRecord = {
-    id: `task_${randomUUID()}`,
-    roadmapId,
-    title,
-    description: normalizeOptionalString(input.description, 10000) || title,
-    status: 'pending',
-    priority: normalizePriority(input.priority),
-    agent: normalizeOptionalIdentifier(input.agent, 'agent') || 'build',
-    agentTeam: normalizeOptionalAgentTeam(input.agentTeam, 'agentTeam'),
-    stageProfiles: normalizeStageProfileOverrides(input.stageProfiles, 'stageProfiles'),
-    environment: normalizeEnvironmentSelector(input.environment, 'task.environment'),
-    pipeline,
-    currentStage: pipeline[0] || 'implement',
-    attempts: {},
-    note: normalizeOptionalString(input.note, 5000),
-    earliestStartAt: normalizeOptionalIsoTime(input.earliestStartAt, 'earliestStartAt'),
-    deadlineAt: normalizeOptionalIsoTime(input.deadlineAt, 'deadlineAt'),
-    recurrence: normalizeOptionalString(input.recurrence, 200),
-    manualGate: normalizeManualGate(input.manualGate),
-    slaClass: normalizeOptionalString(input.slaClass, 80),
-    qualitySpec: normalizeTaskQualitySpec(input.qualitySpec),
-    sourceType,
-    sourceKey,
-    createdAt: now,
-    updatedAt: now,
-  }
-  state.tasks.push(task)
-  for (const dependsOnTaskId of input.dependsOn || []) addWorkDependencyInState(state, db, { taskId: task.id, dependsOnTaskId }, now)
-  recomputeRoadmapStatusInState(state, roadmapId, now)
-  appendWorkEventRow(db, 'task.created', task.id, { title: task.title, roadmapId, agentTeam: task.agentTeam, stageProfiles: task.stageProfiles }, now)
-  if (task.manualGate) insertHumanGateRow(db, humanGateInputForManualTask(task), now, { force: false })
-  return task
-}
-
-function validateTaskUpdate(state: WorkState, task: WorkTaskRecord, input: WorkTaskUpdateInput): void {
-  if (input.status !== undefined && normalizeWorkStatus(input.status) === 'running') throw new Error('running status is reserved for scheduler run dispatch')
-  const roadmapId = input.roadmapId ?? task.roadmapId
-  assertRoadmapAcceptsTasks(state, roadmapId)
-  const pipeline = input.pipeline !== undefined ? normalizeTaskPipeline(input.pipeline, task.pipeline) : task.pipeline
-  const currentStage = input.currentStage !== undefined ? input.currentStage ? normalizeStage(input.currentStage, 'currentStage') : undefined : task.currentStage
-  if (input.currentStage !== undefined && currentStage && !pipeline.includes(currentStage)) throw new Error(`currentStage must be in pipeline: ${currentStage}`)
-  if (input.currentStage === undefined && task.status === 'running' && currentStage && !pipeline.includes(currentStage)) throw new Error(`currentStage must be in pipeline: ${currentStage}`)
-  if (input.earliestStartAt !== undefined) normalizeOptionalIsoTime(input.earliestStartAt, 'earliestStartAt')
-  if (input.deadlineAt !== undefined) normalizeOptionalIsoTime(input.deadlineAt, 'deadlineAt')
-  if (input.manualGate !== undefined) normalizeManualGate(input.manualGate)
-  if (input.agentTeam !== undefined) normalizeOptionalAgentTeam(input.agentTeam, 'agentTeam')
-  if (input.stageProfiles !== undefined) normalizeStageProfileOverrides(input.stageProfiles, 'stageProfiles')
-  if (input.qualitySpec !== undefined) normalizeTaskQualitySpec(input.qualitySpec)
-}
-
-function addWorkDependencyInState(state: WorkState, db: DatabaseSync, input: WorkDependencyInput, now: string): WorkDependencyRecord {
-  state.dependencies ||= []
-  const taskId = normalizeRequiredString(input.taskId, 'taskId', 120)
-  const dependsOnTaskId = normalizeRequiredString(input.dependsOnTaskId, 'dependsOnTaskId', 120)
-  const type = normalizeDependencyType(input.type)
-  if (taskId === dependsOnTaskId) throw new Error('task cannot depend on itself')
-  if (!state.tasks.some(task => task.id === taskId)) throw new Error(`task not found: ${taskId}`)
-  if (!state.tasks.some(task => task.id === dependsOnTaskId)) throw new Error(`dependency task not found: ${dependsOnTaskId}`)
-  const existing = state.dependencies.find(dep => dep.taskId === taskId && dep.dependsOnTaskId === dependsOnTaskId && dep.type === type)
-  if (existing) return existing
-  assertNoDependencyCycle(state, { taskId, dependsOnTaskId, type, createdAt: now })
-  const record = { taskId, dependsOnTaskId, type, createdAt: now }
-  state.dependencies.push(record)
-  appendWorkEventRow(db, 'task.dependency.created', taskId, { dependsOnTaskId, type }, now)
-  return record
-}
-
-function assertRoadmapAcceptsTasks(state: WorkState, roadmapId: string): void {
-  const roadmap = state.roadmaps.find(row => row.id === roadmapId)
-  if (!roadmap) throw new Error(`roadmap not found: ${roadmapId}`)
-  if (roadmap.status === 'archived') throw new Error(`roadmap is archived: ${roadmapId}`)
-}
-
-
-function assertProfileExists(profile: string): void {
-  if (!getConfig().profiles[profile]) throw new Error(`profile not found: ${profile}`)
-}
-
-function assertAgentTeamExists(agentTeam: string): void {
-  if (!getConfig().agentTeams[agentTeam]) throw new Error(`agent team not found: ${agentTeam}`)
-}
-
-function normalizeOptionalAgentTeam(value: unknown, label: string): string | undefined {
-  if (value === undefined || value === null || value === '') return undefined
-  const agentTeam = normalizeStage(value, label)
-  assertAgentTeamExists(agentTeam)
-  return agentTeam
-}
-
-function normalizeStageProfileOverrides(value: unknown, label: string): Record<string, string> | undefined {
-  if (value === undefined || value === null || value === '') return undefined
-  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`)
-  const profiles: Record<string, string> = {}
-  for (const [stage, rawProfile] of Object.entries(value as Record<string, unknown>)) {
-    const normalizedStage = stage === 'default' ? 'default' : normalizeStage(stage, `${label}.${stage}`)
-    const profile = normalizeOptionalIdentifier(rawProfile, `${label}.${stage}`)
-    if (!profile) throw new Error(`${label}.${stage} is required`)
-    assertProfileExists(profile)
-    profiles[normalizedStage] = profile
-  }
-  return Object.keys(profiles).length ? profiles : undefined
-}
-
-function assertStageInPipeline(task: WorkTaskRecord, stage: string): void {
-  if (!task.pipeline.includes(stage)) throw new Error(`stage must be in pipeline: ${stage}`)
-}
-
-function normalizeTaskPipeline(input?: string[], fallback = defaultPipeline()): string[] {
-  const source = Array.isArray(input) && input.length > 0 ? input : fallback
-  const candidates = source
-    .map((stage, index) => {
-      if (typeof stage !== 'string') throw new Error(`pipeline stage at index ${index} must be a string`)
-      return stage.trim()
-    })
-    .filter(Boolean)
-  const pipeline = [...new Set(candidates)]
-  if (pipeline.length === 0) throw new Error('pipeline must include at least one stage')
-  for (const stage of pipeline) {
-    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(stage)) throw new Error(`pipeline contains invalid stage: ${stage}`)
-  }
-  return pipeline
-}
-
-function normalizeTaskCreateList(inputs: unknown): WorkTaskCreateInput[] {
-  if (!Array.isArray(inputs)) throw new Error('tasks must be an array')
-  return inputs.map((input, index) => {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error(`task at index ${index} must be an object`)
-    return input as WorkTaskCreateInput
-  })
-}
-
-function normalizeTaskUpdateList(inputs: unknown): WorkTaskBulkUpdateInput[] {
-  if (!Array.isArray(inputs) || inputs.length === 0) throw new Error('updates must include at least one task update')
-  return inputs.map((input, index) => {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error(`update at index ${index} must be an object`)
-    const update = input as WorkTaskBulkUpdateInput
-    if (typeof update.taskId !== 'string' || !update.taskId.trim()) throw new Error(`update at index ${index} requires taskId`)
-    return update
-  })
-}
-
-function normalizeRoadmapStatus(value: unknown): RoadmapStatus {
-  if (value === 'active' || value === 'done' || value === 'blocked' || value === 'archived') return value
-  throw new Error(`roadmap status must be active, done, blocked, or archived: ${String(value)}`)
-}
-
-
-function normalizeWorkStatus(value: unknown): WorkStatus {
-  if (value === 'pending' || value === 'running' || value === 'done' || value === 'blocked' || value === 'paused' || value === 'cancelled' || value === 'archived') return value
-  throw new Error(`task status must be pending, running, done, blocked, paused, cancelled, or archived: ${String(value)}`)
-}
-
-function normalizeWorkTaskAction(value: unknown): WorkTaskAction {
-  if (value === 'pause' || value === 'resume' || value === 'cancel' || value === 'retry' || value === 'done' || value === 'block') return value
-  throw new Error(`task action must be pause, resume, cancel, retry, done, or block: ${String(value)}`)
-}
-
-function normalizeDependencyType(value: unknown): WorkDependencyType {
-  if (value === undefined || value === null || value === '') return 'blocks'
-  if (value === 'blocks' || value === 'blocked_by' || value === 'parent' || value === 'child' || value === 'related' || value === 'duplicate') return value
-  throw new Error(`dependency type must be blocks, blocked_by, parent, child, related, or duplicate: ${String(value)}`)
-}
-
-function normalizeManualGate(value: unknown): ManualGate | undefined {
-  if (value === undefined || value === null || value === '') return undefined
-  if (value === 'approval_required' || value === 'credentials_required' || value === 'external_dependency' || value === 'waiting_for_user') return value
-  throw new Error(`manualGate must be approval_required, credentials_required, external_dependency, or waiting_for_user: ${String(value)}`)
-}
-
-
-function blockingDependenciesForTask(taskId: string, state: WorkState, indexes?: Pick<WorkTaskReadinessIndexes, 'dependenciesByTask'>): WorkDependencyRecord[] {
-  const dependencies = indexes?.dependenciesByTask?.get(taskId) || state.dependencies || []
-  return dependencies.filter(dep => dep.taskId === taskId && (dep.type === 'blocks' || dep.type === 'blocked_by' || dep.type === 'parent'))
-}
-
-function manualGateReason(gate: ManualGate): string {
-  if (gate === 'approval_required') return 'Waiting for operator approval'
-  if (gate === 'credentials_required') return 'Waiting for credentials'
-  if (gate === 'external_dependency') return 'Waiting for an external dependency'
-  return 'Waiting for user input'
-}
-
-function humanGateInputForManualTask(task: WorkTaskRecord): HumanGateInput {
-  const manualGate = task.manualGate || 'waiting_for_user'
-  return {
-    type: humanGateTypeForManualGate(manualGate),
-    roadmapId: task.roadmapId,
-    taskId: task.id,
-    stage: task.currentStage || task.pipeline[0] || 'implement',
-    reason: manualGateReason(manualGate),
-    requestedBy: 'gateway.manual_gate',
-    scopeKey: `manual:${task.id}:${manualGate}`,
-    details: { manualGate },
-  }
-}
-
-function humanGateTypeForManualGate(gate: ManualGate): HumanGateType {
-  if (gate === 'approval_required') return 'task_start'
-  if (gate === 'credentials_required') return 'credential_use'
-  if (gate === 'external_dependency') return 'external_side_effect'
-  return 'manual'
-}
-
-export function insertHumanGateRow(db: DatabaseSync, input: HumanGateInput, now: string, options: { force: boolean }): HumanGateRecord | undefined {
-  const type = normalizeHumanGateType(input.type)
-  const taskId = normalizeOptionalString(input.taskId, 120)
-  const roadmapId = normalizeOptionalString(input.roadmapId, 120)
-  const runId = normalizeOptionalString(input.runId, 120)
-  const stage = input.stage ? normalizeStage(input.stage, 'stage') : undefined
-  const reason = normalizeRequiredString(input.reason, 'reason', 1000)
-  const requestedBy = normalizeOptionalString(input.requestedBy, 120) || 'gateway'
-  const timeoutAction = normalizeHumanGateTimeoutAction(input.timeoutAction || getConfig().humanLoop.timeoutAction)
-  const expiresAt = normalizeOptionalIsoTime(input.expiresAt, 'expiresAt') || defaultHumanGateExpiresAt(taskId, now)
-  const scopeKey = normalizeOptionalString(input.scopeKey, 300) || defaultHumanGateScopeKey({ type, taskId, roadmapId, runId, stage })
-  const details = input.details && typeof input.details === 'object' && !Array.isArray(input.details) ? input.details : {}
-
-  if (!options.force && scopeKey) {
-    const approved = rowToHumanGate(db.prepare("SELECT * FROM human_gates WHERE scope_key = ? AND status = 'approved' ORDER BY updated_at DESC LIMIT 1").get(scopeKey))
-    if (approved) return undefined
-    const existingOpen = rowToHumanGate(db.prepare("SELECT * FROM human_gates WHERE scope_key = ? AND status IN ('pending', 'escalated') ORDER BY requested_at ASC LIMIT 1").get(scopeKey))
-    if (existingOpen) return existingOpen
-  }
-
-  const id = `gate_${randomUUID()}`
-  db.prepare(`INSERT INTO human_gates (
-    id, type, status, roadmap_id, task_id, run_id, stage, reason, requested_by, requested_at, updated_at,
-    expires_at, timeout_action, scope_key, details_json
-  ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    id,
-    type,
-    roadmapId || null,
-    taskId || null,
-    runId || null,
-    stage || null,
-    reason,
-    requestedBy,
-    now,
-    now,
-    expiresAt || null,
-    timeoutAction,
-    scopeKey || null,
-    JSON.stringify(details),
-  )
-  appendWorkEventRow(db, 'human_gate.created', taskId || roadmapId || id, { gateId: id, type, stage, reason, expiresAt, timeoutAction }, now)
-  return rowToHumanGate(db.prepare('SELECT * FROM human_gates WHERE id = ?').get(id))!
-}
-
-function defaultHumanGateExpiresAt(taskId: string | undefined, now: string): string | undefined {
-  const config = getConfig().humanLoop
-  if (!config.enabled) return undefined
-  void taskId
-  return new Date(Date.parse(now) + config.defaultTimeoutMs).toISOString()
-}
-
-function defaultHumanGateScopeKey(input: { type: HumanGateType; taskId?: string; roadmapId?: string; runId?: string; stage?: string }): string | undefined {
-  if (input.runId) return `${input.type}:run:${input.runId}`
-  if (input.taskId) return `${input.type}:task:${input.taskId}:${input.stage || ''}`
-  if (input.roadmapId) return `${input.type}:roadmap:${input.roadmapId}:${input.stage || ''}`
-  return undefined
-}
-
-function normalizeHumanGateType(value: unknown): HumanGateType {
-  if (value === 'task_start' || value === 'stage_transition' || value === 'external_side_effect' || value === 'budget_exception' || value === 'destructive_action' || value === 'credential_use' || value === 'manual') return value
-  throw new Error(`human gate type must be task_start, stage_transition, external_side_effect, budget_exception, destructive_action, credential_use, or manual: ${String(value)}`)
-}
-
-export function normalizeHumanGateDecision(value: unknown): HumanGateDecision {
-  if (value === 'approve' || value === 'reject') return value
-  throw new Error(`human gate decision must be approve or reject: ${String(value)}`)
-}
-
-export function normalizeHumanGateScope(value: unknown): HumanGateScope {
-  if (value === undefined || value === null || value === '') return 'once'
-  if (value === 'once' || value === 'always') return value
-  throw new Error(`human gate scope must be once or always: ${String(value)}`)
-}
-
-function normalizeHumanGateTimeoutAction(value: unknown): HumanGateTimeoutAction {
-  if (value === 'remind' || value === 'escalate' || value === 'pause' || value === 'block') return value
-  throw new Error(`human gate timeout action must be remind, escalate, pause, or block: ${String(value)}`)
-}
-
-
-function compareTaskReadiness(a: WorkTaskView, b: WorkTaskView): number {
-  const readiness = readinessRank(a.readiness?.status) - readinessRank(b.readiness?.status)
-  if (readiness !== 0) return readiness
-  const priority = priorityRank(a.priority) - priorityRank(b.priority)
-  if (priority !== 0) return priority
-  const aDeadline = Date.parse(a.deadlineAt || '')
-  const bDeadline = Date.parse(b.deadlineAt || '')
-  if (Number.isFinite(aDeadline) || Number.isFinite(bDeadline)) return (Number.isFinite(aDeadline) ? aDeadline : Number.MAX_SAFE_INTEGER) - (Number.isFinite(bDeadline) ? bDeadline : Number.MAX_SAFE_INTEGER)
-  return Date.parse(a.createdAt) - Date.parse(b.createdAt)
-}
-
-function readinessRank(status: WorkTaskReadinessStatus | undefined): number {
-  if (status === 'runnable') return 0
-  if (status === 'running') return 1
-  if (status === 'blocked' || status === 'waiting') return 2
-  if (status === 'scheduled') return 3
-  if (status === 'paused') return 4
-  return 5
-}
-
-function assertNoDependencyCycle(state: WorkState, proposed: WorkDependencyRecord): void {
-  if (!isBlockingDependency(proposed)) return
-  const edges = [...(state.dependencies || []).filter(isBlockingDependency), proposed]
-  const visit = (taskId: string, seen: Set<string>): boolean => {
-    if (taskId === proposed.taskId) return true
-    if (seen.has(taskId)) return false
-    seen.add(taskId)
-    return edges.filter(dep => dep.taskId === taskId).some(dep => visit(dep.dependsOnTaskId, seen))
-  }
-  if (visit(proposed.dependsOnTaskId, new Set())) throw new Error('dependency would create a cycle')
-}
-
-function isBlockingDependency(dep: WorkDependencyRecord): boolean {
-  return dep.type === 'blocks' || dep.type === 'blocked_by' || dep.type === 'parent'
-}
 
 export function mutateWorkState<T>(filePath: string, fn: (state: WorkState, db: DatabaseSync) => T): T {
   assertNoStorageOperationInProgress(filePath)
@@ -3532,16 +3040,6 @@ function applyStageResultInState(state: WorkState, task: WorkTaskRecord, run: Ru
   return decision
 }
 
-export function recomputeRoadmapStatusInState(state: WorkState, roadmapId: string, now = new Date().toISOString()): RoadmapRecord | undefined {
-  const roadmap = state.roadmaps.find(row => row.id === roadmapId)
-  if (!roadmap || roadmap.status === 'archived') return roadmap
-  const tasks = state.tasks.filter(task => task.roadmapId === roadmapId && task.status !== 'archived')
-  if (tasks.length > 0 && tasks.every(task => task.status === 'done')) roadmap.status = 'done'
-  else if (tasks.some(task => task.status === 'blocked')) roadmap.status = 'blocked'
-  else roadmap.status = 'active'
-  roadmap.updatedAt = now
-  return roadmap
-}
 
 /**
  * Bounded count of recent terminal runs materialized into the live (mutation)
@@ -4402,23 +3900,4 @@ function normalizeState(value: any): WorkState {
     : []
   for (const roadmapId of roadmapIds) reconcileDefaultSupervisorInState(state, roadmapId, undefined, new Date().toISOString())
   return state
-}
-
-function ensureInboxRoadmap(state: WorkState, now: Date): RoadmapRecord {
-  const existing = state.roadmaps.find(roadmap => roadmap.id === INBOX_ROADMAP_ID)
-  if (existing) return existing
-  const roadmap: RoadmapRecord = {
-    id: INBOX_ROADMAP_ID,
-    title: 'Task Inbox',
-    status: 'active',
-    priority: 'MEDIUM',
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-  }
-  state.roadmaps.push(roadmap)
-  return roadmap
-}
-
-function priorityRank(priority: string): number {
-  return priority === 'HIGH' ? 0 : priority === 'MEDIUM' ? 1 : 2
 }
