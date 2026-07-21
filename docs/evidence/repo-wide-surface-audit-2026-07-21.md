@@ -1,7 +1,7 @@
 # Repo-wide surface audit (medium+)
 
-**Date:** 2026-07-21  
-**HEAD audited:** `8863765d` (`Merge pull request #957 … codeql-action-4.37.1`)  
+**Date:** 2026-07-21
+**HEAD audited:** `8863765d` (`Merge pull request #957 … codeql-action-4.37.1`)
 **Method:** First-principles inventory of every major surface (apps, products, packages, CI, deploy, supply chain), then deep dives on security, dual stacks, reliability, and ops. **Tiny nits excluded.** Only medium-to-big fix items.
 
 **Prior context (not re-litigated as “new” unless still open):**
@@ -67,8 +67,8 @@ Approximate source LOC (TS/JS, excl. `node_modules` / `dist`):
 
 Severity scale used here:
 
-- **P0 / High** — breaks CI, production security posture, or continuous quality signal now  
-- **P1 / Medium-High** — structural debt that will produce real bugs or dual-fix misses  
+- **P0 / High** — breaks CI, production security posture, or continuous quality signal now
+- **P1 / Medium-High** — structural debt that will produce real bugs or dual-fix misses
 - **P2 / Medium** — real but contained; schedule as dedicated work
 
 ### P0-1 — `pnpm audit:full` is red on current lockfile (CI gate will fail)
@@ -82,31 +82,31 @@ Severity scale used here:
 | GHSA-52CP-R559-CP3M | high | `js-yaml` | 4.2.0 |
 | GHSA-3JXR-9VMJ-R5CP | high | `brace-expansion` | 2.1.1 and 1.1.13 |
 
-`package.json#pnpm.auditConfig` ignore lists are **empty**.  
+`package.json#pnpm.auditConfig` ignore lists are **empty**.
 `.github/workflows/ci.yml` runs `pnpm audit:full` on every PR/push to master.
 
 Last master CI success was **2026-07-19** (post-#957). Advisories / resolution state have moved since; **the next PR that touches master will hit this gate** unless versions are bumped or explicit, time-boxed ignores + override pins are landed.
 
-**Fix:**  
-1. Override / bump `tar`, `js-yaml`, and `brace-expansion` (or their parents) to fixed ranges.  
-2. Prefer real upgrades over ignore list.  
+**Fix:**
+1. Override / bump `tar`, `js-yaml`, and `brace-expansion` (or their parents) to fixed ranges.
+2. Prefer real upgrades over ignore list.
 3. Only if no fixed release exists: temporary `ignoreGhsas` with expiry comment + monthly-maintenance follow-up.
 
 ---
 
 ### P0-2 — Nightly Evals failed 10 consecutive runs (dead quality signal)
 
-**Evidence:** `gh run list --workflow=nightly-evals.yml --limit 10` → **all failure**.  
+**Evidence:** `gh run list --workflow=nightly-evals.yml --limit 10` → **all failure**.
 Latest (`29809502812`, 2026-07-21):
 
-1. Timeout waiting for `[data-nav-view="admin"]` (admin nav surface missing/renamed).  
+1. Timeout waiting for `[data-nav-view="admin"]` (admin nav surface missing/renamed).
 2. `prompt-stream-approval.eval.test.ts`: **`no app subscriber received the synthetic approval`** (retries also fail).
 
 This is not flake noise — same failure class for **~10 days**. Nightly is intentionally non-blocking for release, so **nobody is forced to notice** that offline approval projection / admin nav contracts regressed.
 
-**Fix:**  
-1. Treat Nightly red streak as a product bug: restore approval subscriber wiring or update the eval harness to the current event contract.  
-2. Fix or retire the admin nav selector.  
+**Fix:**
+1. Treat Nightly red streak as a product bug: restore approval subscriber wiring or update the eval harness to the current event contract.
+2. Fix or retire the admin nav selector.
 3. Optional ratchet: alert after N consecutive red nightlies (Slack/GitHub issue).
 
 ---
@@ -115,7 +115,7 @@ This is not flake noise — same failure class for **~10 days**. Nightly is inte
 
 **Evidence:** `docs/product-channel-ownership.md` freezes two stacks by design. Concrete providers exist in both:
 
-- Durable: `products/gateway/src/channels/{telegram,whatsapp,discord}.ts` (+ renderer/capabilities)  
+- Durable: `products/gateway/src/channels/{telegram,whatsapp,discord}.ts` (+ renderer/capabilities)
 - Monorepo: `packages/gateway-provider-{telegram,whatsapp,discord,slack,signal,email,webhook,cli}`
 
 Security bugs (signature verify, SSRF on webhook callbacks, rate limits, constant-time compare) must be fixed **twice** or risk silent skew. Ownership matrix helps humans; it does not prevent drift.
@@ -137,9 +137,9 @@ Security bugs (signature verify, SSRF on webhook callbacks, rate limits, constan
 
 Pin is aligned to **1.18.1** (good; closes prior supply-chain skew). Call-shape divergence remains: Durable Gateway still classic `client.session.*`; Desktop/Standalone use V2. Classic residual methods on Desktop are pin-gated (`docs/opencode-classic-sdk-burndown.md`); Durable Gateway classic surface is much larger and is **not** on the same burndown table as Desktop.
 
-**Fix:**  
-1. Keep pin-lockstep forever (already policy).  
-2. Epic: Durable Gateway V2 migration when OpenCode exposes working routes (same reopen checklist as JOE-845).  
+**Fix:**
+1. Keep pin-lockstep forever (already policy).
+2. Epic: Durable Gateway V2 migration when OpenCode exposes working routes (same reopen checklist as JOE-845).
 3. Extract shared “spawn + client + event pump” kernel to collapse cloud vs runtime-host duplication (prior SDK-6).
 
 ---
@@ -148,8 +148,8 @@ Pin is aligned to **1.18.1** (good; closes prior supply-chain skew). Call-shape 
 
 **Evidence:**
 
-- Helm: `gateway replicaCount > 1 is unsafe while stream/replay state is process-local` (`helm/open-cowork-gateway/templates/deployment.yaml`).  
-- Product doc: `products/gateway/docs/concepts/multi-daemon-scaling.md` — JSON sidecars (`sessions.json`, `channel-sync.json`, `events.json`), process-local locks, notification in-flight maps are **not** multi-writer safe.  
+- Helm: `gateway replicaCount > 1 is unsafe while stream/replay state is process-local` (`helm/open-cowork-gateway/templates/deployment.yaml`).
+- Product doc: `products/gateway/docs/concepts/multi-daemon-scaling.md` — JSON sidecars (`sessions.json`, `channel-sync.json`, `events.json`), process-local locks, notification in-flight maps are **not** multi-writer safe.
 - Process-local maps in live code (`channel-sync` poll state, environment warm pools, usage cache, session stream managers in channel-gateway).
 
 This is correctly fail-closed in Helm for the monorepo chart. Risk is **operator/docs drift** (custom deploy without chart guards) and **future HA marketing** without finishing distributed ownership.
@@ -183,8 +183,8 @@ Module-boundary budgets track **graph edges/cycles**, not **max file LOC**. Part
 
 Contrasts:
 
-- MCP URL policy **rejects** metadata link-local.  
-- Durable Gateway `opencodePeers` / OpenCode URL policy **rejects** link-local/metadata.  
+- MCP URL policy **rejects** metadata link-local.
+- Durable Gateway `opencodePeers` / OpenCode URL policy **rejects** link-local/metadata.
 - Standalone (shared policy) **allows** it.
 
 **Fix:** Deny known metadata addresses (at least `169.254.169.254`, GCP/Azure metadata hostnames) inside `assertPrivateHttpEndpoint`, or add `denyCloudMetadata: true` default for OpenCode endpoints. Keep RFC1918 for lab OpenCode if needed.
@@ -195,14 +195,14 @@ Contrasts:
 
 **Evidence:**
 
-- Channel-gateway / gateway diagnostics intentionally return partial credential shapes (`abcd…[redacted]…wxyz`).  
+- Channel-gateway / gateway diagnostics intentionally return partial credential shapes (`abcd…[redacted]…wxyz`).
 - Durable Gateway HTTP API documents `redact=false` / `unredacted=true` on evidence, config, sessions — gated to **admin** (+ `localAdmin=true` for some paths).
 
 Safe only if admin tokens never leave a trusted operator network and diagnostics are never fronted publicly without auth.
 
-**Fix:**  
-1. Docs runbook: “diagnostics & unredacted exports are high-sensitivity; never expose Gateway admin without mTLS/VPN.”  
-2. Consider removing partial credential reveal in favor of length/fingerprint only.  
+**Fix:**
+1. Docs runbook: “diagnostics & unredacted exports are high-sensitivity; never expose Gateway admin without mTLS/VPN.”
+2. Consider removing partial credential reveal in favor of length/fingerprint only.
 3. Rate-limit + audit every unredacted export (already partially audited).
 
 ---
@@ -229,7 +229,7 @@ Safe only if admin tokens never leave a trusted operator network and diagnostics
 
 Durable Gateway is covered by **path-filtered** `.github/workflows/ci-gateway.yml` (paths: `products/gateway/**`, `packages/shared/**`, lockfile, workflow). That is intentional for modular CI, but:
 
-- Local `pnpm test` green ≠ Gateway green.  
+- Local `pnpm test` green ≠ Gateway green.
 - Shared-only changes correctly trigger Gateway CI; pure monorepo script changes might not.
 
 **Fix:** Document in CONTRIBUTING/AGENTS: “Gateway tests: `pnpm --filter cowork-gateway test`.” Optionally add a thin root script `test:gateway` and call it from a weekly full-matrix job.
@@ -300,9 +300,9 @@ These look scary but are **controlled** or **already mitigated**:
 
 **Title:** `fix: unblock audit:full + deny OpenCode metadata hosts`
 
-1. Bump/override vulnerable `tar` / `js-yaml` / `brace-expansion` until `pnpm audit:full` is green.  
-2. Deny `169.254.169.254` (and documented metadata hosts) in `assertPrivateHttpEndpoint` or OpenCode-specific wrapper; add unit tests.  
-3. Optional drive-by: delete empty `apps/gateway` if present in tree; add CI assert.  
+1. Bump/override vulnerable `tar` / `js-yaml` / `brace-expansion` until `pnpm audit:full` is green.
+2. Deny `169.254.169.254` (and documented metadata hosts) in `assertPrivateHttpEndpoint` or OpenCode-specific wrapper; add unit tests.
+3. Optional drive-by: delete empty `apps/gateway` if present in tree; add CI assert.
 
 Do **not** mix channel unification or work-store splits into that PR.
 
@@ -310,9 +310,9 @@ Do **not** mix channel unification or work-store splits into that PR.
 
 ## 6. Method notes / limits
 
-- Static + repo evidence + GitHub Actions history; no live production traffic analysis.  
-- Did not re-run full monorepo test suite (hours); relied on recent master green (2026-07-19) + current audit/evals signals.  
-- Wiki partition (~100k LOC) was mapped and auth entrypoints sampled; a dedicated wiki-only deep audit is still warranted before public hosted claims.  
+- Static + repo evidence + GitHub Actions history; no live production traffic analysis.
+- Did not re-run full monorepo test suite (hours); relied on recent master green (2026-07-19) + current audit/evals signals.
+- Wiki partition (~100k LOC) was mapped and auth entrypoints sampled; a dedicated wiki-only deep audit is still warranted before public hosted claims.
 - Did not re-open closed Dependabot PRs; new advisories may require fresh upgrades.
 
 ---
@@ -321,10 +321,10 @@ Do **not** mix channel unification or work-store splits into that PR.
 
 The monorepo’s **product partitions and security primitives (post-#956) are in good shape for a private/beta product**. The medium+ problems that still need fixing are:
 
-1. **Supply-chain gate is currently red** — treat as fire.  
-2. **Nightly Evals are a multi-day red streak** — treat as fire for signal integrity.  
-3. **Dual channel + dual OpenCode adapter architecture** — largest structural cost; only solvable as epics.  
-4. **God modules and single-writer Gateway** — correct for local beta, wrong if HA/multi-tenant marketing races ahead of implementation.  
+1. **Supply-chain gate is currently red** — treat as fire.
+2. **Nightly Evals are a multi-day red streak** — treat as fire for signal integrity.
+3. **Dual channel + dual OpenCode adapter architecture** — largest structural cost; only solvable as epics.
+4. **God modules and single-writer Gateway** — correct for local beta, wrong if HA/multi-tenant marketing races ahead of implementation.
 5. **Residual security threat-model items (metadata host, partial secrets, unsafeAllowNoAuth)** — small code changes, high clarity.
 
 Ship fixes in that order.
