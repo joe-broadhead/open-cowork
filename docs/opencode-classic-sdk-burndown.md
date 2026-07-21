@@ -76,3 +76,15 @@ On **every** OpenCode SDK/runtime pin change:
   both an allowlist entry *and* a documented residual row with a reopen condition.
 - **No fake V2.** Do not wrap classic HTTP under `client.v2` names.
 - **Burn one method at a time** with proving tests; do not bulk-delete rows.
+
+## Durable Gateway classic surface (separate inventory)
+
+Desktop / Cloud / Standalone use `@opencode-ai/sdk/v2`. **Durable Gateway**
+(`products/gateway`) still uses the **classic root** client on the same pin.
+That surface is inventoried separately so Desktop allowlist burn-down is not
+confused with Durable daemon call sites:
+
+- **Inventory + reopen table:** `docs/opencode-durable-gateway-classic-burndown.md` (JOE-940)
+- **Migration epic (pin-gated):** JOE-941
+- **Pin lockstep CI:** `scripts/check-opencode-pin-lockstep.mjs` (JOE-945; includes `products/gateway`)
+

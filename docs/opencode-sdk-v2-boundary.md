@@ -36,10 +36,12 @@ registry shape; changing it is a compatibility review, not a snapshot refresh.
   `apps/standalone-gateway/src/opencode.ts`.
 - **Durable Gateway** (`products/gateway`, package `cowork-gateway`) is a
   **product partition** that coordinates OpenCode via its own daemon/MCP and
-  may declare `@opencode-ai/sdk` at the **same pin as Desktop/Cloud (1.18.1)**.
-  It currently uses the classic client entry + `client.session.*` call shapes
-  (V2 field migration is a follow-up). It is not part of the Desktop Electron
-  runtime-host path and must not be imported by `apps/desktop` or
+  may declare `@opencode-ai/sdk` at the **same pin as Desktop/Cloud (1.18.1)** —
+  enforced by `scripts/check-opencode-pin-lockstep.mjs` (JOE-945).
+  It currently uses the classic root client entry + `client.session.*` call
+  shapes (inventory: `docs/opencode-durable-gateway-classic-burndown.md`,
+  JOE-940; V2 migration is pin-gated JOE-941). It is not part of the Desktop
+  Electron runtime-host path and must not be imported by `apps/desktop` or
   `packages/app`.
 - Web, website, renderer, preload, and `@open-cowork/cloud-client` code must
   not import `@opencode-ai/sdk`.
