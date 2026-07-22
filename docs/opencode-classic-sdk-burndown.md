@@ -2,9 +2,7 @@
 
 ## Status on OpenCode pin `1.18.1`
 
-**Revalidated 2026-07-22 (post-#959 / pin-gated residual):** still **Won't Do
-(full burn-down)** while pinned to OpenCode 1.18.1. Prior revalidation
-2026-07-21 (JOE-937). No residual desktop classic method gained a working
+**Revalidated 2026-07-22 (post-#959 / pin-gated residual):** still **Won't Do (full burn-down)** while pinned to OpenCode 1.18.1. Prior revalidation 2026-07-21 (JOE-937). No residual desktop classic method gained a working
 native V2 route on this pin; allowlist + registry below remain authoritative.
 
 OpenCode 1.18.1 does not expose working native V2 routes for the remaining

@@ -379,10 +379,15 @@ export function createLocalWorkspaceSessionPort(engine: {
   }
   return {
     async policy() {
-      return await call('policy', engine.policy ? () => engine.policy!() : undefined, async () => ({
-        mode: 'local',
-        capabilities: [],
-      } as WorkspacePolicy))
+      return await call('policy', engine.policy ? () => engine.policy!() : undefined, async (): Promise<WorkspacePolicy> => ({
+        features: {},
+        allowedAgents: null,
+        allowedTools: null,
+        allowedMcps: null,
+        localFiles: 'enabled',
+        localStdioMcps: 'enabled',
+        machineRuntimeConfig: 'allowlisted',
+      }))
     },
     async createSession(input) {
       return await call('createSession', engine.createSession ? () => engine.createSession!(input) : undefined)
