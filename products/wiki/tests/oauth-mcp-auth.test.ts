@@ -225,7 +225,33 @@ test("OAuth hosted HTTPS issuer requires shared Postgres state", async () => {
       });
       const metadata = await routeHttpRequest(root, "GET", "/.well-known/oauth-authorization-server");
       assert.equal(metadata.status, 503);
-      assert.match(JSON.stringify(metadata.body), /OAuth.*state.*postgres/i);
+      assert.match(JSON.stringify(metadata.body), /OAuth.*postgres|multi-replica OAuth|file-backed OAuth/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+test("OAuth refuses explicit file state when multi-replica signal is set", async () => {
+  await withEnv({
+    OPENWIKI_RUNTIME_MODE: "team",
+    OPENWIKI_OAUTH_STATE_BACKEND: "file",
+    OPENWIKI_OPERATIONAL_STATE_BACKEND: "memory",
+    OPENWIKI_WEB_REPLICAS: "2",
+    OPENWIKI_DATABASE_URL: undefined,
+    DATABASE_URL: undefined,
+  }, async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "openwiki-oauth-multi-replica-file-"));
+    try {
+      await createWorkspace(root, "OAuth Multi Replica File Wiki");
+      await configureOAuth(root, {
+        enabled: true,
+        issuer: "https://wiki.example.com",
+        clients: [],
+      });
+      const metadata = await routeHttpRequest(root, "GET", "/.well-known/oauth-authorization-server");
+      assert.equal(metadata.status, 503);
+      assert.match(JSON.stringify(metadata.body), /single-node|postgres|multi-replica/i);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

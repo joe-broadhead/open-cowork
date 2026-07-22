@@ -115,7 +115,11 @@ clients get no elevation from pure scope-list bearers. Override only via
 
 **Evidence:** `scripts/openwiki-hosted-readiness-evidence.mjs` proves dual HTTP replicas, MCP session stickiness, shared rate limits, write-coordinator contention—but is operator/release scripted, not required on every wiki PR.
 
-**Fix:** Optional nightly or release-wiki job; keep PR cost bounded.
+**Fix (JOE-975, 2026-07-22):** PR `CI Wiki` keeps only the dry-run unit contract
+(`hosted-readiness-evidence.test.ts`). `Release Wiki` runs
+`pnpm evidence:hosted-readiness -- --dry-run`. Live `--enforce` stays
+operator/release when Postgres is available—not every monorepo PR. Documented in
+`docs/deployment/performance.md` and workflow comments.
 
 ### P2-4 — CSP `style-src 'self' 'unsafe-inline'`
 
@@ -127,7 +131,11 @@ clients get no elevation from pure scope-list bearers. Override only via
 
 **Evidence:** Docs (`auth-boundaries.md`) already: file OAuth state is not multi-replica safe. Enterprise path uses Postgres operational state for MCP/rate limits; OAuth state backend selection must stay explicit for multi-replica OAuth.
 
-**Fix:** Document + doctor check if OAuth enabled with multi-replica and non-Postgres state (follow-up).
+**Fix (JOE-979, 2026-07-22):** Runtime `oauthFileStateUnsafeReason` fails closed
+for hosted mode, shared operational Postgres, or `OPENWIKI_WEB_REPLICAS` /
+`WEB_REPLICAS` > 1 with non-loopback issuers. Doctor/preflight `oauth-state`
+check; Helm multi-replica + OAuth requires Postgres OAuth/ops state and rejects
+explicit file OAuth state.
 
 ---
 
@@ -158,9 +166,9 @@ clients get no elevation from pure scope-list bearers. Override only via
 | P1-4 | JOE-978 | High | In Progress (claim gate until JOE-959) |
 | P2-1 | JOE-977 | Medium | Backlog |
 | P2-2 | JOE-972 | Low | Done (loopback-only scope-tokens) |
-| P2-3 | JOE-975 | Low | Backlog |
+| P2-3 | JOE-975 | Low | Done (dry-run PR + release gate; enforce operator) |
 | P2-4 | JOE-980 | Low | Backlog |
-| P2-5 | JOE-979 | Low | Backlog |
+| P2-5 | JOE-979 | Low | Done (doctor + runtime + Helm multi-replica OAuth) |
 
 ## Remediation status (this PR)
 

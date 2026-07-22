@@ -266,6 +266,8 @@ test("deployment artifacts reference the implemented OpenWiki server", async () 
   assert.match(helmHelpers, /OPENWIKI_BOOTSTRAP_MODE/);
   assert.match(helmHelpers, /worker\.replicaCount > 1 requires persistence\.accessModes/);
   assert.match(helmHelpers, /replicaCount > 1 requires openwiki\.operationalStateBackend=postgres/);
+  assert.match(helmHelpers, /replicaCount > 1 with oauthEnabled requires openwiki\.oauthStateBackend=postgres/);
+  assert.match(helmHelpers, /OPENWIKI_OAUTH_STATE_BACKEND/);
   assert.match(helmHelpers, /openwiki\.role process-wide elevation is only allowed with openwiki\.host loopback/);
 
   const deployment = await readFile("deploy/helm/openwiki/templates/deployment.yaml", "utf8");

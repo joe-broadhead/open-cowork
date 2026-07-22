@@ -182,6 +182,14 @@ state because clients, authorization codes, refresh tokens, and revocations
 would not be consistent across replicas. File-backed OAuth state is only for
 local loopback clients.
 
+Doctor and deploy-preflight expose an `oauth-state` check (JOE-979): when OAuth
+is enabled with file-backed state under hosted runtime mode, shared operational
+Postgres, or `OPENWIKI_WEB_REPLICAS` / `WEB_REPLICAS` > 1, the check fails closed
+and points operators at Postgres OAuth state. Helm also fails when
+`replicaCount > 1` with `oauthEnabled=true` unless
+`oauthStateBackend=postgres` or `operationalStateBackend=postgres` (and rejects
+an explicit `oauthStateBackend=file` multi-replica combo).
+
 Supported OAuth routes:
 
 | Route | Purpose |

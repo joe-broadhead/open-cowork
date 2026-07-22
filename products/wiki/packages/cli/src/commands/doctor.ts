@@ -11,6 +11,7 @@ import { backupRehearsalDiagnostic } from "../backup-rehearsal-diagnostics.ts";
 import type { CliOptions } from "../args.ts";
 import { doctorProfileFor, doctorProfileRequirements, type DoctorProfile } from "../doctor-profiles.ts";
 import type { DeploymentProfileDefinition, DeploymentProfileName, DeploymentProfileRequirement } from "../deployment-profiles.ts";
+import { oauthStateDiagnostic } from "../hosted-auth-diagnostics.ts";
 import { printJson } from "../output.ts";
 import { checkPostgresRuntimeIntegrity, postgresRuntimeConfigured } from "@openwiki/postgres-runtime";
 import { MIN_NODE_VERSION, execFileAsync, exists, resolveRoot } from "../utils.ts";
@@ -225,6 +226,7 @@ export async function workspaceRuntimeConfigDiagnostics(root: string): Promise<D
       await backupStateDiagnostic(root, repo.config),
       backupRehearsalDiagnostic(repo.config, repo.events),
       objectStorageBackupDiagnostic(repo.config.runtime?.storage),
+      oauthStateDiagnostic(repo.config),
       ...await automationServiceDiagnostics(root),
     ];
   } catch (error: unknown) {

@@ -13,6 +13,11 @@ export {
   scopeTokenAuthAllowed,
 } from "./auth.ts";
 export type { ResolveHttpPolicyOptions } from "./auth.ts";
+export {
+  issuerIsLoopback,
+  oauthFileStateUnsafeReason,
+  resolveOAuthStateBackend,
+} from "./oauth-runtime.ts";
 export { resetHttpOperationalStateForTests } from "./operational.ts";
 export type {
   HttpApiOptions,

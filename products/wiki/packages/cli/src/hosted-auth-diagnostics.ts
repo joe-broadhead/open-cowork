@@ -1,4 +1,11 @@
 import type { OpenWikiAuthServiceAccount, OpenWikiAuthServiceAccountToken, OpenWikiConfig } from "@openwiki/core";
+import { openWikiRuntimeModeFromEnvOrProfile } from "@openwiki/core";
+import {
+  issuerIsLoopback,
+  oauthFileStateUnsafeReason,
+  resolveOAuthStateBackend,
+} from "@openwiki/http-api";
+import { postgresRuntimeConfigured } from "@openwiki/postgres-runtime";
 import { loadRepository } from "@openwiki/repo";
 import type { DiagnosticCheck } from "./commands/doctor.ts";
 import { requirementFrom, requirementStatus } from "./commands/doctor.ts";
@@ -24,6 +31,131 @@ export async function hostedHumanAgentDiagnostics(root: string, profile: Deploym
       },
     ];
   }
+}
+
+/**
+ * Doctor / deploy-preflight check for file-backed OAuth under multi-replica or
+ * hosted profiles (wiki audit P2-5 / JOE-979).
+ */
+export function oauthStateDiagnostic(
+  config: OpenWikiConfig | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): DiagnosticCheck {
+  const oauthEnabled =
+    config?.auth?.oauth?.enabled === true || envBooleanEnabled(env.OPENWIKI_OAUTH_ENABLED);
+  if (!oauthEnabled) {
+    return {
+      name: "oauth-state",
+      status: "skip",
+      message: "OAuth is not enabled; file vs Postgres OAuth state does not apply.",
+    };
+  }
+
+  const stateBackend = resolveOAuthStateBackend(env, config?.runtime?.controls?.operational_state?.backend);
+  const runtimeMode = openWikiRuntimeModeFromEnvOrProfile(env, config?.runtime?.profile);
+  const issuerInput = config?.auth?.oauth?.issuer ?? env.OPENWIKI_OAUTH_ISSUER ?? env.OPENWIKI_PUBLIC_ORIGIN;
+  const issuer = typeof issuerInput === "string" ? issuerInput.trim() : undefined;
+  const explicitOauthBackend = env.OPENWIKI_OAUTH_STATE_BACKEND?.trim().toLowerCase();
+
+  if (stateBackend === "postgres") {
+    if (!postgresRuntimeConfigured(env)) {
+      return {
+        name: "oauth-state",
+        status: "fail",
+        message: "OAuth Postgres state requires OPENWIKI_DATABASE_URL or DATABASE_URL.",
+        details: { state_backend: stateBackend, source: explicitOauthBackend ? "OPENWIKI_OAUTH_STATE_BACKEND" : "operational_state" },
+      };
+    }
+    return {
+      name: "oauth-state",
+      status: "pass",
+      message: "OAuth uses shared Postgres state suitable for multi-replica hosted clients.",
+      details: { state_backend: stateBackend, runtime_mode: runtimeMode },
+    };
+  }
+
+  const unsafe = oauthFileStateUnsafeReason({
+    stateBackend: "file",
+    runtimeMode,
+    issuer,
+    env,
+  });
+  if (unsafe !== undefined) {
+    return {
+      name: "oauth-state",
+      status: "fail",
+      message: unsafe,
+      details: {
+        state_backend: "file",
+        runtime_mode: runtimeMode,
+        issuer,
+        next_step:
+          "Set OPENWIKI_OAUTH_STATE_BACKEND=postgres (or OPENWIKI_OPERATIONAL_STATE_BACKEND=postgres) with DATABASE_URL before multi-replica or hosted HTTPS OAuth.",
+      },
+    };
+  }
+
+  // Match runtime: loopback issuers may use file state even under hosted mode.
+  if (issuerIsLoopback(issuer)) {
+    return {
+      name: "oauth-state",
+      status: "pass",
+      message: "File-backed OAuth state is acceptable for single-process loopback clients.",
+      details: { state_backend: "file", runtime_mode: runtimeMode, issuer },
+    };
+  }
+
+  // Multi-replica without a resolvable loopback issuer: fail even if runtime mode is team.
+  if (multiReplicaSignal(env)) {
+    return {
+      name: "oauth-state",
+      status: "fail",
+      message:
+        "File-backed OAuth state is single-node only. Configure Postgres OAuth/operational state before multi-replica OAuth.",
+      details: { state_backend: "file", runtime_mode: runtimeMode, issuer },
+    };
+  }
+
+  // Non-loopback issuer with file state on a single-node profile: warn before scaling.
+  if (issuer !== undefined && issuer.length > 0) {
+    try {
+      const url = new URL(issuer);
+      const loopbackHost =
+        url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+      if (!loopbackHost) {
+        return {
+          name: "oauth-state",
+          status: "warn",
+          message:
+            "OAuth uses file-backed state. This is only safe on a single process; set Postgres OAuth state before adding web replicas.",
+          details: { state_backend: "file", issuer },
+        };
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  return {
+    name: "oauth-state",
+    status: "pass",
+    message: "File-backed OAuth state is acceptable for single-process loopback/local clients.",
+    details: { state_backend: "file", runtime_mode: runtimeMode },
+  };
+}
+
+function multiReplicaSignal(env: NodeJS.ProcessEnv): boolean {
+  const raw = env.OPENWIKI_WEB_REPLICAS?.trim() || env.WEB_REPLICAS?.trim();
+  if (raw === undefined || raw.length === 0) {
+    return false;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 1;
+}
+
+function envBooleanEnabled(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
 function operationalStateDiagnostic(

@@ -71,6 +71,7 @@ openwiki:
   requireAuth: ""
   oauthEnabled: ""
   oauthIssuer: ""
+  oauthStateBackend: ""
   oauthDynamicClientRegistration: ""
   runtimeBackend: ""
   readBackend: ""

@@ -102,6 +102,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and (gt (int .Values.replicaCount) 1) (ne .Values.openwiki.operationalStateBackend "postgres") -}}
 {{- fail "replicaCount > 1 requires openwiki.operationalStateBackend=postgres for shared MCP sessions and rate limits" -}}
 {{- end -}}
+{{- /* JOE-979: multi-replica OAuth cannot use file-backed state (single-node). */ -}}
+{{- if and (eq (toString .Values.openwiki.oauthEnabled) "true") (gt (int .Values.replicaCount) 1) -}}
+{{- if eq (toString .Values.openwiki.oauthStateBackend) "file" -}}
+{{- fail "replicaCount > 1 with oauthEnabled requires openwiki.oauthStateBackend=postgres (or omit oauthStateBackend so operationalStateBackend=postgres selects shared OAuth state); file-backed OAuth state is single-node only" -}}
+{{- end -}}
+{{- if and (ne .Values.openwiki.oauthStateBackend "postgres") (ne .Values.openwiki.operationalStateBackend "postgres") -}}
+{{- fail "replicaCount > 1 with oauthEnabled requires openwiki.oauthStateBackend=postgres or openwiki.operationalStateBackend=postgres for shared OAuth clients/codes/tokens" -}}
+{{- end -}}
+{{- end -}}
 {{- if and .Values.openwiki.role (ne .Values.openwiki.host "127.0.0.1") (ne .Values.openwiki.host "localhost") (ne .Values.openwiki.host "::1") -}}
 {{- fail "openwiki.role process-wide elevation is only allowed with openwiki.host loopback; map roles per request via trusted headers or tokens" -}}
 {{- end -}}
@@ -143,6 +152,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if .Values.openwiki.oauthIssuer }}
 - name: OPENWIKI_OAUTH_ISSUER
   value: {{ .Values.openwiki.oauthIssuer | quote }}
+{{- end }}
+{{- if .Values.openwiki.oauthStateBackend }}
+- name: OPENWIKI_OAUTH_STATE_BACKEND
+  value: {{ .Values.openwiki.oauthStateBackend | quote }}
 {{- end }}
 {{- if ne (toString .Values.openwiki.oauthDynamicClientRegistration) "" }}
 - name: OPENWIKI_OAUTH_DYNAMIC_CLIENT_REGISTRATION

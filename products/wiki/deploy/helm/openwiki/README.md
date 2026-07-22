@@ -18,10 +18,14 @@ Useful values:
 - `ingress.enabled` publishes the HTTP API and web UI through an ingress.
 - `openwiki.extraEnv` and `openwiki.envFrom` attach deployment-specific
   settings and secret references.
-- `openwiki.oauthEnabled`, `openwiki.oauthIssuer`, and
+- `openwiki.oauthEnabled`, `openwiki.oauthIssuer`,
+  `openwiki.oauthStateBackend`, and
   `openwiki.oauthDynamicClientRegistration` expose the hosted OAuth MCP
-  environment toggles. Keep DCR disabled unless an admin-gated workflow fronts
-  `/oauth/register`.
+  environment toggles. Multi-replica web (`replicaCount > 1`) with OAuth
+  requires Postgres OAuth state (`oauthStateBackend=postgres` or
+  `operationalStateBackend=postgres`); file-backed OAuth state is single-node
+  only and the chart fails closed. Keep DCR disabled unless an admin-gated
+  workflow fronts `/oauth/register`.
 - `podDisruptionBudget.enabled` and `networkPolicy.enabled` keep production
   cluster defaults explicit.
 - `postgresBackup.enabled` adds a `pg_dump` CronJob. Set
