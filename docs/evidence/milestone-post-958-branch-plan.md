@@ -45,7 +45,7 @@ c4b2112f refactor(JOE-977): progressive wiki module splits (oauth + graph)
    - JOE-941 full Durable classic→V2 (needs OpenCode pin reopen + live probes)  
    - JOE-923 full Durable → monorepo provider body migrate  
    - Wiki watch-band residual (doctor/jobs/tool-router) when seams appear  
-3. **Open single PR** — ready (this is the planned Actions burn).
+3. **Single PR opened:** https://github.com/joe-broadhead/open-cowork/pull/959
 
 ## Non-claims
 
