@@ -21,7 +21,7 @@
 | 4 | **Channel kernel** | JOE-923; JOE-929, JOE-934, JOE-932 | **Foundation + Slack/Telegram kernels + shared rate-limiter**; full provider body migrate residual |
 | 5 | **OpenCode kernel** | JOE-916; JOE-940, JOE-945, JOE-943, JOE-937, JOE-966, JOE-941 | **Inventory + pin + standalone + event-pump**; Durable session I/O façade collapse + classic gate **done**; full classic→V2 still pin-gated |
 | 6 | **HA / claim gates** | JOE-931; JOE-963 | **Design + gates done**; not multi-AZ HA |
-| 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **P0/P1 done**; P2-2–P2-5 **done**; P2-1 oauth progressive split **done** (other watch-band residual) |
+| 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **P0/P1 done**; P2-2–P2-5 **done**; P2-1 progressive (oauth/graph/postgres queries) **done** (doctor/jobs residual) |
 | 8 | **Private-beta ops package** | JOE-922 | **Done** (public package + gaps) |
 | 9 | **WorkspaceSessionPort** | JOE-921 | **Done** |
 | 10 | **Audit pointer hygiene** | JOE-964 | **Done** |
@@ -35,12 +35,12 @@ ea28479c refactor(JOE-942): supervisor + project-binding helpers
 
 ## Next unfinished work (when continuing)
 
-1. **JOE-942 / JOE-936 / JOE-919** — named god façades ≤2000 **done** (ratchets enforced).  
-2. **JOE-923 progressive** — Slack/Telegram shared verify + shared `WebhookRateLimiter` **done**; full provider body migrate still residual.  
-3. **JOE-940 / JOE-945 / JOE-966** — Durable classic inventory, pin lockstep CI, standalone adapter decision **done**.  
-4. **JOE-943 progressive** — event-pump reconnect kernel shared (cloud + desktop); full spawn/event topology still product-owned.  
-5. Progressive: full Durable classic→V2 when pin reopens (JOE-941 residual); full channel provider body migrate (multi-PR epic).  
-6. **Open single PR** when ready to burn Actions once.
+1. Named god façades / channel kernels / wiki P2s / OpenCode prep — **milestone progressive work complete**.  
+2. **Explicit residuals (out of band / pin-gated / multi-PR epics):**  
+   - JOE-941 full Durable classic→V2 (needs OpenCode pin reopen + live probes)  
+   - JOE-923 full Durable → monorepo provider body migrate  
+   - Wiki watch-band residual (doctor/jobs/tool-router) when seams appear  
+3. **Open single PR** when ready to burn Actions once.
 
 ## Non-claims
 

@@ -103,9 +103,10 @@ Local loopback + no process-wide role is safe. Multi-tenant hosted with `OPENWIK
 **Fix (JOE-977 progressive, 2026-07-22):** Extracted `http-api/oauth.ts` helpers and
 token grant routes into `oauth-helpers.ts` + `oauth-token-routes.ts` (façade now
 ~322 LOC). Extracted graph client controls from `web/src/client/graph/index.js`
-into `graph/controls.js` after CSP work pushed it over 800. Remaining watch-band
-files (tool-router, postgres jobs/queries, workflows) still progressive when the
-next local seam appears.
+into `graph/controls.js` after CSP work pushed it over 800. Split
+`postgres-runtime/queries.ts` into `queries-catalog.ts` + `queries-counts.ts`
+(façade ~615). Remaining watch-band files (tool-router, postgres jobs, doctor,
+workflows) still progressive when the next local seam appears.
 
 ### P2-2 — `scope-token` auth method grants scopes from a raw bearer string
 
@@ -171,7 +172,7 @@ explicit file OAuth state.
 | P1-2 | JOE-973 | High | Done (this PR) |
 | P1-3 | JOE-974 | High | Done (this PR) |
 | P1-4 | JOE-978 | High | In Progress (claim gate until JOE-959) |
-| P2-1 | JOE-977 | Medium | Progressive (oauth split done; more seams residual) |
+| P2-1 | JOE-977 | Medium | Progressive (oauth + graph + postgres queries splits; more residual) |
 | P2-2 | JOE-972 | Low | Done (loopback-only scope-tokens) |
 | P2-3 | JOE-975 | Low | Done (dry-run PR + release gate; enforce operator) |
 | P2-4 | JOE-980 | Low | Done (CSP style-src self only; no unsafe-inline) |

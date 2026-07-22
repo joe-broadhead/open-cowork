@@ -444,6 +444,8 @@ async function readPostgresRuntimeSources(): Promise<string> {
     "migrations.ts",
     "operational-state.ts",
     "queries.ts",
+    "queries-catalog.ts",
+    "queries-counts.ts",
     "rows.ts",
     "search.ts",
     "sync.ts",
