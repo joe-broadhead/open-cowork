@@ -523,7 +523,10 @@ export async function buildDoctorReport(client: any): Promise<Record<string, unk
     opencode = { ok: false, error: redactSensitiveText(err?.message || String(err)) }
   }
   let sessions = 0
-  try { sessions = (((await client.session.list()).data || []) as any[]).length } catch {}
+  try {
+    const { createOpenCodeSessionRuntime } = await import('../opencode-session-runtime.js')
+    sessions = (await createOpenCodeSessionRuntime(client).listSessions()).length
+  } catch {}
   return {
     daemon: { ok: true, uptime: process.uptime(), pid: process.pid, port: cfg.httpPort },
     opencode,

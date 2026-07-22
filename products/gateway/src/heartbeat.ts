@@ -299,8 +299,9 @@ function newest(runs: RunRecord[]): RunRecord | undefined {
 
 async function resolveSessionUrl(client: OpencodeClient, sessionId: string): Promise<string | undefined> {
   try {
-    const session = (await client.session.get({ path: { id: sessionId } })).data
-    return session ? opencodeSessionWebUrl(getConfig().opencodeUrl, session) : undefined
+    const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+    const got = await createOpenCodeSessionRuntime(client).getSession(sessionId)
+    return got.data ? opencodeSessionWebUrl(getConfig().opencodeUrl, got.data) : undefined
   } catch {
     return undefined
   }

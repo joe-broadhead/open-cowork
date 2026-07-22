@@ -1,8 +1,10 @@
 /**
- * OpenCode session lifecycle port.
+ * OpenCode session lifecycle port (JOE-941 flip point).
  *
  * Deliberately separate from `gateway-runtime.ts` (daemon client holder).
- * Prefer this module over sprinkling `client.session.*` across edges.
+ * All Durable production session CRUD/messages/abort go through this façade so
+ * classic→V2 migration (when pin-proven) is a single-module change.
+ * Pin gate: `scripts/check-durable-opencode-classic-gate.mjs`.
  */
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import { getDaemonClient } from './gateway-runtime.js'
@@ -133,10 +135,13 @@ export function createOpenCodeSessionRuntime(client?: OpencodeClient): OpenCodeS
 
     async abort(sessionId, directory) {
       const c = clientOrThrow(client)
-      await c.session.abort({
+      const abortFn = c.session?.abort as undefined | ((args: any) => Promise<unknown>)
+      // Mocks / partial clients may omit abort; optional-chain parity with prior edges.
+      if (typeof abortFn !== 'function') return
+      await abortFn.call(c.session, {
         path: { id: sessionId },
         query: directory ? { directory } : undefined,
-      } as any).catch(() => undefined)
+      }).catch(() => undefined)
     },
 
     async deleteSession(sessionId, directory) {

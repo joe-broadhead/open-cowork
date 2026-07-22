@@ -456,8 +456,8 @@ export class ChannelSyncBridge {
   }
 
   private async readMessages(sessionId: string): Promise<any[]> {
-    const result = await this.client.session.messages({ path: { id: sessionId } })
-    return Array.isArray(result?.data) ? result.data : []
+    const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+    return createOpenCodeSessionRuntime(this.client).messages(sessionId)
   }
 
   private loadState(): ChannelSyncState {

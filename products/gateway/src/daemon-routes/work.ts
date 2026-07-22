@@ -735,7 +735,7 @@ async ({ req, url, client, channels }) => {
       if (approval) return approval
       const result = deleteWorkTask(taskMatch[0])
       if (!result.deleted) throw new HttpError(404, 'task not found')
-      if (result.abortedSessionId) await client.session.abort({ path: { id: result.abortedSessionId } }).catch(() => {})
+      if (result.abortedSessionId) await abortSessions(client, [result.abortedSessionId])
       consumeDestructiveHttpApproval(req, body, 'task.delete')
       auditHttp(req, 'task.delete', taskMatch[0], 'ok', { abortedSessionId: result.abortedSessionId })
       return json(result)
@@ -746,7 +746,7 @@ async ({ req, url, client, channels }) => {
       const body = await readJsonBodyAs(req, zArchiveBody)
       const result = archiveWorkTask(taskArchiveMatch[0], { note: body.note })
       if (!result) throw new HttpError(404, 'task not found')
-      if (result.abortedSessionId) await client.session.abort({ path: { id: result.abortedSessionId } }).catch(() => {})
+      if (result.abortedSessionId) await abortSessions(client, [result.abortedSessionId])
       return json(result)
     }
 
@@ -776,7 +776,7 @@ async ({ req, url, client, channels }) => {
       const body = await readJsonBodyAs(req, zTaskActionBody)
       const result = applyWorkTaskAction(taskActionMatch[0], body.action, { stage: body.stage, note: body.note })
       if (!result) throw new HttpError(404, 'task not found')
-      if (result.abortedSessionId) await client.session.abort({ path: { id: result.abortedSessionId } }).catch(() => {})
+      if (result.abortedSessionId) await abortSessions(client, [result.abortedSessionId])
       return json(result)
     }
 
@@ -1837,8 +1837,10 @@ function auditAgentTeam(req: any, operation: string, target: string, result: 'ok
 }
 
 async function abortSessions(client: any, sessionIds: string[]): Promise<void> {
+  const { createOpenCodeSessionRuntime } = await import('../opencode-session-runtime.js')
+  const runtime = createOpenCodeSessionRuntime(client)
   for (const id of [...new Set(sessionIds.filter(Boolean))]) {
-    await client.session.abort({ path: { id } }).catch(() => {})
+    await runtime.abort(id)
   }
 }
 

@@ -1,4 +1,4 @@
-import type { OpencodeClient, SessionListData, SessionMessagesData } from '@opencode-ai/sdk'
+import type { OpencodeClient } from '@opencode-ai/sdk'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { createHash } from 'node:crypto'
@@ -232,10 +232,11 @@ async function runSchedulerCycle(client: OpencodeClient): Promise<SchedulerCycle
 }
 
 async function completeRunningSupervisors(client: OpencodeClient, state: WorkState): Promise<void> {
+  const runtime = createOpenCodeSessionRuntime(client)
   const leased = state.supervisors.filter(supervisor => supervisor.wakeLeaseOwner && supervisor.wakeLeaseExpiresAt)
   for (const supervisor of leased) {
-    const messages = await client.session.messages({ path: { id: supervisor.sessionId } }).catch(() => null)
-    const result = parseSupervisorResult(messages?.data || [])
+    const messages = await runtime.messages(supervisor.sessionId).catch(() => null)
+    const result = parseSupervisorResult(messages || [])
     if (!result) continue
     const applied = applySupervisorResult(supervisor.supervisorId, result)
     if (!applied?.applied) continue
@@ -959,10 +960,11 @@ export async function recoverMissingOpenCodeRuns(client: any, state: WorkState |
   // definitely alive, so it needs no per-run confirmation (the healthy case
   // makes zero session.get calls).
   const activeSessionIds = new Set<string>()
+  const runtime = createOpenCodeSessionRuntime(client)
   for (const directory of directories) {
-    const result = await client.session.list(sessionListOptions(directory)).catch(() => null)
-    if (!result) return { recovered: 0, blocked: 0, runIds: [] }
-    for (const session of result.data || []) {
+    const sessions = await runtime.listSessions(directory).catch(() => null)
+    if (!sessions) return { recovered: 0, blocked: 0, runIds: [] }
+    for (const session of sessions) {
       if (session?.id) activeSessionIds.add(String(session.id))
     }
   }
@@ -1671,17 +1673,6 @@ function canonicalWorkdir(directory: string): string {
   try { return fs.realpathSync(directory) } catch { return path.resolve(directory) }
 }
 
-function sessionListOptions(directory?: string): Omit<SessionListData, 'url'> {
-  return directory ? { query: { directory } } : {}
-}
-
-// Widest of the session-scoped path options (messages allows `limit`); the get
-// call site accepts a superset structurally, so one helper serves remaining hosts.
-function sessionPathOptions(id: string, directory?: string, extraQuery: { limit?: number } = {}): Omit<SessionMessagesData, 'url'> {
-  const query = { ...extraQuery, ...(directory ? { directory } : {}) }
-  return Object.keys(query).length ? { path: { id }, query } : { path: { id } }
-}
-
 async function abortSession(client: OpencodeClient, sessionId: string, directory?: string): Promise<void> {
   await createOpenCodeSessionRuntime(client).abort(sessionId, directory)
 }
@@ -1716,8 +1707,8 @@ function recordUnverifiedSessionCleanup(task: WorkTaskRecord, stage: string, dis
 
 async function sessionMessages(client: OpencodeClient, sessionId: string, directory?: string): Promise<{ ok: true; data: any[] } | { ok: false; missing: boolean; reason?: string }> {
   try {
-    const response = await client.session.messages(sessionPathOptions(sessionId, directory, { limit: 50 }))
-    return { ok: true, data: response?.data || [] }
+    const data = await createOpenCodeSessionRuntime(client).messages(sessionId, directory, 50)
+    return { ok: true, data }
   } catch (err: any) {
     return { ok: false, missing: isNotFoundError(err), reason: err?.message || String(err) }
   }
@@ -1730,9 +1721,9 @@ async function sessionHasAssistantActivity(client: OpencodeClient, sessionId: st
 
 async function sessionGet(client: OpencodeClient, sessionId: string, directory?: string): Promise<{ data?: any; missing: boolean }> {
   try {
-    const response = await client.session.get(sessionPathOptions(sessionId, directory))
-    return { data: response?.data, missing: false }
+    return await createOpenCodeSessionRuntime(client).getSession(sessionId, directory)
   } catch (err: any) {
+    // Transport / non-404 errors must not look like "session gone" (recovery stays conservative).
     return { missing: isNotFoundError(err) }
   }
 }

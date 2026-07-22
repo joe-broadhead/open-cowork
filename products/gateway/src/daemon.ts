@@ -746,7 +746,9 @@ export function describeServerListenError(err: any, input: { port: number; host:
 
 export async function checkBoundChannelSession(client: any, sessionId: string): Promise<'usable' | 'missing' | 'transient'> {
   try {
-    await client.session.get({ path: { id: sessionId } })
+    const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+    const got = await createOpenCodeSessionRuntime(client).getSession(sessionId)
+    if (got.missing) return 'missing'
     return 'usable'
   } catch (err: any) {
     return isNotFoundError(err) ? 'missing' : 'transient'

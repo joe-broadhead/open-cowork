@@ -170,7 +170,10 @@ export function formatReadinessText(report: ReadinessReport): string {
 
 async function checkOpenCode(opencodeUrl: string, client?: any): Promise<ReadinessCheck> {
   try {
-    if (client?.session?.list) await withDeadline(Promise.resolve(client.session.list()), OPENCODE_READINESS_TIMEOUT_MS, 'OpenCode session list').catch(() => undefined)
+    if (client?.session?.list) {
+      const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+      await withDeadline(Promise.resolve(createOpenCodeSessionRuntime(client).listSessions()), OPENCODE_READINESS_TIMEOUT_MS, 'OpenCode session list').catch(() => undefined)
+    }
     const res = await openCodeFetch(opencodeUrl, 'global/health', {}, { timeoutMs: OPENCODE_READINESS_TIMEOUT_MS })
     if (!res.ok) return { name: 'opencode', status: 'fail', severity: 'critical', summary: `OpenCode health returned HTTP ${res.status}` }
     return { name: 'opencode', status: 'pass', severity: 'info', summary: 'OpenCode is reachable' }
