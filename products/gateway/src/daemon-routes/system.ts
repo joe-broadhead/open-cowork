@@ -33,6 +33,7 @@ import { requestDaemonShutdown } from '../daemon-lifecycle.js'
 import { getRunArtifactManifestView, listRunArtifactManifestViews } from '../artifacts.js'
 import { openCodeFetch } from '../opencode-client.js'
 import { auditHttp, consumeDestructiveHttpApproval, requireDestructiveHttpApproval, stripApprovalFields } from './http-guardrails.js'
+import { guardUnredactedExport } from '../unredacted-export-guard.js'
 
 const zOperatorActionBody = z.object({
   action: z.enum(['status', 'hygiene', 'pause', 'resume', 'recover', 'reset-stale']),
@@ -168,6 +169,12 @@ export function systemRoutes(): RouteHandler[] {
 
     if (req.method === 'GET' && url.pathname === '/evidence/export') {
       const unredacted = url.searchParams.get('redact') === 'false' || url.searchParams.get('unredacted') === 'true'
+      const limited = guardUnredactedExport(req, {
+        operation: 'evidence.export.unredacted',
+        target: 'evidence/export',
+        unredacted,
+      })
+      if (limited) return limited
       const bundle = buildEvidenceBundle({
         mode: unredacted ? 'unredacted' : 'redacted',
         allowUnredacted: unredacted && url.searchParams.get('localAdmin') === 'true',
@@ -180,7 +187,7 @@ export function systemRoutes(): RouteHandler[] {
           projectId: url.searchParams.get('projectId') || undefined,
         },
       })
-      auditHttp(req, unredacted ? 'evidence.export.unredacted' : 'evidence.export.redacted', bundle.manifest.id, 'ok')
+      if (!unredacted) auditHttp(req, 'evidence.export.redacted', bundle.manifest.id, 'ok')
       if (url.searchParams.get('format') === 'markdown') return { status: 200, body: bundle.markdown, contentType: 'text/markdown; charset=utf-8' }
       return json(bundle)
     }
@@ -333,7 +340,12 @@ export function systemRoutes(): RouteHandler[] {
 
     if (req.method === 'GET' && url.pathname === '/config') {
       const redact = url.searchParams.get('redact') !== 'false'
-      if (!redact) auditHttp(req, 'config.read.unredacted', 'config', 'ok')
+      const limited = guardUnredactedExport(req, {
+        operation: 'config.read.unredacted',
+        target: 'config',
+        unredacted: !redact,
+      })
+      if (limited) return limited
       return json({ config: redact ? redactGatewayConfig(getConfig()) : getConfig(), path: getConfigPath() })
     }
 
@@ -511,7 +523,10 @@ export async function buildDoctorReport(client: any): Promise<Record<string, unk
     opencode = { ok: false, error: redactSensitiveText(err?.message || String(err)) }
   }
   let sessions = 0
-  try { sessions = (((await client.session.list()).data || []) as any[]).length } catch {}
+  try {
+    const { createOpenCodeSessionRuntime } = await import('../opencode-session-runtime.js')
+    sessions = (await createOpenCodeSessionRuntime(client).listSessions()).length
+  } catch {}
   return {
     daemon: { ok: true, uptime: process.uptime(), pid: process.pid, port: cfg.httpPort },
     opencode,

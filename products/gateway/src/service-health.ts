@@ -325,7 +325,8 @@ async function opencodeHealth(config: GatewayConfig, options: ServiceHealthOptio
 
   if (options.client?.session?.list) {
     try {
-      await withDeadline(Promise.resolve(options.client.session.list()), 2000, 'OpenCode session list')
+      const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+      await withDeadline(Promise.resolve(createOpenCodeSessionRuntime(options.client).listSessions()), 2000, 'OpenCode session list')
       return component('opencode', 'OpenCode Connectivity', 'ok', 'OpenCode client can list sessions.', config.opencodeUrl, 'No action required.')
     } catch (err: any) {
       return component('opencode', 'OpenCode Connectivity', 'down', 'OpenCode client cannot list sessions.', err?.message || String(err), 'Start OpenCode, verify `opencodeUrl`, then restart Gateway.')

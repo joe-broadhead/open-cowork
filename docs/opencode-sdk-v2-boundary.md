@@ -36,10 +36,12 @@ registry shape; changing it is a compatibility review, not a snapshot refresh.
   `apps/standalone-gateway/src/opencode.ts`.
 - **Durable Gateway** (`products/gateway`, package `cowork-gateway`) is a
   **product partition** that coordinates OpenCode via its own daemon/MCP and
-  may declare `@opencode-ai/sdk` at the **same pin as Desktop/Cloud (1.18.1)**.
-  It currently uses the classic client entry + `client.session.*` call shapes
-  (V2 field migration is a follow-up). It is not part of the Desktop Electron
-  runtime-host path and must not be imported by `apps/desktop` or
+  may declare `@opencode-ai/sdk` at the **same pin as Desktop/Cloud (1.18.1)** —
+  enforced by `scripts/check-opencode-pin-lockstep.mjs` (JOE-945).
+  It currently uses the classic root client entry + `client.session.*` call
+  shapes (inventory: `docs/opencode-durable-gateway-classic-burndown.md`,
+  JOE-940; V2 migration is pin-gated JOE-941). It is not part of the Desktop
+  Electron runtime-host path and must not be imported by `apps/desktop` or
   `packages/app`.
 - Web, website, renderer, preload, and `@open-cowork/cloud-client` code must
   not import `@opencode-ai/sdk`.
@@ -94,14 +96,11 @@ Desktop residual seams and removal plan: [desktop-composition-shell.md](desktop-
 - `packages/runtime-host/src/runtime-state.ts`
 - `packages/runtime-host/src/runtime.ts`
 - `packages/runtime-host/src/session-history-loader.ts`
-- `products/gateway/src/opencode-client.ts` (classic entry at pin 1.18.1; residual `client.session.*` call shapes)
-- `products/gateway/src/gateway-runtime.ts`
-- `products/gateway/src/channel-sync.ts`
-- `products/gateway/src/opencode-session-runtime.ts`
-- `products/gateway/src/live.ts`
-- `products/gateway/src/heartbeat.ts`
-- `products/gateway/src/scheduler.ts`
-- `products/gateway/src/observability.ts`
+- `products/gateway/src/opencode-client.ts` (V2 entry at pin 1.18.1; peer
+  allowlist + Basic auth; JOE-941 + `scripts/check-durable-opencode-classic-gate.mjs`)
+- `products/gateway/src/opencode-session-runtime.ts` (session I/O façade prefers
+  `client.v2.session.*` with classic mock fallback; other Durable modules take
+  `DurableOpencodeClient` from here and must not import `@opencode-ai/sdk` directly)
 
 ## Native V2 Capability Gaps
 

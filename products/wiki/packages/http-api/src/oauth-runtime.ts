@@ -46,7 +46,7 @@ export async function oauthRuntime(root: string): Promise<OAuthRuntime> {
   const issuerInput = oauth?.issuer ?? process.env.OPENWIKI_OAUTH_ISSUER ?? process.env.OPENWIKI_PUBLIC_ORIGIN;
   const issuer = normalizeIssuer(issuerInput);
   const runtimeMode = openWikiRuntimeModeFromEnvOrProfile(process.env, config.runtime?.profile);
-  const stateBackend = oauthStateBackend(config.runtime?.controls?.operational_state?.backend);
+  const stateBackend = resolveOAuthStateBackend(process.env, config.runtime?.controls?.operational_state?.backend);
   return {
     enabled: true,
     ...(issuer === undefined ? {} : { issuer }),
@@ -78,42 +78,72 @@ export async function updateOAuthStateForRuntime<T>(
   return updateOAuthState(root, update);
 }
 
-export function oauthStateBackendFailure(runtime: OAuthRuntime): HttpRouteResult | undefined {
+export function oauthStateBackendFailure(runtime: OAuthRuntime, env: NodeJS.ProcessEnv = process.env): HttpRouteResult | undefined {
   const stateBackend = runtime.stateBackend ?? "file";
-  if (stateBackend === "postgres" && !postgresRuntimeConfigured()) {
+  if (stateBackend === "postgres" && !postgresRuntimeConfigured(env)) {
     return oauthError(503, "server_error", "OAuth Postgres state requires OPENWIKI_DATABASE_URL or DATABASE_URL");
   }
-  if (
-    stateBackend === "file" &&
-    runtime.runtimeMode !== undefined &&
-    openWikiRuntimeModeRequiresHostedStores(runtime.runtimeMode) &&
-    !issuerIsLoopback(runtime.issuer)
-  ) {
-    return oauthError(503, "server_error", "Hosted OAuth requires OPENWIKI_OAUTH_STATE_BACKEND=postgres or OPENWIKI_OPERATIONAL_STATE_BACKEND=postgres");
+  const unsafe = oauthFileStateUnsafeReason({
+    stateBackend,
+    ...(runtime.runtimeMode === undefined ? {} : { runtimeMode: runtime.runtimeMode }),
+    ...(runtime.issuer === undefined ? {} : { issuer: runtime.issuer }),
+    env,
+  });
+  if (unsafe !== undefined) {
+    return oauthError(503, "server_error", unsafe);
   }
   return undefined;
 }
 
-async function ensureOAuthPostgresState(runtime: OAuthRuntime): Promise<void> {
-  if (runtime.stateBackend !== "postgres" || process.env.OPENWIKI_POSTGRES_MIGRATE === "0") {
-    return;
+/**
+ * File-backed OAuth state is single-node only. Refuse it for hosted modes,
+ * shared operational Postgres (multi-process), multi-replica signals, or any
+ * non-loopback issuer under those conditions (JOE-979 / wiki audit P2-5).
+ */
+export function oauthFileStateUnsafeReason(input: {
+  stateBackend: OAuthStateBackend;
+  runtimeMode?: OpenWikiRuntimeMode | undefined;
+  issuer?: string | undefined;
+  env?: NodeJS.ProcessEnv | undefined;
+}): string | undefined {
+  if (input.stateBackend !== "file") {
+    return undefined;
   }
-  await migratePostgresRuntime();
+  if (issuerIsLoopback(input.issuer)) {
+    return undefined;
+  }
+  const env = input.env ?? process.env;
+  const hosted =
+    input.runtimeMode !== undefined && openWikiRuntimeModeRequiresHostedStores(input.runtimeMode);
+  const sharedOps = env.OPENWIKI_OPERATIONAL_STATE_BACKEND?.trim().toLowerCase() === "postgres";
+  const multiReplica = webReplicaCount(env) > 1;
+  if (!hosted && !sharedOps && !multiReplica) {
+    return undefined;
+  }
+  return "Hosted or multi-replica OAuth requires OPENWIKI_OAUTH_STATE_BACKEND=postgres or OPENWIKI_OPERATIONAL_STATE_BACKEND=postgres (file-backed OAuth state is single-node only)";
 }
 
-function oauthStateBackend(configuredOperationalBackend: string | undefined): OAuthStateBackend {
-  const explicit = process.env.OPENWIKI_OAUTH_STATE_BACKEND?.trim().toLowerCase();
+/**
+ * Resolve OAuth state backend from env + optional config operational backend.
+ * Explicit OPENWIKI_OAUTH_STATE_BACKEND wins; otherwise operational postgres
+ * selects shared OAuth state.
+ */
+export function resolveOAuthStateBackend(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredOperationalBackend?: string,
+): OAuthStateBackend {
+  const explicit = env.OPENWIKI_OAUTH_STATE_BACKEND?.trim().toLowerCase();
   if (explicit === "postgres") {
     return "postgres";
   }
   if (explicit === "file" || explicit === "local") {
     return "file";
   }
-  const operational = process.env.OPENWIKI_OPERATIONAL_STATE_BACKEND?.trim().toLowerCase() || configuredOperationalBackend;
+  const operational = env.OPENWIKI_OPERATIONAL_STATE_BACKEND?.trim().toLowerCase() || configuredOperationalBackend;
   return operational === "postgres" ? "postgres" : "file";
 }
 
-function issuerIsLoopback(issuer: string | undefined): boolean {
+export function issuerIsLoopback(issuer: string | undefined): boolean {
   if (issuer === undefined) {
     return false;
   }
@@ -123,6 +153,22 @@ function issuerIsLoopback(issuer: string | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+function webReplicaCount(env: NodeJS.ProcessEnv): number {
+  const raw = env.OPENWIKI_WEB_REPLICAS?.trim() || env.WEB_REPLICAS?.trim();
+  if (raw === undefined || raw.length === 0) {
+    return 1;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+async function ensureOAuthPostgresState(runtime: OAuthRuntime): Promise<void> {
+  if (runtime.stateBackend !== "postgres" || process.env.OPENWIKI_POSTGRES_MIGRATE === "0") {
+    return;
+  }
+  await migratePostgresRuntime();
 }
 
 function envBooleanEnabled(value: string | undefined): boolean {

@@ -18,6 +18,7 @@ const STYLE_FILES = ["tokens.css", "base.css", "components.css", "markdown.css",
 const CLIENT_MODULE_FILES = [
   "diff-controls.js",
   "dom-utils.js",
+  "graph/controls.js",
   "graph/detail.js",
   "graph/fetch.js",
   "graph/index.js",

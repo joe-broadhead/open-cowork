@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@open-cowork/gateway-channel": "workspace:*",
+    "@open-cowork/shared": "workspace:*",
     "grammy": "^1.44.0"
   },
   "devDependencies": {

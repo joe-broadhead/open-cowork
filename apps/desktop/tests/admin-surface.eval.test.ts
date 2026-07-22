@@ -8,10 +8,11 @@ import { captureEvidence, getEvalBridgeState, installEvalBridge } from './eval-h
 //
 // Admin access is cloud-role-gated (`admin.access()` permissions). In the
 // default local desktop build there is no cloud role, so the sidebar hides the
-// Admin entry and AdminPage renders a "No admin access" gate. The eval bridge
-// grants a coarse, content-free admin role (permission strings only) so we can
-// drive the REAL AdminPage and assert its section navigation renders. When the
-// hardened bridge can't be wrapped, we assert the security-relevant
+// Admin entry and AdminPage renders a "No admin access" gate. Smoke/eval runs
+// set OPEN_COWORK_E2E=1 so preload exposes `window.__openCoworkEval`, which
+// grants a coarse, content-free admin role (permission strings only) *before*
+// contextBridge freezes coworkApi. Contract selector: `[data-nav-view="admin"]`.
+// When the E2E seam is unavailable, we assert the security-relevant
 // fail-closed behavior instead — which is itself a valuable eval.
 const ADMIN_PERMISSIONS = ['members:read', 'roles:manage', 'policy:manage', 'audit:read']
 

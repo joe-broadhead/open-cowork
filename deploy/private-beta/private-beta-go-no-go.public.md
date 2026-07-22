@@ -12,6 +12,11 @@ bundles.
 - Reason: private deployed evidence has not been attached to a private
   operations record for every blocking item in
   `deploy/private-beta/launch-evidence-record.template.json`.
+- Last public package review: 2026-07-21 (JOE-922)
+- Public ops evidence package:
+  `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md`
+- Public package validators (`deploy:private-beta:validate`,
+  `deploy:launch:validate`, `ops:validate`, private-beta load **plan**): green
 - Current public tier: `local-self-host-beta`
 - Higher tiers not claimed: `private-beta`, `public-beta`,
   `general-availability`, `enterprise-scale`

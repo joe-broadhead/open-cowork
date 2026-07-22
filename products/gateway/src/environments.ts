@@ -6,11 +6,74 @@ import { spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 
 export * from './environments/types.js'
+
+import {
+  DEFAULT_ENVIRONMENT_NAME,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_TTL_MS,
+  REMOTE_HOST_PROCESS_CONTROL_ENV_PATTERN,
+  SECRET_NAME_PATTERN,
+  SECRET_VALUE_PLACEHOLDER,
+  binaryAvailable,
+  boundedInteger,
+  boundedNumber,
+  durationMs,
+  environmentIdempotencyKeyHash,
+  normalizeEnvironmentIdempotencyKey,
+  normalizeRuntimeExecutable,
+  optionalText,
+  redactEnvironmentRecord,
+  shortText,
+  uniqueStrings,
+} from './environments/util.js'
+export {
+  redactEnvironmentRecord,
+  redactEnvironmentSensitiveText,
+  redactEnvironmentNetworkTarget,
+  redactEnvironmentNetworkTargets,
+  remoteCrabboxAcquisitionSlug,
+} from './environments/util.js'
+import {
+  lookupMetadataEnvironmentAcquisition,
+  reconcileEnvironmentRuns,
+  releaseEnvironmentRun,
+  releaseMetadataEnvironmentAcquisition,
+  retainEnvironmentRun,
+  setEnvironmentControllerResolver,
+} from './environments/lifecycle.js'
+export {
+  cleanupFailedEnvironmentRun,
+  environmentPromptContext,
+  finalizeEnvironmentRun,
+  releaseEnvironmentRun,
+  retainEnvironmentRun,
+} from './environments/lifecycle.js'
+import {
+  collectLocalContainerArtifacts,
+  inspectLocalContainerImage,
+  localContainerCommandPrefix,
+  lookupLocalContainerEnvironmentByKey,
+  prepareLocalContainerEnvironment,
+  reconcileLocalContainerEnvironmentRuns,
+  releaseLocalContainerEnvironmentByKey,
+  releaseLocalContainerEnvironmentRun,
+  runLocalContainerCommand,
+  setLocalContainerPrepareEnvironment,
+} from './environments/local-container.js'
+export { clearLocalContainerWarmPoolsForTest } from './environments/local-container.js'
+import {
+  lookupRemoteCrabboxEnvironmentByKey,
+  prepareRemoteCrabboxEnvironment,
+  reconcileRemoteCrabboxEnvironmentRuns,
+  releaseRemoteCrabboxEnvironmentByKey,
+  releaseRemoteCrabboxEnvironmentRun,
+  remoteCrabboxCommandPrefix,
+  setCrabboxPrepareEnvironment,
+} from './environments/remote-crabbox.js'
 import type {
   CrabboxSpec,
   EnvironmentAcquisitionLookupResult,
   EnvironmentAcquisitionReleaseResult,
-  EnvironmentArtifactCollectionResult,
   EnvironmentBackend,
   EnvironmentCachePolicy,
   EnvironmentCleanupPolicy,
@@ -19,7 +82,6 @@ import type {
   EnvironmentNetwork,
   EnvironmentPreflightResult,
   EnvironmentPrepareOptions,
-  EnvironmentReconciliationResult,
   EnvironmentResolution,
   EnvironmentResolutionInput,
   EnvironmentResources,
@@ -34,20 +96,7 @@ import type {
   LocalContainerSpec,
 } from './environments/types.js'
 
-const DEFAULT_ENVIRONMENT_NAME = 'local-process'
-const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000
-const DEFAULT_TTL_MS = 60 * 60 * 1000
-const DEFAULT_CONTAINER_WORKDIR = '/workspace'
-const SECRET_NAME_PATTERN = /(?:TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|COOKIE|AUTH)/i
-const SENSITIVE_TEXT_FIELD_PATTERN = /(?:ERROR|REASON|MESSAGE|OUTPUT|STDERR|STDOUT|LOG|EVIDENCE|PAYLOAD)/i
-const REMOTE_HOST_PROCESS_CONTROL_ENV_PATTERN = /^(?:PATH|HOME|SHELL|TMPDIR|TEMP|TMP|USER|LOGNAME|BASH_ENV|ENV|ZDOTDIR|IFS|CDPATH|SHELLOPTS|BASHOPTS|NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|ELECTRON_RUN_AS_NODE|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|PYTHONHOME|PYTHONPATH|PYTHONSTARTUP|PYTHONINSPECT|PYTHONWARNINGS|RUBYOPT|RUBYLIB|PERL5OPT|PERL5LIB|GCONV_PATH|GLIBC_TUNABLES|OPENSSL_CONF|SSL_CERT_FILE|SSL_CERT_DIR|CURL_CA_BUNDLE|REQUESTS_CA_BUNDLE|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|HOSTALIASES|RES_OPTIONS|LOCALDOMAIN|GIT_SSH|GIT_SSH_COMMAND|SSH_AUTH_SOCK|AWS_PROFILE|AWS_CONFIG_FILE|AWS_SHARED_CREDENTIALS_FILE|GOOGLE_APPLICATION_CREDENTIALS|CLOUDSDK_CONFIG|DOCKER_CONFIG|KUBECONFIG|XDG_.+|LD_.+|DYLD_.+|CRABBOX_.+)$/
-const SECRET_VALUE_PLACEHOLDER = '<secret-from-environment>'
-const MAX_ENVIRONMENT_IDEMPOTENCY_KEY_LENGTH = 512
-const localContainerWarmPools = new Map<string, { warmedAt: string; runtime: string; image: string; specHash: string }>()
 
-export function clearLocalContainerWarmPoolsForTest(): void {
-  localContainerWarmPools.clear()
-}
 
 export function defaultGatewayEnvironmentConfig(): GatewayEnvironmentConfig {
   return {
@@ -209,6 +258,11 @@ export function registerEnvironmentControllerForTest(backend: EnvironmentBackend
   return () => controllerOverrides.delete(backend)
 }
 
+setEnvironmentControllerResolver(environmentControllerForBackend)
+setLocalContainerPrepareEnvironment(prepareEnvironment)
+setCrabboxPrepareEnvironment(prepareEnvironment)
+
+
 export function normalizeGatewayEnvironmentConfig(input?: Partial<GatewayEnvironmentConfig> | Record<string, unknown>): GatewayEnvironmentConfig {
   const defaults = defaultGatewayEnvironmentConfig()
   const raw = (input || {}) as any
@@ -306,460 +360,6 @@ export function prepareEnvironment(spec: EnvironmentSpec, options: EnvironmentPr
   }
 }
 
-function prepareLocalContainerEnvironment(spec: EnvironmentSpec, options: EnvironmentPrepareOptions = { taskId: 'unknown', stage: 'unknown' }): EnvironmentRunRecord {
-  const workspaceHostPath = createLocalContainerWorkspace(spec, options)
-  const containerSpec = { ...spec, workdir: workspaceHostPath || spec.workdir }
-  const run = prepareEnvironment(containerSpec, options)
-  const digest = inspectLocalContainerImage(spec)
-  const commandRuntimePrefix = localContainerCommandPrefix(spec, run.workdir || spec.workdir)
-  const commandCaptureDir = createLocalContainerCaptureDir(workspaceHostPath)
-  const commandWrapper = createLocalContainerCommandWrapper(spec, run.workdir || spec.workdir, commandCaptureDir)
-  const commandPrefix = [commandWrapper]
-  const commandPreflight = preflightLocalContainerStageCommands(containerSpec, run.preflight)
-  const warmPool = warmLocalContainerPool(spec, run.workdir || spec.workdir)
-  return {
-    ...run,
-    status: commandPreflight.preflight.ok ? run.status : 'blocked',
-    provider: 'local-container',
-    preflight: commandPreflight.preflight,
-    metadata: {
-      ...run.metadata,
-      originalWorkdir: spec.workdir,
-      workspaceHostPath,
-      containerWorkdir: localContainerWorkdir(spec),
-      imageDigest: digest.digest,
-      imageInspectStatus: digest.status,
-      commandPrefix,
-      runtimeCommandPrefix: commandRuntimePrefix,
-      commandCaptureDir,
-      commandWrapper,
-      commandResults: commandPreflight.results.map(localContainerCommandSummary),
-      warmPool: warmPool.enabled ? { key: warmPool.key, hit: warmPool.hit, warmedAt: warmPool.warmedAt, result: warmPool.result ? localContainerCommandSummary(warmPool.result) : undefined } : undefined,
-      cacheVolumes: localContainerCacheVolumes(spec),
-    },
-  }
-}
-
-function releaseLocalContainerEnvironmentRun(environment: EnvironmentRunRecord): EnvironmentRunRecord {
-  const workspace = typeof environment.metadata['workspaceHostPath'] === 'string' ? environment.metadata['workspaceHostPath'] : undefined
-  if (workspace && isLocalContainerWorkspace(workspace)) fs.rmSync(path.dirname(workspace), { recursive: true, force: true })
-  return releaseEnvironmentRun(environment)
-}
-
-function lookupLocalContainerEnvironmentByKey(spec: EnvironmentSpec, idempotencyKey: string): EnvironmentAcquisitionLookupResult {
-  const target = localContainerWorkspaceTargetForKey(spec, idempotencyKey)
-  const found = fs.existsSync(target.root)
-  return {
-    ok: true,
-    found,
-    backend: spec.backend,
-    idempotencyKeyHash: target.idempotencyKeyHash,
-    resourceId: found ? `local-container:${target.idempotencyKeyHash}` : undefined,
-    state: found ? 'prepared' : undefined,
-    metadata: { workspaceHostPath: target.workspace, root: target.root },
-    evidence: [found ? `local-container workspace ${target.idempotencyKeyHash} is present` : `local-container workspace ${target.idempotencyKeyHash} was not found`],
-  }
-}
-
-function releaseLocalContainerEnvironmentByKey(spec: EnvironmentSpec, idempotencyKey: string): EnvironmentAcquisitionReleaseResult {
-  const lookup = lookupLocalContainerEnvironmentByKey(spec, idempotencyKey)
-  if (lookup.found) fs.rmSync(String(lookup.metadata['root']), { recursive: true, force: true })
-  return {
-    ok: true,
-    found: lookup.found,
-    released: lookup.found,
-    backend: spec.backend,
-    idempotencyKeyHash: lookup.idempotencyKeyHash,
-    resourceId: lookup.resourceId,
-    evidence: [...lookup.evidence, lookup.found ? `local-container workspace ${lookup.idempotencyKeyHash} released by acquisition key` : `local-container workspace ${lookup.idempotencyKeyHash} had nothing to release`],
-  }
-}
-
-function collectLocalContainerArtifacts(environment: EnvironmentRunRecord): EnvironmentArtifactCollectionResult {
-  const artifacts = new Set(environment.artifacts)
-  const evidence: string[] = []
-  const captureDir = typeof environment.metadata['commandCaptureDir'] === 'string' ? environment.metadata['commandCaptureDir'] : undefined
-  const captures = readLocalContainerCaptures(captureDir)
-  for (const capture of captures) {
-    artifacts.add(`file:${capture.metadataPath}`)
-    if (capture['stdoutPath'] && fs.existsSync(capture['stdoutPath'])) artifacts.add(`file:${capture['stdoutPath']}`)
-    if (capture['stderrPath'] && fs.existsSync(capture['stderrPath'])) artifacts.add(`file:${capture['stderrPath']}`)
-  }
-  if (captures.length) {
-    const failed = captures.filter(capture => Number(capture['exitCode'] || 0) !== 0).length
-    evidence.push(`local-container captured ${captures.length} command(s) with stdout/stderr/exit/timing metadata${failed ? `; failed=${failed}` : ''}`)
-  }
-  const workspace = typeof environment.metadata['workspaceHostPath'] === 'string' ? environment.metadata['workspaceHostPath'] : undefined
-  for (const artifact of localContainerWorkspaceArtifacts(workspace)) artifacts.add(`file:${artifact}`)
-  return {
-    ok: true,
-    artifacts: [...artifacts].sort(),
-    evidence: evidence.length ? evidence : ['local-container has no captured command logs'],
-  }
-}
-
-function reconcileLocalContainerEnvironmentRuns(environments: EnvironmentRunRecord[]): EnvironmentReconciliationResult {
-  const base = reconcileEnvironmentRuns(environments)
-  const evidence = base.evidence.slice()
-  for (const environment of environments.filter(row => row.backend === 'local-container')) {
-    const workspace = typeof environment.metadata['workspaceHostPath'] === 'string' ? environment.metadata['workspaceHostPath'] : undefined
-    if (!workspace) {
-      evidence.push(`local-container ${environment.id} has no workspace metadata`)
-      continue
-    }
-    if (environment.status === 'cleanup_failed' && isLocalContainerWorkspace(workspace)) {
-      try {
-        fs.rmSync(path.dirname(workspace), { recursive: true, force: true })
-        evidence.push(`local-container ${environment.id} stale workspace cleanup attempted`)
-      } catch (err: any) {
-        evidence.push(`local-container ${environment.id} stale workspace cleanup failed: ${shortText(err?.message || err, 500)}`)
-      }
-      continue
-    }
-    evidence.push(fs.existsSync(workspace) ? `local-container ${environment.id} workspace present` : `local-container ${environment.id} workspace missing`)
-  }
-  return { ...base, evidence }
-}
-
-function prepareRemoteCrabboxEnvironment(spec: EnvironmentSpec, options: EnvironmentPrepareOptions = { taskId: 'unknown', stage: 'unknown' }): EnvironmentRunRecord {
-  const base = prepareEnvironment(spec, options)
-  if (!base.preflight.ok) return { ...base, leaseId: undefined }
-
-  const idempotencyKey = options.idempotencyKey ? normalizeEnvironmentIdempotencyKey(options.idempotencyKey) : undefined
-  const requestedSlug = idempotencyKey ? remoteCrabboxAcquisitionSlug(idempotencyKey) : undefined
-  let existing = idempotencyKey ? lookupRemoteCrabboxEnvironmentByKey(spec, idempotencyKey) : undefined
-  if (existing && !existing.ok) throw new Error(`Crabbox acquisition lookup failed: ${existing.reason || existing.evidence.join('; ')}`)
-
-  let warmup: CrabboxCommandResult | undefined
-  let duplicateLeaseReleased: string | undefined
-  let leaseId = existing?.found ? existing.resourceId : undefined
-  if (!leaseId) {
-    warmup = runCrabboxCli(spec, crabboxWarmupArgs(spec, idempotencyKey), 'warmup')
-    if (!warmup.ok) throw new Error(`Crabbox lease failed (${warmup.failureClass}): ${warmup.output || warmup.error || 'warmup failed'}`)
-    leaseId = crabboxLeaseId(warmup)
-    if (leaseId && idempotencyKey) {
-      const keyedLease = lookupRemoteCrabboxEnvironmentByKey(spec, idempotencyKey)
-      if (!keyedLease.ok || !keyedLease.found || !keyedLease.resourceId) {
-        const cleanup = releaseRemoteCrabboxLease(spec, leaseId)
-        const cleanupFailure = cleanup.ok ? '' : `; duplicate cleanup failed: ${cleanup.output || cleanup.error || 'unknown failure'}`
-        throw new Error(`Crabbox keyed lease could not be resolved after warmup: ${keyedLease.reason || keyedLease.evidence.join('; ')}${cleanupFailure}`)
-      }
-      if (keyedLease.resourceId !== leaseId) {
-        const cleanup = releaseRemoteCrabboxLease(spec, leaseId)
-        if (!cleanup.ok) throw new Error(`Crabbox duplicate lease cleanup failed (${cleanup.failureClass}): ${cleanup.output || cleanup.error || 'release failed'}`)
-        duplicateLeaseReleased = leaseId
-        leaseId = keyedLease.resourceId
-        existing = keyedLease
-      }
-    }
-  }
-  if (!leaseId) throw new Error('Crabbox lease failed (unknown): warmup did not return a lease id')
-  const slug = (warmup ? crabboxSlug(warmup) : undefined) || stringField(existing?.metadata, 'slug') || requestedSlug
-  const inspect = inspectRemoteCrabboxLease(spec, leaseId)
-  const remotePreflight = preflightRemoteCrabboxLease(spec, leaseId, base.preflight)
-  const timing = [warmup?.timing, ...remotePreflight.results.map(result => result.timing)].filter(Boolean)
-  const runIds = remotePreflight.results.map(crabboxRunId).filter(Boolean)
-  const artifacts = uniqueStrings(remotePreflight.results.flatMap(result => result.artifacts))
-  const inspectRecord = inspect.ok ? inspect.record : undefined
-  const provider = stringField(inspectRecord, 'provider') || stringField(warmup?.timing, 'provider') || spec.crabbox?.provider
-  const machineClass = spec.crabbox?.class || stringField(inspectRecord, 'class') || stringField(inspectRecord, 'type') || stringField(warmup?.timing, 'class')
-  const remoteWorkdir = stringField(inspectRecord, 'remoteWorkdir') || stringField(inspectRecord, 'remote_workdir') || stringField(inspectRecord, 'workroot') || stringField(warmup?.timing, 'remoteWorkdir') || stringField(warmup?.timing, 'remote_workdir')
-  return {
-    ...base,
-    status: remotePreflight.preflight.ok ? 'prepared' : 'blocked',
-    provider,
-    class: machineClass,
-    leaseId,
-    runId: runIds.at(-1),
-    preflight: remotePreflight.preflight,
-    artifacts,
-    cleanup: { ...base.cleanup, retainOnFailure: base.cleanup.retainOnFailure || spec.crabbox?.keepOnFailure === true },
-    metadata: {
-      ...base.metadata,
-      leaseId,
-      slug,
-      inspect: inspectRecord,
-      inspectStatus: inspect.ok ? 'ok' : 'failed',
-      inspectError: inspect.ok ? undefined : inspect.reason,
-      timing,
-      acquisitionKeyHash: idempotencyKey ? environmentIdempotencyKeyHash(idempotencyKey) : undefined,
-      acquisitionSlug: requestedSlug,
-      acquisitionReused: existing?.found === true,
-      acquisitionDuplicateReleased: duplicateLeaseReleased,
-      commandPrefix: remoteCrabboxCommandPrefix(spec, { ...base, leaseId }),
-      commandResults: remotePreflight.results.map(crabboxCommandSummary),
-      remoteWorkdir,
-    },
-  }
-}
-
-function preflightRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string, base: EnvironmentPreflightResult): { preflight: EnvironmentPreflightResult; results: CrabboxCommandResult[] } {
-  const checked = base.checked.slice()
-  const missing = base.missing.slice()
-  const warnings = base.warnings.slice()
-  const commandRefs = base.commandRefs.slice()
-  const results: CrabboxCommandResult[] = []
-  checked.push(`lease:${leaseId}`)
-  for (const tool of spec.tools) {
-    const result = runCrabboxRemoteCommand(spec, leaseId, `tool:${tool}`, ['command', '-v', tool])
-    results.push(result)
-    checked.push(tool)
-    commandRefs.push(result.commandRef)
-    if (!result.ok) {
-      missing.push(tool)
-      warnings.push(`remote-crabbox tool check failed for ${tool} (${result.failureClass}): ${result.output || 'no output'}`)
-    }
-  }
-  for (const [index, command] of spec.setup.entries()) {
-    const result = runCrabboxRemoteCommand(spec, leaseId, `setup:${index + 1}`, command)
-    results.push(result)
-    checked.push(`setup:${index + 1}`)
-    commandRefs.push(result.commandRef)
-    if (!result.ok) {
-      missing.push(`setup:${index + 1}`)
-      warnings.push(`remote-crabbox setup command ${index + 1} failed (${result.failureClass}): ${result.output || 'no output'}`)
-    }
-  }
-  for (const [index, command] of spec.validation.entries()) {
-    const result = runCrabboxRemoteCommand(spec, leaseId, `validation:${index + 1}`, command)
-    results.push(result)
-    checked.push(`validation:${index + 1}`)
-    commandRefs.push(result.commandRef)
-    if (!result.ok) {
-      missing.push(`validation:${index + 1}`)
-      warnings.push(`remote-crabbox validation command ${index + 1} failed (${result.failureClass}): ${result.output || 'no output'}`)
-    }
-  }
-  return { preflight: { ok: missing.length === 0, checked: uniqueStrings(checked), missing: uniqueStrings(missing), warnings, commandRefs: uniqueStrings(commandRefs) }, results }
-}
-
-function releaseRemoteCrabboxEnvironmentRun(environment: EnvironmentRunRecord): EnvironmentRunRecord {
-  const leaseId = environment.leaseId
-  if (!leaseId) return releaseEnvironmentRun(environment)
-  const cli = typeof environment.runtime === 'string' ? environment.runtime : 'crabbox'
-  const provider = typeof environment.provider === 'string' ? environment.provider : undefined
-  const result = runCrabboxReleaseCommand(cli, provider, leaseId, 'stop')
-  if (!result.ok && isUnknownCrabboxCommand(result.output)) {
-    const fallback = runCrabboxReleaseCommand(cli, provider, leaseId, 'release')
-    if (!fallback.ok) throw new Error(`Crabbox release failed (${fallback.failureClass}): ${fallback.output || fallback.error || 'release failed'}`)
-  } else if (!result.ok) {
-    throw new Error(`Crabbox stop failed (${result.failureClass}): ${result.output || result.error || 'stop failed'}`)
-  }
-  return releaseEnvironmentRun({ ...environment, metadata: { ...environment.metadata, releasedLeaseId: leaseId } })
-}
-
-function lookupMetadataEnvironmentAcquisition(spec: EnvironmentSpec, idempotencyKey: string): EnvironmentAcquisitionLookupResult {
-  const key = normalizeEnvironmentIdempotencyKey(idempotencyKey)
-  return {
-    ok: true,
-    found: false,
-    backend: spec.backend,
-    idempotencyKeyHash: environmentIdempotencyKeyHash(key),
-    metadata: {},
-    evidence: [`${spec.backend} has no external acquisition to look up by key`],
-  }
-}
-
-function releaseMetadataEnvironmentAcquisition(spec: EnvironmentSpec, idempotencyKey: string): EnvironmentAcquisitionReleaseResult {
-  const key = normalizeEnvironmentIdempotencyKey(idempotencyKey)
-  return {
-    ok: true,
-    found: false,
-    released: false,
-    backend: spec.backend,
-    idempotencyKeyHash: environmentIdempotencyKeyHash(key),
-    evidence: [`${spec.backend} has no external acquisition to release by key`],
-  }
-}
-
-function lookupRemoteCrabboxEnvironmentByKey(spec: EnvironmentSpec, idempotencyKey: string): EnvironmentAcquisitionLookupResult {
-  const key = normalizeEnvironmentIdempotencyKey(idempotencyKey)
-  const idempotencyKeyHash = environmentIdempotencyKeyHash(key)
-  const slug = remoteCrabboxAcquisitionSlug(key)
-  const inspect = inspectRemoteCrabboxLease(spec, slug)
-  if (!inspect.ok) {
-    const missing = isMissingCrabboxLease(inspect.reason)
-    return {
-      ok: missing,
-      found: false,
-      backend: spec.backend,
-      idempotencyKeyHash,
-      metadata: { slug },
-      evidence: [missing ? `remote-crabbox acquisition ${idempotencyKeyHash} was not found` : `remote-crabbox acquisition lookup failed: ${shortText(inspect.reason, 500)}`],
-      reason: missing ? undefined : inspect.reason,
-    }
-  }
-  const resourceId = crabboxLeaseIdFromRecord(inspect.record)
-  if (!resourceId) {
-    return {
-      ok: false,
-      found: false,
-      backend: spec.backend,
-      idempotencyKeyHash,
-      metadata: { slug },
-      evidence: [`remote-crabbox acquisition lookup returned no canonical lease id`],
-      reason: 'Crabbox inspect returned no canonical lease id',
-    }
-  }
-  return {
-    ok: true,
-    found: true,
-    backend: spec.backend,
-    idempotencyKeyHash,
-    resourceId,
-    provider: stringField(inspect.record, 'provider') || spec.crabbox?.provider,
-    state: stringField(inspect.record, 'state') || stringField(inspect.record, 'status'),
-    metadata: { ...inspect.record, slug: stringField(inspect.record, 'slug') || slug },
-    evidence: [`remote-crabbox acquisition ${idempotencyKeyHash} resolved to lease ${resourceId}`],
-  }
-}
-
-function releaseRemoteCrabboxEnvironmentByKey(spec: EnvironmentSpec, idempotencyKey: string): EnvironmentAcquisitionReleaseResult {
-  const lookup = lookupRemoteCrabboxEnvironmentByKey(spec, idempotencyKey)
-  if (!lookup.ok || !lookup.found || !lookup.resourceId) {
-    return {
-      ok: lookup.ok,
-      found: lookup.found,
-      released: false,
-      backend: spec.backend,
-      idempotencyKeyHash: lookup.idempotencyKeyHash,
-      resourceId: lookup.resourceId,
-      evidence: lookup.evidence,
-      reason: lookup.reason,
-    }
-  }
-  const release = releaseRemoteCrabboxLease(spec, lookup.resourceId)
-  return {
-    ok: release.ok,
-    found: true,
-    released: release.ok,
-    backend: spec.backend,
-    idempotencyKeyHash: lookup.idempotencyKeyHash,
-    resourceId: lookup.resourceId,
-    evidence: [...lookup.evidence, release.ok ? `remote-crabbox lease ${lookup.resourceId} released by acquisition key` : `remote-crabbox lease ${lookup.resourceId} release failed: ${release.output || release.error || 'unknown failure'}`],
-    reason: release.ok ? undefined : release.output || release.error || 'Crabbox release failed',
-  }
-}
-
-function releaseRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string): CrabboxCommandResult {
-  let release = runCrabboxCli(spec, crabboxReleaseArgs(spec, leaseId, 'stop'), 'release')
-  if (!release.ok && isUnknownCrabboxCommand(release.output)) {
-    release = runCrabboxCli(spec, crabboxReleaseArgs(spec, leaseId, 'release'), 'release')
-  }
-  return release
-}
-
-export function finalizeEnvironmentRun(environment: EnvironmentRunRecord | undefined, success: boolean): EnvironmentRunRecord | undefined {
-  if (!environment) return undefined
-  const retain = success ? environment.cleanup.retainOnSuccess : environment.cleanup.retainOnFailure
-  const controller = environmentControllerForBackend(environment.backend)
-  try {
-    return retain ? controller.retain(environment) : controller.release(environment)
-  } catch (err: any) {
-    return cleanupFailedEnvironmentRun(environment, err?.message || String(err))
-  }
-}
-
-export function releaseEnvironmentRun(environment: EnvironmentRunRecord): EnvironmentRunRecord {
-  return updateEnvironmentLifecycle(environment, 'released', 'released')
-}
-
-export function retainEnvironmentRun(environment: EnvironmentRunRecord): EnvironmentRunRecord {
-  return updateEnvironmentLifecycle(environment, 'retained', 'retained')
-}
-
-export function cleanupFailedEnvironmentRun(environment: EnvironmentRunRecord, reason: string): EnvironmentRunRecord {
-  return {
-    ...updateEnvironmentLifecycle(environment, 'cleanup_failed', 'failed'),
-    metadata: { ...environment.metadata, cleanupError: shortText(reason, 500) },
-  }
-}
-
-function updateEnvironmentLifecycle(environment: EnvironmentRunRecord, status: EnvironmentRunRecord['status'], state: EnvironmentRunRecord['cleanup']['state']): EnvironmentRunRecord {
-  return {
-    ...environment,
-    status,
-    updatedAt: new Date().toISOString(),
-    cleanup: { ...environment.cleanup, state },
-  }
-}
-
-function reconcileEnvironmentRuns(environments: EnvironmentRunRecord[]): EnvironmentReconciliationResult {
-  const active = environments.filter(environment => environment.status === 'prepared' || environment.status === 'blocked')
-  const retained = environments.filter(environment => environment.status === 'retained')
-  const cleanupFailed = environments.filter(environment => environment.status === 'cleanup_failed')
-  return {
-    ok: cleanupFailed.length === 0,
-    checked: environments.length,
-    active: active.length,
-    retained: retained.length,
-    cleanupFailed: cleanupFailed.length,
-    evidence: [`checked=${environments.length}`, `active=${active.length}`, `retained=${retained.length}`, `cleanupFailed=${cleanupFailed.length}`],
-  }
-}
-
-export function environmentPromptContext(spec: EnvironmentSpec, run: EnvironmentRunRecord): string {
-  const networkAllow = redactEnvironmentNetworkTargets(spec.network.allow || [])
-  const lines = [
-    'Execution environment contract:',
-    `- Environment: ${spec.name} (${spec.backend})`,
-    spec.workdir ? `- Workdir: ${spec.workdir}` : '',
-    spec.tools.length ? `- Required tools declared for environment: ${spec.tools.join(', ')}` : '- Required tools declared for environment: none',
-    `- Network policy: ${spec.network.mode}${networkAllow.length ? ` allow=${networkAllow.join(',')}` : ''}`,
-    run.preflight.warnings.length ? `- Warnings: ${run.preflight.warnings.join('; ')}` : '',
-  ]
-  if (spec.backend === 'local-container') {
-    const prefix = Array.isArray(run.metadata['commandPrefix']) ? run.metadata['commandPrefix'].map(String).join(' ') : `${spec.container?.runtime || 'docker'} run ... ${spec.container?.image || '(image not set)'}`
-    lines.push(`- Run repository commands through the configured container runtime/image: ${spec.container?.runtime || 'docker'} ${spec.container?.image || '(image not set)'}`)
-    lines.push(`- Container command prefix: ${prefix}`)
-  }
-  if (spec.backend === 'remote-crabbox') {
-    const prefix = Array.isArray(run.metadata['commandPrefix']) ? run.metadata['commandPrefix'].map(String).join(' ') : `${spec.crabbox?.cli || 'crabbox'} run --id ${run.leaseId || '<lease-id>'} -- ...`
-    lines.push(`- Remote Crabbox lease: ${run.leaseId || '(not leased)'}${run.metadata['slug'] ? ` slug=${run.metadata['slug']}` : ''}`)
-    lines.push(`- Run repository commands through Crabbox so source sync, logs, timing, and artifacts stay attached to this lease.`)
-    lines.push(`- Crabbox command prefix: ${prefix}`)
-    lines.push(`- For multi-command shell snippets use: ${spec.crabbox?.cli || 'crabbox'} run --id ${run.leaseId || '<lease-id>'} --shell '<command>'`)
-  }
-  return lines.filter(Boolean).join('\n')
-}
-
-export function redactEnvironmentRecord<T>(value: T): T {
-  return redact(value) as T
-}
-
-export function redactEnvironmentSensitiveText(value: string): string {
-  return value
-    .replace(/https?:\/\/[^\s'",)]+/gi, '<url:redacted>')
-    .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 <redacted>')
-    .replace(/\b(token|secret|password|api[_-]?key|authorization|bearer|webhook|chat[_ -]?id|phone)\s*[:=]\s*[^\s'",)]+/gi, '$1=<redacted>')
-    .replace(/(?:[A-Za-z]:\\|\/)[^\s'",)]+/g, match => {
-      if (/^https?:\/\//i.test(match)) return match
-      return `<path:${hashText(path.resolve(match)).slice(0, 12)}>`
-    })
-}
-
-export function redactEnvironmentNetworkTarget(value: string): string {
-  const target = String(value || '').trim()
-  if (!target) return ''
-  try {
-    const parsed = new URL(target)
-    if (parsed.protocol && parsed.host) return `${parsed.protocol}//${parsed.host.toLowerCase()}`
-  } catch {
-    // Hostname, wildcard, and scp-like allow entries are not always valid URLs.
-  }
-  const withoutUserInfo = target.includes('@') ? target.slice(target.lastIndexOf('@') + 1) : target
-  const head = withoutUserInfo.split(/[/?#]/)[0]!
-  if (/^\[[0-9a-f:.]+\](?::\d{1,5})?$/i.test(head)) return head.toLowerCase()
-  if (/^(\*\.)?[a-z0-9.-]+(?::\d{1,5})?$/i.test(head)) return head.toLowerCase()
-  const scpLikeHost = head.match(/^([a-z0-9.-]+):[^:]+$/i)?.[1]
-  if (scpLikeHost) return scpLikeHost.toLowerCase()
-  const redacted = redactEnvironmentSensitiveText(head)
-  return redacted === head ? `<network-target:${hashText(target).slice(0, 12)}>` : redacted
-}
-
-export function redactEnvironmentNetworkTargets(values: string[]): string[] {
-  return uniqueStrings(values.map(redactEnvironmentNetworkTarget)).sort()
-}
 
 function hydrateSourcePlan(plan: EnvironmentSourcePlan | undefined, workdir: string | undefined): EnvironmentHydrationResult | undefined {
   if (!plan || !plan.required) return undefined
@@ -810,529 +410,6 @@ function gitApply(workdir: string, patch: string, args: string[]): { ok: boolean
   const result = spawnSync('git', ['-C', workdir, 'apply', ...args, '-'], { input: patch, encoding: 'utf8', maxBuffer: 1024 * 1024 })
   if (result.status === 0) return { ok: true }
   return { ok: false, error: shortText([result.stderr, result.stdout].filter(Boolean).join('\n') || `git apply exited ${result.status}`, 500) }
-}
-
-function createLocalContainerWorkspace(spec: EnvironmentSpec, options: { taskId: string; stage: string; idempotencyKey?: string }): string {
-  const keyed = options.idempotencyKey ? localContainerWorkspaceTargetForKey(spec, options.idempotencyKey) : undefined
-  const root = keyed?.root || path.join(os.tmpdir(), 'opencode-gateway', 'local-container', `${safePathPart(spec.name)}-${safePathPart(options.taskId)}-${safePathPart(options.stage)}-${randomUUID()}`)
-  const workspace = path.join(root, 'workspace')
-  if (keyed) fs.rmSync(root, { recursive: true, force: true })
-  fs.mkdirSync(workspace, { recursive: true })
-  if (spec.workdir && fs.existsSync(spec.workdir) && fs.statSync(spec.workdir).isDirectory()) fs.cpSync(spec.workdir, workspace, { recursive: true, dereference: false })
-  return workspace
-}
-
-function localContainerWorkspaceTargetForKey(spec: EnvironmentSpec, idempotencyKey: string): { idempotencyKeyHash: string; root: string; workspace: string } {
-  const idempotencyKeyHash = environmentIdempotencyKeyHash(idempotencyKey)
-  const root = path.join(os.tmpdir(), 'opencode-gateway', 'local-container', `${safePathPart(spec.name)}-key-${idempotencyKeyHash}`)
-  return { idempotencyKeyHash, root, workspace: path.join(root, 'workspace') }
-}
-
-function createLocalContainerCaptureDir(workspace: string): string {
-  const dir = path.join(path.dirname(workspace), 'captures')
-  fs.mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-function createLocalContainerCommandWrapper(spec: EnvironmentSpec, workdir: string | undefined, captureDir: string): string {
-  const scriptPath = path.join(path.dirname(captureDir), 'gateway-container-command.js')
-  const runtimePrefix = localContainerCommandPrefix(spec, workdir)
-  const timeoutMs = spec.resources.timeoutMs
-  const script = `#!/usr/bin/env node
-const fs = require('node:fs')
-const path = require('node:path')
-const { spawnSync } = require('node:child_process')
-const prefix = ${JSON.stringify(runtimePrefix)}
-const captureDir = ${JSON.stringify(captureDir)}
-const timeoutMs = ${JSON.stringify(timeoutMs)}
-fs.mkdirSync(captureDir, { recursive: true })
-const command = process.argv.slice(2)
-const id = 'cmd-' + Date.now() + '-' + process.pid
-const startedAt = new Date().toISOString()
-const started = Date.now()
-const result = spawnSync(prefix[0], prefix.slice(1).concat(command), { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: timeoutMs })
-const completedAt = new Date().toISOString()
-const stdout = String(result.stdout || '')
-const stderr = String(result.stderr || '')
-const exitCode = result.status === null || result.status === undefined ? (result.error && result.error.code === 'ETIMEDOUT' ? 124 : 1) : result.status
-const stdoutPath = path.join(captureDir, id + '.stdout.log')
-const stderrPath = path.join(captureDir, id + '.stderr.log')
-const metadataPath = path.join(captureDir, id + '.json')
-fs.writeFileSync(stdoutPath, stdout)
-fs.writeFileSync(stderrPath, stderr)
-fs.writeFileSync(metadataPath, JSON.stringify({ id, command, runtimeCommand: prefix.concat(command), exitCode, runtimeMs: Date.now() - started, startedAt, completedAt, stdoutPath, stderrPath, error: result.error ? String(result.error.message || result.error) : undefined }, null, 2))
-if (stdout) process.stdout.write(stdout)
-if (stderr) process.stderr.write(stderr)
-process.exit(exitCode)
-`
-  fs.writeFileSync(scriptPath, script)
-  fs.chmodSync(scriptPath, 0o755)
-  return scriptPath
-}
-
-function inspectLocalContainerImage(spec: EnvironmentSpec): { status: 'ok' | 'missing' | 'unavailable'; digest?: string; error?: string } {
-  const runtime = spec.container?.runtime || 'docker'
-  const image = spec.container?.image
-  if (!image) return { status: 'missing', error: 'container image is not configured' }
-  if (!binaryAvailable(runtime)) return { status: 'unavailable', error: `container runtime not found: ${runtime}` }
-  const result = spawnSync(runtime, ['image', 'inspect', '--format', '{{.Id}}', image], { encoding: 'utf8', maxBuffer: 1024 * 1024 })
-  if (result.status === 0) return { status: 'ok', digest: shortText(result.stdout.trim() || 'unknown', 300) }
-  return { status: 'missing', error: shortText([result.stderr, result.stdout].filter(Boolean).join('\n') || `image inspect exited ${result.status}`, 500) }
-}
-
-interface CrabboxCommandResult {
-  ok: boolean
-  exitCode?: number
-  output: string
-  stdout: string
-  stderr: string
-  runtimeMs: number
-  timing?: Record<string, unknown>
-  artifacts: string[]
-  commandRef: string
-  failureClass: 'capacity' | 'auth' | 'quota' | 'setup' | 'sync' | 'command' | 'timeout' | 'network' | 'unknown'
-  error?: string
-}
-
-function runCrabboxRemoteCommand(spec: EnvironmentSpec, leaseId: string, phase: string, command: string | string[]): CrabboxCommandResult {
-  const args = crabboxRunArgs(spec, leaseId)
-  if (Array.isArray(command)) args.push('--', ...command)
-  else args.push('--shell', command)
-  return runCrabboxCli(spec, args, phase)
-}
-
-function runCrabboxCli(spec: EnvironmentSpec, args: string[], phase: string): CrabboxCommandResult {
-  const started = Date.now()
-  const cli = spec.crabbox?.cli || 'crabbox'
-  const result = spawnSync(cli, args, {
-    cwd: spec.workdir && fs.existsSync(spec.workdir) ? spec.workdir : undefined,
-    env: crabboxProcessEnv(spec),
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-    timeout: spec.resources.timeoutMs,
-  })
-  const stdout = redactCrabboxText(String(result.stdout || ''), spec)
-  const stderr = redactCrabboxText(String(result.stderr || ''), spec)
-  const output = shortText([stdout, stderr].filter(Boolean).join('\n'), 2000)
-  const timing = crabboxTimingRecord(stderr)
-  const timedOut = (result.error as any)?.code === 'ETIMEDOUT'
-  const failureClass = classifyCrabboxFailure(output || String(result.error || ''), phase, timing, timedOut)
-  return {
-    ok: result.status === 0 && !result.error,
-    exitCode: result.status === null ? undefined : result.status,
-    output,
-    stdout: shortText(stdout, 2000),
-    stderr: shortText(stderr, 2000),
-    runtimeMs: Date.now() - started,
-    timing,
-    artifacts: crabboxArtifacts(timing),
-    commandRef: crabboxCommandRef(cli, args),
-    failureClass,
-    error: result.error ? shortText(result.error.message || String(result.error), 500) : undefined,
-  }
-}
-
-function runCrabboxReleaseCommand(cli: string, provider: string | undefined, leaseId: string, command: 'stop' | 'release'): CrabboxCommandResult {
-  const args: string[] = [command]
-  if (provider) args.push('--provider', provider)
-  args.push(leaseId)
-  const started = Date.now()
-  const result = spawnSync(cli, args, { encoding: 'utf8', maxBuffer: 1024 * 1024, timeout: 60_000 })
-  const output = shortText([result.stdout, result.stderr].filter(Boolean).join('\n'), 2000)
-  const timedOut = (result.error as any)?.code === 'ETIMEDOUT'
-  return {
-    ok: result.status === 0 && !result.error,
-    exitCode: result.status === null ? undefined : result.status,
-    output,
-    stdout: shortText(result.stdout || '', 2000),
-    stderr: shortText(result.stderr || '', 2000),
-    runtimeMs: Date.now() - started,
-    artifacts: [],
-    commandRef: crabboxCommandRef(cli, args),
-    failureClass: classifyCrabboxFailure(output || String(result.error || ''), 'release', undefined, timedOut),
-    error: result.error ? shortText(result.error.message || String(result.error), 500) : undefined,
-  }
-}
-
-function inspectRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string): { ok: true; record: Record<string, unknown> } | { ok: false; reason: string } {
-  const args = ['inspect', '--id', leaseId, '--json']
-  if (spec.crabbox?.provider) args.splice(1, 0, '--provider', spec.crabbox.provider)
-  const result = runCrabboxCli(spec, args, 'inspect')
-  if (!result.ok) return { ok: false, reason: result.output || result.error || 'inspect failed' }
-  try {
-    const parsed = JSON.parse(result.stdout || result.output || '{}')
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? { ok: true, record: redactEnvironmentRecord(parsed as Record<string, unknown>) } : { ok: false, reason: 'inspect returned non-object JSON' }
-  } catch (err: any) {
-    return { ok: false, reason: `inspect returned invalid JSON: ${err?.message || err}` }
-  }
-}
-
-function reconcileRemoteCrabboxEnvironmentRuns(environments: EnvironmentRunRecord[]): EnvironmentReconciliationResult {
-  const base = reconcileEnvironmentRuns(environments)
-  const evidence = base.evidence.slice()
-  for (const environment of environments.filter(row => row.backend === 'remote-crabbox' && (row.status === 'prepared' || row.status === 'retained'))) {
-    const leaseId = environment.leaseId
-    const cli = typeof environment.runtime === 'string' ? environment.runtime : 'crabbox'
-    if (!leaseId) {
-      evidence.push(`remote-crabbox ${environment.id} has no lease id`)
-      continue
-    }
-    if (!binaryAvailable(cli)) {
-      evidence.push(`remote-crabbox ${leaseId} inspect skipped: ${cli} unavailable`)
-      continue
-    }
-    const result = spawnSync(cli, ['inspect', '--id', leaseId, '--json'], { encoding: 'utf8', maxBuffer: 1024 * 1024, timeout: 60_000 })
-    evidence.push(result.status === 0 ? `remote-crabbox ${leaseId} inspect ok` : `remote-crabbox ${leaseId} inspect failed: ${shortText([result.stderr, result.stdout].filter(Boolean).join('\n') || result.error?.message || 'unknown', 500)}`)
-  }
-  return { ...base, evidence }
-}
-
-function crabboxWarmupArgs(spec: EnvironmentSpec, idempotencyKey?: string): string[] {
-  const args = ['warmup', '--timing-json']
-  if (idempotencyKey) args.push('--slug', remoteCrabboxAcquisitionSlug(idempotencyKey))
-  if (spec.crabbox?.profile) args.push('--profile', spec.crabbox.profile)
-  if (spec.crabbox?.provider) args.push('--provider', spec.crabbox.provider)
-  if (spec.crabbox?.class) args.push('--class', spec.crabbox.class)
-  if (spec.crabbox?.ttl) args.push('--ttl', spec.crabbox.ttl)
-  for (const volume of spec.cache.volumes) args.push('--cache-volume', `${volume.name}:${volume.path}`)
-  return args
-}
-
-function crabboxReleaseArgs(spec: EnvironmentSpec, leaseId: string, command: 'stop' | 'release'): string[] {
-  const args: string[] = [command]
-  if (spec.crabbox?.provider) args.push('--provider', spec.crabbox.provider)
-  args.push(leaseId)
-  return args
-}
-
-function crabboxRunArgs(spec: EnvironmentSpec, leaseId: string): string[] {
-  const args = ['run', '--id', leaseId, '--timing-json']
-  if (spec.crabbox?.provider) args.push('--provider', spec.crabbox.provider)
-  if (spec.crabbox?.keepOnFailure) args.push('--keep-on-failure')
-  for (const name of crabboxAllowedEnvNames(spec)) args.push('--allow-env', name)
-  return args
-}
-
-function remoteCrabboxCommandPrefix(spec: EnvironmentSpec, environment: Pick<EnvironmentRunRecord, 'leaseId'>): string[] {
-  const leaseId = environment.leaseId || '<lease-id>'
-  return [spec.crabbox?.cli || 'crabbox', ...crabboxRunArgs(spec, leaseId), '--']
-}
-
-function crabboxProcessEnv(spec: EnvironmentSpec): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {}
-  for (const name of ['PATH', 'HOME', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME']) {
-    if (process.env[name]) env[name] = process.env[name]
-  }
-  if (spec.crabbox?.brokerUrl) env['CRABBOX_COORDINATOR'] = spec.crabbox.brokerUrl
-  for (const name of crabboxAllowedEnvNames(spec)) {
-    if (process.env[name]) env[name] = process.env[name]
-  }
-  for (const [key, value] of Object.entries(spec.env)) {
-    if (value !== SECRET_VALUE_PLACEHOLDER) env[key] = value
-  }
-  return env
-}
-
-function crabboxAllowedEnvNames(spec: EnvironmentSpec): string[] {
-  return uniqueStrings([...Object.keys(spec.env), ...spec.secrets.allow])
-}
-
-function redactCrabboxText(text: string, spec: EnvironmentSpec): string {
-  let out = text
-  for (const name of crabboxAllowedEnvNames(spec)) {
-    if (!SECRET_NAME_PATTERN.test(name) && !spec.secrets.allow.includes(name)) continue
-    const value = process.env[name]
-    if (value && value.length >= 4) out = out.split(value).join('<redacted>')
-  }
-  return out
-}
-
-function crabboxTimingRecord(output: string): Record<string, unknown> | undefined {
-  let found: Record<string, unknown> | undefined
-  for (const line of output.split(/\r?\n/)) {
-    const text = line.trim()
-    if (!text.startsWith('{') || !text.endsWith('}')) continue
-    try {
-      const parsed = JSON.parse(text)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) found = redactEnvironmentRecord(parsed as Record<string, unknown>)
-    } catch {}
-  }
-  return found
-}
-
-function crabboxLeaseId(result: CrabboxCommandResult): string | undefined {
-  return stringField(result.timing, 'leaseId') || stringField(result.timing, 'lease_id') || result.stdout.match(/\b(cbx_[a-zA-Z0-9_-]+)/)?.[1] || result.output.match(/\b(cbx_[a-zA-Z0-9_-]+)/)?.[1]
-}
-
-function crabboxLeaseIdFromRecord(record: Record<string, unknown>): string | undefined {
-  return stringField(record, 'id') || stringField(record, 'leaseId') || stringField(record, 'lease_id')
-}
-
-function crabboxSlug(result: CrabboxCommandResult): string | undefined {
-  return stringField(result.timing, 'slug') || result.stdout.match(/\bslug=([^\s]+)/)?.[1] || result.output.match(/\bslug=([^\s]+)/)?.[1]
-}
-
-function crabboxRunId(result: CrabboxCommandResult): string | undefined {
-  return stringField(result.timing, 'runId') || stringField(result.timing, 'run_id')
-}
-
-function crabboxArtifacts(timing: Record<string, unknown> | undefined): string[] {
-  if (!timing) return []
-  const values = [timing['artifacts'], timing['artifactRefs'], timing['artifact_refs'], timing['captures'], timing['downloads']]
-  const refs: string[] = []
-  for (const value of values) {
-    if (Array.isArray(value)) refs.push(...value.map(item => typeof item === 'string' ? item : stableStringifyDefined(item)))
-    else if (typeof value === 'string') refs.push(value)
-  }
-  return uniqueStrings(refs.map(ref => shortText(ref, 500)))
-}
-
-function crabboxCommandSummary(result: CrabboxCommandResult): Record<string, unknown> {
-  return {
-    ok: result.ok,
-    commandRef: result.commandRef,
-    exitCode: result.exitCode,
-    runtimeMs: result.runtimeMs,
-    failureClass: result.ok ? undefined : result.failureClass,
-    output: result.ok ? undefined : result.output,
-    runId: crabboxRunId(result),
-    artifacts: result.artifacts,
-  }
-}
-
-function crabboxCommandRef(cli: string, args: string[]): string {
-  return [cli, ...args].join(' ')
-}
-
-function classifyCrabboxFailure(output: string, phase: string, timing: Record<string, unknown> | undefined, timedOut = false): CrabboxCommandResult['failureClass'] {
-  const text = `${output} ${stringField(timing, 'blockedStage') || ''} ${stringField(timing, 'failureClass') || ''}`.toLowerCase()
-  if (timedOut || /\b(timeout|timed out|deadline)\b/.test(text)) return 'timeout'
-  if (/\b(auth|unauthorized|forbidden|login|credential|credentials|token|api key|permission denied)\b/.test(text)) return 'auth'
-  if (/\b(quota|budget|billing|insufficient|limit exceeded|rate limit)\b/.test(text)) return 'quota'
-  if (/\b(capacity|no capacity|sold out|exhausted|unavailable capacity)\b/.test(text)) return 'capacity'
-  if (/\b(sync|rsync|checkout|manifest|mass deletion|mass deletions)\b/.test(text)) return 'sync'
-  if (/\b(network|ssh|connect|connection|econn|dns|host unreachable|no route)\b/.test(text)) return 'network'
-  if (phase.startsWith('setup') || text.includes('install/setup')) return 'setup'
-  if (phase !== 'warmup' && phase !== 'inspect' && phase !== 'release') return 'command'
-  return 'unknown'
-}
-
-function stringField(value: unknown, key: string): string | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const raw = (value as Record<string, unknown>)[key]
-  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined
-}
-
-function isUnknownCrabboxCommand(output: string): boolean {
-  return /unknown command|unrecognized command|not a crabbox command/i.test(output)
-}
-
-function isMissingCrabboxLease(output: string): boolean {
-  return /\b(not found|no such|unknown lease|missing lease|does not exist|404)\b/i.test(output)
-}
-
-interface LocalContainerCommandResult {
-  ok: boolean
-  exitCode?: number
-  output: string
-  stdout: string
-  stderr: string
-  runtimeMs: number
-  commandRef: string
-  phase: string
-  error?: string
-}
-
-function preflightLocalContainerStageCommands(spec: EnvironmentSpec, base: EnvironmentPreflightResult): { preflight: EnvironmentPreflightResult; results: LocalContainerCommandResult[] } {
-  const checked = base.checked.slice()
-  const missing = base.missing.slice()
-  const warnings = base.warnings.slice()
-  const commandRefs = base.commandRefs.slice()
-  const results: LocalContainerCommandResult[] = []
-  if (!base.ok) return { preflight: base, results }
-  for (const [index, command] of spec.setup.entries()) {
-    const result = runLocalContainerShellCommand(spec, command, spec.workdir, `setup:${index + 1}`)
-    results.push(result)
-    checked.push(`setup:${index + 1}`)
-    commandRefs.push(result.commandRef)
-    if (!result.ok) {
-      missing.push(`setup:${index + 1}`)
-      warnings.push(`local-container setup command ${index + 1} failed: ${result.output || result.error || 'no output'}`)
-    }
-  }
-  for (const [index, command] of spec.validation.entries()) {
-    const result = runLocalContainerShellCommand(spec, command, spec.workdir, `validation:${index + 1}`)
-    results.push(result)
-    checked.push(`validation:${index + 1}`)
-    commandRefs.push(result.commandRef)
-    if (!result.ok) {
-      missing.push(`validation:${index + 1}`)
-      warnings.push(`local-container validation command ${index + 1} failed: ${result.output || result.error || 'no output'}`)
-    }
-  }
-  return { preflight: { ok: missing.length === 0, checked: uniqueStrings(checked), missing: uniqueStrings(missing), warnings, commandRefs: uniqueStrings(commandRefs) }, results }
-}
-
-function runLocalContainerShellCommand(spec: EnvironmentSpec, command: string, workdir: string | undefined, phase: string): LocalContainerCommandResult {
-  return runLocalContainerCommand(spec, ['sh', '-lc', command], workdir, phase)
-}
-
-function runLocalContainerCommand(spec: EnvironmentSpec, command: string[], workdir: string | undefined, phase = 'command'): LocalContainerCommandResult {
-  const started = Date.now()
-  const runtime = spec.container?.runtime || 'docker'
-  const args = localContainerRunArgs(spec, workdir, command)
-  const result = spawnSync(runtime, args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, timeout: spec.resources.timeoutMs })
-  const stdout = redactLocalContainerText(String(result.stdout || ''), spec)
-  const stderr = redactLocalContainerText(String(result.stderr || ''), spec)
-  return {
-    ok: result.status === 0 && !result.error,
-    exitCode: result.status === null ? undefined : result.status,
-    output: shortText([stdout, stderr].filter(Boolean).join('\n'), 2000),
-    stdout: shortText(stdout, 2000),
-    stderr: shortText(stderr, 2000),
-    runtimeMs: Date.now() - started,
-    commandRef: localContainerCommandRef(runtime, args),
-    phase,
-    error: result.error ? shortText(result.error.message || String(result.error), 500) : undefined,
-  }
-}
-
-function localContainerCommandSummary(result: LocalContainerCommandResult): Record<string, unknown> {
-  return {
-    ok: result.ok,
-    phase: result.phase,
-    commandRef: result.commandRef,
-    exitCode: result.exitCode,
-    runtimeMs: result.runtimeMs,
-    output: result.ok ? undefined : result.output,
-    error: result.error,
-  }
-}
-
-function localContainerCommandRef(runtime: string, args: string[]): string {
-  return [runtime, ...args].join(' ')
-}
-
-function warmLocalContainerPool(spec: EnvironmentSpec, workdir: string | undefined): { enabled: false } | { enabled: true; key: string; hit: boolean; warmedAt?: string; result?: LocalContainerCommandResult } {
-  if (!spec.container?.warm) return { enabled: false }
-  const runtime = spec.container.runtime || 'docker'
-  const image = spec.container.image || '<image>'
-  const key = hashText(`${runtime}\0${image}\0${spec.specHash}`).slice(0, 24)
-  const existing = localContainerWarmPools.get(key)
-  if (existing) return { enabled: true, key, hit: true, warmedAt: existing.warmedAt }
-  const result = runLocalContainerCommand(spec, ['true'], workdir, 'warmup')
-  const warmedAt = new Date().toISOString()
-  if (result.ok) localContainerWarmPools.set(key, { warmedAt, runtime, image, specHash: spec.specHash })
-  return { enabled: true, key, hit: false, warmedAt: result.ok ? warmedAt : undefined, result }
-}
-
-function redactLocalContainerText(text: string, spec: EnvironmentSpec): string {
-  let out = text
-  for (const name of uniqueStrings([...Object.keys(spec.env), ...spec.secrets.allow])) {
-    const value = process.env[name]
-    if (value && value.length >= 4) out = out.split(value).join('<redacted>')
-  }
-  return out
-}
-
-function localContainerCommandPrefix(spec: EnvironmentSpec, workdir: string | undefined): string[] {
-  return [spec.container?.runtime || 'docker', ...localContainerRunArgs(spec, workdir, [])]
-}
-
-function localContainerRunArgs(spec: EnvironmentSpec, workdir: string | undefined, command: string[]): string[] {
-  const containerWorkdir = localContainerWorkdir(spec)
-  const args = ['run', '--rm']
-  if (spec.container?.pull && spec.container.pull !== 'missing') args.push('--pull', spec.container.pull)
-  if (spec.container?.privileged) args.push('--privileged')
-  if (spec.container?.user) args.push('--user', spec.container.user)
-  if (spec.resources.cpu) args.push('--cpus', String(spec.resources.cpu))
-  if (spec.resources.memory) args.push('--memory', spec.resources.memory)
-  args.push(...localContainerNetworkArgs(spec))
-  for (const [key, value] of Object.entries(spec.env)) args.push('--env', value === SECRET_VALUE_PLACEHOLDER ? key : `${key}=${value}`)
-  for (const mount of spec.container?.mounts || []) args.push('--volume', `${mount.source}:${mount.target}:${mount.readonly ? 'ro' : 'rw'}`)
-  for (const volume of localContainerCacheVolumes(spec)) args.push('--volume', `${volume.name}:${volume.target}:${volume.mode === 'readonly' ? 'ro' : 'rw'}`)
-  if (workdir) args.push('--volume', `${workdir}:${containerWorkdir}:rw`)
-  args.push('--workdir', containerWorkdir)
-  if (spec.container?.entrypoint?.length) args.push('--entrypoint', spec.container.entrypoint[0]!)
-  args.push(spec.container?.image || '<image>')
-  args.push(...(spec.container?.entrypoint?.slice(1) || []), ...command)
-  return args
-}
-
-function localContainerNetworkArgs(spec: EnvironmentSpec): string[] {
-  assertContainerNetworkPolicy(spec)
-  if (spec.network.mode === 'disabled' || spec.network.mode === 'restricted') return ['--network', 'none']
-  return spec.container?.network ? ['--network', spec.container.network] : []
-}
-
-function localContainerWorkdir(spec: EnvironmentSpec): string {
-  return spec.container?.workdir || DEFAULT_CONTAINER_WORKDIR
-}
-
-function localContainerCacheVolumes(spec: EnvironmentSpec): Array<{ name: string; target: string; mode: 'readonly' | 'readwrite' }> {
-  return spec.cache.volumes.map(volume => ({ name: `opencode-gateway-${hashText(`${spec.specHash}:${volume.name}`).slice(0, 16)}-${safePathPart(volume.name)}`, target: volume.path, mode: volume.mode || 'readwrite' }))
-}
-
-function readLocalContainerCaptures(captureDir: string | undefined): Array<Record<string, any> & { metadataPath: string }> {
-  if (!captureDir || !fs.existsSync(captureDir)) return []
-  const rows: Array<Record<string, any> & { metadataPath: string }> = []
-  for (const entry of fs.readdirSync(captureDir).sort()) {
-    if (!entry.endsWith('.json')) continue
-    const metadataPath = path.join(captureDir, entry)
-    try {
-      const parsed = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'))
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) rows.push({ ...(parsed as Record<string, any>), metadataPath })
-    } catch {}
-  }
-  return rows
-}
-
-function localContainerWorkspaceArtifacts(workspace: string | undefined): string[] {
-  if (!workspace) return []
-  const root = path.join(workspace, '.gateway', 'artifacts')
-  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return []
-  const out: string[] = []
-  const walk = (dir: string) => {
-    for (const entry of fs.readdirSync(dir).sort()) {
-      if (out.length >= 100) return
-      const full = path.join(dir, entry)
-      const stat = fs.statSync(full)
-      if (stat.isDirectory()) walk(full)
-      else if (stat.isFile()) out.push(full)
-    }
-  }
-  walk(root)
-  return out
-}
-
-function safePathPart(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_.:-]+/g, '-').slice(0, 80) || 'item'
-}
-
-function isLocalContainerWorkspace(workspace: string): boolean {
-  const root = path.join(os.tmpdir(), 'opencode-gateway', 'local-container')
-  const relative = path.relative(root, workspace)
-  return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative)
-}
-
-function hashText(value: string): string {
-  return createHash('sha256').update(value).digest('hex')
-}
-
-function normalizeEnvironmentIdempotencyKey(value: string): string {
-  const key = String(value || '').trim()
-  if (!key || key.length > MAX_ENVIRONMENT_IDEMPOTENCY_KEY_LENGTH || /[\0\r\n]/.test(key)) {
-    throw new Error(`environment acquisition idempotency key must be 1-${MAX_ENVIRONMENT_IDEMPOTENCY_KEY_LENGTH} printable characters`)
-  }
-  return key
-}
-
-function environmentIdempotencyKeyHash(value: string): string {
-  return hashText(normalizeEnvironmentIdempotencyKey(value)).slice(0, 24)
-}
-
-export function remoteCrabboxAcquisitionSlug(idempotencyKey: string): string {
-  return `ogw-${hashText(normalizeEnvironmentIdempotencyKey(idempotencyKey)).slice(0, 32)}`
 }
 
 function normalizeEnvironmentRegistry(input: Record<string, unknown>): Record<string, EnvironmentSpecInput> {
@@ -1905,27 +982,6 @@ function toolAvailable(tool: string, directory: string | undefined): boolean {
   return binaryAvailable(tool)
 }
 
-function binaryAvailable(binary: string): boolean {
-  if (path.isAbsolute(binary)) {
-    try {
-      fs.accessSync(binary, fs.constants.X_OK)
-      return true
-    } catch {
-      return false
-    }
-  }
-  const paths = (process.env['PATH'] || '').split(path.delimiter).filter(Boolean)
-  const extensions = process.platform === 'win32' ? ['', '.exe', '.cmd', '.bat'] : ['']
-  return paths.some(dir => extensions.some(ext => {
-    try {
-      fs.accessSync(path.join(dir, binary + ext), fs.constants.X_OK)
-      return true
-    } catch {
-      return false
-    }
-  }))
-}
-
 function assertBackendSpec(spec: Omit<EnvironmentSpec, 'specHash'>): void {
   if (spec.backend === 'local-container' && !spec.container?.image) throw new Error(`environment ${spec.name} local-container requires container.image`)
   if (spec.backend === 'remote-crabbox' && !spec.crabbox?.profile && !spec.crabbox?.brokerUrl) throw new Error(`environment ${spec.name} remote-crabbox requires crabbox.profile or crabbox.brokerUrl`)
@@ -2132,75 +1188,6 @@ function normalizeRequiredPath(value: unknown, label: string): string {
   const text = value.trim()
   if (!text || text.includes('\0')) throw new Error(`${label} must be a non-empty path`)
   return text
-}
-
-function uniqueStrings(values: unknown[]): string[] {
-  return [...new Set((values || []).map(value => String(value || '').trim()).filter(Boolean))].sort()
-}
-
-function boundedInteger(value: unknown, min: number, max: number, label: string): number {
-  const number = Number(value)
-  if (!Number.isSafeInteger(number) || number < min || number > max) throw new Error(`${label} must be an integer between ${min} and ${max}`)
-  return number
-}
-
-function boundedNumber(value: unknown, min: number, max: number, label: string): number {
-  const number = Number(value)
-  if (!Number.isFinite(number) || number < min || number > max) throw new Error(`${label} must be a number between ${min} and ${max}`)
-  return number
-}
-
-function optionalText(value: unknown, maxLength: number): string | undefined {
-  if (value === undefined || value === null || value === '') return undefined
-  if (typeof value !== 'string') throw new Error('environment text field must be a string')
-  const text = value.trim()
-  return text ? text.substring(0, maxLength) : undefined
-}
-
-function normalizeRuntimeExecutable(value: unknown, label: string): string | undefined {
-  const text = optionalText(value, 1024)
-  if (!text) return undefined
-  if (text.includes('\0') || /[\r\n]/.test(text)) throw new Error(`${label} must be one executable path or command name`)
-  return text
-}
-
-function shortText(value: unknown, maxLength: number): string {
-  return String(value || '').replace(/\s+/g, ' ').trim().substring(0, maxLength)
-}
-
-function durationMs(value: unknown, fallback: number): number {
-  if (value === undefined || value === null || value === '') return fallback
-  if (typeof value === 'number') return boundedInteger(value, 1000, 30 * 24 * 60 * 60 * 1000, 'duration')
-  const match = String(value).trim().match(/^(\d+)(ms|s|m|h|d)$/i)
-  if (!match) throw new Error(`duration must use ms, s, m, h, or d suffix: ${String(value)}`)
-  const amount = Number(match[1])
-  const unit = match[2]!.toLowerCase()
-  const multiplier = unit === 'ms' ? 1 : unit === 's' ? 1000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000
-  return boundedInteger(amount * multiplier, 1000, 30 * 24 * 60 * 60 * 1000, 'duration')
-}
-
-
-function redact(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redact)
-  if (!value || typeof value !== 'object') return value
-  const out: Record<string, unknown> = {}
-  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-    if (SECRET_NAME_PATTERN.test(key)) out[key] = '<redacted>'
-    else if (SENSITIVE_TEXT_FIELD_PATTERN.test(key)) out[key] = redactSensitiveValue(val)
-    else out[key] = redact(val)
-  }
-  return out
-}
-
-function redactSensitiveValue(value: unknown): unknown {
-  if (typeof value === 'string') return redactEnvironmentSensitiveText(value)
-  if (Array.isArray(value)) return value.map(redactSensitiveValue)
-  if (!value || typeof value !== 'object') return value
-  const out: Record<string, unknown> = {}
-  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-    out[key] = SECRET_NAME_PATTERN.test(key) ? '<redacted>' : redactSensitiveValue(val)
-  }
-  return out
 }
 
 function parseSimpleYaml(text: string): unknown {

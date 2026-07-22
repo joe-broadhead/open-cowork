@@ -8,6 +8,25 @@ description: Support workflow for managed BYOK private beta onboarding and incid
 Use this runbook for managed BYOK private beta support. It is intentionally
 designed to work without asking users to expose secrets.
 
+## Support Ownership (public)
+
+Interim public ownership for private-beta support (refresh when the private
+on-call roster is filled offline). Do not commit personal phone numbers, private
+Slack channel ids, or customer-facing email aliases here.
+
+| Role | Interim public owner | Escalation |
+| --- | --- | --- |
+| Support primary | Joseph Broadhead | Linear project `open-cowork` / team Joe; Sev1 ≤ 30 minutes |
+| Support secondary | TBD in private roster | Same Linear project |
+| Cloud auth owner | Joseph Broadhead (interim) | Support primary |
+| Worker / BYOK owner | Joseph Broadhead (interim) | Support primary |
+| Gateway owner | Joseph Broadhead (interim) | Support primary |
+| Platform (Postgres / object store / KMS) | Joseph Broadhead (interim) | Support primary |
+| Release / go-no-go owner | Joseph Broadhead | Milestone **Post-#958 Production Next Steps** |
+
+Evidence package: `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md`
+(Linear: JOE-922 / JOE-968). Private phone trees and chat channels stay offline.
+
 ## Support Intake
 
 Collect:

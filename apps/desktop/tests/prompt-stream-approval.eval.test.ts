@@ -17,11 +17,12 @@ import {
 //     live announcer. The placeholder credential means no real model responds,
 //     so the STREAM machinery (pending state, transcript announcer) is what we
 //     assert — no network dependency, no flakiness on model output.
-//  2. Approval resolution. A synthetic, content-free PermissionRequest is fed
-//     through the app's own `on.permissionRequest` subscriber (via the eval
-//     bridge), the real Approvals queue renders it, and resolving it records a
-//     `permission.respond` call. If the hardened bridge can't be wrapped, the
-//     flow falls back to asserting the real (empty) Approvals surface renders.
+//  2. Approval resolution. A synthetic, content-free PermissionRequest is
+//     broadcast via main `permission:request` IPC (E2E eval seam), the app's
+//     real `on.permissionRequest` subscriber receives it, the Approvals queue
+//     renders it, and resolving records a `permission.respond` offline. If the
+//     E2E seam is unavailable, the flow falls back to asserting the real
+//     (empty) Approvals surface renders.
 test('eval:prompt-approval — prompt streams and an approval resolves offline', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
@@ -68,15 +69,30 @@ test('eval:prompt-approval — prompt streams and an approval resolves offline',
       await page.getByRole('heading', { name: 'Approvals' }).waitFor({ timeout: 10_000 })
       await captureEvidence(page, 'prompt-approval', '02-approval-pending')
 
-      const approveButton = page.getByRole('button', { name: /^(Approve|Allow once)$/ }).first()
-      await approveButton.waitFor({ timeout: 10_000 })
-      await approveButton.click()
+      // Studio queue labels the primary action "Allow once" (chat card uses
+      // "Approve"). Prefer the queue action; tolerate chat-card wording.
+      // Session streaming can remount queue rows mid-click, so use a
+      // DOM-stable click rather than Playwright's actionability retry loop.
+      await page.waitForFunction(() => {
+        return [...document.querySelectorAll('button')].some((button) => {
+          const label = (button.textContent || '').replace(/\s+/g, ' ').trim()
+          return label === 'Allow once' || label === 'Approve'
+        })
+      }, undefined, { timeout: 10_000 })
+      await page.evaluate(() => {
+        const button = [...document.querySelectorAll('button')].find((candidate) => {
+          const label = (candidate.textContent || '').replace(/\s+/g, ' ').trim()
+          return label === 'Allow once' || label === 'Approve'
+        }) as HTMLButtonElement | undefined
+        if (!button) throw new Error('approval action button not found')
+        button.click()
+      })
 
       await page.waitForFunction(() => {
-        const state = (window as unknown as {
-          __coworkEval?: { permissionResponses: Array<{ id: string; allowed: boolean }> }
-        }).__coworkEval
-        return (state?.permissionResponses.length ?? 0) > 0
+        const evalApi = (window as unknown as {
+          __openCoworkEval?: { getPermissionResponses: () => Array<{ id: string; allowed: boolean }> }
+        }).__openCoworkEval
+        return (evalApi?.getPermissionResponses().length ?? 0) > 0
       }, undefined, { timeout: 10_000 })
 
       const resolved = await getEvalBridgeState(page)

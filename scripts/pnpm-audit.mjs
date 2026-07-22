@@ -4,6 +4,13 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import semver from 'semver'
 
+// CI / release supply-chain gate. Prefer real upgrades and pnpm.overrides over
+// permanent ignores. If you must add pnpm.auditConfig.ignoreGhsas / ignoreCves:
+//   1. Document justification + blast radius in the PR.
+//   2. Name an owner and expiry date (re-review on monthly-maintenance).
+//   3. File a tracking issue; remove the ignore when a fixed release lands.
+// Monthly maintenance runs audit:full and alerts if this gate goes red (JOE-957).
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const auditEndpointPath = '-/npm/v1/security/advisories/bulk'
 const severityRank = new Map([

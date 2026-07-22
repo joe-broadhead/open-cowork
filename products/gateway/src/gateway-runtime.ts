@@ -1,4 +1,4 @@
-import type { OpencodeClient } from '@opencode-ai/sdk'
+import type { DurableOpencodeClient as OpencodeClient } from './opencode-session-runtime.js'
 
 /**
  * Typed process-wide holder for the daemon's live OpenCode client.

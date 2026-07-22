@@ -100,18 +100,21 @@ The following surfaces are **operator high-sensitivity** and must never be expos
 | Redacted config / evidence export | Safe for authenticated read | — |
 | `GET /config?redact=false` | Denied without admin | Admin (+ local intent where required) |
 | Evidence/session export `unredacted=true` / `redact=false` | Denied without admin | Admin; some paths also require `localAdmin=true` |
+| OpenCode sessions/MCP `raw` / `unredacted` / `redact=false` | Denied without admin | Admin |
+| Run/events `raw` / `unredacted` | Denied without admin; runs also require `localAdmin=true` | Admin + local intent |
 | Channel diagnostic credential fields | Length-only fingerprints | Never return live secret material |
 
 **Operator rules:**
 
-1. Treat admin tokens as production secrets (mTLS/VPN/localhost only for admin paths when possible).
+1. Treat admin tokens as production secrets. Prefer **mTLS, VPN, or localhost-only** for any admin / unredacted path. Never front Gateway admin HTTP on a public ingress without authenticating infrastructure.
 2. Prefer redacted evidence bundles for sharing; unredacted export is for private ops review only.
-3. Audit events record unredacted export intent — review them in incident response.
-4. Never put Gateway admin HTTP on a public ingress without authenticating infrastructure in front.
+3. Audit events record unredacted export intent (`*.unredacted` operations) — review them in incident response.
+4. **Rate limit (JOE-952):** unredacted/raw export paths are limited per actor fingerprint to **10 requests / 60s** by default (`unredacted-export-guard.ts`). Exceeding the limit returns HTTP 429 and an audited `denied` event. Redacted reads are not counted.
+5. Never put Gateway admin HTTP on a public ingress without authenticating infrastructure in front.
 
 ## Multi-writer / HA limits (operator)
 
-Durable Gateway is a **single-writer** control plane per state directory. Helm charts refuse `replicaCount > 1` unless `gateway.experimentalDistributedOwnership=true`. Process-local stream/replay maps and JSON sidecars (`sessions.json`, `channel-sync.json`, `events.json`) are **not** multi-writer safe. See [Multi-Daemon Scaling](../concepts/multi-daemon-scaling.md). Do not claim multi-AZ HA for Durable Gateway until distributed ownership is proven.
+Durable Gateway is a **single-writer** control plane per state directory. Helm charts refuse `replicaCount > 1` unless `gateway.experimentalDistributedOwnership=true` (lab-only; not multi-AZ HA). Process-local stream/replay maps and JSON sidecars (`sessions.json`, `channel-sync.json`, `events.json`) are **not** multi-writer safe. See [Multi-Daemon Scaling](../concepts/multi-daemon-scaling.md) and [Distributed ownership design](../concepts/distributed-ownership-design.md). Do not claim multi-AZ HA for Durable Gateway until the proving registry status is `ready` and migrate hazards are closed (JOE-949/963).
 
 Route, MCP, trusted-channel-command, and CLI capability classification is enforced in code by `src/security.ts` (`httpCapabilityForRequest`, `evaluateHttpRequestSecurity`) and `src/security-policy.ts`, covering local daemon routes, MCP groups, trusted-channel command groups, CLI groups, binding requirements, OpenCode-owned decision routing, and exposed-mode fail-closed invariants. Focused tests fail when a new surface is not classified. This is local evidence for the current single-operator boundary; it is not hosted/team RBAC certification.
 

@@ -1,12 +1,14 @@
 /**
- * Shared OpenCode V2 client kernel (audit 2026-07-21 P1-2).
+ * Shared OpenCode V2 client kernel (audit 2026-07-21 P1-2 / JOE-943).
  *
- * Desktop runtime-host and cloud-server both need a consistent way to construct
- * the native V2 client. Session API call shapes remain product-owned; this module
- * only owns client construction + health probe helpers so spawn/client wiring
- * cannot drift independently.
+ * Desktop runtime-host, cloud-server, and standalone-gateway construct the
+ * native V2 client through this module so spawn/client wiring cannot drift.
+ * Session API call shapes remain product-owned. Event-pump reconnect math lives
+ * in `opencode-event-pump-kernel.ts` (same JOE-943 progressive expansion).
+ * Managed-server spawn plans stay in `runtime-managed-server-core.ts`.
  *
  * Does not invent classic→V2 shims for non-working routes on pin 1.18.1.
+ * Durable Gateway remains on classic root `@opencode-ai/sdk` until JOE-941.
  */
 import {
   createOpencodeClient,
@@ -17,9 +19,41 @@ import {
 export type OpencodeV2Client = OpencodeClient
 export type OpencodeV2ClientConfig = OpencodeClientConfig
 
+export type ManagedOpencodeAuthLike = {
+  authorizationHeader: string
+}
+
 /** Construct the native OpenCode SDK v2 client (shared kernel entry). */
 export function createOpencodeV2Client(config: OpencodeV2ClientConfig): OpencodeV2Client {
   return createOpencodeClient(config)
+}
+
+/**
+ * Shared client config for managed OpenCode servers that use Basic/bearer
+ * Authorization (desktop managed runtime + cloud worker). Optional directory
+ * scopes V2 location-sensitive routes (Standalone pattern).
+ */
+export function buildAuthenticatedOpencodeV2ClientConfig(
+  baseUrl: string,
+  auth: ManagedOpencodeAuthLike,
+  directory?: string | null,
+): OpencodeV2ClientConfig & { directory?: string } {
+  return {
+    baseUrl,
+    headers: {
+      Authorization: auth.authorizationHeader,
+    },
+    ...(directory ? { directory } : {}),
+  }
+}
+
+/** Convenience: config + construct for managed-server clients. */
+export function createAuthenticatedOpencodeV2Client(
+  baseUrl: string,
+  auth: ManagedOpencodeAuthLike,
+  directory?: string | null,
+): OpencodeV2Client {
+  return createOpencodeV2Client(buildAuthenticatedOpencodeV2ClientConfig(baseUrl, auth, directory))
 }
 
 /**

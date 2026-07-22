@@ -13,7 +13,7 @@
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import type { OpencodeClient } from '@opencode-ai/sdk'
+import type { DurableOpencodeClient as OpencodeClient } from './opencode-session-runtime.js'
 import { getConfig, getConfigDir } from './config.js'
 import { redactSensitiveText } from './security.js'
 
@@ -54,14 +54,15 @@ export async function recordWorkerCompletion(client: OpencodeClient, workerInfo:
   id: string; title: string; stage?: string; retries: number; status?: WorkerTrace['status']; summary?: string
 }) {
   try {
-    const session = await client.session.get({ path: { id: workerInfo.id } }).catch(() => null)
-    const msgs = await client.session.messages({ path: { id: workerInfo.id } }).catch(() => null)
+    const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+    const runtime = createOpenCodeSessionRuntime(client)
+    const got = await runtime.getSession(workerInfo.id).catch(() => ({ data: undefined, missing: true }))
+    const msgList = await runtime.messages(workerInfo.id).catch(() => [] as any[])
 
     // The running OpenCode session carries usage fields (agent/model/cost/tokens)
     // that are absent from the typed Session shape; read them through a precise
     // optional view rather than erasing the whole object to `any`.
-    const s: SessionUsageView = session?.data || {}
-    const msgList = msgs?.data || []
+    const s: SessionUsageView = got?.data || {}
 
     let lastText = ''
     for (const p of (msgList[msgList.length - 1]?.parts || [])) {

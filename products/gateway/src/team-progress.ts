@@ -134,9 +134,12 @@ export async function deliverTeamProgressBriefings(channels: Map<string, Pick<Ch
         continue
       }
       try {
-        await withTimeout(options.sessionClient.session.prompt({
-          path: { id: route.target.sessionId },
-          body: { agent: 'gateway-assistant', parts: [{ type: 'text', text: sessionTeamProgressPrompt(route) }] },
+        const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+        await withTimeout(createOpenCodeSessionRuntime(options.sessionClient as any).prompt({
+          sessionId: route.target.sessionId,
+          agent: 'gateway-assistant',
+          parts: [{ type: 'text', text: sessionTeamProgressPrompt(route) }],
+          async: false,
         }), Math.max(1, options.sessionPromptTimeoutMs || DEFAULT_SESSION_PROMPT_TIMEOUT_MS), 'team progress parent session prompt')
         appendWorkEvent('team_assignment.briefing.notified', route.dedupeKey, eventPayload(route), options.filePath)
         sent.push(route)

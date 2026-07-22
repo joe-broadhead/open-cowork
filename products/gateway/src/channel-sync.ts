@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import type { OpencodeClient } from '@opencode-ai/sdk'
+import type { DurableOpencodeClient as OpencodeClient } from './opencode-session-runtime.js'
 import type { ChannelAdapter } from './channels/provider.js'
 import { getConfig, getConfigDir } from './config.js'
 import { canCurrentDaemonWrite } from './daemon-leadership.js'
@@ -456,8 +456,8 @@ export class ChannelSyncBridge {
   }
 
   private async readMessages(sessionId: string): Promise<any[]> {
-    const result = await this.client.session.messages({ path: { id: sessionId } })
-    return Array.isArray(result?.data) ? result.data : []
+    const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+    return createOpenCodeSessionRuntime(this.client as any).messages(sessionId)
   }
 
   private loadState(): ChannelSyncState {

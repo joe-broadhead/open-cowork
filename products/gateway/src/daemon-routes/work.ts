@@ -28,6 +28,7 @@ import { createPersona, listPersonas, PersonaValidationError } from '../persona.
 import { createAgentPresence, getAgentPresence, listAgentPresences, updateAgentPresence } from '../agent-presence.js'
 import { previewBulkTaskUpdate, previewRoadmapDelete, previewTaskDelete } from '../destructive-preview.js'
 import { auditHttp, consumeDestructiveHttpApproval, httpCallerIdentity, httpRequestSource, requireDestructiveHttpApproval } from './http-guardrails.js'
+import { guardUnredactedExport } from '../unredacted-export-guard.js'
 
 const projectBindings = createSqliteWorkStoreBindingsPort()
 
@@ -734,7 +735,7 @@ async ({ req, url, client, channels }) => {
       if (approval) return approval
       const result = deleteWorkTask(taskMatch[0])
       if (!result.deleted) throw new HttpError(404, 'task not found')
-      if (result.abortedSessionId) await client.session.abort({ path: { id: result.abortedSessionId } }).catch(() => {})
+      if (result.abortedSessionId) await abortSessions(client, [result.abortedSessionId])
       consumeDestructiveHttpApproval(req, body, 'task.delete')
       auditHttp(req, 'task.delete', taskMatch[0], 'ok', { abortedSessionId: result.abortedSessionId })
       return json(result)
@@ -745,7 +746,7 @@ async ({ req, url, client, channels }) => {
       const body = await readJsonBodyAs(req, zArchiveBody)
       const result = archiveWorkTask(taskArchiveMatch[0], { note: body.note })
       if (!result) throw new HttpError(404, 'task not found')
-      if (result.abortedSessionId) await client.session.abort({ path: { id: result.abortedSessionId } }).catch(() => {})
+      if (result.abortedSessionId) await abortSessions(client, [result.abortedSessionId])
       return json(result)
     }
 
@@ -775,7 +776,7 @@ async ({ req, url, client, channels }) => {
       const body = await readJsonBodyAs(req, zTaskActionBody)
       const result = applyWorkTaskAction(taskActionMatch[0], body.action, { stage: body.stage, note: body.note })
       if (!result) throw new HttpError(404, 'task not found')
-      if (result.abortedSessionId) await client.session.abort({ path: { id: result.abortedSessionId } }).catch(() => {})
+      if (result.abortedSessionId) await abortSessions(client, [result.abortedSessionId])
       return json(result)
     }
 
@@ -1150,12 +1151,24 @@ async ({ req, url, client, channels }) => {
       if (!run) throw new HttpError(404, 'run not found')
       const raw = url.searchParams.get('raw') === 'true' || url.searchParams.get('unredacted') === 'true'
       if (raw && url.searchParams.get('localAdmin') !== 'true') throw new HttpError(403, 'raw run access requires explicit local/admin intent')
+      const limited = guardUnredactedExport(req, {
+        operation: 'runs.read.unredacted',
+        target: runMatch[0],
+        unredacted: raw,
+      })
+      if (limited) return limited
       return json({ run: raw ? { ...run, environment: redactEnvironmentValue(run.environment) } : compactRun(run) })
     }
 
     if (req.method === 'GET' && url.pathname === '/events') {
       const limit = Number(url.searchParams.get('limit') || 100)
       const raw = url.searchParams.get('raw') === 'true' || url.searchParams.get('unredacted') === 'true'
+      const limited = guardUnredactedExport(req, {
+        operation: 'events.read.unredacted',
+        target: 'events',
+        unredacted: raw,
+      })
+      if (limited) return limited
       const events = listWorkEvents(limit)
       return json({ events: raw ? events : redactSensitiveObject(events, getConfig()) })
     }
@@ -1824,8 +1837,10 @@ function auditAgentTeam(req: any, operation: string, target: string, result: 'ok
 }
 
 async function abortSessions(client: any, sessionIds: string[]): Promise<void> {
+  const { createOpenCodeSessionRuntime } = await import('../opencode-session-runtime.js')
+  const runtime = createOpenCodeSessionRuntime(client)
   for (const id of [...new Set(sessionIds.filter(Boolean))]) {
-    await client.session.abort({ path: { id } }).catch(() => {})
+    await runtime.abort(id)
   }
 }
 

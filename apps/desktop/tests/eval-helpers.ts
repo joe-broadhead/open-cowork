@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 import type { Page } from 'playwright-core'
 import { repoRoot, waitForAppShell } from './smoke-helpers.ts'
 
-// Shared utilities for the nightly "eval flow" suite. These are higher-level,
+// Shared utilities for the monthly "eval flow" suite. These are higher-level,
 // user-journey checks that build on the same real-Electron harness as the
 // *.smoke.test.ts specs (see smoke-helpers.ts), but they also capture
 // screenshot/video evidence per flow and run a lightweight, dependency-free
@@ -12,7 +12,7 @@ import { repoRoot, waitForAppShell } from './smoke-helpers.ts'
 // Everything here is designed to PARSE / typecheck and run through the
 // existing smoke runner. A full run still needs a real display (xvfb on
 // Linux) because it drives the packaged/dev Electron app — that is what the
-// nightly workflow provides.
+// monthly workflow provides.
 
 export const EVAL_ARTIFACT_DIR = resolve(
   repoRoot,
@@ -173,107 +173,107 @@ export async function compareToBaseline(
   return { name, seeded: false, diffRatio, threshold, passed }
 }
 
-// Install a deterministic, offline "eval bridge" over the renderer before the
-// app mounts. Real Electron exposes `window.coworkApi` via a locked
-// contextBridge and keeps the session store module-private, so there is no
-// shipping hook to push a synthetic assistant stream, a permission request, or
-// an admin role from the renderer. This shim intercepts the preload's
-// `coworkApi` assignment through a `window` accessor seam and, where the
-// object is writable, wraps the relevant methods so an eval flow can drive the
-// REAL ApprovalsQueue / AdminPage components with synthetic, content-free
-// payloads — no LLM, no network. It records whether the wrap took (some
-// hardened builds freeze the bridge); flows that need it check
-// `getEvalBridgeState(page).installed` and fall back to asserting the real,
-// unstubbed surfaces so the spec still exercises the app end-to-end.
+type OpenCoworkEvalBridge = {
+  enabled: true
+  setAdminAccess: (access: {
+    role: 'admin'
+    customRoleKey: null
+    permissions: string[]
+    email: null
+    ssoVerified: false
+  } | null) => void
+  setEntitlements: (entitlements: {
+    provider: string
+    gatingEnabled: boolean
+    billingEnabled: boolean
+    planKey: null
+    planLabel: null
+    subscriptionStatus: null
+    seats: null
+    features: Record<string, never>
+    limits: Record<string, never>
+  } | null) => void
+  getPermissionResponses: () => Array<{ id: string; allowed: boolean }>
+  clearPermissionResponses: () => void
+  emitPermissionRequest: (request: {
+    id: string
+    sessionId: string
+    tool: string
+    input: Record<string, unknown>
+    description: string
+    workspaceId?: string | null
+  }) => Promise<number>
+}
+
+// Install a deterministic, offline "eval bridge" over the renderer *before* the
+// app mounts. Electron's contextBridge freezes `window.coworkApi`, so the old
+// approach of reassigning `on.permissionRequest` / `admin.access` after expose
+// silently failed (non-strict assignment) while still marking the bridge
+// "installed" — which is what made admin nav + synthetic approval evals red.
+//
+// Smoke runs set OPEN_COWORK_E2E=1, which makes preload expose
+// `window.__openCoworkEval` with real seams:
+//   - admin.access / entitlements overrides built into the API before freeze
+//   - permission.respond records offline resolutions
+//   - emitPermissionRequest broadcasts via main → permission:request IPC so
+//     the app's real subscriber receives the event
+//
+// Contract selector: `[data-nav-view="admin"]` (Sidebar ADMIN_NAV_ITEM).
 export async function installEvalBridge(
   page: Page,
   options?: { adminPermissions?: string[] },
 ) {
   await page.addInitScript((config: { adminPermissions?: string[] }) => {
     const globalRef = window as unknown as {
-      coworkApi?: unknown
+      __openCoworkEval?: OpenCoworkEvalBridge
       __coworkEval?: {
         installed: boolean
         permissionResponses: Array<{ id: string; allowed: boolean }>
-        permissionCallbacks: Array<(request: unknown) => void>
-        emitPermissionRequest: (request: unknown) => number
       }
     }
 
-    const state = {
-      installed: false,
-      permissionResponses: [] as Array<{ id: string; allowed: boolean }>,
-      permissionCallbacks: [] as Array<(request: unknown) => void>,
-      emitPermissionRequest(request: unknown) {
-        for (const cb of state.permissionCallbacks) {
-          try {
-            cb(request)
-          } catch {
-            // A subscriber throwing must not abort the eval drive.
-          }
-        }
-        return state.permissionCallbacks.length
-      },
-    }
-    globalRef.__coworkEval = state
-
-    function wrap(api: any) {
-      if (!api || state.installed) return
-      try {
-        // Capture app-registered permission subscribers so the eval can feed
-        // synthetic requests into the real store pipeline.
-        if (api.on && typeof api.on.permissionRequest === 'function') {
-          const original = api.on.permissionRequest.bind(api.on)
-          api.on.permissionRequest = (cb: (request: unknown) => void) => {
-            state.permissionCallbacks.push(cb)
-            return original(cb)
-          }
-        }
-        // Record resolutions instead of hitting the runtime.
-        if (api.permission && typeof api.permission.respond === 'function') {
-          api.permission.respond = async (id: string, allowed: boolean) => {
-            state.permissionResponses.push({ id, allowed })
-          }
-        }
-        // Grant a coarse admin role so AdminPage renders its authorized
-        // sections. Content-free: only permission strings, no identifiers.
-        if (config.adminPermissions && api.admin) {
-          const access = {
-            role: 'admin',
-            permissions: config.adminPermissions,
-            workspaceId: 'local',
-          }
-          api.admin.access = async () => access
-          if (typeof api.admin.entitlements === 'function') {
-            api.admin.entitlements = async () => ({ billingEnabled: false })
-          }
-        }
-        state.installed = true
-      } catch {
-        state.installed = false
+    function apply() {
+      const evalApi = globalRef.__openCoworkEval
+      if (!evalApi?.enabled) {
+        globalRef.__coworkEval = { installed: false, permissionResponses: [] }
+        return false
       }
-    }
 
-    // If coworkApi is already present, wrap now; otherwise trap the assignment.
-    if (globalRef.coworkApi) {
-      wrap(globalRef.coworkApi)
-    } else {
-      try {
-        let stored: unknown
-        Object.defineProperty(window, 'coworkApi', {
-          configurable: true,
-          get() {
-            return stored
-          },
-          set(value) {
-            stored = value
-            wrap(value)
-          },
+      if (config.adminPermissions && config.adminPermissions.length > 0) {
+        evalApi.setAdminAccess({
+          role: 'admin',
+          customRoleKey: null,
+          permissions: config.adminPermissions,
+          email: null,
+          ssoVerified: false,
         })
-      } catch {
-        // Bridge is non-configurable; flows fall back to real surfaces.
+        evalApi.setEntitlements({
+          provider: 'eval',
+          gatingEnabled: false,
+          billingEnabled: false,
+          planKey: null,
+          planLabel: null,
+          subscriptionStatus: null,
+          seats: null,
+          features: {},
+          limits: {},
+        })
       }
+
+      evalApi.clearPermissionResponses()
+      globalRef.__coworkEval = { installed: true, permissionResponses: [] }
+      return true
     }
+
+    // Preload exposes __openCoworkEval before page scripts; init scripts run
+    // after the document is created. Prefer immediate apply, fall back to a
+    // short poll for slower preload wiring.
+    if (apply()) return
+    let attempts = 0
+    const timer = window.setInterval(() => {
+      attempts += 1
+      if (apply() || attempts > 50) window.clearInterval(timer)
+    }, 20)
   }, { adminPermissions: options?.adminPermissions })
 }
 
@@ -282,25 +282,37 @@ export async function getEvalBridgeState(page: Page): Promise<{
   permissionResponses: Array<{ id: string; allowed: boolean }>
 }> {
   return page.evaluate(() => {
-    const state = (window as unknown as {
-      __coworkEval?: { installed: boolean; permissionResponses: Array<{ id: string; allowed: boolean }> }
-    }).__coworkEval
+    const globalRef = window as unknown as {
+      __openCoworkEval?: OpenCoworkEvalBridge
+      __coworkEval?: { installed: boolean }
+    }
+    const evalApi = globalRef.__openCoworkEval
     return {
-      installed: Boolean(state?.installed),
-      permissionResponses: state?.permissionResponses ?? [],
+      installed: Boolean(globalRef.__coworkEval?.installed && evalApi?.enabled),
+      permissionResponses: evalApi?.getPermissionResponses() ?? [],
     }
   })
 }
 
 export async function emitSyntheticApproval(
   page: Page,
-  request: { id: string; sessionId: string; tool: string; input: Record<string, unknown>; description: string },
+  request: {
+    id: string
+    sessionId: string
+    tool: string
+    input: Record<string, unknown>
+    description: string
+    workspaceId?: string | null
+  },
 ): Promise<number> {
-  return page.evaluate((payload) => {
-    const state = (window as unknown as {
-      __coworkEval?: { emitPermissionRequest: (request: unknown) => number }
-    }).__coworkEval
-    return state ? state.emitPermissionRequest(payload) : 0
+  return page.evaluate(async (payload) => {
+    const evalApi = (window as unknown as { __openCoworkEval?: OpenCoworkEvalBridge }).__openCoworkEval
+    if (!evalApi?.enabled) return 0
+    // Bind to the active workspace so useOpenCodeEvents.isActiveWorkspaceEvent accepts it.
+    const workspaceId = payload.workspaceId
+      ?? (window as unknown as { __openCoworkActiveWorkspaceId?: string | null }).__openCoworkActiveWorkspaceId
+      ?? null
+    return evalApi.emitPermissionRequest({ ...payload, workspaceId })
   }, request)
 }
 

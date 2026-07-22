@@ -264,7 +264,8 @@ async function newSession(client: ChannelCommandClient, msg: ChannelMessage, tit
   if (!sessionId) return 'Could not create an OpenCode Session.'
 
   setChannelSession(msg.provider, msg.chatId, sessionId, { threadId: msg.threadId, mode: 'chat', title: label })
-  const session = (await client.session.get({ path: { id: sessionId } })).data
+  const got = await (await import('./opencode-session-runtime.js')).createOpenCodeSessionRuntime(client as any).getSession(sessionId)
+  const session = got.data
   const links = session ? formatOpenCodeSessionLinks(getConfig().opencodeUrl, session, { gatewayBaseUrl: configuredGatewayBaseUrl() }) : ''
   return [`Created and bound Session: ${sessionId}`, links].filter(Boolean).join('\n')
 }
@@ -348,7 +349,9 @@ async function switchSession(client: ChannelCommandClient, msg: ChannelMessage, 
 
   let session: any
   try {
-    session = (await client.session.get({ path: { id: sessionId } })).data
+    const got = await (await import('./opencode-session-runtime.js')).createOpenCodeSessionRuntime(client as any).getSession(sessionId)
+    if (got.missing || !got.data) return unavailableSessionLinks(sessionId, 'session not found in OpenCode API')
+    session = got.data
   } catch {
     return unavailableSessionLinks(sessionId, 'session not found in OpenCode API')
   }
@@ -395,7 +398,9 @@ async function bindSession(client: ChannelCommandClient, msg: ChannelMessage, se
   if (conflict && conflict.sessionId !== sessionId && !allowRebind) return `This chat is already bound to ${describeChannelBinding(conflict)}.\nUse /bind session ${sessionId} --rebind to replace it.`
   let session: any
   try {
-    session = (await client.session.get({ path: { id: sessionId } })).data
+    const got = await (await import('./opencode-session-runtime.js')).createOpenCodeSessionRuntime(client as any).getSession(sessionId)
+    if (got.missing || !got.data) return unavailableSessionLinks(sessionId, 'session not found in OpenCode API')
+    session = got.data
   } catch {
     return unavailableSessionLinks(sessionId, 'session not found in OpenCode API')
   }
@@ -427,8 +432,9 @@ async function status(client: ChannelCommandClient, msg: ChannelMessage): Promis
   if (binding.taskId) lines.push(`Issue: ${binding.taskId}`)
   if (binding.roadmapId) lines.push(`Project: ${binding.roadmapId}`)
   try {
-    const session = (await client.session.get({ path: { id: binding.sessionId } })).data
-    if (session) lines.push(formatOpenCodeSessionLinks(getConfig().opencodeUrl, session, { gatewayBaseUrl: configuredGatewayBaseUrl() }))
+    const got = await (await import('./opencode-session-runtime.js')).createOpenCodeSessionRuntime(client as any).getSession(binding.sessionId)
+    if (got.missing) lines.push(unavailableSessionLinks(binding.sessionId, 'session not found in OpenCode API'))
+    else if (got.data) lines.push(formatOpenCodeSessionLinks(getConfig().opencodeUrl, got.data, { gatewayBaseUrl: configuredGatewayBaseUrl() }))
     else lines.push(unavailableSessionLinks(binding.sessionId, 'session metadata missing from OpenCode response'))
   } catch {
     lines.push(unavailableSessionLinks(binding.sessionId, 'session not found in OpenCode API'))
@@ -916,9 +922,10 @@ function formatTaskSummary(task: WorkTaskView): string[] {
 
 async function sessionLinksText(client: ChannelCommandClient, sessionId: string): Promise<string> {
   try {
-    const session = (await client.session.get({ path: { id: sessionId } })).data
-    return session
-      ? formatOpenCodeSessionLinks(getConfig().opencodeUrl, session, { gatewayBaseUrl: configuredGatewayBaseUrl() })
+    const got = await (await import('./opencode-session-runtime.js')).createOpenCodeSessionRuntime(client as any).getSession(sessionId)
+    if (got.missing) return unavailableSessionLinks(sessionId, 'session not found in OpenCode API')
+    return got.data
+      ? formatOpenCodeSessionLinks(getConfig().opencodeUrl, got.data, { gatewayBaseUrl: configuredGatewayBaseUrl() })
       : unavailableSessionLinks(sessionId, 'session metadata missing from OpenCode response')
   } catch {
     return unavailableSessionLinks(sessionId, 'session not found in OpenCode API')
@@ -955,7 +962,7 @@ async function applyChannelTaskAction(client: ChannelCommandClient, msg: Channel
       actor: `channel:${msg.provider}`,
       source: 'channel-command',
     })
-    if (control.applied && control.abortedSessionId) await client.session.abort?.({ path: { id: control.abortedSessionId } }).catch(() => {})
+    if (control.applied && control.abortedSessionId) await (await import('./opencode-session-runtime.js')).createOpenCodeSessionRuntime(client as any).abort(control.abortedSessionId)
     return [
       `${action}: ${control.task?.title || task.title}`,
       `Outcome: ${control.outcome}`,
@@ -969,7 +976,7 @@ async function applyChannelTaskAction(client: ChannelCommandClient, msg: Channel
   }
   const result = applyWorkTaskAction(task.id, action, { note: note || undefined })
   if (!result) return `Issue not found: ${task.id}`
-  if (result.abortedSessionId) await client.session.abort?.({ path: { id: result.abortedSessionId } }).catch(() => {})
+  if (result.abortedSessionId) await (await import('./opencode-session-runtime.js')).createOpenCodeSessionRuntime(client as any).abort(result.abortedSessionId)
   return `${action}: ${result.task.title}\nStatus: ${result.task.status}${result.task.currentStage ? `\nStage: ${result.task.currentStage}` : ''}${result.abortedSessionId ? `\nAborted session: ${result.abortedSessionId}` : ''}`
 }
 
@@ -1388,7 +1395,8 @@ async function selectUsableProjectSession(client: ChannelCommandClient, msg: Cha
 
 async function openCodeSessionAvailable(client: ChannelCommandClient, sessionId: string): Promise<boolean> {
   try {
-    return Boolean((await client.session.get({ path: { id: sessionId } })).data?.id)
+    const got = await (await import('./opencode-session-runtime.js')).createOpenCodeSessionRuntime(client as any).getSession(sessionId)
+    return Boolean(got.data?.id)
   } catch {
     return false
   }

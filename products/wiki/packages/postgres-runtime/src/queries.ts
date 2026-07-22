@@ -1,16 +1,25 @@
 import { runtimeRecordFromJson, runtimeWorkspaceConfigFromJson } from "./records.ts";
 import { POSTGRES_RUNTIME_SCHEMA_VERSION } from "./schema.ts";
-import { boundedOpenWikiListLimit, type EventRecord, idToUri, type OpenWikiDerivedRecordType, type OpenWikiWorkspaceRegistry, type PageRecord, type ProposalRecord, type RunRecord, type SourceRecord } from "@openwiki/core";
+import { boundedOpenWikiListLimit, type EventRecord, idToUri, type OpenWikiDerivedRecordType, type OpenWikiWorkspaceRegistry, type ProposalRecord, type RunRecord } from "@openwiki/core";
 import { listGraphEdges, listTopics, loadRepository } from "@openwiki/repo";
 import { openPostgresSql } from "./connection.ts";
 import { postgresRuntimeReadEnabled } from "./config.ts";
-import { collectDerivedRecords, derivedRuntimeContentHash, openQuestionsFromPageRecord, topicFromRuntimeRecord } from "./derived-records.ts";
+import { collectDerivedRecords, derivedRuntimeContentHash } from "./derived-records.ts";
 import { currentGitCommit } from "./git.ts";
 import { readPostgresMigrationDiagnostics } from "./migrations.ts";
-import { jobAttemptFromRow, jobDetailFromRow, jsonb, readRuntimeSections, recordsFromPostgres, runtimeApiTokenFromRow, runtimeGroupFromRow, runtimeIdpMappingFromRow, runtimePrincipalFromRow, runtimePrincipalGroupFromRow, runtimeServiceAccountFromRow, runtimeSessionFromRow, stringField } from "./rows.ts";
+import { jobAttemptFromRow, jobDetailFromRow, jsonb, readRuntimeSections, stringField } from "./rows.ts";
 import { proposalSectionIds, proposalTargetsPath, proposalUpdatedAt } from "./search.ts";
 import { openCurrentPostgresRuntime } from "./sync.ts";
-import type { CountRow, MetadataRow, PostgresQuery, PostgresRuntimeCountTable, PostgresRuntimeEventList, PostgresRuntimeEventListOptions, PostgresRuntimeIdentityList, PostgresRuntimeIntegrityResult, PostgresRuntimeOpenQuestionList, PostgresRuntimeOptions, PostgresRuntimeProposalList, PostgresRuntimeProposalListOptions, PostgresRuntimeRecordEntry, PostgresRuntimeRunDetail, PostgresRuntimeRunList, PostgresRuntimeRunListOptions, PostgresRuntimeSourceList, PostgresRuntimeSummary, PostgresRuntimeTopicList, PostgresRuntimeWorkspaceIndex, RuntimeRow, SourceCommitRow } from "./types.ts";
+import { metadataCount, recordTypeCount, tableCount, workspaceSourceCommit } from "./queries-counts.ts";
+export { jobStatusCount, recordTypeCount, runStatusCount } from "./queries-counts.ts";
+export {
+  listCurrentPostgresIdentities,
+  listCurrentPostgresOpenQuestions,
+  listCurrentPostgresSources,
+  listCurrentPostgresTopics,
+  readCurrentPostgresSource,
+} from "./queries-catalog.ts";
+import type { CountRow, MetadataRow, PostgresRuntimeEventList, PostgresRuntimeEventListOptions, PostgresRuntimeIntegrityResult, PostgresRuntimeOptions, PostgresRuntimeProposalList, PostgresRuntimeProposalListOptions, PostgresRuntimeRecordEntry, PostgresRuntimeRunDetail, PostgresRuntimeRunList, PostgresRuntimeRunListOptions, PostgresRuntimeSummary, PostgresRuntimeWorkspaceIndex, RuntimeRow } from "./types.ts";
 
 export async function readPostgresRuntimeSummary(root: string, options: PostgresRuntimeOptions = {}): Promise<PostgresRuntimeSummary | undefined> {
   const repo = await loadRepository(root);
@@ -602,198 +611,4 @@ export async function readCurrentPostgresRun(root: string, runId: string): Promi
   } finally {
     await opened.close();
   }
-}
-
-export async function listCurrentPostgresTopics(root: string): Promise<PostgresRuntimeTopicList | undefined> {
-  const opened = await openCurrentPostgresRuntime(root, postgresRuntimeReadEnabled);
-  if (!opened) {
-    return undefined;
-  }
-  const { sql, workspaceId } = opened;
-  try {
-    const topics = (await recordsFromPostgres<Record<string, unknown>>(sql, workspaceId, "topic"))
-      .map(topicFromRuntimeRecord)
-      .sort((left, right) => right.page_count - left.page_count || left.topic.localeCompare(right.topic));
-    return { source: "postgres-runtime", topics };
-  } finally {
-    await opened.close();
-  }
-}
-
-export async function listCurrentPostgresOpenQuestions(root: string): Promise<PostgresRuntimeOpenQuestionList | undefined> {
-  const opened = await openCurrentPostgresRuntime(root, postgresRuntimeReadEnabled);
-  if (!opened) {
-    return undefined;
-  }
-  const { sql, workspaceId } = opened;
-  try {
-    const pages = await recordsFromPostgres<PageRecord>(sql, workspaceId, "page");
-    return {
-      source: "postgres-runtime",
-      open_questions: pages.flatMap(openQuestionsFromPageRecord),
-    };
-  } finally {
-    await opened.close();
-  }
-}
-
-export async function listCurrentPostgresSources(root: string, limit = 100): Promise<PostgresRuntimeSourceList | undefined> {
-  const opened = await openCurrentPostgresRuntime(root, postgresRuntimeReadEnabled);
-  if (!opened) {
-    return undefined;
-  }
-  const { sql, workspaceId } = opened;
-  try {
-    const rows = await sql<RuntimeRow[]>`
-      SELECT json
-      FROM source_objects
-      WHERE workspace_id = ${workspaceId}
-      ORDER BY source_id ASC
-      LIMIT ${Math.min(Math.max(limit, 0), 1000)}
-    `;
-    const total = await tableCount(sql, "source_objects", workspaceId);
-    return { source: "postgres-runtime", sources: rows.map((row) => runtimeRecordFromJson<SourceRecord>(row.json, "source")), total };
-  } finally {
-    await opened.close();
-  }
-}
-
-export async function readCurrentPostgresSource(root: string, id: string): Promise<SourceRecord | undefined> {
-  const opened = await openCurrentPostgresRuntime(root, postgresRuntimeReadEnabled);
-  if (!opened) {
-    return undefined;
-  }
-  const { sql, workspaceId } = opened;
-  try {
-    const rows = await sql<RuntimeRow[]>`
-      SELECT json
-      FROM source_objects
-      WHERE workspace_id = ${workspaceId} AND source_id = ${id}
-      LIMIT 1
-    `;
-    if (!rows[0]) {
-      return undefined;
-    }
-    return runtimeRecordFromJson<SourceRecord>(rows[0].json, "source");
-  } finally {
-    await opened.close();
-  }
-}
-
-export async function listCurrentPostgresIdentities(root: string): Promise<PostgresRuntimeIdentityList | undefined> {
-  const opened = await openCurrentPostgresRuntime(root, postgresRuntimeReadEnabled);
-  if (!opened) {
-    return undefined;
-  }
-  const { sql, workspaceId } = opened;
-  try {
-    const principalRows = await sql<Array<Record<string, unknown>>>`
-      SELECT principal_id, principal_type, title, json
-      FROM principals
-      WHERE workspace_id = ${workspaceId}
-      ORDER BY principal_id ASC
-    `;
-    const groupRows = await sql<Array<Record<string, unknown>>>`
-      SELECT group_id, title, json
-      FROM groups
-      WHERE workspace_id = ${workspaceId}
-      ORDER BY group_id ASC
-    `;
-    const principalGroupRows = await sql<Array<Record<string, unknown>>>`
-      SELECT principal_id, group_id
-      FROM principal_groups
-      WHERE workspace_id = ${workspaceId}
-      ORDER BY principal_id ASC, group_id ASC
-    `;
-    const serviceAccountRows = await sql<Array<Record<string, unknown>>>`
-      SELECT service_account_id, actor_id, role, scopes_json, principals_json, token_hash_count, json
-      FROM service_accounts
-      WHERE workspace_id = ${workspaceId}
-      ORDER BY service_account_id ASC
-    `;
-    const sessionRows = await sql<Array<Record<string, unknown>>>`
-      SELECT session_id, actor_id, principal_id, created_at, expires_at, revoked_at, json
-      FROM sessions
-      WHERE workspace_id = ${workspaceId}
-      ORDER BY created_at DESC, session_id DESC
-      LIMIT 500
-    `;
-    const tokenRows = await sql<Array<Record<string, unknown>>>`
-      SELECT token_id, actor_id, principal_id, scopes_json, token_hash, created_at, expires_at, revoked_at, json
-      FROM api_tokens
-      WHERE workspace_id = ${workspaceId}
-      ORDER BY created_at DESC, token_id DESC
-      LIMIT 500
-    `;
-    const mappingRows = await sql<Array<Record<string, unknown>>>`
-      SELECT mapping_id, provider, claim, claim_value, principal_id, json
-      FROM idp_mappings
-      WHERE workspace_id = ${workspaceId}
-      ORDER BY provider ASC, claim ASC, claim_value ASC
-    `;
-    return {
-      source: "postgres-runtime",
-      workspace_id: workspaceId,
-      principals: principalRows.map(runtimePrincipalFromRow),
-      groups: groupRows.map(runtimeGroupFromRow),
-      principal_groups: principalGroupRows.map(runtimePrincipalGroupFromRow),
-      service_accounts: serviceAccountRows.map(runtimeServiceAccountFromRow),
-      sessions: sessionRows.map(runtimeSessionFromRow),
-      api_tokens: tokenRows.map(runtimeApiTokenFromRow),
-      idp_mappings: mappingRows.map(runtimeIdpMappingFromRow),
-    };
-  } finally {
-    await opened.close();
-  }
-}
-
-export async function recordTypeCount(sql: PostgresQuery, workspaceId: string, type: string): Promise<number> {
-  const rows = await sql<CountRow[]>`SELECT COUNT(*) AS count FROM records WHERE workspace_id = ${workspaceId} AND record_type = ${type}`;
-  return Number(rows[0]?.count ?? 0);
-}
-
-function metadataCount(metadata: Map<string, string>, key: string): number | undefined {
-  const value = metadata.get(key);
-  if (value === undefined) {
-    return undefined;
-  }
-  const count = Number(value);
-  return Number.isFinite(count) && count >= 0 ? count : undefined;
-}
-
-async function tableCount(sql: PostgresQuery, table: PostgresRuntimeCountTable, workspaceId: string): Promise<number> {
-  let rows: CountRow[];
-  switch (table) {
-    case "records":
-      rows = await sql<CountRow[]>`SELECT COUNT(*) AS count FROM records WHERE workspace_id = ${workspaceId}`;
-      break;
-    case "edges":
-      rows = await sql<CountRow[]>`SELECT COUNT(*) AS count FROM edges WHERE workspace_id = ${workspaceId}`;
-      break;
-    case "search_documents":
-      rows = await sql<CountRow[]>`SELECT COUNT(*) AS count FROM search_documents WHERE workspace_id = ${workspaceId}`;
-      break;
-    case "effective_permissions":
-      rows = await sql<CountRow[]>`SELECT COUNT(*) AS count FROM effective_permissions WHERE workspace_id = ${workspaceId}`;
-      break;
-    case "source_objects":
-      rows = await sql<CountRow[]>`SELECT COUNT(*) AS count FROM source_objects WHERE workspace_id = ${workspaceId}`;
-      break;
-  }
-  return Number(rows[0]?.count ?? 0);
-}
-
-export async function runStatusCount(sql: PostgresQuery, workspaceId: string, status: "queued" | "running" | "succeeded" | "failed"): Promise<number> {
-  const rows = await sql<CountRow[]>`SELECT COUNT(*) AS count FROM runs WHERE workspace_id = ${workspaceId} AND status = ${status}`;
-  return Number(rows[0]?.count ?? 0);
-}
-
-export async function jobStatusCount(sql: PostgresQuery, workspaceId: string, status: "queued" | "running" | "succeeded" | "failed"): Promise<number> {
-  const rows = await sql<CountRow[]>`SELECT COUNT(*) AS count FROM jobs WHERE workspace_id = ${workspaceId} AND status = ${status}`;
-  return Number(rows[0]?.count ?? 0);
-}
-
-async function workspaceSourceCommit(sql: PostgresQuery, workspaceId: string): Promise<{ source_commit?: string }> {
-  const rows = await sql<SourceCommitRow[]>`SELECT source_commit FROM workspaces WHERE workspace_id = ${workspaceId} LIMIT 1`;
-  return rows[0]?.source_commit === undefined ? {} : { source_commit: rows[0].source_commit };
 }

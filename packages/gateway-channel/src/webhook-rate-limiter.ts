@@ -1,7 +1,9 @@
 /**
- * Shared fixed-window webhook rate limiter used by both the Cloud Channel
- * Gateway (`apps/channel-gateway`) and Standalone Gateway (`apps/standalone-gateway`).
- * JOE-875: one kernel, two product entrypoints.
+ * Fixed-window webhook rate limiter for monorepo Channel / Standalone Gateway
+ * (JOE-875). Algorithm must stay lockstep with
+ * `@open-cowork/shared/node` `WebhookRateLimiter` (Durable composes the shared
+ * class — JOE-923 progressive). Dual-fix algorithm changes in both places
+ * (or fold monorepo call sites onto shared when package boundaries allow).
  */
 
 export type WebhookRateLimitRecord = {
@@ -46,6 +48,10 @@ export class WebhookRateLimiter {
   private readonly records = new Map<string, WebhookRateLimitRecord>()
 
   constructor(private readonly maxRecords = DEFAULT_MAX_RECORDS) {}
+
+  clear(): void {
+    this.records.clear()
+  }
 
   claim(input: WebhookRateLimitClaimInput): WebhookRateLimitResult {
     const record = this.record(input.key, input.nowMs, input.windowMs)

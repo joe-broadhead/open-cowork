@@ -140,9 +140,12 @@ export async function deliverDelegationProgress(channels: Map<string, Pick<Chann
       }
       try {
         recordDeliveryAttempt(route, Math.max(1, options.sessionPromptTimeoutMs || DEFAULT_SESSION_PROMPT_TIMEOUT_MS), options)
-        await withTimeout(options.sessionClient.session.prompt({
-          path: { id: route.target.sessionId },
-          body: { agent: 'gateway-assistant', parts: [{ type: 'text', text: sessionProgressPrompt(route) }] },
+        const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+        await withTimeout(createOpenCodeSessionRuntime(options.sessionClient as any).prompt({
+          sessionId: route.target.sessionId,
+          agent: 'gateway-assistant',
+          parts: [{ type: 'text', text: sessionProgressPrompt(route) }],
+          async: false,
         }), Math.max(1, options.sessionPromptTimeoutMs || DEFAULT_SESSION_PROMPT_TIMEOUT_MS), 'parent session prompt')
         appendWorkEvent('delegation.progress.notified', route.dedupeKey, eventPayload(route), options.filePath)
         sent.push(route)

@@ -13,14 +13,18 @@ import {
   advanceDurableCursor,
   durableAfterCursor,
   type DurableSequenceCursor,
+  exponentialReconnectDelayMs,
+  nextReconnectFailureCount,
+  OPENCODE_DURABLE_RECONNECT_INITIAL_MS_DESKTOP,
+  OPENCODE_DURABLE_RECONNECT_MAX_MS_DESKTOP,
+  OPENCODE_SSE_OWNED_MAX_RETRY_ATTEMPTS,
   readDurableSequenceFromEvent,
   readSessionStatusType,
   shouldSuppressGlobalEventForTrackedSession,
+  waitForAbortableDelay,
 } from '@open-cowork/runtime-host'
 import { log } from '@open-cowork/shared/node'
 
-const RECONNECT_INITIAL_MS = 250
-const RECONNECT_MAX_MS = 8_000
 // JOE-839: durable tails are long-lived SSE streams. Cap hubs (one per project
 // directory client) and sessions per hub so a long-running desktop cannot pin
 // unbounded OpenCode event streams.
@@ -50,20 +54,6 @@ const hubsByDirectory = new Map<string, DirectoryDurableHub>()
 
 function directoryKey(directory: string | null | undefined) {
   return directory || '__runtime_home__'
-}
-
-function waitForReconnect(signal: AbortSignal, delayMs: number) {
-  if (signal.aborted) return Promise.resolve()
-  return new Promise<void>((resolve) => {
-    const finish = () => {
-      clearTimeout(timer)
-      signal.removeEventListener('abort', finish)
-      resolve()
-    }
-    const timer = setTimeout(finish, delayMs)
-    timer.unref?.()
-    signal.addEventListener('abort', finish, { once: true })
-  })
 }
 
 function stopDurableSession(hub: DirectoryDurableHub, sessionId: string) {
@@ -119,7 +109,7 @@ async function durableStreamLoop(hub: DirectoryDurableHub, state: DurableSession
       }, {
         signal: hub.signal,
         // Own reconnects so every retry carries the last durable sequence.
-        sseMaxRetryAttempts: 1,
+        sseMaxRetryAttempts: OPENCODE_SSE_OWNED_MAX_RETRY_ATTEMPTS,
         onSseError(error: unknown) {
           streamError = error
         },
@@ -141,12 +131,13 @@ async function durableStreamLoop(hub: DirectoryDurableHub, state: DurableSession
       if (hub.signal.aborted || state.stopped) break
       const message = error instanceof Error ? error.message : String(error)
       log('events', `Durable session stream error [${state.sessionId}]: ${message}`)
-      consecutiveFailures = receivedEvent ? 1 : Math.min(consecutiveFailures + 1, 16)
-      const retryDelayMs = Math.min(
-        RECONNECT_MAX_MS,
-        RECONNECT_INITIAL_MS * (2 ** Math.min(consecutiveFailures - 1, 8)),
+      consecutiveFailures = nextReconnectFailureCount(consecutiveFailures, receivedEvent)
+      const retryDelayMs = exponentialReconnectDelayMs(
+        consecutiveFailures,
+        OPENCODE_DURABLE_RECONNECT_INITIAL_MS_DESKTOP,
+        OPENCODE_DURABLE_RECONNECT_MAX_MS_DESKTOP,
       )
-      await waitForReconnect(hub.signal, retryDelayMs)
+      await waitForAbortableDelay(hub.signal, retryDelayMs)
     }
   }
 }

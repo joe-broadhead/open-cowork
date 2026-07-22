@@ -133,6 +133,12 @@ session sharing, Postgres queue/worker execution, write-lock contention, and
 shared rate-limit windows. Use the hosted Postgres scale runner below after
 that contract passes.
 
+**CI policy (JOE-975 / wiki audit P2-3):** monorepo PR `CI Wiki` runs the dry-run
+contract unit test only (`tests/hosted-readiness-evidence.test.ts`) so PR cost
+stays bounded. `Release Wiki` re-runs `pnpm evidence:hosted-readiness -- --dry-run`.
+Live `--enforce` (dual HTTP replicas + Postgres) remains an operator/release
+step when `OPENWIKI_DATABASE_URL` is available—not a required gate on every PR.
+
 In `hosted` and `enterprise` runtime modes, OpenWiki disables request-path
 SQLite index rebuilds and full-repo search fallbacks by default. That prevents
 a missing or stale derived store from turning one user search into a full

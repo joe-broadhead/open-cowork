@@ -17,10 +17,15 @@ import { routeHttpRequestInner } from "./routes/router.ts";
 import { warmHostedHealth } from "./health-metrics.ts";
 
 export async function startHttpApi(options: HttpApiOptions): Promise<StartedHttpApi> {
+  const host = options.host ?? "127.0.0.1";
   validateTrustedHeaderRuntime(options.defaultPolicy ?? {});
+  validateProcessWideDefaultPolicy({
+    host,
+    ...(options.defaultPolicy === undefined ? {} : { defaultPolicy: options.defaultPolicy }),
+  });
+  validateHostedAuthConfiguration();
   await ensureHttpOperationalState(options.root);
   await warmHostedHealth(options.root);
-  const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 3030;
   const sockets = new Set<Socket>();
   let closing = false;
@@ -161,6 +166,81 @@ export function validateTrustedHeaderRuntime(defaultPolicy: HttpPolicyOptions = 
   }
 }
 
+/**
+ * Process-wide serve --role/--scope elevates every request (and merges into
+ * identity-less principals). That is only safe on loopback single-user binds.
+ */
+export function validateProcessWideDefaultPolicy(options: {
+  host?: string | undefined;
+  defaultPolicy?: HttpPolicyOptions | undefined;
+} = {}): void {
+  const policy = options.defaultPolicy ?? {};
+  const processWideRole = policy.role !== undefined;
+  const processWideScopes = policy.scopes !== undefined && policy.scopes.length > 0;
+  if (!processWideRole && !processWideScopes) {
+    return;
+  }
+  const host = options.host ?? "127.0.0.1";
+  if (isLoopbackBindHost(host)) {
+    return;
+  }
+  throw new Error(
+    "Process-wide serve --role/--scope (or OPENWIKI_ROLE) is only allowed when binding to loopback (127.0.0.1, ::1, localhost). For non-loopback hosts use per-request trusted identity headers or service-account/OAuth tokens without process-wide role elevation.",
+  );
+}
+
+/**
+ * Explicit OPENWIKI_REQUIRE_AUTH=false must not disarm hosted / public-origin deployments.
+ * Public unauthenticated content belongs on static export, not write-capable HTTP/MCP.
+ */
+export function validateHostedAuthConfiguration(env: NodeJS.ProcessEnv = process.env): void {
+  const explicit = parseOptionalBooleanEnv(env.OPENWIKI_REQUIRE_AUTH ?? env.OPENWIKI_AUTH_REQUIRED);
+  if (explicit !== false) {
+    return;
+  }
+  if (env.OPENWIKI_PUBLIC_ORIGIN?.trim()) {
+    throw new Error(
+      "OPENWIKI_REQUIRE_AUTH=false is not allowed when OPENWIKI_PUBLIC_ORIGIN is set; use static export for public unauthenticated content",
+    );
+  }
+  if (
+    env.OPENWIKI_QUEUE_BACKEND === "postgres" ||
+    env.OPENWIKI_OPERATIONAL_STATE_BACKEND === "postgres" ||
+    env.OPENWIKI_WRITE_COORDINATOR_BACKEND === "postgres" ||
+    env.OPENWIKI_READ_BACKEND === "postgres" ||
+    env.OPENWIKI_SEARCH_BACKEND === "postgres" ||
+    env.OPENWIKI_RUNTIME_BACKEND === "postgres"
+  ) {
+    throw new Error(
+      "OPENWIKI_REQUIRE_AUTH=false is not allowed with hosted Postgres backends (queue, operational state, write coordinator, read, search, or runtime)",
+    );
+  }
+}
+
+export function isLoopbackBindHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return (
+    normalized === "127.0.0.1" ||
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "[::1]"
+  );
+}
+
+function parseOptionalBooleanEnv(value: string | undefined): boolean | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === undefined || normalized === "") {
+    return undefined;
+  }
+  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  throw new Error("OPENWIKI_REQUIRE_AUTH must be true or false");
+}
+
 export async function handleHttpRequest(
   root: string,
   request: IncomingMessage,
@@ -198,7 +278,11 @@ export async function handleHttpRequest(
       return;
     }
     const requestPolicy = await policyOptionsFromRequest(root, request, httpTrustsRequestHeaders(defaultPolicy, request));
-    const policy = await resolveHttpPolicy(root, mergeHttpPolicy(defaultPolicy, requestPolicy));
+    const policy = await resolveHttpPolicy(
+      root,
+      mergeHttpPolicy(defaultPolicy, requestPolicy),
+      context.remoteAddress === undefined ? {} : { remoteAddress: context.remoteAddress },
+    );
     const authenticationFailure = await requireAuthenticatedHttpPolicy(root, policy);
     if (authenticationFailure !== undefined) {
       writeRouteResult(response, authenticationFailure);
@@ -232,7 +316,11 @@ export async function handleHttpRequest(
   const eventStream = eventStreamUrl(request.url ?? "/");
   if (method === "GET" && eventStream) {
     const requestPolicy = await policyOptionsFromRequest(root, request, httpTrustsRequestHeaders(defaultPolicy, request));
-    const policy = await resolveHttpPolicy(root, mergeHttpPolicy(defaultPolicy, requestPolicy));
+    const policy = await resolveHttpPolicy(
+      root,
+      mergeHttpPolicy(defaultPolicy, requestPolicy),
+      context.remoteAddress === undefined ? {} : { remoteAddress: context.remoteAddress },
+    );
     const authenticationFailure = await requireAuthenticatedHttpPolicy(root, policy);
     if (authenticationFailure !== undefined) {
       writeRouteResult(response, authenticationFailure);
@@ -287,7 +375,13 @@ export async function routeHttpRequest(
   let rateLimited = false;
   try {
     const policyResolved = shouldResolvePolicyForOperationalRoute(method, url);
-    effectivePolicy = policyResolved ? await resolveHttpPolicy(root, policy) : policy;
+    effectivePolicy = policyResolved
+      ? await resolveHttpPolicy(
+          root,
+          policy,
+          context.remoteAddress === undefined ? {} : { remoteAddress: context.remoteAddress },
+        )
+      : policy;
     if (route.bucket !== undefined && url.pathname !== "/mcp") {
       const decision = await checkRateLimit(root, route, effectivePolicy, context);
       if (!decision.allowed) {

@@ -51,6 +51,15 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_tests != true }}
         run: pnpm --filter cowork-wiki-workspace test
 
+      # JOE-975 / wiki audit P2-3: PR CI keeps only the dry-run unit contract
+      # (hosted-readiness-evidence.test.ts). Release re-runs the dry-run script
+      # as an explicit hosted multi-replica contract gate. Full --enforce needs
+      # live Postgres and stays operator/nightly (not every monorepo PR).
+      - name: Hosted readiness evidence (dry-run contract)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_tests != true }}
+        working-directory: products/wiki
+        run: pnpm evidence:hosted-readiness -- --dry-run --json
+
       - name: Pack CLI
         run: pnpm --filter cowork-wiki-workspace pack:cli
 

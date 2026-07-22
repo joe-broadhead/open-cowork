@@ -271,8 +271,8 @@ interface OpenCodeSessionSource {
 async function collectOpenCodeSessionIds(client: any, config: GatewayConfig): Promise<OpenCodeSessionSource> {
   if (!client?.session?.list) return { checked: false, reachable: false }
   try {
-    const response = await client.session.list()
-    const rows = Array.isArray(response?.data) ? response.data : []
+    const { createOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+    const rows = await createOpenCodeSessionRuntime(client).listSessions()
     return { checked: true, reachable: true, ids: new Set(rows.map((row: any) => String(row.id || '')).filter(Boolean)) }
   } catch (err: any) {
     return {

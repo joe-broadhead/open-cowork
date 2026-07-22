@@ -740,30 +740,33 @@
  "fileLocBudgets": [
   {
    "path": "src/work-store.ts",
-   "maxLines": 5800,
+   "maxLines": 2000,
    "owner": "work_store",
-   "note": "Fa\u00e7ade after types extraction (audit 2026-07-21)"
+   "note": "Hard LOC budget (JOE-919/JOE-942); current ~1956 after state-io + event-queries + final helper moves; at ≤2000 target"
   },
   {
    "path": "src/environments.ts",
-   "maxLines": 2350,
+   "maxLines": 1300,
    "owner": "environments",
-   "note": "After types extraction (audit 2026-07-21)"
+   "note": "Hard LOC budget (JOE-919/JOE-936); current ~1262 after util/lifecycle/local-container/remote-crabbox extract; ≤2000"
   },
   {
    "path": "src/config.ts",
-   "maxLines": 2000,
-   "owner": "config"
+   "maxLines": 1800,
+   "owner": "config",
+   "note": "Hard LOC budget (JOE-919); current 1780 lines; under 2000"
   },
   {
    "path": "src/scheduler.ts",
-   "maxLines": 2000,
-   "owner": "scheduler_replay"
+   "maxLines": 1820,
+   "owner": "scheduler_replay",
+   "note": "Hard LOC budget (JOE-919); current 1800 lines; under 2000"
   },
   {
    "path": "src/daemon-routes/work.ts",
-   "maxLines": 2100,
-   "owner": "scheduler_replay"
+   "maxLines": 1960,
+   "owner": "scheduler_replay",
+   "note": "Hard LOC budget (JOE-919); current 1940 lines; under 2000"
   }
  ]
 }

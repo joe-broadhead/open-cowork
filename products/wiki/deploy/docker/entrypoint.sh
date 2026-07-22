@@ -203,6 +203,14 @@ else
   echo "Skipping inline OpenWiki bootstrap because OPENWIKI_BOOTSTRAP_MODE=skip. Run db migrate, index, db rebuild, and db sync-postgres from a one-shot job before serving."
 fi
 if [ -n "$ROLE" ]; then
+  case "$HOST" in
+    127.0.0.1|localhost|::1|\[::1\])
+      ;;
+    *)
+      echo "OPENWIKI_ROLE process-wide elevation is only allowed when OPENWIKI_HOST is loopback (127.0.0.1, localhost, ::1). For non-loopback hosts map identity per request via trusted headers or service-account tokens." >&2
+      exit 1
+      ;;
+  esac
   exec node --no-warnings --import tsx /app/packages/cli/src/main.ts --root "$ROOT" serve --host "$HOST" --port "$PORT" --role "$ROLE"
 fi
 

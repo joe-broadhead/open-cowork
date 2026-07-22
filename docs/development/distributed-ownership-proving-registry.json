@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "durable-gateway-distributed-ownership",
+  "status": "partial",
+  "description": "Proving suite for experimentalDistributedOwnership / multi-replica safety (JOE-949). status=ready only when migrate hazards are closed and all requiredTests pass in CI.",
+  "relatedDocs": [
+    "products/gateway/docs/concepts/distributed-ownership-design.md",
+    "products/gateway/docs/concepts/multi-daemon-scaling.md",
+    "docs/evidence/gateway-multi-writer-hazards-2026-07-21.md"
+  ],
+  "requiredTests": [
+    {
+      "id": "daemon-leadership",
+      "path": "products/gateway/src/__tests__/daemon-leadership.test.ts",
+      "purpose": "Leadership lease acquire/renew/standby fencing"
+    },
+    {
+      "id": "multi-process-store",
+      "path": "products/gateway/src/__tests__/multi-process-store.test.ts",
+      "purpose": "Cross-process SQLite contention + leadership"
+    },
+    {
+      "id": "distributed-ownership-proving",
+      "path": "products/gateway/src/__tests__/distributed-ownership-proving.test.ts",
+      "purpose": "Hazard inventory + claim gates + suite completeness"
+    },
+    {
+      "id": "helm-replica-fail-closed",
+      "path": "tests/cloud-deployment-artifacts.test.ts",
+      "purpose": "Helm refuses replicaCount>1 without experimental flag"
+    }
+  ],
+  "requiredScripts": [
+    {
+      "id": "claims-check",
+      "path": "scripts/check-distributed-ownership-claims.mjs",
+      "purpose": "Fail closed on multi-AZ HA marketing language"
+    }
+  ],
+  "openMigrateHazards": ["H1", "H3", "H4", "H8", "H13"],
+  "marketingAllowedClaims": [
+    "single-writer per state directory",
+    "replicaCount 1 supported",
+    "experimentalDistributedOwnership is lab-only"
+  ],
+  "marketingForbiddenClaims": [
+    "multi-AZ HA",
+    "multi-az high availability",
+    "active-active multi-daemon",
+    "horizontally scaled Durable Gateway",
+    "production multi-replica Gateway"
+  ]
+}

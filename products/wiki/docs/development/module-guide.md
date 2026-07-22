@@ -27,6 +27,9 @@ internal modules when it can be tested and reviewed independently.
 | `@openwiki/mcp-server` | Read/proposal/write tool definition groups | `packages/mcp-server/src/tool-definitions-read.ts`, `packages/mcp-server/src/tool-definitions-proposal.ts`, `packages/mcp-server/src/tool-definitions-write.ts` |
 | `@openwiki/postgres-runtime` | Schema SQL and migration inventory | `packages/postgres-runtime/src/schema.ts` |
 | `@openwiki/postgres-runtime` | Runtime JSON parsing and protocol-row validation | `packages/postgres-runtime/src/records.ts` |
+| `@openwiki/postgres-runtime` | Read queries (summary/records/events/runs) | `packages/postgres-runtime/src/queries.ts` |
+| `@openwiki/postgres-runtime` | Catalog reads (topics/sources/identities) | `packages/postgres-runtime/src/queries-catalog.ts` |
+| `@openwiki/postgres-runtime` | Table/status count helpers | `packages/postgres-runtime/src/queries-counts.ts` |
 | `@openwiki/search` | Search index JSON row validation | `packages/search/src/records.ts` |
 | `@openwiki/workflows` | Governance detector workflow and visibility filtering | `packages/workflows/src/governance.ts` |
 | `@openwiki/workflows` | Inbox submit/status, processing, and watch orchestration | `packages/workflows/src/inbox-submit.ts`, `packages/workflows/src/inbox-process.ts`, `packages/workflows/src/inbox-watch.ts` |
@@ -34,8 +37,10 @@ internal modules when it can be tested and reviewed independently.
 | `@openwiki/workflows` | Local/Postgres write coordination and lock metrics | `packages/workflows/src/write-coordinator.ts` |
 | `@openwiki/http-api` | HTTP option/result types | `packages/http-api/src/types.ts` |
 | `@openwiki/http-api` | Request body parsing, query helpers, redirects, CORS, and response writing | `packages/http-api/src/request.ts` |
+| `@openwiki/http-api` | OAuth route façade, token grants, pure helpers | `packages/http-api/src/oauth.ts`, `oauth-token-routes.ts`, `oauth-helpers.ts` |
 | `@openwiki/http-api` | Bounded markdown render cache for server HTML | `packages/http-api/src/markdown-cache.ts` |
 | `@openwiki/http-api` | System routes such as liveness probes | `packages/http-api/src/routes/system.ts` |
+| `@openwiki/web` | Graph legend/search/URL controls (CSP-safe styling) | `packages/web/src/client/graph/controls.js` |
 | `@openwiki/core` | Derived-store runtime record validation | `openWikiDerivedRecordFromUnknown`, `openWikiIndexedRecordJsonFromUnknown` |
 | `@openwiki/core` | Proposal path and section filtering shared by Git, SQLite, and Postgres readers | `openWikiProposalTargetPaths`, `openWikiProposalSectionIds` |
 | `@openwiki/core` | Validation report artifact parsing | `validationReportFromUnknown` |

@@ -1,24 +1,32 @@
 /**
- * Shared workspace session port (audit 2026-07-21 P2-8).
+ * Shared workspace session port (audit 2026-07-21 P2-8 / JOE-921).
  *
- * Local Durable Gateway bridges (`workspace-gateway.ts`) and cloud workspace
- * adapters (`cloud-workspace-adapter.ts`) both implement session/workflow
- * operations. Product code should depend on this port for the common surface
- * so fixes land once at the interface and each adapter only translates
- * transport.
+ * Local Durable session engines, Desktop pairing executors, and cloud workspace
+ * adapters all own session/workflow surfaces. Product code should depend on this
+ * port for the common surface so fixes land once at the interface and each
+ * adapter only translates transport.
  *
- * Core session methods are required. Interaction (question/permission) and
- * workflow methods are optional so partial mocks and limited transports can
- * still satisfy the port; full `CloudWorkspaceAdapter` implements all of them.
+ * Core session methods are required. Interaction, workflow, import, artifact, and
+ * sync methods are optional so limited transports (gateway status-only, partial
+ * mocks) can still satisfy `mode: 'core'`; `CloudWorkspaceAdapter` implements the
+ * full surface (`mode: 'full'`).
+ *
+ * Inventory: `docs/evidence/workspace-session-port-inventory-2026-07-21.md`.
  */
-import type {
-  MessageAttachment,
-  SessionInfo,
-  SessionView,
-  WorkflowDetail,
-  WorkflowListPayload,
-  WorkflowRun,
-  WorkspacePolicy,
+import {
+  emptySessionImportItemCounts,
+  emptySessionView,
+  type MessageAttachment,
+  type SessionArtifact,
+  type SessionArtifactAttachment,
+  type SessionArtifactUploadRequest,
+  type SessionImportRequest,
+  type SessionInfo,
+  type SessionView,
+  type WorkflowDetail,
+  type WorkflowListPayload,
+  type WorkflowRun,
+  type WorkspacePolicy,
 } from '@open-cowork/shared'
 
 /** Prompt payload shared by cloud and gateway workspace session ports. */
@@ -31,8 +39,13 @@ export type WorkspaceSessionPromptInput = {
   [key: string]: unknown
 }
 
+export type WorkspaceSessionImportResult = {
+  session: SessionInfo
+  view: SessionView
+}
+
 /**
- * Minimal session surface shared by cloud and gateway workspace paths.
+ * Minimal session surface shared by cloud and local workspace paths.
  * Adapters may expose additional product-specific methods beyond this port.
  */
 export interface WorkspaceSessionPort {
@@ -53,6 +66,12 @@ export interface WorkspaceSessionPort {
   pauseWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   resumeWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   archiveWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
+  /** Dual-path ops promoted onto the port (JOE-967). */
+  importSession?(input: SessionImportRequest): Promise<WorkspaceSessionImportResult>
+  listArtifacts?(sessionId: string): Promise<SessionArtifact[]>
+  uploadArtifact?(input: SessionArtifactUploadRequest): Promise<SessionArtifact>
+  readArtifactAttachment?(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>
+  sync?(): Promise<void>
 }
 
 /** Core methods every WorkspaceSessionPort implementation must provide. */
@@ -66,9 +85,8 @@ export const WORKSPACE_SESSION_PORT_CORE_METHODS = [
   'abortSession',
 ] as const
 
-/** Full method set implemented by CloudWorkspaceAdapter. */
-export const WORKSPACE_SESSION_PORT_FULL_METHODS = [
-  ...WORKSPACE_SESSION_PORT_CORE_METHODS,
+/** Interaction + workflow methods shared by full cloud adapters. */
+export const WORKSPACE_SESSION_PORT_INTERACTION_METHODS = [
   'replyToQuestion',
   'rejectQuestion',
   'respondToPermission',
@@ -80,9 +98,31 @@ export const WORKSPACE_SESSION_PORT_FULL_METHODS = [
   'archiveWorkflow',
 ] as const
 
+/** Dual-path extensions (import, artifacts, sync) promoted in JOE-967. */
+export const WORKSPACE_SESSION_PORT_EXTENDED_METHODS = [
+  'importSession',
+  'listArtifacts',
+  'uploadArtifact',
+  'readArtifactAttachment',
+  'sync',
+] as const
+
+/** Full method set implemented by CloudWorkspaceAdapter. */
+export const WORKSPACE_SESSION_PORT_FULL_METHODS = [
+  ...WORKSPACE_SESSION_PORT_CORE_METHODS,
+  ...WORKSPACE_SESSION_PORT_INTERACTION_METHODS,
+  ...WORKSPACE_SESSION_PORT_EXTENDED_METHODS,
+] as const
+
+export type WorkspaceSessionPortMethod =
+  | (typeof WORKSPACE_SESSION_PORT_CORE_METHODS)[number]
+  | (typeof WORKSPACE_SESSION_PORT_INTERACTION_METHODS)[number]
+  | (typeof WORKSPACE_SESSION_PORT_EXTENDED_METHODS)[number]
+
 /**
  * Type guard for the shared port. Checks core session methods by default.
- * Pass `mode: 'full'` to require the complete CloudWorkspaceAdapter surface.
+ * Pass `mode: 'full'` to require the complete CloudWorkspaceAdapter surface
+ * (session + interaction + workflow + import/artifacts/sync).
  */
 export function assertWorkspaceSessionPort(
   value: unknown,
@@ -99,5 +139,220 @@ export function assertWorkspaceSessionPort(
     if (typeof (port as unknown as Record<string, unknown>)[method] !== 'function') {
       throw new Error(`WorkspaceSessionPort missing method: ${method}`)
     }
+  }
+}
+
+/** Empty policy used by local/memory fixtures when no managed policy applies. */
+export const WORKSPACE_SESSION_PORT_LOCAL_POLICY: WorkspacePolicy = {
+  features: {},
+  allowedAgents: null,
+  allowedTools: null,
+  allowedMcps: null,
+  localFiles: 'enabled',
+  localStdioMcps: 'enabled',
+  machineRuntimeConfig: 'allowlisted',
+}
+
+/**
+ * In-memory WorkspaceSessionPort for contract/parity tests and local-path
+ * scaffolding. Implements the full method set so local and cloud fixtures share
+ * one contract runner without partial-mock theater.
+ */
+export function createMemoryWorkspaceSessionPort(
+  options: {
+    policy?: WorkspacePolicy
+    initialSessions?: SessionInfo[]
+  } = {},
+): WorkspaceSessionPort {
+  const policy = options.policy ?? WORKSPACE_SESSION_PORT_LOCAL_POLICY
+  const sessions = new Map<string, SessionInfo>()
+  const views = new Map<string, SessionView>()
+  const artifacts = new Map<string, SessionArtifact[]>()
+  let seq = 0
+
+  for (const session of options.initialSessions ?? []) {
+    sessions.set(session.id, session)
+    views.set(session.id, emptySessionView())
+  }
+
+  function requireSession(sessionId: string): SessionInfo {
+    const session = sessions.get(sessionId)
+    if (!session) throw new Error(`Unknown session: ${sessionId}`)
+    return session
+  }
+
+  const port: WorkspaceSessionPort = {
+    async policy() {
+      return policy
+    },
+    async listSessions() {
+      return [...sessions.values()]
+    },
+    async createSession() {
+      seq += 1
+      const id = `mem-session-${seq}`
+      const now = new Date().toISOString()
+      const session: SessionInfo = {
+        id,
+        title: `Memory ${seq}`,
+        createdAt: now,
+        updatedAt: now,
+      }
+      sessions.set(id, session)
+      views.set(id, emptySessionView())
+      return session
+    },
+    async getSessionInfo(sessionId) {
+      return sessions.get(sessionId) ?? null
+    },
+    async getSessionView(sessionId) {
+      requireSession(sessionId)
+      return views.get(sessionId) ?? emptySessionView()
+    },
+    async promptSession(sessionId) {
+      requireSession(sessionId)
+      const view = views.get(sessionId) ?? emptySessionView()
+      views.set(sessionId, {
+        ...view,
+        revision: view.revision + 1,
+        lastEventAt: Date.now(),
+      })
+    },
+    async abortSession(sessionId) {
+      requireSession(sessionId)
+    },
+    async replyToQuestion(sessionId) {
+      requireSession(sessionId)
+    },
+    async rejectQuestion(sessionId) {
+      requireSession(sessionId)
+    },
+    async respondToPermission(sessionId) {
+      requireSession(sessionId)
+    },
+    async listWorkflows() {
+      return { workflows: [], runs: [], nextCursor: null }
+    },
+    async getWorkflow() {
+      return null
+    },
+    async runWorkflow() {
+      return null
+    },
+    async pauseWorkflow() {
+      return null
+    },
+    async resumeWorkflow() {
+      return null
+    },
+    async archiveWorkflow() {
+      return null
+    },
+    async importSession(input) {
+      seq += 1
+      const id = `mem-import-${seq}`
+      const now = new Date().toISOString()
+      const session: SessionInfo = {
+        id,
+        title: input.title || `Imported ${seq}`,
+        createdAt: now,
+        updatedAt: now,
+      }
+      const view = emptySessionView()
+      sessions.set(id, session)
+      views.set(id, view)
+      return { session, view }
+    },
+    async listArtifacts(sessionId) {
+      requireSession(sessionId)
+      return artifacts.get(sessionId) ?? []
+    },
+    async uploadArtifact(input) {
+      requireSession(input.sessionId)
+      const artifact: SessionArtifact = {
+        id: `mem-art-${++seq}`,
+        toolId: 'memory-upload',
+        toolName: 'memory-upload',
+        filePath: input.filename,
+        filename: input.filename,
+        order: (artifacts.get(input.sessionId)?.length ?? 0) + 1,
+        source: 'local',
+        kind: input.kind ?? undefined,
+        status: input.status === 'draft' || input.status === 'in-review' || input.status === 'final'
+          ? input.status
+          : 'draft',
+        createdAt: new Date().toISOString(),
+      }
+      const list = artifacts.get(input.sessionId) ?? []
+      list.push(artifact)
+      artifacts.set(input.sessionId, list)
+      return artifact
+    },
+    async readArtifactAttachment(sessionId, filePathOrArtifactId) {
+      requireSession(sessionId)
+      return {
+        mime: 'text/plain',
+        url: `data:text/plain;base64,${Buffer.from('memory-artifact').toString('base64')}`,
+        filename: filePathOrArtifactId,
+        chart: null,
+      } satisfies SessionArtifactAttachment
+    },
+    async sync() {
+      // no-op for memory fixture
+    },
+  }
+
+  assertWorkspaceSessionPort(port, { mode: 'full' })
+  return port
+}
+
+/**
+ * Drive every full-port method once. Used by parity tests for cloud + memory
+ * adapters so missing methods fail closed (not spy theater).
+ */
+export async function exerciseWorkspaceSessionPort(port: WorkspaceSessionPort): Promise<{
+  sessionId: string
+  methodCount: number
+}> {
+  assertWorkspaceSessionPort(port, { mode: 'full' })
+  await port.policy()
+  const created = await port.createSession()
+  const sessions = await port.listSessions()
+  if (!sessions.some((entry) => entry.id === created.id)) {
+    throw new Error('listSessions did not include createSession result')
+  }
+  const info = await port.getSessionInfo(created.id)
+  if (!info || info.id !== created.id) {
+    throw new Error('getSessionInfo missed created session')
+  }
+  await port.getSessionView(created.id)
+  await port.promptSession(created.id, { text: 'contract-prompt' })
+  await port.abortSession(created.id)
+  await port.replyToQuestion!(created.id, 'q1', ['a'])
+  await port.rejectQuestion!(created.id, 'q1')
+  await port.respondToPermission!(created.id, 'p1', false)
+  await port.listWorkflows!()
+  await port.getWorkflow!('wf-1')
+  await port.runWorkflow!('wf-1')
+  await port.pauseWorkflow!('wf-1')
+  await port.resumeWorkflow!('wf-1')
+  await port.archiveWorkflow!('wf-1')
+  const imported = await port.importSession!({
+    source: { kind: 'local-session', fingerprint: 'contract-fp', title: 'Imported contract' },
+    title: 'Imported contract',
+    selection: { includeMessages: true },
+    itemCounts: emptySessionImportItemCounts({ messages: 1 }),
+  })
+  await port.listArtifacts!(imported.session.id)
+  await port.uploadArtifact!({
+    sessionId: imported.session.id,
+    filename: 'contract.txt',
+    dataBase64: Buffer.from('hello').toString('base64'),
+  })
+  await port.readArtifactAttachment!(imported.session.id, 'contract.txt')
+  await port.sync!()
+  return {
+    sessionId: created.id,
+    methodCount: WORKSPACE_SESSION_PORT_FULL_METHODS.length,
   }
 }

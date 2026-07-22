@@ -78,8 +78,10 @@ export function writeHtml(res: ServerResponse, status: number, body: string, ori
 //
 // WHY script-src stays STRICT: the document loads only external hashed module
 // scripts (no inline script, no eval), so script-src stays 'self' with NO
-// 'unsafe-inline'. Relaxing style does not weaken script execution — 'unsafe-inline'
-// in style-src cannot run JavaScript.
+// 'unsafe-inline' and NO 'unsafe-eval' (JOE-946 / P2-7). Vega chart evaluation
+// is confined to writeBrowserRendererChartFrameHtml's sandboxed iframe.
+// Relaxing style does not weaken script execution — 'unsafe-inline' in
+// style-src cannot run JavaScript.
 //
 // objectStoreOrigin (SEC-2): when the configured object store can presign uploads,
 // the browser shim's F4 path PUTs the artifact bytes DIRECTLY to that cross-origin

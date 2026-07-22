@@ -25,6 +25,8 @@ gateway:
   trustProxyHeaders: false
   trustedProxyCidrs: []
   maxRequestBodyBytes: 1048576
+  # Lab-only escape hatch for replicaCount > 1. NOT multi-AZ HA. Requires
+  # proving suite green + residual sidecar risks accepted (JOE-949/954).
   experimentalDistributedOwnership: false
   logLevel: info
   timeouts:

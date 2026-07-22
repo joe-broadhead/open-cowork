@@ -17,6 +17,9 @@ Security posture for public preview:
   secret managers, or credential helpers.
 - Public unauthenticated content should use static export. Do not expose
   write-capable HTTP or MCP endpoints without SSO/reverse-proxy auth.
+- HTTP responses set a restrictive CSP (`script-src 'self'`, `style-src 'self'`
+  with no `'unsafe-inline'`). Dynamic graph styling uses data attributes and
+  CSSOM rather than inline `style=` attributes.
 
 Read the [threat model](security/threat-model.md) for deployment boundaries,
 test coverage, supply-chain controls, credential-ref guidance, and public

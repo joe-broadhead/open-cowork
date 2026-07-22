@@ -5,11 +5,12 @@
  * Events: session.created, session.updated, message.updated, tool calls, etc.
  */
 
-import type { OpencodeClient } from '@opencode-ai/sdk'
+import type { DurableOpencodeClient as OpencodeClient } from './opencode-session-runtime.js'
 import { queueEvent } from './wakeup.js'
 import { getConfig } from './config.js'
 import { isLocalOrigin, redactSensitiveText } from './security.js'
 import { openCodeFetch } from './opencode-client.js'
+import { createOpenCodeSessionRuntime } from './opencode-session-runtime.js'
 
 interface LiveClient {
   id: string
@@ -34,7 +35,7 @@ export function subscribeToOpenCodeEvents(client: OpencodeClient, onEvent?: (eve
   setInterval(async () => {
     if (liveClients.length === 0) return
     try {
-      const sessions = (await client.session.list()).data as any[]
+      const sessions = await createOpenCodeSessionRuntime(client).listSessions() as any[]
       if (!Array.isArray(sessions)) return
 
       const gw = sessions.filter((s: any) => (s.title || '').startsWith('GW:'))

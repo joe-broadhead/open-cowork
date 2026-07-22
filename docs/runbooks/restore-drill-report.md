@@ -47,6 +47,16 @@ pnpm ops:validate
 pnpm deploy:validate
 ```
 
+### Public package refresh (2026-07-21)
+
+| Field | Value |
+| --- | --- |
+| Last public refresh | 2026-07-21 |
+| Commit SHA (package) | see `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` |
+| `pnpm ops:validate` | pass on package date |
+| Live target restore | **not run in public repo** — required private ops gap (JOE-960) |
+| Owner (interim) | Platform / Joseph Broadhead |
+
 Environment-specific drills must additionally run the commands from
 `docs/runbooks/backup-restore.md` against a non-production restore target and
 attach their redacted command output to the private drill report.

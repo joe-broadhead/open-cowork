@@ -9,6 +9,35 @@
 - `docs/evidence/opencode-sdk-duplication-audit-2026-07-18.md`
 - `docs/product-channel-ownership.md` (frozen dual-stack policy)
 
+## Residual tracking pointer (JOE-964)
+
+**Do not re-litigate remediations closed in PR #958** against this document as if they were still open on `master`. Use this pointer:
+
+| Source | Role |
+| --- | --- |
+| **PR #958** (`fix/audit-p0-p2-remediation-2026-07-21` → master) | Closed the primary P0–P2 remediations called out at audit time (quality signal bridge, security residuals that landed in that PR, supply-chain overrides, chart CSP docs, etc.) |
+| **Linear milestone** [Post-#958 Production Next Steps (2026-07-21 residual)](https://linear.app/joe-broadhead/project/open-cowork) | Tracks **residuals and progressive epics** after #958 |
+| Branch `fix/milestone-post-958-quality-signal` | Multi-commit implementation branch for that milestone (single PR at end) |
+
+### Audit ID → residual issue map (post-#958)
+
+| Audit ID (this doc) | Closed in #958? | Residual / epic (Linear) | Evidence / notes |
+| --- | --- | --- | --- |
+| P0-1 `audit:full` red | **Yes** (overrides / process) | JOE-957 supply-chain maintenance | Prefer upgrades; monthly re-check |
+| P0-2 Nightly / UI evals red | **Partial** (#958 monthly + bridge work continued on milestone) | JOE-918 / JOE-924 / JOE-925 | Product contracts; not “done” by reschedule alone |
+| P1-1 Dual channel stacks | **No** (inventory + kernel progressive) | JOE-923 (+ JOE-929/934 foundation on milestone) | Shared verify + rate-limit kernel progressive; full body migrate residual |
+| P1-2 OpenCode adapters / classic | **Partial** (pin lockstep in #958 era) | JOE-916 | Kernel + classic inventory on milestone; Durable V2 still progressive |
+| P1-3 HA multi-writer | **No** (docs/fail-closed) | JOE-931 | Design + claim gates; not multi-AZ HA |
+| P1-4 God modules | **Partial** | JOE-919 / JOE-951 / JOE-942 | Budgets + first splits; work-store still large |
+| P2-1 private-host metadata | **Yes** (where fixed for MCP/gateway peers) | — | Re-open only if new surface reintroduces allow |
+| P2-2 unredacted admin exports | **Partial** | JOE-952 under JOE-920 | Channel length-only vs Durable Gateway residual |
+| P2-7 chart CSP | **Partial** | JOE-946 under JOE-920 | Sandbox docs; parent unsafe-eval residual |
+| P2-8 Desktop dual workspace bridges | **Partial** (#958 port intro) | **JOE-921** (+ JOE-965/967/970) | Port inventory + full contract on milestone |
+| Wiki deep audit | **No** (explicit non-goal of #958) | JOE-917 | Evidence package on milestone |
+| Private-beta hosted claims | **No** | JOE-922 | Public package + `no-go` until private ops |
+
+**Explicit non-claims of #958 (still true):** dual-stack **delete**, full Durable Gateway **V2 migration**, multi-AZ **HA**, complete wiki deep audit (later JOE-917), and “product eval bugs fully fixed by monthly schedule alone.”
+
 ---
 
 ## Executive scorecard

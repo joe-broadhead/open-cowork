@@ -2,7 +2,8 @@
 
 ## Status on OpenCode pin `1.18.1`
 
-**Won't Do (full burn-down) while pinned to OpenCode 1.18.1.**
+**Revalidated 2026-07-21 (JOE-937):** still **Won't Do (full burn-down)** while pinned to OpenCode 1.18.1. No residual desktop classic method gained a working
+native V2 route on this pin; allowlist + registry below remain authoritative.
 
 OpenCode 1.18.1 does not expose working native V2 routes for the remaining
 classic methods (summarize/compaction, MCP group, explorer gaps, `tool.list`,
@@ -74,3 +75,15 @@ On **every** OpenCode SDK/runtime pin change:
   both an allowlist entry *and* a documented residual row with a reopen condition.
 - **No fake V2.** Do not wrap classic HTTP under `client.v2` names.
 - **Burn one method at a time** with proving tests; do not bulk-delete rows.
+
+## Durable Gateway surface (JOE-941 complete on this pin)
+
+Desktop / Cloud / Standalone use `@opencode-ai/sdk/v2`. **Durable Gateway**
+(`products/gateway`) now constructs the **V2** client on the same pin and routes
+session I/O through a façade that prefers `client.v2.session.*` (classic
+`session.*` remains only as a partial-mock fallback). Desktop allowlist
+burn-down above stays separate from Durable:
+
+- **Inventory + migration proof:** `docs/opencode-durable-gateway-classic-burndown.md` (JOE-940 / JOE-941)
+- **Classic-session gate:** `scripts/check-durable-opencode-classic-gate.mjs`
+- **Pin lockstep CI:** `scripts/check-opencode-pin-lockstep.mjs` (JOE-945; includes `products/gateway`)

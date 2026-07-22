@@ -57,7 +57,16 @@ export async function routeHttpRequestInner(
   if (oauthPublicResult !== undefined) {
     return oauthPublicResult;
   }
-  const routeContext: HttpRouteHandlerContext = { ...initialContext, policy: context.policyResolved === true ? policy : await resolveHttpPolicy(root, policy) };
+  const routeContext: HttpRouteHandlerContext = {
+    ...initialContext,
+    policy: context.policyResolved === true
+      ? policy
+      : await resolveHttpPolicy(
+          root,
+          policy,
+          context.remoteAddress === undefined ? {} : { remoteAddress: context.remoteAddress },
+        ),
+  };
   const authenticationFailure = await requireAuthenticatedHttpPolicy(root, routeContext.policy);
   if (authenticationFailure !== undefined) {
     return authenticationFailure;

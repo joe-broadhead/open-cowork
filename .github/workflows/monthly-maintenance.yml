@@ -46,6 +46,13 @@ jobs:
         run: pnpm audit:prod
         continue-on-error: false
 
+      # JOE-957: full high+critical graph gate (same as CI audit:full). Surfaces
+      # rot in overrides/ignores on a monthly cadence without waiting for a PR.
+      - name: Full dependency audit (high)
+        id: audit-full
+        run: pnpm audit:full
+        continue-on-error: false
+
       - name: Report outdated packages (advisory only)
         run: pnpm outdated || true
         continue-on-error: true
@@ -86,6 +93,31 @@ jobs:
           Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 
           Review the upstream changes, then either update the pinned OpenCode packages with fixes or keep the current pin intentionally.
+          EOF
+          )"
+          existing="$(gh issue list --state open --search "${title} in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+
+      # If audit:full failed earlier, the job already failed; this step only runs
+      # when we restructure to continue-on-error. Keep a dedicated failure issue
+      # path for workflow_dispatch visibility when the step is marked failed.
+      - name: Alert on audit:full failure
+        if: failure() && steps.audit-full.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="pnpm audit:full red on monthly maintenance"
+          body="$(cat <<EOF
+          Monthly maintenance found \`pnpm audit:full\` (high+) is red.
+
+          Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Prefer real upgrades / \`pnpm.overrides\` over permanent \`ignoreGhsas\`.
+          Any temporary ignore needs justification, owner, and expiry (see docs/security-model.md dependency posture and scripts/pnpm-audit.mjs).
           EOF
           )"
           existing="$(gh issue list --state open --search "${title} in:title" --json number --jq '.[0].number // empty')"

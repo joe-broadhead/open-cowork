@@ -108,6 +108,7 @@ test("deployment artifacts reference the implemented OpenWiki server", async () 
   assert.match(entrypoint, /src\/main\.ts --root "\$ROOT" serve/);
   assert.match(entrypoint, /db sync-postgres/);
   assert.match(entrypoint, /OPENWIKI_ROLE/);
+  assert.match(entrypoint, /OPENWIKI_ROLE process-wide elevation is only allowed when OPENWIKI_HOST is loopback/);
   assert.match(entrypoint, /OPENWIKI_BOOTSTRAP_MODE/);
   assert.match(entrypoint, /OPENWIKI_GIT_REMOTE_URL/);
   assert.match(entrypoint, /OPENWIKI_ALLOW_LOCAL_GIT_REMOTE/);
@@ -264,6 +265,10 @@ test("deployment artifacts reference the implemented OpenWiki server", async () 
   assert.match(helmHelpers, /OPENWIKI_TRUST_AUTH_HEADERS_SECRET/);
   assert.match(helmHelpers, /OPENWIKI_BOOTSTRAP_MODE/);
   assert.match(helmHelpers, /worker\.replicaCount > 1 requires persistence\.accessModes/);
+  assert.match(helmHelpers, /replicaCount > 1 requires openwiki\.operationalStateBackend=postgres/);
+  assert.match(helmHelpers, /replicaCount > 1 with oauthEnabled requires openwiki\.oauthStateBackend=postgres/);
+  assert.match(helmHelpers, /OPENWIKI_OAUTH_STATE_BACKEND/);
+  assert.match(helmHelpers, /openwiki\.role process-wide elevation is only allowed with openwiki\.host loopback/);
 
   const deployment = await readFile("deploy/helm/openwiki/templates/deployment.yaml", "utf8");
   assert.match(deployment, /kind: Deployment/);

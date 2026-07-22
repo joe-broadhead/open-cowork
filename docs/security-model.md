@@ -175,16 +175,26 @@ runtime registration, so public-looking hostnames that resolve into
 private networks at those policy checkpoints are skipped before OpenCode
 receives the MCP entry.
 
-**DNS pin / residual SSRF (JOE-826):** At runtime handoff, cleartext `http:`
-MCP entries are rewritten to connect to a policy-validated resolved address
-while preserving the original `Host` header (`pinHttpMcpRemoteEntry`). That
-closes the DNS-rebinding window for HTTP. **HTTPS residual:** OpenCode owns
-the TLS transport; IP-pinning would break SNI and certificate hostname checks,
-so `https:` MCPs stay hostname-based after the pre-connect DNS policy check.
-Operators who need stronger guarantees for HTTPS MCPs should terminate TLS at
-a trusted reverse proxy with a fixed upstream IP, or restrict MCPs to known
+**DNS pin / residual SSRF (JOE-826, revalidated 2026-07-21 / JOE-962):** At
+runtime handoff, cleartext `http:` MCP entries are rewritten to connect to a
+policy-validated resolved address while preserving the original `Host` header
+(`pinHttpMcpRemoteEntry` in `packages/runtime-host/src/runtime-mcp.ts`). That
+closes the DNS-rebinding window for HTTP.
+
+**HTTPS residual (accepted):** OpenCode owns the TLS transport; IP-pinning
+would break SNI and certificate hostname checks, so `https:` MCPs stay
+hostname-based after the pre-connect DNS policy check (`evaluateHttpMcpUrlResolved`
+still rejects private/link-local/metadata resolutions at handoff). Residual
+risk: a hostile DNS rebind between the policy resolve and OpenCode’s own TLS
+connect is theoretically possible if the resolver is compromised or TTL is
+hostile. **Operators who need stronger guarantees** should terminate TLS at a
+trusted reverse proxy with a fixed upstream IP, or restrict MCPs to known
 static endpoints. Cloud-metadata targets remain hard-denied on every policy
 check regardless of protocol.
+
+**Reopen when:** OpenCode exposes a connect-IP + SNI/Host override for remote
+MCP transport, or we add an optional local HTTPS MITM pin path for lab-only
+use.
 
 ### stdio policy (stdio MCPs)
 
@@ -318,14 +328,22 @@ lifecycle, lease/fencing contract, recovery behavior, and threat model live in
 
 ## Chart frame isolation
 
-Chart rendering uses Vega, which compiles its specs with `new Function()`
-(the reactive dataflow interpreter evaluates expressions at runtime).
-That means the chart iframe *must* allow `unsafe-eval` — there is no
-AOT path we can use without reimplementing Vega.
+**Parent SPA CSP (JOE-946 / P2-7):** Cloud `writeBrowserRendererHtml` and the
+desktop main-window CSP keep `script-src 'self'` with **no** `'unsafe-eval'`.
+Interactive Vega must not execute in the parent document.
 
-We scope the risk by keeping charts inside a dedicated iframe
-(`chart-frame.html`) with a separate, stricter CSP than the main
-renderer:
+**Chart iframe residual (accepted):** Chart rendering uses Vega, which compiles
+its specs with `new Function()` (the reactive dataflow interpreter evaluates
+expressions at runtime). That means the **chart iframe** must allow
+`unsafe-eval` — there is no AOT path without reimplementing Vega or compiling
+charts server-side.
+
+We scope the residual risk by keeping charts inside a dedicated iframe
+(`chart-frame.html` / cloud chart-frame response) with a separate, stricter CSP
+than the main renderer:
+
+**Reopen for full residual closure when:** server-side Vega compile ships, or a
+WASM/no-eval Vega path exists that preserves chart UX.
 
 - `default-src 'none'`, `connect-src 'none'` in packaged builds —
   even arbitrary JS cannot exfiltrate over the network.
@@ -479,6 +497,12 @@ URL credentials, or local home-directory paths.
   include a justification, impact notes, and an owner/date for removal; the
   entry is removed once a patched release ships and is re-reviewed during
   monthly maintenance.
+- **Monthly supply-chain maintenance (JOE-957):** `.github/workflows/monthly-maintenance.yml`
+  runs `pnpm audit:prod` and `pnpm audit:full` on a schedule (plus
+  `workflow_dispatch`). Failures open/comment a GitHub issue so overrides and
+  ignores cannot rot silently. Prefer real upgrades/`pnpm.overrides` over
+  permanent `ignoreGhsas`. Every ignore entry must carry an expiry comment in
+  the PR description (and ideally a tracking issue).
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.
