@@ -40,13 +40,17 @@ c4b2112f refactor(JOE-977): progressive wiki module splits (oauth + graph)
 
 ## Next unfinished work (when continuing)
 
-1. Named god façades / channel kernels / wiki P2s / OpenCode prep — **milestone progressive work complete**.
-2. **Explicit residuals (out of band / pin-gated / multi-PR epics):**
-   - JOE-941 full Durable classic→V2 (needs OpenCode pin reopen + live probes)
-   - JOE-923 full Durable → monorepo provider body migrate
-   - Wiki watch-band residual (doctor/jobs/tool-router) when seams appear
-3. **Single PR opened:** https://github.com/joe-broadhead/open-cowork/pull/959
+1. Milestone progressive + residual close-out for PR #959 — **complete**.
+2. **Single PR:** https://github.com/joe-broadhead/open-cowork/pull/959
+
+## Residual close-out (this PR)
+
+| Residual | Resolution |
+| --- | --- |
+| JOE-941 Durable V2 | **Done** — V2 client construction + façade prefers `v2.session.*` |
+| JOE-923 channel body | **Done (scoped)** — security body shared; dual-stack protocol freeze retained |
+| Wiki watch-band | **Done progressive** — oauth/graph/queries/doctor splits |
 
 ## Non-claims
 
-Do not claim multi-AZ HA, full dual-stack delete, Durable Gateway V2 complete, or hosted private-beta **go** from this branch alone (see private-beta go/no-go + HA claim gates).
+Do not claim multi-AZ HA, full dual-stack **protocol** delete, or hosted private-beta **go** from this branch alone. Durable OpenCode **does** use V2 construction and session I/O on pin 1.18.1 via the façade.

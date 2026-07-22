@@ -1,4 +1,4 @@
-import type { OpencodeClient } from '@opencode-ai/sdk'
+import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { createHash } from 'node:crypto'

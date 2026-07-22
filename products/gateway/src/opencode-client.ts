@@ -3,11 +3,10 @@
  * and optional trusted-peer Basic auth (never URL-embedded credentials).
  */
 import * as fs from 'node:fs'
-// Classic client entry at monorepo pin 1.18.1 (audit 2026-07-18 / JOE-941).
-// Session I/O is collapsed onto opencode-session-runtime.ts (single flip point).
-// Do not construct @opencode-ai/sdk/v2 here until real-process V2 probes pass
-// and docs/opencode-durable-gateway-classic-burndown.md is updated in the same change.
-import { createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk'
+// JOE-941: construct native OpenCode SDK V2 client (same pin 1.18.1 as Desktop/Cloud).
+// Session I/O lives in opencode-session-runtime.ts and prefers client.v2.session.*
+// with classic session.* fallback for partial test mocks.
+import { createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk/v2'
 import { getConfig, type GatewayConfig } from './config.js'
 import { openCodeEndpointUrl, safeOpenCodeBaseUrlString } from './opencode-url-policy.js'
 import { createLogger } from './logger.js'

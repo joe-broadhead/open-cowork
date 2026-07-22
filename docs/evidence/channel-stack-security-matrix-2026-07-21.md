@@ -34,7 +34,12 @@
 4. ~~Durable inbound webhook rate limit~~ — **done** (process-local twin of `WebhookRateLimiter` on WhatsApp/Discord routes)
 5. ~~Compose monorepo Telegram secret verify onto shared helper~~ — **done** (`verifyTelegramWebhookSecretToken` in provider); Durable Telegram remains long-poll primary
 6. ~~Fold Durable rate-limit twin into shared package~~ — **done** (`packages/shared/src/node/webhook-rate-limiter.ts` + Durable façade); monorepo `gateway-channel` keeps algorithm twin (pack boundary)
-7. Provider body migration (Durable → monorepo providers) — multi-PR epic residual
+7. ~~Provider body migration (Durable → monorepo providers)~~ — **Closed for this milestone:**
+   dual-stack freeze retained (`docs/product-channel-ownership.md`); security body
+   fully shared (verify kernels + rate-limit); monorepo Telegram secret on shared
+   kernel; Durable keeps native protocol adapters (Telegram long-poll, native
+   Meta/Discord) as the Durable-owned stack. Full protocol re-home to
+   `gateway-provider-*` remains a future epic outside post-#958.
 
 ## Dual-stack security PR rule
 

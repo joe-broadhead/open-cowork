@@ -13,7 +13,7 @@
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import type { OpencodeClient } from '@opencode-ai/sdk'
+import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import { getConfig, getConfigDir } from './config.js'
 import { redactSensitiveText } from './security.js'
 

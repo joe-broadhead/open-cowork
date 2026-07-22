@@ -1,12 +1,11 @@
 /**
- * OpenCode session lifecycle port (JOE-941 flip point).
+ * OpenCode session lifecycle port (JOE-941).
  *
- * Deliberately separate from `gateway-runtime.ts` (daemon client holder).
- * All Durable production session CRUD/messages/abort go through this façade so
- * classic→V2 migration (when pin-proven) is a single-module change.
- * Pin gate: `scripts/check-durable-opencode-classic-gate.mjs`.
+ * Prefers native V2 session APIs (`client.v2.session.*`) on the Durable V2
+ * client; falls back to classic `client.session.*` for partial mocks/tests.
+ * All production session I/O goes through this façade.
  */
-import type { OpencodeClient } from '@opencode-ai/sdk'
+import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import { getDaemonClient } from './gateway-runtime.js'
 import { getConfig } from './config.js'
 import { loadWorkState, openWorkDb, withWorkDbLeadershipEpoch, workStatePath, type WorkDbLeadershipEpoch } from './work-store.js'
@@ -71,16 +70,44 @@ function clientOrThrow(explicit?: OpencodeClient): OpencodeClient {
   return client
 }
 
+function v2Session(client: OpencodeClient): any | undefined {
+  const v2 = (client as any)?.v2?.session
+  return v2 && typeof v2 === 'object' ? v2 : undefined
+}
+
+function unwrapSessionPayload(value: any): any {
+  if (!value || typeof value !== 'object') return value
+  // Classic: { data: T }. V2 double envelope: { data: { data: T } } or { data: T }.
+  const outer = value.data
+  if (outer && typeof outer === 'object' && !Array.isArray(outer) && 'data' in outer) {
+    return (outer as any).data
+  }
+  return outer
+}
+
 export function createOpenCodeSessionRuntime(client?: OpencodeClient): OpenCodeSessionRuntime {
   return {
     async createSession(input) {
       const c = clientOrThrow(client)
+      const v2 = v2Session(c)
+      if (v2?.create) {
+        const directory = input.directory?.trim() || process.cwd()
+        const response = await v2.create({
+          location: { directory },
+          ...(input.agent ? { agent: input.agent } : {}),
+          ...(input.title ? { title: input.title } : {}),
+        }, { throwOnError: true })
+        const data = unwrapSessionPayload(response)
+        const id = data?.id
+        if (!id) throw new Error('OpenCode session create returned no id')
+        return { id: String(id) }
+      }
       const options: any = {
         body: { title: input.title },
       }
       if (input.directory) options.query = { directory: input.directory }
       if (input.agent) options.body.agent = input.agent
-      const session = await c.session.create(options)
+      const session = await (c as any).session.create(options)
       const id = session.data?.id
       if (!id) throw new Error('OpenCode session create returned no id')
       return { id: String(id) }
@@ -88,11 +115,18 @@ export function createOpenCodeSessionRuntime(client?: OpencodeClient): OpenCodeS
 
     async getSession(sessionId, directory) {
       const c = clientOrThrow(client)
+      const v2 = v2Session(c)
       try {
-        const response = await c.session.get({
+        if (v2?.get) {
+          const response = await v2.get({ sessionID: sessionId }, { throwOnError: true })
+          const data = unwrapSessionPayload(response)
+          if (!data) return { missing: true }
+          return { data, missing: false }
+        }
+        const response = await (c as any).session.get({
           path: { id: sessionId },
           query: directory ? { directory } : undefined,
-        } as any)
+        })
         if (!response.data) return { missing: true }
         return { data: response.data, missing: false }
       } catch (err: any) {
@@ -104,12 +138,33 @@ export function createOpenCodeSessionRuntime(client?: OpencodeClient): OpenCodeS
 
     async listSessions(directory) {
       const c = clientOrThrow(client)
-      const response = await c.session.list(directory ? { query: { directory } } as any : undefined as any)
+      const v2 = v2Session(c)
+      if (v2?.list) {
+        const response = await v2.list({
+          ...(directory ? { directory } : {}),
+          limit: 200,
+          order: 'asc',
+        }, { throwOnError: true })
+        const data = unwrapSessionPayload(response)
+        return Array.isArray(data) ? data : (data?.data || [])
+      }
+      const response = await (c as any).session.list(directory ? { query: { directory } } : undefined)
       return (response.data as any[]) || []
     },
 
     async prompt(input) {
       const c = clientOrThrow(client)
+      const v2 = v2Session(c)
+      if (v2?.prompt) {
+        const text = input.parts.map((part) => part.text).join('\n')
+        return v2.prompt({
+          sessionID: input.sessionId,
+          prompt: { text },
+          delivery: 'queue',
+          resume: true,
+          ...(input.agent ? { agent: input.agent } : {}),
+        }, { throwOnError: true, signal: input.signal })
+      }
       const body: any = {
         parts: input.parts,
       }
@@ -122,23 +177,24 @@ export function createOpenCodeSessionRuntime(client?: OpencodeClient): OpenCodeS
       const path = { id: input.sessionId }
       const query = input.directory ? { directory: input.directory } : undefined
       const signal = input.signal
-      const promptAsync = (c.session as any).promptAsync as undefined | ((args: any) => Promise<unknown>)
+      const promptAsync = (c as any).session?.promptAsync as undefined | ((args: any) => Promise<unknown>)
 
-      // Always return the underlying promise so callers can chain .then/.catch
-      // (scheduler completion + failure paths depend on that). Prefer promptAsync
-      // when the SDK exposes it and async is not forced off.
       if (input.async !== false && typeof promptAsync === 'function') {
-        return promptAsync.call(c.session, { path, query, body, signal })
+        return promptAsync.call((c as any).session, { path, query, body, signal })
       }
-      return c.session.prompt({ path, query, body, signal } as any)
+      return (c as any).session.prompt({ path, query, body, signal })
     },
 
     async abort(sessionId, directory) {
       const c = clientOrThrow(client)
-      const abortFn = c.session?.abort as undefined | ((args: any) => Promise<unknown>)
-      // Mocks / partial clients may omit abort; optional-chain parity with prior edges.
+      const v2 = v2Session(c)
+      if (v2?.interrupt) {
+        await v2.interrupt({ sessionID: sessionId }, { throwOnError: false }).catch(() => undefined)
+        return
+      }
+      const abortFn = (c as any).session?.abort as undefined | ((args: any) => Promise<unknown>)
       if (typeof abortFn !== 'function') return
-      await abortFn.call(c.session, {
+      await abortFn.call((c as any).session, {
         path: { id: sessionId },
         query: directory ? { directory } : undefined,
       }).catch(() => undefined)
@@ -146,18 +202,33 @@ export function createOpenCodeSessionRuntime(client?: OpencodeClient): OpenCodeS
 
     async deleteSession(sessionId, directory) {
       const c = clientOrThrow(client)
-      await c.session.delete({
+      const v2 = v2Session(c)
+      if (v2?.delete) {
+        await v2.delete({ sessionID: sessionId }, { throwOnError: true })
+        return
+      }
+      await (c as any).session.delete({
         path: { id: sessionId },
         query: directory ? { directory } : undefined,
-      } as any)
+      })
     },
 
     async messages(sessionId, directory, limit = 50) {
       const c = clientOrThrow(client)
-      const response = await c.session.messages({
+      const v2 = v2Session(c)
+      if (v2?.messages) {
+        const response = await v2.messages({
+          sessionID: sessionId,
+          limit,
+          order: 'asc',
+        }, { throwOnError: true })
+        const data = unwrapSessionPayload(response)
+        return Array.isArray(data) ? data : (data?.data || [])
+      }
+      const response = await (c as any).session.messages({
         path: { id: sessionId },
         query: { ...(directory ? { directory } : {}), limit },
-      } as any)
+      })
       return (response.data as any[]) || []
     },
   }
