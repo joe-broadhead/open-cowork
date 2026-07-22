@@ -18,10 +18,10 @@
 | 1 | **Quality signal** | JOE-918; JOE-924, JOE-925, JOE-926, JOE-933 | **Done** (commits on branch) |
 | 2 | **Security residuals** | JOE-920; JOE-952, JOE-957, JOE-946, JOE-962 | **Mostly done** (946 CSP locked docs; deeper CSP optional residual) |
 | 3 | **God-module budgets** | JOE-919; JOE-951, JOE-942, JOE-936 | **Named façades ≤2000** (work-store, environments, config, scheduler, daemon-routes/work) |
-| 4 | **Channel kernel** | JOE-923; JOE-929, JOE-934, JOE-932 | **Foundation + Slack/Telegram kernels + shared rate-limiter**; full provider body migrate residual |
-| 5 | **OpenCode kernel** | JOE-916; JOE-940, JOE-945, JOE-943, JOE-937, JOE-966, JOE-941 | **Inventory + pin + standalone + event-pump**; Durable session I/O façade collapse + classic gate **done**; full classic→V2 still pin-gated |
+| 4 | **Channel kernel** | JOE-923; JOE-929, JOE-934, JOE-932 | **Done (scoped)** — shared verify kernels + rate-limiter; dual-stack protocol freeze retained |
+| 5 | **OpenCode kernel** | JOE-916; JOE-940, JOE-945, JOE-943, JOE-937, JOE-966, JOE-941 | **Done** — inventory + pin + standalone + event-pump; Durable V2 construction + session façade (classic mock fallback) |
 | 6 | **HA / claim gates** | JOE-931; JOE-963 | **Design + gates done**; not multi-AZ HA |
-| 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **P0/P1 done**; P2-2–P2-5 **done**; P2-1 progressive (oauth/graph/postgres queries) **done** (doctor/jobs residual) |
+| 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **Done progressive** — P0/P1 + P2-2–P2-5; P2-1 oauth/graph/queries/doctor splits |
 | 8 | **Private-beta ops package** | JOE-922 | **Done** (public package + gaps) |
 | 9 | **WorkspaceSessionPort** | JOE-921 | **Done** |
 | 10 | **Audit pointer hygiene** | JOE-964 | **Done** |
