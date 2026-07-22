@@ -23,7 +23,7 @@ function createFakeIpcMain() {
   }
 }
 
-test('eval:emit-permission-request is fail-closed without OPEN_COWORK_E2E', async () => {
+void test('eval:emit-permission-request is fail-closed without OPEN_COWORK_E2E', async () => {
   const fake = createFakeIpcMain()
   registerE2EEvalHandlers(fake.ipcMain, () => [], { OPEN_COWORK_E2E: undefined } as NodeJS.ProcessEnv)
   assert.equal(fake.has('eval:emit-permission-request'), true)
@@ -39,7 +39,7 @@ test('eval:emit-permission-request is fail-closed without OPEN_COWORK_E2E', asyn
   )
 })
 
-test('eval:emit-permission-request broadcasts to live windows under E2E', async () => {
+void test('eval:emit-permission-request broadcasts to live windows under E2E', async () => {
   const fake = createFakeIpcMain()
   const sent: unknown[] = []
   const win = {
@@ -66,7 +66,7 @@ test('eval:emit-permission-request broadcasts to live windows under E2E', async 
   assert.deepEqual(sent, [{ channel: 'permission:request', payload: request }])
 })
 
-test('eval:emit-permission-request rejects malformed payloads', async () => {
+void test('eval:emit-permission-request rejects malformed payloads', async () => {
   const fake = createFakeIpcMain()
   registerE2EEvalHandlers(fake.ipcMain, () => [], { OPEN_COWORK_E2E: '1' } as NodeJS.ProcessEnv)
   await assert.rejects(

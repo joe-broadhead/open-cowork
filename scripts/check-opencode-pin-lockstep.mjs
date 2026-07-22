@@ -4,8 +4,8 @@
  * consumers. Authority packages must keep @opencode-ai/sdk (and opencode-ai
  * where present) on the same version string.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join, relative, resolve, dirname } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
