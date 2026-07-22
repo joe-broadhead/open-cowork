@@ -1,8 +1,8 @@
 # WorkspaceSessionPort dual-path inventory (JOE-965 / JOE-921)
 
-**Date:** 2026-07-21  
-**Linear:** JOE-921, JOE-965, JOE-967, JOE-970  
-**HEAD package:** `fix/milestone-post-958-quality-signal`  
+**Date:** 2026-07-21
+**Linear:** JOE-921, JOE-965, JOE-967, JOE-970
+**HEAD package:** `fix/milestone-post-958-quality-signal`
 **Surfaces:** `apps/desktop/src/main/workspace-session-port.ts`, `cloud-workspace-adapter.ts`, `workspace-gateway.ts`, `gateway-workspace-adapter.ts`, local `sessionEngine` / pairing executor
 
 ## Authority matrix
@@ -38,9 +38,9 @@
 
 ## Ordered migration list
 
-1. **Done (#958 / JOE-921 foundation):** core + interaction + workflow on port; cloud factory assert; gateway `cloudSessionPort`.  
-2. **Done (this package):** import + artifact + sync extended methods; memory full-port fixture; parity contract runner.  
-3. **Next (optional progressive):** wrap local SessionEngine behind a thin `LocalWorkspaceSessionPort` used by IPC when active workspace is local (non-breaking dual-call until cutover).  
+1. **Done (#958 / JOE-921 foundation):** core + interaction + workflow on port; cloud factory assert; gateway `cloudSessionPort`.
+2. **Done (this package):** import + artifact + sync extended methods; memory full-port fixture; parity contract runner.
+3. **Next (optional progressive):** wrap local SessionEngine behind a thin `LocalWorkspaceSessionPort` used by IPC when active workspace is local (non-breaking dual-call until cutover).
 4. **Out of scope for port:** gateway status adapter remains health-only until Standalone Gateway exposes Desktop-safe session APIs; cloud admin/thread/SSE stay cloud-transport extensions.
 
 ## Complexity note

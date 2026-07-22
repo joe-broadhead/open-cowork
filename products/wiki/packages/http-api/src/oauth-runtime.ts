@@ -85,8 +85,8 @@ export function oauthStateBackendFailure(runtime: OAuthRuntime, env: NodeJS.Proc
   }
   const unsafe = oauthFileStateUnsafeReason({
     stateBackend,
-    runtimeMode: runtime.runtimeMode,
-    issuer: runtime.issuer,
+    ...(runtime.runtimeMode === undefined ? {} : { runtimeMode: runtime.runtimeMode }),
+    ...(runtime.issuer === undefined ? {} : { issuer: runtime.issuer }),
     env,
   });
   if (unsafe !== undefined) {
@@ -102,9 +102,9 @@ export function oauthStateBackendFailure(runtime: OAuthRuntime, env: NodeJS.Proc
  */
 export function oauthFileStateUnsafeReason(input: {
   stateBackend: OAuthStateBackend;
-  runtimeMode?: OpenWikiRuntimeMode;
-  issuer?: string;
-  env?: NodeJS.ProcessEnv;
+  runtimeMode?: OpenWikiRuntimeMode | undefined;
+  issuer?: string | undefined;
+  env?: NodeJS.ProcessEnv | undefined;
 }): string | undefined {
   if (input.stateBackend !== "file") {
     return undefined;

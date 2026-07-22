@@ -71,7 +71,7 @@ test("oauthStateDiagnostic fails closed for hosted OAuth with file state", () =>
           issuer: "https://wiki.example.com",
         },
       },
-    },
+    } as any,
     {
       OPENWIKI_RUNTIME_MODE: "hosted",
       OPENWIKI_OAUTH_STATE_BACKEND: "file",
@@ -81,7 +81,7 @@ test("oauthStateDiagnostic fails closed for hosted OAuth with file state", () =>
   assert.equal(fail.status, "fail");
   assert.match(fail.message, /postgres|single-node|multi-replica/i);
 
-  const skip = oauthStateDiagnostic({}, {});
+  const skip = oauthStateDiagnostic(undefined, {});
   assert.equal(skip.name, "oauth-state");
   assert.equal(skip.status, "skip");
 
@@ -93,7 +93,7 @@ test("oauthStateDiagnostic fails closed for hosted OAuth with file state", () =>
           issuer: "http://127.0.0.1:3030",
         },
       },
-    },
+    } as any,
     { OPENWIKI_RUNTIME_MODE: "local" },
   );
   assert.equal(pass.name, "oauth-state");
@@ -105,7 +105,7 @@ test("oauthStateDiagnostic fails closed for hosted OAuth with file state", () =>
       auth: {
         oauth: { enabled: true, issuer: "https://wiki.example.com" },
       },
-    },
+    } as any,
     {
       OPENWIKI_RUNTIME_MODE: "hosted",
       OPENWIKI_OAUTH_STATE_BACKEND: "postgres",

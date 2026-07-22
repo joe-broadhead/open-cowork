@@ -554,4 +554,3 @@ export function cleanupDeletedTaskReferences(db: DatabaseSync, taskIds: Set<stri
     clearAdmissions.run(taskId)
   }
 }
-

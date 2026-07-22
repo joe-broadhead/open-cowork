@@ -215,4 +215,3 @@ export function filterProjectBindings(bindings: ProjectBindingRecord[], filter: 
   if (filter.threadId !== undefined) bindings = bindings.filter(binding => (binding.threadId || '') === normalizeThreadId(filter.threadId))
   return bindings.slice().sort(compareProjectBindings)
 }
-

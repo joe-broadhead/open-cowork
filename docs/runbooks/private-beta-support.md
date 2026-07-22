@@ -24,7 +24,7 @@ Slack channel ids, or customer-facing email aliases here.
 | Platform (Postgres / object store / KMS) | Joseph Broadhead (interim) | Support primary |
 | Release / go-no-go owner | Joseph Broadhead | Milestone **Post-#958 Production Next Steps** |
 
-Evidence package: `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md`  
+Evidence package: `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md`
 (Linear: JOE-922 / JOE-968). Private phone trees and chat channels stay offline.
 
 ## Support Intake

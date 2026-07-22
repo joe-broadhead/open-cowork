@@ -74,4 +74,3 @@ test('eval:emit-permission-request rejects malformed payloads', async () => {
     /PermissionRequest/,
   )
 })
-

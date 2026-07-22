@@ -612,4 +612,3 @@ export async function readCurrentPostgresRun(root: string, runId: string): Promi
     await opened.close();
   }
 }
-

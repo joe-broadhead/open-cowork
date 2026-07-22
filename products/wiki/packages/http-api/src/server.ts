@@ -19,7 +19,10 @@ import { warmHostedHealth } from "./health-metrics.ts";
 export async function startHttpApi(options: HttpApiOptions): Promise<StartedHttpApi> {
   const host = options.host ?? "127.0.0.1";
   validateTrustedHeaderRuntime(options.defaultPolicy ?? {});
-  validateProcessWideDefaultPolicy({ host, defaultPolicy: options.defaultPolicy });
+  validateProcessWideDefaultPolicy({
+    host,
+    ...(options.defaultPolicy === undefined ? {} : { defaultPolicy: options.defaultPolicy }),
+  });
   validateHostedAuthConfiguration();
   await ensureHttpOperationalState(options.root);
   await warmHostedHealth(options.root);
@@ -168,8 +171,8 @@ export function validateTrustedHeaderRuntime(defaultPolicy: HttpPolicyOptions = 
  * identity-less principals). That is only safe on loopback single-user binds.
  */
 export function validateProcessWideDefaultPolicy(options: {
-  host?: string;
-  defaultPolicy?: HttpPolicyOptions;
+  host?: string | undefined;
+  defaultPolicy?: HttpPolicyOptions | undefined;
 } = {}): void {
   const policy = options.defaultPolicy ?? {};
   const processWideRole = policy.role !== undefined;
@@ -275,9 +278,11 @@ export async function handleHttpRequest(
       return;
     }
     const requestPolicy = await policyOptionsFromRequest(root, request, httpTrustsRequestHeaders(defaultPolicy, request));
-    const policy = await resolveHttpPolicy(root, mergeHttpPolicy(defaultPolicy, requestPolicy), {
-      remoteAddress: context.remoteAddress,
-    });
+    const policy = await resolveHttpPolicy(
+      root,
+      mergeHttpPolicy(defaultPolicy, requestPolicy),
+      context.remoteAddress === undefined ? {} : { remoteAddress: context.remoteAddress },
+    );
     const authenticationFailure = await requireAuthenticatedHttpPolicy(root, policy);
     if (authenticationFailure !== undefined) {
       writeRouteResult(response, authenticationFailure);
@@ -311,9 +316,11 @@ export async function handleHttpRequest(
   const eventStream = eventStreamUrl(request.url ?? "/");
   if (method === "GET" && eventStream) {
     const requestPolicy = await policyOptionsFromRequest(root, request, httpTrustsRequestHeaders(defaultPolicy, request));
-    const policy = await resolveHttpPolicy(root, mergeHttpPolicy(defaultPolicy, requestPolicy), {
-      remoteAddress: context.remoteAddress,
-    });
+    const policy = await resolveHttpPolicy(
+      root,
+      mergeHttpPolicy(defaultPolicy, requestPolicy),
+      context.remoteAddress === undefined ? {} : { remoteAddress: context.remoteAddress },
+    );
     const authenticationFailure = await requireAuthenticatedHttpPolicy(root, policy);
     if (authenticationFailure !== undefined) {
       writeRouteResult(response, authenticationFailure);
@@ -369,7 +376,11 @@ export async function routeHttpRequest(
   try {
     const policyResolved = shouldResolvePolicyForOperationalRoute(method, url);
     effectivePolicy = policyResolved
-      ? await resolveHttpPolicy(root, policy, { remoteAddress: context.remoteAddress })
+      ? await resolveHttpPolicy(
+          root,
+          policy,
+          context.remoteAddress === undefined ? {} : { remoteAddress: context.remoteAddress },
+        )
       : policy;
     if (route.bucket !== undefined && url.pathname !== "/mcp") {
       const decision = await checkRateLimit(root, route, effectivePolicy, context);

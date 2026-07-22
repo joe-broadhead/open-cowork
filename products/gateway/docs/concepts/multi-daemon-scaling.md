@@ -6,8 +6,8 @@ Gateway is currently a local, single-operator control plane. It can run unattend
 
 **Operator runbook (audit 2026-07-21 / JOE-931):** Never run two full daemons against one state directory. The open-cowork Helm chart fails closed when `replicaCount > 1` unless experimental distributed ownership is explicitly enabled. Chart fail-closed must not be bypassed for production.
 
-**Follow-on design:** [Distributed ownership + fencing](distributed-ownership-design.md) (JOE-954).  
-**Hazard inventory:** [gateway-multi-writer-hazards-2026-07-21](../../../../docs/evidence/gateway-multi-writer-hazards-2026-07-21.md) (JOE-948).  
+**Follow-on design:** [Distributed ownership + fencing](distributed-ownership-design.md) (JOE-954).
+**Hazard inventory:** [gateway-multi-writer-hazards-2026-07-21](../../../../docs/evidence/gateway-multi-writer-hazards-2026-07-21.md) (JOE-948).
 **Proving suite:** registry `docs/development/distributed-ownership-proving-registry.json` (JOE-949); claim gate `scripts/check-distributed-ownership-claims.mjs` (JOE-963).
 
 ## Decision

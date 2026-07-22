@@ -150,7 +150,7 @@ export const WORKSPACE_SESSION_PORT_LOCAL_POLICY: WorkspacePolicy = {
   allowedMcps: null,
   localFiles: 'enabled',
   localStdioMcps: 'enabled',
-  machineRuntimeConfig: 'enabled',
+  machineRuntimeConfig: 'allowlisted',
 }
 
 /**
@@ -231,7 +231,7 @@ export function createMemoryWorkspaceSessionPort(
       requireSession(sessionId)
     },
     async listWorkflows() {
-      return { workflows: [], nextCursor: null }
+      return { workflows: [], runs: [], nextCursor: null }
     },
     async getWorkflow() {
       return null
@@ -278,7 +278,9 @@ export function createMemoryWorkspaceSessionPort(
         order: (artifacts.get(input.sessionId)?.length ?? 0) + 1,
         source: 'local',
         kind: input.kind ?? undefined,
-        status: input.status ?? 'ready',
+        status: input.status === 'draft' || input.status === 'in-review' || input.status === 'final'
+          ? input.status
+          : 'draft',
         createdAt: new Date().toISOString(),
       }
       const list = artifacts.get(input.sessionId) ?? []

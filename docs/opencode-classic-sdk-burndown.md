@@ -87,4 +87,3 @@ confused with Durable daemon call sites:
 - **Inventory + reopen table:** `docs/opencode-durable-gateway-classic-burndown.md` (JOE-940)
 - **Migration epic (pin-gated):** JOE-941
 - **Pin lockstep CI:** `scripts/check-opencode-pin-lockstep.mjs` (JOE-945; includes `products/gateway`)
-

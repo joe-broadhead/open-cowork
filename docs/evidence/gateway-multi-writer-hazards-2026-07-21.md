@@ -1,7 +1,7 @@
 # Process-local multi-writer hazards inventory (JOE-948)
 
-**Date:** 2026-07-21  
-**Scope:** Durable Gateway (`products/gateway`) + Channel Gateway process-local maps  
+**Date:** 2026-07-21
+**Scope:** Durable Gateway (`products/gateway`) + Channel Gateway process-local maps
 **Related:** JOE-931, JOE-954, `products/gateway/docs/concepts/multi-daemon-scaling.md`
 
 ## Disposition legend

@@ -201,4 +201,3 @@ export function appendAuditLedgerRowForWorkEvent(db: DatabaseSync, event: WorkEv
       record.entryHash,
     )
 }
-

@@ -255,4 +255,3 @@ export function upsertChannelBindingRow(db: DatabaseSync, input: { provider: str
     updated_at = excluded.updated_at`)
     .run(input.provider, input.chatId, normalizeThreadId(input.threadId), input.sessionId, input.mode || 'chat', input.roadmapId || null, input.taskId || null, input.title || null, input.createdAt || now, now)
 }
-

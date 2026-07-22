@@ -136,4 +136,3 @@ export function updateAlertStatus(id: string, action: 'acknowledge' | 'resolve' 
     }
   } finally { db.close() }
 }
-

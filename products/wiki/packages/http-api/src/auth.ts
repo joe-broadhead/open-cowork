@@ -279,9 +279,9 @@ export type ResolveHttpPolicyOptions = {
    * When false, refuse that path (service-account/OAuth still work).
    * When omitted, defaults from remote address + OPENWIKI_ALLOW_SCOPE_TOKEN (JOE-972).
    */
-  allowScopeToken?: boolean;
+  allowScopeToken?: boolean | undefined;
   /** Client remote address used to decide loopback-only scope-token default. */
-  remoteAddress?: string;
+  remoteAddress?: string | undefined;
 };
 
 /**
@@ -291,9 +291,9 @@ export type ResolveHttpPolicyOptions = {
  * via OPENWIKI_ALLOW_SCOPE_TOKEN=1 (JOE-972 / wiki audit P2-2).
  */
 export function scopeTokenAuthAllowed(options: {
-  allowScopeToken?: boolean;
-  remoteAddress?: string;
-  env?: NodeJS.ProcessEnv;
+  allowScopeToken?: boolean | undefined;
+  remoteAddress?: string | undefined;
+  env?: NodeJS.ProcessEnv | undefined;
 } = {}): boolean {
   if (options.allowScopeToken === true) {
     return true;

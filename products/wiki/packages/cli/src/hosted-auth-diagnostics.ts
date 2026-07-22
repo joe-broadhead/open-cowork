@@ -38,7 +38,7 @@ export async function hostedHumanAgentDiagnostics(root: string, profile: Deploym
  * hosted profiles (wiki audit P2-5 / JOE-979).
  */
 export function oauthStateDiagnostic(
-  config: OpenWikiConfig | undefined,
+  config: OpenWikiConfig | undefined | Partial<OpenWikiConfig>,
   env: NodeJS.ProcessEnv = process.env,
 ): DiagnosticCheck {
   const oauthEnabled =
@@ -77,7 +77,7 @@ export function oauthStateDiagnostic(
   const unsafe = oauthFileStateUnsafeReason({
     stateBackend: "file",
     runtimeMode,
-    issuer,
+    ...(issuer === undefined ? {} : { issuer }),
     env,
   });
   if (unsafe !== undefined) {

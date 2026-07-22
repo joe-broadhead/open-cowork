@@ -1,8 +1,8 @@
 # Distributed ownership + fencing design (JOE-954)
 
-**Status:** Design accepted for implementation sequencing; **not** production multi-replica ready.  
-**Depends on:** [Multi-Daemon Scaling Design Record](multi-daemon-scaling.md)  
-**Hazards:** [gateway-multi-writer-hazards-2026-07-21](../../../../docs/evidence/gateway-multi-writer-hazards-2026-07-21.md)  
+**Status:** Design accepted for implementation sequencing; **not** production multi-replica ready.
+**Depends on:** [Multi-Daemon Scaling Design Record](multi-daemon-scaling.md)
+**Hazards:** [gateway-multi-writer-hazards-2026-07-21](../../../../docs/evidence/gateway-multi-writer-hazards-2026-07-21.md)
 **Proving suite:** [distributed-ownership-proving](../../src/__tests__/distributed-ownership-proving.test.ts) + registry below
 
 ## Goal

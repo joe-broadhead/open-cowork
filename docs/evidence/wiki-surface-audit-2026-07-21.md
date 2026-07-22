@@ -1,10 +1,10 @@
 # Wiki partition surface audit (medium+)
 
-**Date:** 2026-07-21  
-**Linear epic:** JOE-917  
-**Run issue:** JOE-956  
-**HEAD audited:** `8b903d45857e714f5103f22f2ff3b34ff6100196` (`fix/milestone-post-958-quality-signal`)  
-**Scope:** `products/wiki` (~100k LOC partition: CLI, HTTP/web, MCP, workflows, policy, postgres-runtime, storage, static-export, deploy, evals)  
+**Date:** 2026-07-21
+**Linear epic:** JOE-917
+**Run issue:** JOE-956
+**HEAD audited:** `8b903d45857e714f5103f22f2ff3b34ff6100196` (`fix/milestone-post-958-quality-signal`)
+**Scope:** `products/wiki` (~100k LOC partition: CLI, HTTP/web, MCP, workflows, policy, postgres-runtime, storage, static-export, deploy, evals)
 **Method:** First-principles inventory of auth, storage, MCP, web/CSRF, multi-tenant/policy, SSRF, secrets, queue/leases, deploy defaults, and CI gates. Sampled implementation against `products/wiki/docs/security/threat-model.md` and monorepo residual note that wiki was only surface-mapped in the 2026-07-21 repo-wide audit. **Tiny nits excluded.**
 
 **Related prior evidence (not re-litigated unless still open in monorepo):**
@@ -192,16 +192,16 @@ explicit file OAuth state.
 
 ## Recommended fix order
 
-1. Land this PR’s fail-closed serve/Helm guards (P1-1..P1-3).  
-2. Close JOE-959 after any additional P1s from review.  
-3. Schedule P2 module splits + scope-token hardening + optional hosted-readiness CI.  
+1. Land this PR’s fail-closed serve/Helm guards (P1-1..P1-3).
+2. Close JOE-959 after any additional P1s from review.
+3. Schedule P2 module splits + scope-token hardening + optional hosted-readiness CI.
 4. Only then allow public multi-tenant hosted Wiki claims.
 
 ---
 
 ## Claim gate
 
-**Do not claim:** multi-tenant public hosted OpenWiki / Open Cowork Wiki as production-complete  
+**Do not claim:** multi-tenant public hosted OpenWiki / Open Cowork Wiki as production-complete
 **Until:** JOE-917 epic AC met (audit evidence + all P0/P1 Done or Won’t Do).
 
 Local personal wiki, loopback serve, static export, and Helm **enterprise** profile (when values fully set) remain the supported production-like shapes described in product docs.

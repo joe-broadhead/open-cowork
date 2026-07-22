@@ -314,4 +314,3 @@ export function nextSupervisorReviewAt(supervisor: RoadmapSupervisorRecord, nowM
   const intervalMs = supervisorCadenceMs(supervisor)
   return intervalMs > 0 ? new Date(nowMs + intervalMs).toISOString() : undefined
 }
-

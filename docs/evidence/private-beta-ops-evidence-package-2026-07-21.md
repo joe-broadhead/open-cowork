@@ -1,11 +1,11 @@
 # Private-beta launch / ops evidence package
 
-**Date:** 2026-07-21  
-**Linear epic:** JOE-922  
-**Children:** JOE-958 (load/soak), JOE-960 (restore), JOE-961 (BYOK), JOE-968 (support), JOE-971 (go/no-go)  
-**HEAD:** `0f28fb8836230907cfee7e9028bcaf648da8a5e3` (`fix/milestone-post-958-quality-signal`)  
-**Profile:** `private-beta` (design-partner managed BYOK)  
-**Public claim tier:** remains **`local-self-host-beta` only**  
+**Date:** 2026-07-21
+**Linear epic:** JOE-922
+**Children:** JOE-958 (load/soak), JOE-960 (restore), JOE-961 (BYOK), JOE-968 (support), JOE-971 (go/no-go)
+**HEAD:** `0f28fb8836230907cfee7e9028bcaf648da8a5e3` (`fix/milestone-post-958-quality-signal`)
+**Profile:** `private-beta` (design-partner managed BYOK)
+**Public claim tier:** remains **`local-self-host-beta` only**
 **Hosted private-beta decision:** **`no-go`** until private ops records pass (see `deploy/private-beta/private-beta-go-no-go.public.md`)
 
 This package is the **public-repo** side of JOE-922. Real customer logs, domains, digests from a live target, support rosters, and metrics exports stay outside this repository per `docs/runbooks/managed-byok-saas-boundary.md`.
@@ -37,7 +37,7 @@ Generated at package date for profile `private-beta`:
 | Mutations / SSE / operator | planned `true` |
 | BYOK provider | `anthropic` (planned validation route only) |
 
-Full generated plan (ephemeral local path when operators re-run):  
+Full generated plan (ephemeral local path when operators re-run):
 `.open-cowork-test/launch-readiness/private-beta-launch-readiness-plan.md`
 
 ---
@@ -46,8 +46,8 @@ Full generated plan (ephemeral local path when operators re-run):
 
 Status vocabulary:
 
-- **public-ready** — contract/tests/validators green in this monorepo  
-- **pending-private-evidence** — blocking for hosted private-beta `go`  
+- **public-ready** — contract/tests/validators green in this monorepo
+- **pending-private-evidence** — blocking for hosted private-beta `go`
 - **Owner** — interim public ownership (fill private roster offline)
 
 | Evidence item | Public status | Owner (interim) | Linear | Gap / next action |
@@ -125,16 +125,16 @@ Attach JSON/MD reports to private ops only; copy redacted summaries + checksums 
 
 ### JOE-971 — Go/no-go
 
-**Decision (public):** **`no-go`** for managed hosted private-beta product claims.  
-**Decision (public package):** **ready for operators to run private evidence campaign** against a target env using templates in `deploy/private-beta/`.  
+**Decision (public):** **`no-go`** for managed hosted private-beta product claims.
+**Decision (public package):** **ready for operators to run private evidence campaign** against a target env using templates in `deploy/private-beta/`.
 **Accepted public tier:** `local-self-host-beta` only.
 
 Linked artifacts:
 
-- This package  
-- `deploy/private-beta/private-beta-go-no-go.public.md`  
-- `docs/runbooks/launch-readiness.md`  
-- `docs/runbooks/launch-readiness-report.md`  
+- This package
+- `deploy/private-beta/private-beta-go-no-go.public.md`
+- `docs/runbooks/launch-readiness.md`
+- `docs/runbooks/launch-readiness-report.md`
 - `deploy/load/launch-evidence-matrix.json`
 
 ---
@@ -153,17 +153,17 @@ Linked artifacts:
 
 ## 5. Promotion checklist (when private evidence lands)
 
-1. Fill private `launch-evidence-record` from template; all blocking items `pass`.  
-2. `pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass`  
-3. `pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>`  
-4. Update `private-beta-go-no-go.public.md` decision only after sign-off from release, support, and security/redaction reviewers.  
+1. Fill private `launch-evidence-record` from template; all blocking items `pass`.
+2. `pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass`
+3. `pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>`
+4. Update `private-beta-go-no-go.public.md` decision only after sign-off from release, support, and security/redaction reviewers.
 5. Do **not** expand `acceptedPublicTier` in the matrix without a deliberate product decision.
 
 ---
 
 ## 6. Explicit non-claims
 
-- Not claiming multi-AZ HA (blocked on HA epic JOE-931 residual).  
-- Not claiming public-beta, GA, or enterprise-scale.  
-- Not claiming managed private-beta is production-ready from public templates alone.  
+- Not claiming multi-AZ HA (blocked on HA epic JOE-931 residual).
+- Not claiming public-beta, GA, or enterprise-scale.
+- Not claiming managed private-beta is production-ready from public templates alone.
 - OSS/local self-host beta evaluation remains the only accepted public product claim.

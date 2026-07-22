@@ -1,7 +1,7 @@
 # Dual-stack channel security / capabilities matrix
 
-**Date:** 2026-07-21  
-**Linear:** JOE-929 (inventory), JOE-934 (shared kernel)  
+**Date:** 2026-07-21
+**Linear:** JOE-929 (inventory), JOE-934 (shared kernel)
 **Related:** `docs/product-channel-ownership.md`
 
 ## Stacks

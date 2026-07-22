@@ -1,7 +1,7 @@
 # Post-#958 milestone branch plan (single PR)
 
-**Branch:** `fix/milestone-post-958-quality-signal`  
-**Base:** `master` @ PR #958 merge  
+**Branch:** `fix/milestone-post-958-quality-signal`
+**Base:** `master` @ PR #958 merge
 **Policy:** One PR at the end of the milestone (GitHub Actions minutes). Commits land per issue or tightly related issue group.
 
 ## Commit rules
@@ -40,11 +40,11 @@ c4b2112f refactor(JOE-977): progressive wiki module splits (oauth + graph)
 
 ## Next unfinished work (when continuing)
 
-1. Named god façades / channel kernels / wiki P2s / OpenCode prep — **milestone progressive work complete**.  
-2. **Explicit residuals (out of band / pin-gated / multi-PR epics):**  
-   - JOE-941 full Durable classic→V2 (needs OpenCode pin reopen + live probes)  
-   - JOE-923 full Durable → monorepo provider body migrate  
-   - Wiki watch-band residual (doctor/jobs/tool-router) when seams appear  
+1. Named god façades / channel kernels / wiki P2s / OpenCode prep — **milestone progressive work complete**.
+2. **Explicit residuals (out of band / pin-gated / multi-PR epics):**
+   - JOE-941 full Durable classic→V2 (needs OpenCode pin reopen + live probes)
+   - JOE-923 full Durable → monorepo provider body migrate
+   - Wiki watch-band residual (doctor/jobs/tool-router) when seams appear
 3. **Single PR opened:** https://github.com/joe-broadhead/open-cowork/pull/959
 
 ## Non-claims

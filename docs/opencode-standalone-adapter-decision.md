@@ -1,6 +1,6 @@
 # Standalone Gateway OpenCode adapter decision (JOE-966)
 
-**Date:** 2026-07-21  
+**Date:** 2026-07-21
 **Decision:** **Keep Standalone thin-special** — do **not** force a dependency on
 `@open-cowork/runtime-host` for client construction on pin 1.18.1.
 

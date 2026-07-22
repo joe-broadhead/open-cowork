@@ -384,4 +384,3 @@ export function startWorkTaskRunInState(state: WorkState, db: DatabaseSync, id: 
   appendDelegationProgressForTask(db, task, 'dispatched', { runId: run.id, stage, sessionId, profile, status: task.status, summary: `Delegated task dispatched to ${stage}: ${task.title}` }, now, run.id)
   return { task, run }
 }
-

@@ -1,7 +1,7 @@
 # Durable Gateway classic SDK surface inventory (JOE-940 / JOE-941)
 
-**Pin:** OpenCode `@opencode-ai/sdk` **1.18.1** (classic root entry)  
-**Date:** 2026-07-22 (façade collapse revalidated)  
+**Pin:** OpenCode `@opencode-ai/sdk` **1.18.1** (classic root entry)
+**Date:** 2026-07-22 (façade collapse revalidated)
 **Status:** Inventory complete; **production session I/O collapsed onto façade**;
 **V2 migration blocked** on pin 1.18.1 ([JOE-941](https://linear.app/joe-broadhead/issue/JOE-941))
 
