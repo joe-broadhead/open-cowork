@@ -18,7 +18,7 @@
 | 1 | **Quality signal** | JOE-918; JOE-924, JOE-925, JOE-926, JOE-933 | **Done** (commits on branch) |
 | 2 | **Security residuals** | JOE-920; JOE-952, JOE-957, JOE-946, JOE-962 | **Mostly done** (946 CSP locked docs; deeper CSP optional residual) |
 | 3 | **God-module budgets** | JOE-919; JOE-951, JOE-942, JOE-936 | **Named façades ≤2000** (work-store, environments, config, scheduler, daemon-routes/work) |
-| 4 | **Channel kernel** | JOE-923; JOE-929, JOE-934, JOE-932 | **Foundation + Slack kernel + Durable rate-limit**; body migrate still progressive |
+| 4 | **Channel kernel** | JOE-923; JOE-929, JOE-934, JOE-932 | **Foundation + Slack/Telegram kernels + shared rate-limiter**; full provider body migrate residual |
 | 5 | **OpenCode kernel** | JOE-916; JOE-940, JOE-945, JOE-943, JOE-937, JOE-966 | **Inventory + pin + standalone + event-pump backoff kernel progressive**; V2 still pin-gated |
 | 6 | **HA / claim gates** | JOE-931; JOE-963 | **Design + gates done**; not multi-AZ HA |
 | 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **P0/P1 done**; P2-2–P2-5 **done**; P2-1 oauth progressive split **done** (other watch-band residual) |
@@ -36,10 +36,10 @@ ea28479c refactor(JOE-942): supervisor + project-binding helpers
 ## Next unfinished work (when continuing)
 
 1. **JOE-942 / JOE-936 / JOE-919** — named god façades ≤2000 **done** (ratchets enforced).  
-2. **JOE-923 progressive** — Slack shared verify + Durable webhook rate-limit **done**; full provider body migrate still residual.  
+2. **JOE-923 progressive** — Slack/Telegram shared verify + shared `WebhookRateLimiter` **done**; full provider body migrate still residual.  
 3. **JOE-940 / JOE-945 / JOE-966** — Durable classic inventory, pin lockstep CI, standalone adapter decision **done**.  
 4. **JOE-943 progressive** — event-pump reconnect kernel shared (cloud + desktop); full spawn/event topology still product-owned.  
-5. Progressive: JOE-941 Durable V2 (pin-gated), remaining wiki watch-band splits, channel body migrate.  
+5. Progressive: JOE-941 Durable V2 (pin-gated), full channel provider body migrate (multi-PR epic).  
 6. **Open single PR** when ready to burn Actions once.
 
 ## Non-claims

@@ -1,23 +1,13 @@
 /**
  * Process-local inbound webhook rate limit for Durable Gateway (JOE-923 progressive).
  *
- * Algorithm matches `@open-cowork/gateway-channel` `WebhookRateLimiter` (fixed window +
- * auth-failure backoff + cap eviction). Kept local so Durable stays on
- * `@open-cowork/shared` only; dual-stack security changes must still update both
- * stacks (see `docs/evidence/channel-stack-security-matrix-2026-07-21.md`).
+ * Algorithm kernel: `@open-cowork/shared/node` {@link WebhookRateLimiter}
+ * (shared with monorepo channel gateways via `@open-cowork/gateway-channel`).
  */
 
-export type DurableWebhookRateLimitRecord = {
-  count: number
-  resetAt: number
-  blockedUntil: number
-}
+import { WebhookRateLimiter, type WebhookRateLimitResult } from '@open-cowork/shared/node'
 
-export type DurableWebhookRateLimitResult =
-  | { ok: true }
-  | { ok: false; retryAfterMs: number }
-
-const DEFAULT_MAX_RECORDS = 10_000
+export type DurableWebhookRateLimitResult = WebhookRateLimitResult
 
 /** Defaults tuned for public webhook endpoints (per remote address). */
 export const DURABLE_WEBHOOK_RATE_LIMIT = {
@@ -28,77 +18,7 @@ export const DURABLE_WEBHOOK_RATE_LIMIT = {
   authFailureBackoffMs: 60_000,
 } as const
 
-export class DurableWebhookRateLimiter {
-  private readonly records = new Map<string, DurableWebhookRateLimitRecord>()
-
-  constructor(private readonly maxRecords = DEFAULT_MAX_RECORDS) {}
-
-  clear(): void {
-    this.records.clear()
-  }
-
-  claim(input: { key: string; nowMs: number; windowMs: number; maxRequests: number }): DurableWebhookRateLimitResult {
-    const record = this.record(input.key, input.nowMs, input.windowMs)
-    if (record.blockedUntil > input.nowMs) {
-      return { ok: false, retryAfterMs: record.blockedUntil - input.nowMs }
-    }
-    record.count += 1
-    if (record.count > input.maxRequests) {
-      record.blockedUntil = Math.max(record.blockedUntil, record.resetAt)
-      return { ok: false, retryAfterMs: record.blockedUntil - input.nowMs }
-    }
-    return { ok: true }
-  }
-
-  backoff(input: { key: string; nowMs: number; windowMs: number; maxFailures: number; backoffMs: number }): DurableWebhookRateLimitResult {
-    const record = this.record(input.key, input.nowMs, input.windowMs)
-    if (record.blockedUntil > input.nowMs) {
-      return { ok: false, retryAfterMs: record.blockedUntil - input.nowMs }
-    }
-    record.count += 1
-    if (record.count >= input.maxFailures) {
-      record.blockedUntil = Math.max(record.blockedUntil, input.nowMs + input.backoffMs)
-    }
-    return { ok: true }
-  }
-
-  private record(key: string, nowMs: number, windowMs: number): DurableWebhookRateLimitRecord {
-    const existing = this.records.get(key)
-    if (existing && existing.resetAt > nowMs) return existing
-    const next: DurableWebhookRateLimitRecord = { count: 0, resetAt: nowMs + windowMs, blockedUntil: 0 }
-    this.records.set(key, next)
-    if (this.records.size > this.maxRecords) this.prune(nowMs)
-    while (this.records.size > this.maxRecords) {
-      let evictKey: string | null = null
-      let evictBlocking = true
-      let evictExpiry = Infinity
-      for (const [candidateKey, candidate] of this.records) {
-        const blocking = candidate.blockedUntil > nowMs
-        const expiry = Math.max(candidate.resetAt, candidate.blockedUntil)
-        if (
-          evictKey === null
-          || (!blocking && evictBlocking)
-          || (blocking === evictBlocking && expiry < evictExpiry)
-        ) {
-          evictKey = candidateKey
-          evictBlocking = blocking
-          evictExpiry = expiry
-        }
-      }
-      if (!evictKey) break
-      this.records.delete(evictKey)
-    }
-    return next
-  }
-
-  private prune(nowMs: number): void {
-    for (const [key, record] of this.records) {
-      if (record.resetAt <= nowMs && record.blockedUntil <= nowMs) this.records.delete(key)
-    }
-  }
-}
-
-const inboundWebhookRateLimiter = new DurableWebhookRateLimiter()
+const inboundWebhookRateLimiter = new WebhookRateLimiter()
 
 export function claimInboundWebhookRateLimit(key: string, nowMs = Date.now()): DurableWebhookRateLimitResult {
   return inboundWebhookRateLimiter.claim({

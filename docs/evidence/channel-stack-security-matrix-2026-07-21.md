@@ -19,9 +19,9 @@
 | Meta WhatsApp `X-Hub-Signature-256` | **Shared** `verifyMetaHubSignature256` | Bridge mode — re-sign with Open Cowork ingress HMAC (`gateway-provider-webhook`) | **Kernel for native** | Monorepo WhatsApp is **bridge**, not native Meta verify |
 | Meta hub.verify_token | **Shared** `verifyMetaHubVerifyToken` | N/A (bridge) | **Kernel for native** | Durable only |
 | Discord Ed25519 interaction | **Shared** `verifyDiscordInteractionSignature` | Bridge mode — Open Cowork ingress re-sign | **Kernel for native** | Durable only |
-| Telegram secret-token header | Durable uses config secret + startup getMe; webhook path varies | **Shared digest** available as `verifyTelegramWebhookSecretToken`; monorepo uses `constantTimeStringEqual` | **Kernel available** | Prefer shared digest for new code |
+| Telegram secret-token header | Durable long-poll primary (no webhook path); kernel available | **Shared** `verifyTelegramWebhookSecretToken` on monorepo provider | **Kernel for monorepo native** | JOE-923 progressive |
 | Slack `X-Slack-Signature` | N/A in Durable `channels/*` | **Shared** `verifySlackRequestSignature` (provider still owns replay cache) | **Kernel for monorepo native** | JOE-923 progressive; monorepo Slack provider composed |
-| Webhook rate limit | Durable process-local fixed-window on `/webhooks/whatsapp|discord` (`channels/webhook-rate-limit.ts`, algorithm twin of gateway-channel) | `gateway-channel` `WebhookRateLimiter` | **Algorithm twin** | Prefer future fold into shared package; dual-fix on limit changes |
+| Webhook rate limit | Durable façade on `/webhooks/whatsapp|discord` composes **shared** `WebhookRateLimiter` | `gateway-channel` local twin (same algorithm; package boundary keeps zero shared dep) | **Shared for Durable; monorepo twin** | JOE-923 progressive; dual-fix algorithm |
 | SSRF / host policy on callbacks | Durable peer / channel target policy | Shared private-host + provider SSRF | **Partial** | Prefer `@open-cowork/shared/node` host policy |
 | Credential redaction diagnostics | Durable length/redact paths | Channel-gateway length-only fingerprints (#958) | **Partial** | Dual-fix checklist for redaction changes |
 | Slack / Signal / Email / Webhook / CLI | N/A in Durable `channels/*` | Monorepo-only providers | **Monorepo-only** | No Durable twin |
@@ -32,8 +32,8 @@
 2. Wire Durable WhatsApp + Discord to kernel — **done with this inventory**
 3. ~~Slack signing kernel + monorepo compose~~ — **done** (`verifySlackRequestSignature` + `gateway-provider-slack`)
 4. ~~Durable inbound webhook rate limit~~ — **done** (process-local twin of `WebhookRateLimiter` on WhatsApp/Discord routes)
-5. Compose Durable Telegram secret verify onto shared helper (when webhook path unified; Durable Telegram is still long-poll primary)
-6. Fold Durable rate-limit twin into shared package (optional DRY)
+5. ~~Compose monorepo Telegram secret verify onto shared helper~~ — **done** (`verifyTelegramWebhookSecretToken` in provider); Durable Telegram remains long-poll primary
+6. ~~Fold Durable rate-limit twin into shared package~~ — **done** (`packages/shared/src/node/webhook-rate-limiter.ts` + Durable façade); monorepo `gateway-channel` keeps algorithm twin (pack boundary)
 7. Provider body migration (Durable → monorepo providers) — multi-PR epic residual
 
 ## Dual-stack security PR rule

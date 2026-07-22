@@ -1,9 +1,8 @@
 /**
- * Fixed-window webhook rate limiter for monorepo Channel / Standalone Gateway
- * (JOE-875). Algorithm must stay lockstep with
- * `@open-cowork/shared/node` `WebhookRateLimiter` (Durable composes the shared
- * class — JOE-923 progressive). Dual-fix algorithm changes in both places
- * (or fold monorepo call sites onto shared when package boundaries allow).
+ * Shared fixed-window webhook rate limiter (JOE-875 / JOE-923 progressive).
+ *
+ * Used by monorepo Channel Gateway (`gateway-channel` re-export), Standalone
+ * Gateway, and Durable Gateway inbound webhooks so algorithm changes land once.
  */
 
 export type WebhookRateLimitRecord = {
@@ -115,7 +114,7 @@ export class WebhookRateLimiter {
     return next
   }
 
-  private prune(nowMs: number) {
+  private prune(nowMs: number): void {
     for (const [key, record] of this.records) {
       if (record.resetAt <= nowMs && record.blockedUntil <= nowMs) this.records.delete(key)
     }

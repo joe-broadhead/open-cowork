@@ -32,12 +32,16 @@ Until then, this freeze document is the source of truth for dual-stack ownership
 
 ### Shared security kernel (2026-07-21)
 
-Native platform webhook verify for Durable Gateway lives in
-`@open-cowork/shared/node` (`channel-webhook-security.ts`):
+Native platform webhook verify and rate-limit kernels live in
+`@open-cowork/shared/node`:
 
-- `verifyMetaHubSignature256` / `verifyMetaHubVerifyToken` (WhatsApp/Meta)
-- `verifyDiscordInteractionSignature` (Discord interactions)
-- `verifyTelegramWebhookSecretToken` (Telegram secret-token header)
+- `channel-webhook-security.ts`: `verifyMetaHubSignature256` /
+  `verifyMetaHubVerifyToken` (WhatsApp/Meta),
+  `verifyDiscordInteractionSignature` (Discord),
+  `verifyTelegramWebhookSecretToken` (Telegram secret-token header),
+  `verifySlackRequestSignature` (Slack Events/Interactions)
+- `webhook-rate-limiter.ts`: fixed-window `WebhookRateLimiter` (Durable façade;
+  monorepo `gateway-channel` keeps an algorithm twin for package boundaries)
 
 Inventory: `docs/evidence/channel-stack-security-matrix-2026-07-21.md`.
 Regression guard: `scripts/check-dual-channel-security.mjs`.

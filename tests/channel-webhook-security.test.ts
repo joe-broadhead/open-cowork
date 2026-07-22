@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { createHmac, generateKeyPairSync, sign } from 'node:crypto'
 import test from 'node:test'
 import {
+  WebhookRateLimiter,
   verifyDiscordInteractionSignature,
   verifyMetaHubSignature256,
   verifyMetaHubVerifyToken,
@@ -53,4 +54,25 @@ test('verifySlackRequestSignature accepts valid Slack signatures within skew', (
   assert.equal(verifySlackRequestSignature(secret, `v0=${'00'.repeat(32)}`, timestamp, body, { nowMs }), false)
   assert.equal(verifySlackRequestSignature('', signature, timestamp, body, { nowMs }), false)
   assert.equal(verifySlackRequestSignature(secret, signature.slice(3), timestamp, body, { nowMs }), false)
+})
+
+test('shared WebhookRateLimiter claims then rate-limits and backs off auth failures', () => {
+  const limiter = new WebhookRateLimiter()
+  const nowMs = 1_700_000_000_000
+  const key = 'test:client'
+  for (let i = 0; i < 3; i++) {
+    assert.equal(limiter.claim({ key, nowMs, windowMs: 60_000, maxRequests: 3 }).ok, true)
+  }
+  const limited = limiter.claim({ key, nowMs, windowMs: 60_000, maxRequests: 3 })
+  assert.equal(limited.ok, false)
+  if (!limited.ok) assert.ok(limited.retryAfterMs > 0)
+
+  const authKey = 'test:attacker'
+  for (let i = 0; i < 2; i++) {
+    assert.equal(limiter.backoff({ key: authKey, nowMs, windowMs: 60_000, maxFailures: 2, backoffMs: 30_000 }).ok, true)
+  }
+  const blocked = limiter.claim({ key: authKey, nowMs, windowMs: 60_000, maxRequests: 100 })
+  assert.equal(blocked.ok, false)
+  limiter.clear()
+  assert.equal(limiter.claim({ key: authKey, nowMs, windowMs: 60_000, maxRequests: 100 }).ok, true)
 })

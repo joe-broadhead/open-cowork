@@ -48,6 +48,41 @@ for (const symbol of [
   }
 }
 
+if (!kernel.includes('export function verifySlackRequestSignature')) {
+  failures.push('shared channel-webhook-security missing export verifySlackRequestSignature')
+}
+
+const rateLimiter = read('packages/shared/src/node/webhook-rate-limiter.ts')
+if (!rateLimiter.includes('export class WebhookRateLimiter')) {
+  failures.push('shared webhook-rate-limiter missing WebhookRateLimiter class')
+}
+
+const durableRate = read('products/gateway/src/channels/webhook-rate-limit.ts')
+if (!durableRate.includes('WebhookRateLimiter') || !durableRate.includes('@open-cowork/shared/node')) {
+  failures.push('Durable webhook-rate-limit.ts must compose WebhookRateLimiter from @open-cowork/shared/node')
+}
+if (/class DurableWebhookRateLimiter/.test(durableRate)) {
+  failures.push('Durable must not re-implement DurableWebhookRateLimiter twin (use shared WebhookRateLimiter)')
+}
+
+const monorepoTelegram = read('packages/gateway-provider-telegram/src/telegram-provider.ts')
+if (!monorepoTelegram.includes('verifyTelegramWebhookSecretToken')) {
+  failures.push('gateway-provider-telegram must use verifyTelegramWebhookSecretToken from the shared kernel')
+}
+
+const monorepoSlack = read('packages/gateway-provider-slack/src/slack-provider.ts')
+if (!monorepoSlack.includes('verifySlackRequestSignature')) {
+  failures.push('gateway-provider-slack must use verifySlackRequestSignature from the shared kernel')
+}
+
+const channelRate = read('packages/gateway-channel/src/webhook-rate-limiter.ts')
+if (!channelRate.includes('export class WebhookRateLimiter')) {
+  failures.push('gateway-channel must export WebhookRateLimiter (monorepo twin; keep algorithm lockstep with shared)')
+}
+if (!channelRate.includes('@open-cowork/shared/node') && !channelRate.includes('WebhookRateLimiter')) {
+  failures.push('gateway-channel webhook-rate-limiter missing WebhookRateLimiter')
+}
+
 if (failures.length) {
   console.error('Dual-channel security kernel drift:\n' + failures.map((f) => `  - ${f}`).join('\n'))
   process.exit(1)

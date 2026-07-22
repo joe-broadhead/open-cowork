@@ -564,6 +564,9 @@ importers:
       '@open-cowork/gateway-channel':
         specifier: workspace:*
         version: link:../gateway-channel
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^22.20.0
@@ -577,6 +580,9 @@ importers:
       '@open-cowork/gateway-channel':
         specifier: workspace:*
         version: link:../gateway-channel
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:../shared
       grammy:
         specifier: ^1.44.0
         version: 1.44.0

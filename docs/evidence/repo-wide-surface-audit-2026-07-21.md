@@ -25,7 +25,7 @@
 | --- | --- | --- | --- |
 | P0-1 `audit:full` red | **Yes** (overrides / process) | JOE-957 supply-chain maintenance | Prefer upgrades; monthly re-check |
 | P0-2 Nightly / UI evals red | **Partial** (#958 monthly + bridge work continued on milestone) | JOE-918 / JOE-924 / JOE-925 | Product contracts; not “done” by reschedule alone |
-| P1-1 Dual channel stacks | **No** (inventory + kernel only later) | JOE-923 (+ JOE-929/934 foundation on milestone) | Full body migrate still progressive |
+| P1-1 Dual channel stacks | **No** (inventory + kernel progressive) | JOE-923 (+ JOE-929/934 foundation on milestone) | Shared verify + rate-limit kernel progressive; full body migrate residual |
 | P1-2 OpenCode adapters / classic | **Partial** (pin lockstep in #958 era) | JOE-916 | Kernel + classic inventory on milestone; Durable V2 still progressive |
 | P1-3 HA multi-writer | **No** (docs/fail-closed) | JOE-931 | Design + claim gates; not multi-AZ HA |
 | P1-4 God modules | **Partial** | JOE-919 / JOE-951 / JOE-942 | Budgets + first splits; work-store still large |
