@@ -30,6 +30,14 @@ import {
   buildAuthenticatedOpencodeV2ClientConfig,
   createOpencodeV2Client,
 } from '@open-cowork/runtime-host/opencode-client-kernel'
+import {
+  exponentialReconnectDelayMs,
+  nextReconnectFailureCount,
+  OPENCODE_DURABLE_RECONNECT_INITIAL_MS_CLOUD,
+  OPENCODE_DURABLE_RECONNECT_MAX_MS_CLOUD,
+  OPENCODE_SSE_OWNED_MAX_RETRY_ATTEMPTS,
+  waitForAbortableDelay,
+} from '@open-cowork/runtime-host'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -575,8 +583,6 @@ export function translateOpencodeRuntimeEvent(raw: unknown): CloudRuntimeEvent[]
   return translateOpencodeRuntimeEventWithDiagnostics(raw).events
 }
 
-const OPENCODE_EVENT_RECONNECT_INITIAL_MS = 100
-const OPENCODE_EVENT_RECONNECT_MAX_MS = 5_000
 const OPENCODE_SESSION_ACTIVE_POLL_MS = 250
 const OPENCODE_SESSION_HISTORY_PAGE_SIZE = 100
 
@@ -659,17 +665,15 @@ function reportRuntimeSubscriptionError(options: CloudRuntimeSubscribeOptions, e
 }
 
 function waitForRuntimeEventReconnect(signal: AbortSignal, delayMs: number) {
-  if (signal.aborted) return Promise.resolve()
-  return new Promise<void>((resolve) => {
-    const finish = () => {
-      clearTimeout(timer)
-      signal.removeEventListener('abort', finish)
-      resolve()
-    }
-    const timer = setTimeout(finish, delayMs)
-    timer.unref?.()
-    signal.addEventListener('abort', finish, { once: true })
-  })
+  return waitForAbortableDelay(signal, delayMs)
+}
+
+function cloudReconnectDelayMs(consecutiveFailures: number) {
+  return exponentialReconnectDelayMs(
+    consecutiveFailures,
+    OPENCODE_DURABLE_RECONNECT_INITIAL_MS_CLOUD,
+    OPENCODE_DURABLE_RECONNECT_MAX_MS_CLOUD,
+  )
 }
 
 export function subscribeToOpencodeCloudRuntimeEvents(
@@ -739,7 +743,7 @@ export function subscribeToOpencodeCloudRuntimeEvents(
           signal: controller.signal,
           // Own retries so every reconnect carries the last durably persisted
           // aggregate sequence instead of relying on a lossy live-stream retry.
-          sseMaxRetryAttempts: 1,
+          sseMaxRetryAttempts: OPENCODE_SSE_OWNED_MAX_RETRY_ATTEMPTS,
           onSseError(error) {
             streamError = error
           },
@@ -756,12 +760,8 @@ export function subscribeToOpencodeCloudRuntimeEvents(
       } catch (error) {
         if (controller.signal.aborted) break
         reportRuntimeSubscriptionError(options, error)
-        consecutiveFailures = receivedEvent ? 1 : Math.min(consecutiveFailures + 1, 16)
-        const retryDelayMs = Math.min(
-          OPENCODE_EVENT_RECONNECT_MAX_MS,
-          OPENCODE_EVENT_RECONNECT_INITIAL_MS * (2 ** Math.min(consecutiveFailures - 1, 8)),
-        )
-        await waitForRuntimeEventReconnect(controller.signal, retryDelayMs)
+        consecutiveFailures = nextReconnectFailureCount(consecutiveFailures, receivedEvent)
+        await waitForRuntimeEventReconnect(controller.signal, cloudReconnectDelayMs(consecutiveFailures))
       }
     }
   }
@@ -830,12 +830,8 @@ export function subscribeToOpencodeCloudRuntimeEvents(
             }
           } else {
             reportRuntimeSubscriptionError(options, error)
-            consecutiveFailures = Math.min(consecutiveFailures + 1, 16)
-            const retryDelayMs = Math.min(
-              OPENCODE_EVENT_RECONNECT_MAX_MS,
-              OPENCODE_EVENT_RECONNECT_INITIAL_MS * (2 ** Math.min(consecutiveFailures - 1, 8)),
-            )
-            await waitForRuntimeEventReconnect(controller.signal, retryDelayMs)
+            consecutiveFailures = nextReconnectFailureCount(consecutiveFailures, false)
+            await waitForRuntimeEventReconnect(controller.signal, cloudReconnectDelayMs(consecutiveFailures))
             continue
           }
         }
@@ -856,12 +852,8 @@ export function subscribeToOpencodeCloudRuntimeEvents(
       } catch (error) {
         if (controller.signal.aborted) break
         reportRuntimeSubscriptionError(options, error)
-        consecutiveFailures = Math.min(consecutiveFailures + 1, 16)
-        const retryDelayMs = Math.min(
-          OPENCODE_EVENT_RECONNECT_MAX_MS,
-          OPENCODE_EVENT_RECONNECT_INITIAL_MS * (2 ** Math.min(consecutiveFailures - 1, 8)),
-        )
-        await waitForRuntimeEventReconnect(controller.signal, retryDelayMs)
+        consecutiveFailures = nextReconnectFailureCount(consecutiveFailures, false)
+        await waitForRuntimeEventReconnect(controller.signal, cloudReconnectDelayMs(consecutiveFailures))
         continue
       }
 
@@ -879,12 +871,8 @@ export function subscribeToOpencodeCloudRuntimeEvents(
       } catch (error) {
         if (controller.signal.aborted) break
         reportRuntimeSubscriptionError(options, error)
-        consecutiveFailures = Math.min(consecutiveFailures + 1, 16)
-        const retryDelayMs = Math.min(
-          OPENCODE_EVENT_RECONNECT_MAX_MS,
-          OPENCODE_EVENT_RECONNECT_INITIAL_MS * (2 ** Math.min(consecutiveFailures - 1, 8)),
-        )
-        await waitForRuntimeEventReconnect(controller.signal, retryDelayMs)
+        consecutiveFailures = nextReconnectFailureCount(consecutiveFailures, false)
+        await waitForRuntimeEventReconnect(controller.signal, cloudReconnectDelayMs(consecutiveFailures))
         continue
       }
 
@@ -1007,7 +995,7 @@ export function subscribeToOpencodeCloudRuntimeEvents(
       try {
         const result = await client.v2.event.subscribe({
           signal: controller.signal,
-          sseMaxRetryAttempts: 1,
+          sseMaxRetryAttempts: OPENCODE_SSE_OWNED_MAX_RETRY_ATTEMPTS,
           onSseError(error) {
             streamError = error
           },
@@ -1052,12 +1040,8 @@ export function subscribeToOpencodeCloudRuntimeEvents(
         // be hidden by the earlier snapshot.
         await descendantDiscoveryTask
         await scheduleDescendantDiscovery()
-        consecutiveFailures = receivedEvent ? 1 : Math.min(consecutiveFailures + 1, 16)
-        const retryDelayMs = Math.min(
-          OPENCODE_EVENT_RECONNECT_MAX_MS,
-          OPENCODE_EVENT_RECONNECT_INITIAL_MS * (2 ** Math.min(consecutiveFailures - 1, 8)),
-        )
-        await waitForRuntimeEventReconnect(controller.signal, retryDelayMs)
+        consecutiveFailures = nextReconnectFailureCount(consecutiveFailures, receivedEvent)
+        await waitForRuntimeEventReconnect(controller.signal, cloudReconnectDelayMs(consecutiveFailures))
       }
     }
   })()

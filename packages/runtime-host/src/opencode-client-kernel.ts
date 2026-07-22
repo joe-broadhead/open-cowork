@@ -3,8 +3,9 @@
  *
  * Desktop runtime-host, cloud-server, and standalone-gateway construct the
  * native V2 client through this module so spawn/client wiring cannot drift.
- * Session API call shapes and event pumps remain product-owned; this kernel
- * owns client construction, authenticated config, and health probes.
+ * Session API call shapes remain product-owned. Event-pump reconnect math lives
+ * in `opencode-event-pump-kernel.ts` (same JOE-943 progressive expansion).
+ * Managed-server spawn plans stay in `runtime-managed-server-core.ts`.
  *
  * Does not invent classic→V2 shims for non-working routes on pin 1.18.1.
  * Durable Gateway remains on classic root `@opencode-ai/sdk` until JOE-941.
