@@ -8,6 +8,7 @@ import { clamp, colorForEdge, colorForType, escapeAttr, escapeHtml, graphDegree,
 export function initGraphs() {
   document.querySelectorAll("[data-openwiki-graph]").forEach(async (graph) => {
     if (!(graph instanceof HTMLElement)) return;
+    applyGraphHeightFromDataset(graph);
     const canvas = graph.querySelector("canvas");
     if (!canvas) return;
     try {
@@ -25,6 +26,13 @@ export function initGraphs() {
       }
     }
   });
+}
+
+/** Apply data-graph-height via CSSOM (CSP-safe; no style= attributes). */
+function applyGraphHeightFromDataset(graph) {
+  const height = graph.dataset.graphHeight?.trim();
+  if (!height) return;
+  graph.style.setProperty("--ow-graph-height", height);
 }
 
 function mountGraph(canvas, graphElement, graph) {
@@ -630,8 +638,18 @@ function renderGraphLegend(container, label, kind, values, visibleSet) {
   container.innerHTML = `<span class="ow-graph__legend-label">${escapeHtml(label)}</span>${reset}${values.map((value) => {
     const active = visibleSet === undefined || visibleSet.has(value);
     const color = kind === "node" ? colorForType(value) : colorForEdge(value);
-    return `<button type="button" class="ow-graph__chip${active ? " is-active" : ""}" data-openwiki-graph-chip data-graph-filter-kind="${kind}" data-graph-filter-value="${escapeAttr(value)}" aria-pressed="${active ? "true" : "false"}"><span class="ow-graph__swatch" style="--ow-chip-color:${escapeAttr(color)}"></span>${escapeHtml(graphValueLabel(value))}</button>`;
+    // data-chip-color + CSSOM below: avoid style= attributes under style-src 'self' (JOE-980).
+    return `<button type="button" class="ow-graph__chip${active ? " is-active" : ""}" data-openwiki-graph-chip data-graph-filter-kind="${kind}" data-graph-filter-value="${escapeAttr(value)}" aria-pressed="${active ? "true" : "false"}"><span class="ow-graph__swatch" data-chip-color="${escapeAttr(color)}"></span>${escapeHtml(graphValueLabel(value))}</button>`;
   }).join("")}`;
+  applyChipColorsFromDataset(container);
+}
+
+function applyChipColorsFromDataset(container) {
+  container.querySelectorAll("[data-chip-color]").forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    const color = el.dataset.chipColor?.trim();
+    if (color) el.style.setProperty("--ow-chip-color", color);
+  });
 }
 
 function handleGraphLegendClick(event, state, expectedKind, render) {

@@ -179,8 +179,11 @@ export function renderGraphMount(options: {
     options.focusId ? `data-focus-id="${escapeAttribute(options.focusId)}"` : "",
     options.maxNodes === undefined ? "" : `data-max-nodes="${escapeAttribute(String(options.maxNodes))}"`,
     options.neighborSrcTemplate === undefined ? "" : `data-graph-neighbor-src="${escapeAttribute(options.neighborSrcTemplate)}"`,
+    // Height via data-attr (applied as CSS variable by graph client JS) so CSP
+    // can drop style-src 'unsafe-inline' (JOE-980 / wiki audit P2-4).
+    options.height ? `data-graph-height="${escapeAttribute(options.height)}"` : "",
   ].filter(Boolean).join(" ");
-  return `<div class="ow-graph" ${attrs} style="${options.height ? `--ow-graph-height:${escapeAttribute(options.height)}` : ""}">
+  return `<div class="ow-graph" ${attrs}>
     <div class="ow-graph__head">
       <div>${options.title ? `<h2>${escapeHtml(options.title)}</h2>` : ""}<span data-openwiki-graph-count>Loading graph</span></div>
       <div class="ow-graph__controls">

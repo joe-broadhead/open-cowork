@@ -667,7 +667,9 @@ export function securityHeaders(contentType: string): Record<string, string> {
     };
   }
   return {
-    "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data:; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'",
+    // style-src 'self' only (JOE-980 / wiki audit P2-4): graph height/chip colors
+    // use data-attrs + CSSOM/CSS presets, not style= attributes.
+    "content-security-policy": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data:; script-src 'self'; worker-src 'self' blob:; style-src 'self'; connect-src 'self'",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",

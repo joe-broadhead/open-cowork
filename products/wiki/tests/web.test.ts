@@ -4,10 +4,22 @@ import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/pro
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
-import { buildWebAssets, renderDiff, renderMarkdown, renderShell } from "@openwiki/web";
+import { buildWebAssets, renderDiff, renderGraphMount, renderMarkdown, renderShell } from "@openwiki/web";
 import { graphIndexForQuery } from "../packages/http-api/src/renderers/graph.ts";
 
 const webSourceRoot = path.resolve("packages/web");
+
+test("graph mount uses data-graph-height instead of style attributes (JOE-980)", () => {
+  const html = renderGraphMount({
+    src: "graph.json",
+    mode: "global",
+    height: "620px",
+    title: "Public Graph",
+  });
+  assert.match(html, /data-graph-height="620px"/);
+  assert.doesNotMatch(html, /\sstyle=/);
+  assert.doesNotMatch(html, /--ow-graph-height/);
+});
 
 test("web markdown renderer escapes raw HTML and keeps safe inline syntax", () => {
   const rendered = renderMarkdown([
@@ -151,6 +163,10 @@ test("web asset build writes a two-theme component preview gallery", async () =>
 
     const graphClient = await readFile(path.join(root, "assets", "graph", "index.js"), "utf8");
     assert.match(graphClient, /export function initGraphs/);
+    assert.match(graphClient, /applyGraphHeightFromDataset/);
+    assert.match(graphClient, /applyChipColorsFromDataset/);
+    assert.match(graphClient, /data-chip-color/);
+    assert.doesNotMatch(graphClient, /style="--ow-chip-color/);
     assert.match(graphClient, /ArrowLeft/);
     assert.match(graphClient, /graphScopeFromParams/);
     assert.match(graphClient, /graphScope === "neighborhood"/);

@@ -359,7 +359,9 @@ test("security boundaries enforce request body size and JSON depth limits", asyn
       assert.match(home.headers.get("content-security-policy") ?? "", /script-src 'self'/);
       assert.match(home.headers.get("content-security-policy") ?? "", /worker-src 'self' blob:/);
       assert.match(home.headers.get("content-security-policy") ?? "", /object-src 'none'/);
+      assert.match(home.headers.get("content-security-policy") ?? "", /style-src 'self'/);
       assert.doesNotMatch(home.headers.get("content-security-policy") ?? "", /script-src[^;]*'unsafe-inline'/);
+      assert.doesNotMatch(home.headers.get("content-security-policy") ?? "", /style-src[^;]*'unsafe-inline'/);
       assert.equal(home.headers.get("x-frame-options"), "DENY");
       assert.equal(home.headers.get("x-content-type-options"), "nosniff");
       assert.equal(home.headers.get("referrer-policy"), "no-referrer");

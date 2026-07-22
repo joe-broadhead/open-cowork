@@ -125,7 +125,9 @@ operator/release when Postgres is available—not every monorepo PR. Documented 
 
 **Evidence:** `packages/http-api/src/request.ts` security headers. Markdown/HTML paths escape; residual defense-in-depth gap if an HTML injection lands later.
 
-**Fix:** Nonce/hash styles when server UI styling can be un-inlined.
+**Fix (JOE-980, 2026-07-22):** Dropped `style-src 'unsafe-inline'`. Graph height uses
+`data-graph-height` + CSS presets/CSSOM; legend chip colors use `data-chip-color`
++ CSSOM. No remaining server-rendered `style=` attributes on the HTML UI path.
 
 ### P2-5 — File-backed OAuth state is single-node
 
@@ -167,7 +169,7 @@ explicit file OAuth state.
 | P2-1 | JOE-977 | Medium | Backlog |
 | P2-2 | JOE-972 | Low | Done (loopback-only scope-tokens) |
 | P2-3 | JOE-975 | Low | Done (dry-run PR + release gate; enforce operator) |
-| P2-4 | JOE-980 | Low | Backlog |
+| P2-4 | JOE-980 | Low | Done (CSP style-src self only; no unsafe-inline) |
 | P2-5 | JOE-979 | Low | Done (doctor + runtime + Helm multi-replica OAuth) |
 
 ## Remediation status (this PR)
