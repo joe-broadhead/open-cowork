@@ -100,7 +100,12 @@ Local loopback + no process-wide role is safe. Multi-tenant hosted with `OPENWIK
 
 **Evidence:** Module hard limit 800 is green; many hot files sit just under (e.g. `mcp-server/tool-router.ts` ~733, `http-api/oauth.ts` ~710, `workflows/{backup,dream-cycle,memory}.ts`, `postgres-runtime/{jobs,queries}.ts`). Same class of change-risk as gateway god modules, smaller scale.
 
-**Fix:** Progressive splits when next local seam appears; no emergency refactor in this PR.
+**Fix (JOE-977 progressive, 2026-07-22):** Extracted `http-api/oauth.ts` helpers and
+token grant routes into `oauth-helpers.ts` + `oauth-token-routes.ts` (façade now
+~322 LOC). Extracted graph client controls from `web/src/client/graph/index.js`
+into `graph/controls.js` after CSP work pushed it over 800. Remaining watch-band
+files (tool-router, postgres jobs/queries, workflows) still progressive when the
+next local seam appears.
 
 ### P2-2 — `scope-token` auth method grants scopes from a raw bearer string
 
@@ -166,7 +171,7 @@ explicit file OAuth state.
 | P1-2 | JOE-973 | High | Done (this PR) |
 | P1-3 | JOE-974 | High | Done (this PR) |
 | P1-4 | JOE-978 | High | In Progress (claim gate until JOE-959) |
-| P2-1 | JOE-977 | Medium | Backlog |
+| P2-1 | JOE-977 | Medium | Progressive (oauth split done; more seams residual) |
 | P2-2 | JOE-972 | Low | Done (loopback-only scope-tokens) |
 | P2-3 | JOE-975 | Low | Done (dry-run PR + release gate; enforce operator) |
 | P2-4 | JOE-980 | Low | Done (CSP style-src self only; no unsafe-inline) |

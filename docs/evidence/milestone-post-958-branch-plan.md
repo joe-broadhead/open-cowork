@@ -21,7 +21,7 @@
 | 4 | **Channel kernel** | JOE-923; JOE-929, JOE-934, JOE-932 | **Foundation + Slack kernel + Durable rate-limit**; body migrate still progressive |
 | 5 | **OpenCode kernel** | JOE-916; JOE-940, JOE-945, JOE-943, JOE-937, JOE-966 | **Inventory + pin + standalone + event-pump backoff kernel progressive**; V2 still pin-gated |
 | 6 | **HA / claim gates** | JOE-931; JOE-963 | **Design + gates done**; not multi-AZ HA |
-| 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **P0/P1 done**; P2-2–P2-5 **done**; P2-1 module splits still progressive |
+| 7 | **Wiki audit** | JOE-917; P1 remediations + P2 backlog | **P0/P1 done**; P2-2–P2-5 **done**; P2-1 oauth progressive split **done** (other watch-band residual) |
 | 8 | **Private-beta ops package** | JOE-922 | **Done** (public package + gaps) |
 | 9 | **WorkspaceSessionPort** | JOE-921 | **Done** |
 | 10 | **Audit pointer hygiene** | JOE-964 | **Done** |
@@ -39,7 +39,7 @@ ea28479c refactor(JOE-942): supervisor + project-binding helpers
 2. **JOE-923 progressive** — Slack shared verify + Durable webhook rate-limit **done**; full provider body migrate still residual.  
 3. **JOE-940 / JOE-945 / JOE-966** — Durable classic inventory, pin lockstep CI, standalone adapter decision **done**.  
 4. **JOE-943 progressive** — event-pump reconnect kernel shared (cloud + desktop); full spawn/event topology still product-owned.  
-5. Progressive: JOE-941 Durable V2 (pin-gated), wiki P2-1 module splits, channel body migrate.  
+5. Progressive: JOE-941 Durable V2 (pin-gated), remaining wiki watch-band splits, channel body migrate.  
 6. **Open single PR** when ready to burn Actions once.
 
 ## Non-claims
