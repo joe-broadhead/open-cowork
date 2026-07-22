@@ -1,8 +1,8 @@
 # Full deep & wide codebase audit — post-#959 `master`
 
-**Date:** 2026-07-22  
-**HEAD:** `12e48c9c` (`Post-#958 production next steps (milestone quality signal) (#959)`)  
-**Scope:** Entire monorepo after squash-merge of PR #959; branch pruned; `master` synced to `origin/master`  
+**Date:** 2026-07-22
+**HEAD:** `12e48c9c` (`Post-#958 production next steps (milestone quality signal) (#959)`)
+**Scope:** Entire monorepo after squash-merge of PR #959; branch pruned; `master` synced to `origin/master`
 **Method:** Quantitative local gates + three parallel deep read-only audits (security, architecture, ops/claims). Skeptical re-check of “done” claims against source — not rubber-stamping prior scorecards.
 
 ---
@@ -81,11 +81,11 @@ Soft target **1500** fails for 7/8 budgeted façades (only `environments.ts` und
 
 ### Gates (green at audit time)
 
-- `check-god-module-loc.mjs` OK  
-- `check-durable-opencode-classic-gate.mjs` OK (V2 construction + façade-only session I/O)  
-- `check-dual-channel-security.mjs` OK  
-- `check-opencode-pin-lockstep.mjs` OK (all authority packages **1.18.1**)  
-- `check-distributed-ownership-claims.mjs` OK (`registry status=partial`)  
+- `check-god-module-loc.mjs` OK
+- `check-durable-opencode-classic-gate.mjs` OK (V2 construction + façade-only session I/O)
+- `check-dual-channel-security.mjs` OK
+- `check-opencode-pin-lockstep.mjs` OK (all authority packages **1.18.1**)
+- `check-distributed-ownership-claims.mjs` OK (`registry status=partial`)
 
 ---
 
@@ -115,24 +115,24 @@ Desktop sandbox + IPC sender URL checks; cloud CSRF + OIDC `safeReturnTo`; gatew
 
 ### Residual accepted risks (still true)
 
-1. Dual channel protocol stacks freeze (security body shared)  
-2. No multi-AZ / multi-replica Gateway HA product claim  
-3. Chart CSP `unsafe-eval` (Vega)  
-4. HTTPS MCP residual  
-5. Public multi-tenant hosted Wiki claim-gated (JOE-978 / JOE-959 process)  
-6. Admin token = full power (rate limits bound volume, not capability)  
+1. Dual channel protocol stacks freeze (security body shared)
+2. No multi-AZ / multi-replica Gateway HA product claim
+3. Chart CSP `unsafe-eval` (Vega)
+4. HTTPS MCP residual
+5. Public multi-tenant hosted Wiki claim-gated (JOE-978 / JOE-959 process)
+6. Admin token = full power (rate limits bound volume, not capability)
 
 ---
 
 ## Architecture findings
 
-1. **Hard budgets green, soft target decorative** — worst headroom: `daemon-routes/work.ts` (18 lines), `config.ts` (20 lines).  
-2. **Work-store modularized, not small** — façade 1956 + ~25 leaves (~9k domain LOC).  
-3. **Import-cycle monorepo gate is UI-scoped only** (`packages/app`, `packages/ui`) — runtime-host / cloud-server / desktop main not scanned.  
-4. **Root knip ignores `products/gateway` and `products/wiki`** — product knip is separate.  
-5. **OpenCode post-#959:** pin lockstep 1.18.1; Durable V2 façade real; Desktop classic allowlist exact-count **Won't Do** full burn-down on this pin.  
-6. **WorkspaceSessionPort:** cloud full; **local residual** — production IPC still hits `sessionEngine` directly.  
-7. **Dual-stack channels:** freeze honest; Telegram body still dual (~673 vs ~616 LOC).  
+1. **Hard budgets green, soft target decorative** — worst headroom: `daemon-routes/work.ts` (18 lines), `config.ts` (20 lines).
+2. **Work-store modularized, not small** — façade 1956 + ~25 leaves (~9k domain LOC).
+3. **Import-cycle monorepo gate is UI-scoped only** (`packages/app`, `packages/ui`) — runtime-host / cloud-server / desktop main not scanned.
+4. **Root knip ignores `products/gateway` and `products/wiki`** — product knip is separate.
+5. **OpenCode post-#959:** pin lockstep 1.18.1; Durable V2 façade real; Desktop classic allowlist exact-count **Won't Do** full burn-down on this pin.
+6. **WorkspaceSessionPort:** cloud full; **local residual** — production IPC still hits `sessionEngine` directly.
+7. **Dual-stack channels:** freeze honest; Telegram body still dual (~673 vs ~616 LOC).
 8. **Unbudgeted gods** (`mcp.ts`, `channel-commands.ts`, postgres control-plane store) evade ratchet.
 
 ---
@@ -141,11 +141,11 @@ Desktop sandbox + IPC sender URL checks; cloud CSRF + OIDC `safeReturnTo`; gatew
 
 ### Honest and enforced
 
-- Public tier: **`local-self-host-beta` only**  
-- Private-beta public decision: **`no-go`** (`deploy/private-beta/private-beta-go-no-go.public.md`)  
-- Multi-AZ HA forbidden language + Helm `replicaCount>1` fail-closed without experimental flag  
-- Distributed-ownership registry `status=partial`; open migrate hazards **H1, H3, H4, H8, H13**  
-- Required PR checks: validate, cloud-gates, macos/linux/windows package, docs, coverage, CodeQL  
+- Public tier: **`local-self-host-beta` only**
+- Private-beta public decision: **`no-go`** (`deploy/private-beta/private-beta-go-no-go.public.md`)
+- Multi-AZ HA forbidden language + Helm `replicaCount>1` fail-closed without experimental flag
+- Distributed-ownership registry `status=partial`; open migrate hazards **H1, H3, H4, H8, H13**
+- Required PR checks: validate, cloud-gates, macos/linux/windows package, docs, coverage, CodeQL
 
 ### Gaps
 
@@ -158,9 +158,9 @@ Desktop sandbox + IPC sender URL checks; cloud CSRF + OIDC `safeReturnTo`; gatew
 
 ### Stale docs to refresh (cheap)
 
-1. ~~`docs/opencode-sdk-v2-boundary.md` — Durable classic paragraph~~ **fixed** on remediation branch (V2 + façade)  
-2. ~~`docs/opencode-standalone-adapter-decision.md` — “until JOE-941”~~ **fixed** on remediation branch  
-3. ~~`docs/evidence/repo-wide-surface-audit-2026-07-21.md` — historical banner~~ **fixed** (points here)  
+1. ~~`docs/opencode-sdk-v2-boundary.md` — Durable classic paragraph~~ **fixed** on remediation branch (V2 + façade)
+2. ~~`docs/opencode-standalone-adapter-decision.md` — “until JOE-941”~~ **fixed** on remediation branch
+3. ~~`docs/evidence/repo-wide-surface-audit-2026-07-21.md` — historical banner~~ **fixed** (points here)
 
 ---
 
@@ -246,11 +246,11 @@ Does **not** invent private-beta go evidence or flip go/no-go to `go`.
 
 Do **not** claim from this audit or from #959 alone:
 
-1. Multi-AZ HA or production multi-replica Durable Gateway  
-2. Hosted private-beta **go**  
-3. Full dual-stack **protocol** delete  
-4. Full Desktop classic SDK burn-down on pin 1.18.1  
-5. Public multi-tenant Wiki product readiness  
+1. Multi-AZ HA or production multi-replica Durable Gateway
+2. Hosted private-beta **go**
+3. Full dual-stack **protocol** delete
+4. Full Desktop classic SDK burn-down on pin 1.18.1
+5. Public multi-tenant Wiki product readiness
 
 **Do claim (accurate):** local/self-host beta posture; progressive security kernels; Durable OpenCode V2 construction + session façade; pin lockstep 1.18.1; hard god-module budgets green; required CI green at merge.
 
@@ -258,27 +258,27 @@ Do **not** claim from this audit or from #959 alone:
 
 ## Suggested next 10 tickets (concise)
 
-1. SEC: Durable webhook rate-key trusted-proxy parity (+ tests)  
-2. SEC: JOE-952 coverage for `/storage/export` + session messages  
-3. SEC: Uniform dual-intent (`localAdmin`/loopback) on raw exports  
-4. Extract `daemon-routes/work.ts` under soft budget  
-5. Extract `config.ts` under soft budget  
-6. ~~Docs: Durable V2 + historical audit scorecard banner~~ (remediation branch)  
-7. Local `WorkspaceSessionPort` progressive cutover  
-8. Wiki `jobs.ts` / `tool-router.ts` splits  
-9. Widen monorepo import-cycle roots  
+1. SEC: Durable webhook rate-key trusted-proxy parity (+ tests)
+2. SEC: JOE-952 coverage for `/storage/export` + session messages
+3. SEC: Uniform dual-intent (`localAdmin`/loopback) on raw exports
+4. Extract `daemon-routes/work.ts` under soft budget
+5. Extract `config.ts` under soft budget
+6. ~~Docs: Durable V2 + historical audit scorecard banner~~ (remediation branch)
+7. Local `WorkspaceSessionPort` progressive cutover
+8. Wiki `jobs.ts` / `tool-router.ts` splits
+9. Widen monorepo import-cycle roots
 10. Private-beta evidence campaign (only if go is a goal; public package COMPLETE / still `no-go`)
 
 ---
 
 ## Audit method appendix
 
-- Local: `pnpm audit:*`, LOC inventories, all post-#959 check scripts, secret/CSP/unsafe pattern sweeps, evidence doc cross-read  
-- Security explore agent: auth, webhooks, exports, CSP, supply chain, HA security  
-- Architecture explore agent: budgets, cycles, partitions, OpenCode, dual-stack, wiki, knip  
-- Ops explore agent: CI required checks, claim gates, private-beta package, HA hazards, evals, doc freshness  
+- Local: `pnpm audit:*`, LOC inventories, all post-#959 check scripts, secret/CSP/unsafe pattern sweeps, evidence doc cross-read
+- Security explore agent: auth, webhooks, exports, CSP, supply chain, HA security
+- Architecture explore agent: budgets, cycles, partitions, OpenCode, dual-stack, wiki, knip
+- Ops explore agent: CI required checks, claim gates, private-beta package, HA hazards, evals, doc freshness
 
-**Prior evidence (not re-litigated as “open” unless re-verified):**  
+**Prior evidence (not re-litigated as “open” unless re-verified):**
 `docs/evidence/repo-wide-surface-audit-2026-07-21.md`, `wiki-surface-audit-2026-07-21.md`, `milestone-post-958-branch-plan.md`, multi-writer hazards, channel security matrix, private-beta ops package.
 
 ---

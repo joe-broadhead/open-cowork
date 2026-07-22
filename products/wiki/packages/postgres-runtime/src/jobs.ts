@@ -1,5 +1,5 @@
 import { runtimeRecordFromJson } from "./records.ts";
-import { assertOpenWikiId, assertOpenWikiRunType, boundedOpenWikiListLimit, type EventRecord, isoNow, OPENWIKI_SYSTEM_ACTOR_ID, type OpenWikiSectionVisibility, redactOpenWikiRunRecord, type RunRecord, type RunStatus } from "@openwiki/core";
+import { assertOpenWikiId, assertOpenWikiRunType, boundedOpenWikiListLimit, type EventRecord, isoNow, OPENWIKI_SYSTEM_ACTOR_ID, redactOpenWikiRunRecord, type RunRecord, type RunStatus } from "@openwiki/core";
 import { appendEvent, appendRun, loadRepository, updateRunIfStatus } from "@openwiki/repo";
 import postgres from "postgres";
 import { openPostgresSql } from "./connection.ts";
@@ -8,7 +8,7 @@ import { migratePostgresRuntime } from "./migrations.ts";
 import { jobStatusCount, runStatusCount } from "./queries.ts";
 import { dateStringField, jsonb, optionalSanitizedRunInput, runFromRow, stringField } from "./rows.ts";
 import { DEFAULT_STALE_RUN_MAX_RUNTIME_MS, RUNTIME_SOURCE_COMMIT, type CountRow, type JobAttemptRow, type PostgresQuery, type PostgresRunCancellationOptions, type PostgresRunCancellationResult, type PostgresRunJobInput, type PostgresRunQueueAdapter, type PostgresRunReaperOptions, type PostgresRunReaperResult, type PostgresRuntimeOptions, type PostgresRuntimeQueueHealth, type PostgresSql, type RunRow } from "./types.ts";
-import { optionalRunSubjectPaths, optionalEventSubjectPaths, optionalRunSensitivity, optionalEventSensitivity, runSubjectPaths, runSensitivity } from "./jobs-subject.ts";
+import { optionalRunSubjectPaths, optionalEventSubjectPaths, optionalRunSensitivity, optionalEventSensitivity } from "./jobs-subject.ts";
 
 export async function createPostgresRunQueue(root: string, options: PostgresRuntimeOptions = {}): Promise<PostgresRunQueueAdapter> {
   const databaseUrl = resolvePostgresDatabaseUrl(options);
