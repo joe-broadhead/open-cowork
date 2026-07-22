@@ -6,8 +6,8 @@
  "sourceRoot": "src",
  "dependencyBudget": {
   "includeTests": false,
-  "maxModuleCount": 240,
-  "maxEdgeCount": 1050,
+  "maxModuleCount": 243,
+  "maxEdgeCount": 1080,
   "maxCycleComponents": 0,
   "maxCycleComponentSize": 4,
   "knownCycles": []
@@ -221,7 +221,8 @@
     "src/cli/commands/task.ts",
     "src/daemon-router.ts",
     "src/daemon-routes/system.ts",
-    "src/daemon-routes/work.ts"
+    "src/daemon-routes/work.ts",
+    "src/daemon-routes/work-presentation.ts"
    ],
    "edgeAdapters": [
     "src/daemon.ts",
@@ -718,6 +719,30 @@
     "growthKind": "runtime",
     "rationale": "Type-module re-exports and imports from work-store/environments fa\u00e7ades increase graph edges during LOC budget extraction.",
     "consolidationPath": "Collapse re-export edges by having consumers import work-store/types and environments/types directly where safe."
+   },
+   {
+    "id": "post_959_facade_loc_remediation_modules",
+    "issue": "POST-959-P0-P3",
+    "metric": "module_count",
+    "previous": 240,
+    "current": 243,
+    "delta": 3,
+    "ownerCategory": "daemon_cli_edge",
+    "growthKind": "runtime",
+    "rationale": "Extract work-presentation helpers and config schema/normalize leaves so work.ts and config.ts stay under soft LOC target 1500 without expanding release claims.",
+    "consolidationPath": "Keep leaves pure; consumers continue to import façades (workRoutes/config) unless a second extraction needs direct leaf imports."
+   },
+   {
+    "id": "post_959_facade_loc_remediation_edges",
+    "issue": "POST-959-P0-P3",
+    "metric": "edge_count",
+    "previous": 1050,
+    "current": 1080,
+    "delta": 30,
+    "ownerCategory": "daemon_cli_edge",
+    "growthKind": "runtime",
+    "rationale": "work.ts→work-presentation and config.ts→config-schema/config-normalize plus presentation helper imports increase graph edges during LOC façade split.",
+    "consolidationPath": "Prefer keeping presentation helpers behind workRoutes; collapse duplicate façade re-export edges if leaves stabilize."
    }
   ],
   "directionalImportPilots": [
@@ -754,7 +779,7 @@
    "path": "src/config.ts",
    "maxLines": 1800,
    "owner": "config",
-   "note": "Hard LOC budget (JOE-919); current 1780 lines; under 2000"
+   "note": "Hard LOC budget (JOE-919); current ~1408 after config-schema + config-normalize extract; soft target ≤1500"
   },
   {
    "path": "src/scheduler.ts",
@@ -766,7 +791,7 @@
    "path": "src/daemon-routes/work.ts",
    "maxLines": 1960,
    "owner": "scheduler_replay",
-   "note": "Hard LOC budget (JOE-919); current 1940 lines; under 2000"
+   "note": "Hard LOC budget (JOE-919); current ~1495 after work-presentation extract; soft target ≤1500"
   }
  ]
 }

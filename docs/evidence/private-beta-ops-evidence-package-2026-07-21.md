@@ -10,6 +10,16 @@
 
 This package is the **public-repo** side of JOE-922. Real customer logs, domains, digests from a live target, support rosters, and metrics exports stay outside this repository per `docs/runbooks/managed-byok-saas-boundary.md`.
 
+### Completeness snapshot
+
+| Layer | Status |
+| --- | --- |
+| **Public package** | **COMPLETE** — templates, configs, validators, public go/no-go, and this evidence package are in-repo; `pnpm deploy:private-beta:validate` is the machine check |
+| **Private campaign items** | **Still required for go** — every blocking row in §2 / `launch-evidence-record.template.json` remains `pending-private-evidence` until operators attach private records |
+| **Go / no-go** | **`no-go`** — do not flip to `go` without private evidence, sign-off, and redacted public summaries |
+
+Do **not** invent fake private-beta go evidence. Public completeness ≠ hosted go.
+
 ---
 
 ## 1. Public package readiness (verified this date)

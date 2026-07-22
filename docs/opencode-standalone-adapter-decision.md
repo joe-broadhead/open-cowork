@@ -11,7 +11,7 @@
 | Desktop runtime-host | `createOpencodeV2Client` via `runtime-host/opencode-client-kernel` | Spawns managed OpenCode |
 | Cloud worker | Same kernel (re-export path) | Cloud runtime authority |
 | Standalone Gateway | Dynamic `import('@opencode-ai/sdk/v2')` in `apps/standalone-gateway/src/opencode.ts` | Appliance + private OpenCode endpoint |
-| Durable Gateway | Classic root `createOpencodeClient` | Separate product partition (JOE-940/941) |
+| Durable Gateway | V2 `createOpencodeClient` + session façade (JOE-941) | Separate product partition; pin lockstep 1.18.1 |
 
 #958 / JOE-943 shared kernel is intentionally **thin** today: V2 client
 construction + auth config + health probe. Spawn, session API shapes, and event
@@ -35,7 +35,9 @@ pumps remain product-owned.
 
 - Moving Standalone spawn into runtime-host (Standalone does not own desktop
   managed-server spawn).
-- Migrating Durable Gateway onto this path (classic root until JOE-941).
+- Folding Durable Gateway into the Standalone appliance adapter (Durable has
+  its own V2 construction + session façade post JOE-941; still a separate
+  product partition — not a Standalone dependency).
 - Expanding JOE-943 kernel into full spawn/event-pump without a separate design
   for cloud vs desktop (JOE-943 residual).
 
@@ -44,7 +46,7 @@ pumps remain product-owned.
 | Trigger | Action |
 | --- | --- |
 | JOE-943 expands kernel with spawn/event-pump | Re-evaluate whether Standalone should import kernel helpers only (still no full runtime-host dependency) |
-| Durable V2 migration (JOE-941) | Align Durable construction with V2 kernel; Standalone stays independent |
+| Durable aligns construction helpers with monorepo kernel | Optional only; Standalone stays independent of Durable and of full runtime-host |
 | Pin bump that changes V2 client config shape | Update kernel + Standalone constructor in the same change |
 
 ## Related code

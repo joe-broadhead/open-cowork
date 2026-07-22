@@ -154,13 +154,29 @@ Desktop sandbox + IPC sender URL checks; cloud CSRF + OIDC `safeReturnTo`; gatew
 | Hosted private-beta go evidence (load/soak/restore/failover/BYOK live/support roster) all pending | **Blocks go** (correct) |
 | Monthly evals non-blocking + monthly cadence | Quality latency risk |
 | Experimental multi-replica lab flag with open migrate hazards | Operator footgun if misread |
-| **Stale docs** still describing Durable as classic root | Doc drift (see hygiene) |
+| ~~**Stale docs** still describing Durable as classic root~~ | **Fixed** on remediation branch (see hygiene + Remediation PR) |
 
 ### Stale docs to refresh (cheap)
 
-1. `docs/opencode-sdk-v2-boundary.md` — Durable classic paragraph  
-2. `docs/opencode-standalone-adapter-decision.md` — “until JOE-941”  
-3. `docs/evidence/repo-wide-surface-audit-2026-07-21.md` — executive scorecard historical; add as-of banner / post-#959 delta  
+1. ~~`docs/opencode-sdk-v2-boundary.md` — Durable classic paragraph~~ **fixed** on remediation branch (V2 + façade)  
+2. ~~`docs/opencode-standalone-adapter-decision.md` — “until JOE-941”~~ **fixed** on remediation branch  
+3. ~~`docs/evidence/repo-wide-surface-audit-2026-07-21.md` — historical banner~~ **fixed** (points here)  
+
+---
+
+## Remediation PR (this branch)
+
+Branch: `fix/post-959-p0-p3-remediation` — documentation + process residuals only.
+Does **not** invent private-beta go evidence or flip go/no-go to `go`.
+
+| Priority | Closed / tightened in this branch |
+| --- | --- |
+| **P1 docs** | Durable classic drift fixed in `docs/opencode-sdk-v2-boundary.md` (V2 construction + façade post JOE-941) and `docs/opencode-standalone-adapter-decision.md` (removed “until JOE-941” classic claims). Historical banner on `docs/evidence/repo-wide-surface-audit-2026-07-21.md` → points to this post-#959 audit. |
+| **P0 private-beta (package completeness)** | `deploy/private-beta/` + `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` explicitly list **public package COMPLETE**, **private campaign items still required for go**, and **go-no-go remains `no-go`**. `scripts/validate-private-beta-package.mjs` inventory asserts required templates exist and public go-no-go contains `no-go` (rejects `Decision: \`go\``). |
+| **P2 dual-stack / HA** | `docs/product-channel-ownership.md` + channel security matrix: security body **done**; protocol freeze = **intentional residual** (not incomplete P1). Multi-writer hazards H1/H3/H4/H8/H13 annotated **single-daemon production shape; multi-replica experimental only**; proving registry `status=partial`; no false “migrated” claim. |
+| **P3 pin-gated residuals** | Classic allowlist burndown revalidated **Won't Do** on 1.18.1; chart CSP + HTTPS MCP residuals reaffirmed **accepted** in `docs/security-model.md`; JOE-915 freeze residual noted in `docs/evidence/archive-plan/README.md` (archive action still maintainer ops). |
+
+**Still open (not closed by docs alone):** hosted private-beta private evidence campaign; SEC-1/SEC-2 code; HA migrate hazards in code; classic allowlist burn on next OpenCode pin; `gh repo archive` for product repos.
 
 ---
 
@@ -184,7 +200,7 @@ Desktop sandbox + IPC sender URL checks; cloud CSRF + OIDC `safeReturnTo`; gatew
 | 2 | **SEC-2** Extend JOE-952 to `/storage/export` + session messages | Stolen admin token harvest surface |
 | 3 | Extract `daemon-routes/work.ts` + `config.ts` below 1800 soft | 18–20 LOC headroom crises |
 | 4 | Uniform `localAdmin`/loopback dual-intent on all raw exports | SEC-3 |
-| 5 | Doc drift cleanup (Durable V2 + historical audit banner) | Prevent re-opening closed work |
+| 5 | ~~Doc drift cleanup (Durable V2 + historical audit banner)~~ | **Closed on remediation branch** (see Remediation PR section) |
 
 ### P2 — structural progressive
 
@@ -196,20 +212,20 @@ Desktop sandbox + IPC sender URL checks; cloud CSRF + OIDC `safeReturnTo`; gatew
 | 4 | Wiki `tool-router` + `jobs.ts` splits | JOE-977 residual |
 | 5 | Budget or extract `mcp.ts` / `channel-commands.ts` | Unbudgeted gods |
 | 6 | Rate-limiter twin parity CI test | SEC-4 |
-| 7 | HA migrate hazards H1/H3/H4/H8/H13 | JOE-931/949 — before any multi-replica claim |
-| 8 | Dual-stack protocol re-home epic (optional product capacity) | JOE-923 follow-on |
+| 7 | HA migrate hazards H1/H3/H4/H8/H13 (docs: single-daemon production; not migrated) | JOE-931/949 — before any multi-replica claim |
+| 8 | Dual-stack protocol re-home epic (optional capacity; security body done) | JOE-923 follow-on — intentional residual |
 
 ### P3 / pin-gated / process
 
 | # | Work |
 | --- | --- |
-| 1 | Desktop classic allowlist burn-down — wait OpenCode pin >1.18.1 |
-| 2 | Chart CSP `unsafe-eval` reopen when server-side Vega |
-| 3 | HTTPS MCP pin when OpenCode supports connect-IP+SNI |
+| 1 | Desktop classic allowlist burn-down — **Won't Do on 1.18.1** (revalidated); wait pin >1.18.1 |
+| 2 | Chart CSP `unsafe-eval` — **accepted residual** (reaffirmed); reopen when server-side Vega |
+| 3 | HTTPS MCP — **accepted residual** (reaffirmed); pin when OpenCode supports connect-IP+SNI |
 | 4 | Monthly evals: dispatch post-#959 to prove green signal |
 | 5 | Design-system / god-module progressive (JOE-848/851/854/894/919) |
 | 6 | DOMPurify low advisory when fix available |
-| 7 | Private product-repo freeze/archive residual (JOE-915) |
+| 7 | JOE-915: freeze/SoT **done**; `gh repo archive` still maintainer ops residual |
 
 ---
 
@@ -247,11 +263,11 @@ Do **not** claim from this audit or from #959 alone:
 3. SEC: Uniform dual-intent (`localAdmin`/loopback) on raw exports  
 4. Extract `daemon-routes/work.ts` under soft budget  
 5. Extract `config.ts` under soft budget  
-6. Docs: Durable V2 + historical audit scorecard banner  
+6. ~~Docs: Durable V2 + historical audit scorecard banner~~ (remediation branch)  
 7. Local `WorkspaceSessionPort` progressive cutover  
 8. Wiki `jobs.ts` / `tool-router.ts` splits  
 9. Widen monorepo import-cycle roots  
-10. Private-beta evidence campaign (only if go is a goal)
+10. Private-beta evidence campaign (only if go is a goal; public package COMPLETE / still `no-go`)
 
 ---
 

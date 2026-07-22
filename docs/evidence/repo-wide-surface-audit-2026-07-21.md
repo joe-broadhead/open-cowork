@@ -1,5 +1,13 @@
 # Repo-wide surface audit (medium+)
 
+> **Historical as-of (pre-#959).** This scorecard and findings table reflect
+> master **before** PR #959 landed. Do **not** treat executive grades, open
+> P0s, or “Durable classic” / dual-stack wording here as current state.
+> **Current post-#959 master audit:**
+> [`post-959-master-full-audit-2026-07-22.md`](./post-959-master-full-audit-2026-07-22.md).
+> Residual tracking after #958/#959 is also summarized in the pointer section
+> below and in the post-#959 remediation notes.
+
 **Date:** 2026-07-21
 **HEAD audited:** `8863765d` (`Merge pull request #957 … codeql-action-4.37.1`)
 **Method:** First-principles inventory of every major surface (apps, products, packages, CI, deploy, supply chain), then deep dives on security, dual stacks, reliability, and ops. **Tiny nits excluded.** Only medium-to-big fix items.

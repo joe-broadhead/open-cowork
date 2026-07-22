@@ -4,6 +4,13 @@
 **Linear:** JOE-929 (inventory), JOE-934 (shared kernel)
 **Related:** `docs/product-channel-ownership.md`
 
+### Disposition (post-#959)
+
+| Layer | Status |
+| --- | --- |
+| **Security body** (verify kernels + rate-limit) | **Done** — shared; not an open P1 |
+| **Protocol / adapter freeze** (Durable `channels/*` vs monorepo providers) | **Intentional residual** — not incomplete dual-stack security work; full re-home is a future epic |
+
 ## Stacks
 
 | Stack | Location | Consumers |
@@ -35,11 +42,13 @@
 5. ~~Compose monorepo Telegram secret verify onto shared helper~~ — **done** (`verifyTelegramWebhookSecretToken` in provider); Durable Telegram remains long-poll primary
 6. ~~Fold Durable rate-limit twin into shared package~~ — **done** (`packages/shared/src/node/webhook-rate-limiter.ts` + Durable façade); monorepo `gateway-channel` keeps algorithm twin (pack boundary)
 7. ~~Provider body migration (Durable → monorepo providers)~~ — **Closed for this milestone:**
-   dual-stack freeze retained (`docs/product-channel-ownership.md`); security body
-   fully shared (verify kernels + rate-limit); monorepo Telegram secret on shared
-   kernel; Durable keeps native protocol adapters (Telegram long-poll, native
-   Meta/Discord) as the Durable-owned stack. Full protocol re-home to
-   `gateway-provider-*` remains a future epic outside post-#958.
+   dual-stack **protocol freeze** retained as an **intentional residual**
+   (`docs/product-channel-ownership.md`); **security body fully shared** (verify
+   kernels + rate-limit) and is **done** — not incomplete P1. Monorepo Telegram
+   secret on shared kernel; Durable keeps native protocol adapters (Telegram
+   long-poll, native Meta/Discord) as the Durable-owned stack. Full protocol
+   re-home to `gateway-provider-*` remains a future capacity epic (optional),
+   not a missing security fix.
 
 ## Dual-stack security PR rule
 
@@ -53,4 +62,5 @@ Any change to signature verify, SSRF, constant-time compare, rate limits, or cha
 ## Explicit non-goals (this pass)
 
 - Full deletion of Durable `channels/*` in favor of monorepo providers
+  (**intentional protocol residual**, not incomplete security work)
 - Replacing bridge-mode monorepo providers with native Meta/Discord verify

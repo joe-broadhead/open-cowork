@@ -114,6 +114,7 @@ export function opencodeRoutes(): RouteHandler[] {
         operation: 'opencode.sessions.unredacted',
         target: 'opencode/sessions',
         unredacted: raw,
+        url,
       })
       if (limited) return limited
       const config = getConfig()
@@ -127,9 +128,19 @@ export function opencodeRoutes(): RouteHandler[] {
     const opencodeSessionMessagesMatch = pathMatch(url.pathname, /^\/opencode\/sessions\/([^/]+)\/messages$/)
     if (req.method === 'GET' && opencodeSessionMessagesMatch) {
       const limit = boundedIntegerQuery(url, 'limit', 20, 200)
+      const raw = url.searchParams.get('raw') === 'true' || url.searchParams.get('unredacted') === 'true' || url.searchParams.get('redact') === 'false'
+      // Transcripts default redacted; raw/unredacted requires JOE-952 guard + localAdmin dual-intent.
+      const limited = guardUnredactedExport(req, {
+        operation: 'opencode.session.messages.unredacted',
+        target: opencodeSessionMessagesMatch[0],
+        unredacted: raw,
+        url,
+      })
+      if (limited) return limited
+      const config = getConfig()
       const runtime = createOpenCodeSessionRuntime(client)
       const messages = ((await runtime.messages(opencodeSessionMessagesMatch[0], undefined, limit)) as any[]).slice(-limit)
-      return json({ messages })
+      return json({ messages: raw ? messages : redactSensitiveObject(messages, config) })
     }
 
     const opencodeSessionChildrenMatch = pathMatch(url.pathname, /^\/opencode\/sessions\/([^/]+)\/children$/)
@@ -157,6 +168,7 @@ export function opencodeRoutes(): RouteHandler[] {
         operation: 'opencode.session.unredacted',
         target: sessionId,
         unredacted: raw,
+        url,
       })
       if (limited) return limited
       let session: any
@@ -206,6 +218,7 @@ export function opencodeRoutes(): RouteHandler[] {
         operation: 'opencode.mcp.unredacted',
         target: 'opencode/mcp',
         unredacted: raw,
+        url,
       })
       if (limited) return limited
       const mcp = listOpenCodeMcp(url.searchParams.get('configDir') || undefined)

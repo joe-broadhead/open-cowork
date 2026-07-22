@@ -1,9 +1,17 @@
 # Channel stack ownership (products/gateway vs monorepo providers)
 
-**Status:** Frozen dual-stack policy (audit 2026-07-18)
-**Related:** `docs/evidence/opencode-sdk-duplication-audit-2026-07-18.md`
+**Status:** Dual-stack **protocol freeze** retained (intentional residual, not incomplete P1)
+**Security body:** **Done** — shared verify kernels + rate-limit primitives in `@open-cowork/shared/node` (JOE-934 / post-#958/#959)
+**Related:** `docs/evidence/opencode-sdk-duplication-audit-2026-07-18.md`, `docs/evidence/channel-stack-security-matrix-2026-07-21.md`
 
-## Two stacks (intentional for this milestone close)
+## Disposition (post-#959)
+
+| Layer | Status | Meaning |
+| --- | --- | --- |
+| **Security body** (signature verify, Meta/Discord/Telegram/Slack kernels, rate-limit algorithm) | **Done** | Shared; dual-fix checklist still required for security PRs |
+| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Intentional residual freeze** | Not an incomplete P1; full protocol re-home is a future epic (capacity), not a missing security fix |
+
+## Two stacks (intentional)
 
 | Stack | Location | Consumers |
 | --- | --- | --- |
@@ -22,11 +30,12 @@ be casually dual-fixed. Security and protocol bugs need an explicit owner.
 | Durable Gateway (cowork-gateway) inbound/outbound chat | products/gateway channels | monorepo providers (unless migrating) |
 | Shared crypto / rate-limit / retry primitives | `packages/gateway-channel` or `@open-cowork/shared` | copy-paste into either stack |
 
-## Migration (future)
+## Protocol migration (future epic — not open P1)
 
 Preferred long-term: products/gateway composes `gateway-provider-*` instead of
 local `channels/*`. That is a large product change and is **out of band** for
-the security/SDK DRY fix PR. Track as a dedicated epic when ready.
+security body work (already shared). Track as a dedicated capacity epic when
+ready — **do not re-open as incomplete dual-stack security P1**.
 
 Until then, this freeze document is the source of truth for dual-stack ownership.
 

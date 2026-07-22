@@ -77,8 +77,29 @@ export function evaluateUnredactedExportGuard(
 }
 
 /**
+ * Dual-intent for raw/unredacted admin dumps (JOE-952 uniformity).
+ * Callers must pass `localAdmin=true` (or set requireLocalAdmin=false only for
+ * explicitly redacted-safe paths). Fail closed with 403 when missing.
+ */
+export function requireLocalAdminIntent(
+  req: { url?: string },
+  url: URL = new URL(req.url || '/', 'http://localhost'),
+): ReturnType<typeof json> | null {
+  if (url.searchParams.get('localAdmin') === 'true') return null
+  return json(
+    {
+      error: 'localAdmin intent required',
+      message: 'Raw/unredacted export requires explicit localAdmin=true dual intent in addition to admin capability.',
+    },
+    403,
+  )
+}
+
+/**
  * When the request is asking for unredacted/raw data, apply the export guard
  * and return a 429 response body if limited. Returns null when allowed.
+ * When `requireLocalAdmin` is true (default for sensitive dumps), also require
+ * `localAdmin=true` query dual-intent.
  */
 export function guardUnredactedExport(
   req: any,
@@ -86,11 +107,25 @@ export function guardUnredactedExport(
     operation: string
     target: string
     unredacted: boolean
+    /** Default true for sensitive dumps; set false only when dual-intent is checked separately. */
+    requireLocalAdmin?: boolean
     config?: UnredactedExportGuardConfig
     now?: number
+    url?: URL
   },
 ): ReturnType<typeof json> | null {
   if (!options.unredacted) return null
+  const url = options.url || new URL(req?.url || '/', 'http://localhost')
+  if (options.requireLocalAdmin !== false) {
+    const intent = requireLocalAdminIntent(req, url)
+    if (intent) {
+      auditHttp(req, options.operation, options.target, 'denied', {
+        unredacted: true,
+        reason: 'local_admin_required',
+      })
+      return intent
+    }
+  }
   const actorKey = unredactedExportActorKey(req)
   const decision = evaluateUnredactedExportGuard(actorKey, options.config, options.now)
   if (decision.allowed) {

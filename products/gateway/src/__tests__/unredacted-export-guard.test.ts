@@ -38,11 +38,29 @@ describe('unredacted-export-guard (JOE-952)', () => {
     ).toBeNull()
   })
 
-  it('returns 429 after the limit', () => {
+  it('requires localAdmin dual-intent for unredacted dumps', () => {
     const req = {
+      url: '/config?redact=false',
       headers: { authorization: 'Bearer test-token-abcdef' },
       socket: { remoteAddress: '10.0.0.5' },
     }
+    const denied = guardUnredactedExport(req, {
+      operation: 'config.read.unredacted',
+      target: 'config',
+      unredacted: true,
+      url: new URL('http://localhost/config?redact=false'),
+    })
+    expect(denied?.status).toBe(403)
+    expect((denied?.body as { error?: string })?.error).toBe('localAdmin intent required')
+  })
+
+  it('returns 429 after the limit when localAdmin is present', () => {
+    const req = {
+      url: '/config?redact=false&localAdmin=true',
+      headers: { authorization: 'Bearer test-token-abcdef' },
+      socket: { remoteAddress: '10.0.0.5' },
+    }
+    const url = new URL('http://localhost/config?redact=false&localAdmin=true')
     const config = { ...DEFAULT_UNREDACTED_EXPORT_GUARD, maxRequests: 2, windowMs: 60_000 }
     const now = 3_000_000
     expect(
@@ -52,6 +70,7 @@ describe('unredacted-export-guard (JOE-952)', () => {
         unredacted: true,
         config,
         now,
+        url,
       }),
     ).toBeNull()
     expect(
@@ -61,6 +80,7 @@ describe('unredacted-export-guard (JOE-952)', () => {
         unredacted: true,
         config,
         now: now + 1,
+        url,
       }),
     ).toBeNull()
     const denied = guardUnredactedExport(req, {
@@ -69,6 +89,7 @@ describe('unredacted-export-guard (JOE-952)', () => {
       unredacted: true,
       config,
       now: now + 2,
+      url,
     })
     expect(denied).toBeTruthy()
     expect(denied?.status).toBe(429)

@@ -1,5 +1,4 @@
 import * as fs from 'node:fs'
-import { z } from 'zod'
 import { stableStringify } from './stable-stringify.js'
 import * as path from 'node:path'
 import * as os from 'node:os'
@@ -9,9 +8,19 @@ import { normalizeEnvironmentSelector, normalizeGatewayEnvironmentConfig, type E
 import { ConfigError } from './errors.js'
 import { gatewayEnv, type EnvSource } from './env.js'
 import { setTrustedOpenCodePeerHosts } from './opencode-peer-hosts.js'
-import { isCloudMetadataHost, writeFileAtomic } from '@open-cowork/shared/node'
+import { writeFileAtomic } from '@open-cowork/shared/node'
+import { GatewayConfigSchema } from './config-schema.js'
+import {
+  assertProfileName,
+  boundedInteger,
+  boundedNumber,
+  clone,
+  deepMerge,
+  isForbiddenPeerHost,
+  isNonLocalHostname,
+} from './config-normalize.js'
 
-const zStringRecord = <Schema extends z.ZodTypeAny>(schema: Schema) => z.record(z.string(), schema)
+export { GatewayConfigSchema } from './config-schema.js'
 
 export type AgentPromotionState = 'draft' | 'evaluated' | 'promoted' | 'deprecated' | 'blocked'
 
@@ -740,275 +749,6 @@ function normalizeProfile(profile: AgentProfile): AgentProfile {
   return normalized
 }
 
-// --- Zod schema (defense-in-depth validation of the NORMALIZED config) ---
-//
-// This schema models the *output* of the normalize* pipeline: every field's
-// type, and — critically — the exact numeric bounds and enums the hand-rolled
-// validators enforce. It runs after normalizeConfig() produces its result, as a
-// belt-and-suspenders assertion that the effective config is well-formed. It is
-// deliberately strict on the bounded/enum fields (where operator mistakes and
-// normalize regressions are caught) and permissive on open-ended shapes
-// (arbitrary permission keys, qualitySpecDefaults, model records, the
-// externally-owned environments registry) so it can never reject a config the
-// normalizer legitimately produced. Because the operator-facing messages are
-// still emitted by the normalizers (which run first), all existing config tests
-// keep their exact error strings; this layer only fires on a normalizer bug,
-// naming the offending JSON path when it does.
-//
-// zObject() below is a plain z.object (unknown keys are stripped, not rejected),
-// keeping the schema permissive to forward-compatible additions.
-
-const zLooseNumber = z.number().or(z.nan())
-const zBoolean = z.boolean()
-const zString = z.string()
-const zStringArray = z.array(z.string())
-function zBoundedInt(min: number, max: number) {
-  return z.number().int().min(min).max(max)
-}
-function zBoundedNumber(min: number, max: number) {
-  return z.number().min(min).max(max)
-}
-function zConcurrencyMap() {
-  return zStringRecord(zBoundedInt(1, 100))
-}
-
-const zGovernanceAction = z.enum(['block', 'pause', 'warn'])
-const zGovernanceBudget = z.object({
-  dailyCostUsd: zBoundedNumber(0, 1_000_000).optional(),
-  weeklyCostUsd: zBoundedNumber(0, 1_000_000).optional(),
-  monthlyCostUsd: zBoundedNumber(0, 1_000_000).optional(),
-  totalCostUsd: zBoundedNumber(0, 1_000_000).optional(),
-  tokenLimit: zBoundedInt(0, 10_000_000_000).optional(),
-  action: zGovernanceAction.optional(),
-})
-
-const zChannelAllowlistRule = z.object({
-  chatId: zString,
-  threadId: zString.optional(),
-  userIds: zStringArray.optional(),
-  adminUserIds: zStringArray.optional(),
-})
-
-const zExposedHttp = z.object({
-  requireStrongToken: zBoolean,
-  minTokenLength: zBoundedInt(8, 512),
-  minTokenEntropyBits: zBoundedInt(0, 512),
-  trustedProxyCidrs: zStringArray.optional(),
-  rateLimit: z.object({
-    enabled: zBoolean,
-    windowMs: zBoundedInt(100, 60 * 60 * 1000),
-    maxRequests: zBoundedInt(1, 1_000_000),
-    maxTrackedClients: zBoundedInt(1, 1_000_000),
-  }),
-  authLockout: z.object({
-    enabled: zBoolean,
-    maxConsecutiveFailures: zBoundedInt(1, 10_000),
-    lockoutMs: zBoundedInt(100, 24 * 60 * 60 * 1000),
-  }),
-})
-
-const zSecurity = z.object({
-  httpHost: zString,
-  allowNonLocalHttp: zBoolean,
-  publicWebhookMode: zBoolean,
-  unsafeAllowNoAuth: zBoolean,
-  capabilityScopedLoopback: zBoolean.optional(),
-  requireNonMcpDestructiveApproval: zBoolean.optional(),
-  exposedHttp: zExposedHttp.optional(),
-  trustTargetMembersForFreeText: zBoolean,
-  unsafeAllowAllChannelTargets: z.object({ telegram: zBoolean, whatsapp: zBoolean, discord: zBoolean }),
-  channelAllowlists: z.object({
-    telegram: z.array(zChannelAllowlistRule),
-    whatsapp: z.array(zChannelAllowlistRule),
-    discord: z.array(zChannelAllowlistRule),
-  }),
-})
-
-const zGovernance = z.object({
-  enabled: zBoolean,
-  action: zGovernanceAction,
-  global: zGovernanceBudget,
-  roadmaps: zStringRecord(zGovernanceBudget),
-  tasks: zStringRecord(zGovernanceBudget),
-  stages: zStringRecord(zGovernanceBudget),
-  runtime: z.object({
-    maxRunMs: zBoundedNumber(0, 30 * 24 * 60 * 60 * 1000),
-    staleRunMs: zBoundedNumber(0, 30 * 24 * 60 * 60 * 1000),
-  }),
-})
-
-const zHumanLoop = z.object({
-  enabled: zBoolean,
-  taskStartApproval: zBoolean,
-  stageApprovals: zStringArray,
-  externalSideEffectApproval: zBoolean,
-  budgetExceptionApproval: zBoolean,
-  destructiveActionApproval: zBoolean,
-  credentialUseApproval: zBoolean,
-  defaultTimeoutMs: zBoundedInt(1000, 30 * 24 * 60 * 60 * 1000),
-  timeoutAction: z.enum(['remind', 'escalate', 'pause', 'block']),
-  priorityTimeoutMs: z.object({
-    HIGH: zBoundedInt(1000, 30 * 24 * 60 * 60 * 1000),
-    MEDIUM: zBoundedInt(1000, 30 * 24 * 60 * 60 * 1000),
-    LOW: zBoundedInt(1000, 30 * 24 * 60 * 60 * 1000),
-  }),
-})
-
-const zAlerts = z.object({
-  profileHealth: z.object({
-    enabled: zBoolean,
-    windowDays: zBoundedInt(1, 365),
-    minRuns: zBoundedInt(1, 100_000),
-    maxGenuineFailureRate: zBoundedNumber(0, 1),
-  }),
-  stuckTask: z.object({
-    enabled: zBoolean,
-    runThreshold: zBoundedInt(1, 1000),
-  }),
-  delivery: z.object({
-    enabled: zBoolean,
-    maxAttempts: zBoundedInt(1, 100),
-    targets: z.array(z.object({
-      provider: z.enum(['telegram', 'whatsapp', 'discord']),
-      chatId: zString,
-      threadId: zString.optional(),
-      minimumSeverity: z.enum(['warning', 'critical']),
-    })),
-  }),
-})
-
-const zProfile = z.object({
-  version: zString.optional(),
-  updatedAt: zString.optional(),
-  description: zString.optional(),
-  model: zStringRecord(z.unknown()),
-  agent: zString,
-  skills: zStringArray,
-  mcpServers: zStringArray.optional(),
-  tools: zStringArray.optional(),
-  permission: zStringRecord(z.enum(['allow', 'ask', 'deny'])),
-  heartbeatMs: zLooseNumber,
-  maxTokens: zLooseNumber,
-  role: z.enum(['planning', 'execution']),
-  environment: z.unknown().optional(),
-  capabilities: zStringArray.optional(),
-  budget: z
-    .object({
-      maxTokens: zBoundedInt(0, 10_000_000_000).optional(),
-      maxCostUsd: zBoundedNumber(0, 1_000_000).optional(),
-      maxRuntimeMs: zBoundedInt(0, 30 * 24 * 60 * 60 * 1000).optional(),
-      retryLimit: zBoundedInt(0, 10).optional(),
-      humanGate: z.enum(['never', 'on-risk', 'always']).optional(),
-    })
-    .optional(),
-  outputContract: z
-    .object({
-      format: z.enum(['text', 'json', 'stage-result', 'supervisor-result']).optional(),
-      schema: zStringRecord(z.unknown()).optional(),
-      requiredEvidence: zStringArray.optional(),
-      requiredDecisions: zStringArray.optional(),
-      artifactRefs: zBoolean.optional(),
-      failureClass: zBoolean.optional(),
-    })
-    .optional(),
-  promotionState: z.enum(['draft', 'evaluated', 'promoted', 'deprecated', 'blocked']).optional(),
-})
-
-const zAgentTeam = z.object({
-  description: zString.optional(),
-  version: zString.optional(),
-  updatedAt: zString.optional(),
-  promotionState: z.enum(['draft', 'evaluated', 'promoted', 'deprecated', 'blocked']).optional(),
-  roles: zStringRecord(zString),
-  capabilityRequirements: zStringRecord(zStringArray),
-  qualitySpecDefaults: zStringRecord(z.unknown()),
-  revision: zString,
-})
-
-const zScheduler = z.object({
-  enabled: zBoolean,
-  intervalMs: zBoundedInt(1000, 24 * 60 * 60 * 1000),
-  maxConcurrent: zBoundedInt(1, 20),
-  leaseMs: zBoundedInt(60 * 1000, 7 * 24 * 60 * 60 * 1000),
-  retryLimit: zBoundedInt(0, 10),
-  maxRunsPerTask: zBoundedInt(1, 1000),
-  defaultPipeline: z.array(zString).min(1),
-  stageProfiles: zStringRecord(zString),
-  stageConcurrency: zConcurrencyMap(),
-  profileConcurrency: zConcurrencyMap(),
-  capacity: z
-    .object({
-      teamConcurrency: zConcurrencyMap(),
-      roadmapConcurrency: zConcurrencyMap(),
-      channelConcurrency: zConcurrencyMap(),
-    })
-    .optional(),
-  reviewGateIsolation: z.object({
-    enabled: zBoolean,
-    stages: zStringArray,
-    deniedTools: zStringArray,
-    allowBashEvidenceCommands: zBoolean,
-    bashAllowlist: zStringArray,
-    forbiddenPathHints: zStringArray,
-  }),
-})
-
-const zChannels = z.object({
-  richMessages: z.object({ enabled: zBoolean }),
-  telegram: z.object({ botToken: zString.optional(), richMessages: z.object({ enabled: zBoolean }).optional() }),
-  whatsapp: zStringRecord(z.unknown()),
-  discord: z.object({
-    enabled: zBoolean,
-    botToken: zString.optional(),
-    applicationId: zString.optional(),
-    publicKey: zString.optional(),
-    richMessages: z.object({ enabled: zBoolean }).optional(),
-  }),
-})
-
-export const GatewayConfigSchema = z.object({
-  opencodeConfigDir: z.unknown().optional(),
-  opencodeUrl: zString.min(1),
-  opencodePeers: zStringRecord(z.object({
-    baseUrl: zString.min(1),
-    default: zBoolean.optional(),
-    allowHostnames: zStringArray.optional(),
-    basicAuth: z.object({
-      usernameEnv: zString.optional(),
-      passwordEnv: zString.optional(),
-      passwordFile: zString.optional(),
-    }).optional(),
-    requireHttps: zBoolean.optional(),
-  })).optional(),
-  httpPort: zBoundedInt(1, 65535),
-  heartbeat: z.object({ intervalMs: zBoundedInt(1000, 24 * 60 * 60 * 1000) }),
-  channelSync: z.object({
-    enabled: zBoolean,
-    intervalMs: zBoundedInt(1000, 24 * 60 * 60 * 1000),
-    includeUserMessages: zBoolean,
-    providerBackoffMs: zBoundedInt(1000, 24 * 60 * 60 * 1000).optional(),
-    maxDeliveryAttempts: zBoundedInt(1, 100).optional(),
-  }),
-  security: zSecurity,
-  governance: zGovernance,
-  humanLoop: zHumanLoop,
-  alerts: zAlerts,
-  storage: z.object({
-    backend: z.enum(['local_sqlite']),
-    retention: z.object({
-      runsMaxAgeDays: zBoundedInt(60, 3650).optional(),
-      receiptsMaxAgeDays: zBoundedInt(7, 3650).optional(),
-    }).optional(),
-  }),
-  secretLifecycle: z.unknown().optional(),
-  environments: zStringRecord(z.unknown()),
-  scheduler: zScheduler,
-  profiles: zStringRecord(zProfile),
-  agentTeams: zStringRecord(zAgentTeam),
-  agentFactory: z.object({ blueprintDirs: zStringArray }),
-  channels: zChannels,
-})
-
 /**
  * Assert the normalized config satisfies the zod schema. Fires only on a
  * normalizer regression; names the offending JSON path when it does, preserving
@@ -1120,86 +860,6 @@ function normalizeOpenCodePeers(input: GatewayConfig['opencodePeers'] | undefine
     }
   }
   return peers
-}
-
-function isNonLocalHostname(host: string): boolean {
-  const value = String(host || '').trim().toLowerCase().replace(/^\[(.*)\]$/, '$1').replace(/\.$/, '')
-  if (!value || value === 'localhost') return false
-  if (net.isIP(value)) return !isLoopbackIp(value)
-  if (value === 'host.docker.internal') return false
-  return true
-}
-
-function isLoopbackIp(value: string): boolean {
-  if (net.isIPv4(value)) return value.startsWith('127.')
-  if (!value.includes(':')) return false
-  const bytes = ipv6ToBytes(value)
-  if (!bytes) return false
-  const ipv4Mapped = bytes.slice(0, 10).every(byte => byte === 0) && bytes[10] === 0xff && bytes[11] === 0xff
-  if (ipv4Mapped) return bytes[12] === 127
-  return bytes.slice(0, 15).every(byte => byte === 0) && bytes[15] === 1
-}
-
-/** SSRF-classic hosts that must never be a trusted OpenCode peer fetch target. */
-function isForbiddenPeerHost(host: string): boolean {
-  const value = String(host || '').trim().toLowerCase().replace(/^\[(.*)\]$/, '$1').replace(/\.$/, '')
-  if (!value) return true
-  // Shared IMDS denylist (audit 2026-07-21) — keep Durable Gateway peers aligned
-  // with monorepo private-host / webhook metadata policy.
-  if (isCloudMetadataHost(value)) return true
-  // Parse numerically rather than pattern-match the serialized string: a
-  // link-local/metadata target can hide behind decimal/hex IPv4 forms or an
-  // IPv4-mapped IPv6 literal (e.g. [::ffff:169.254.169.254], which WHATWG URL
-  // serializes to [::ffff:a9fe:a9fe]).
-  if (net.isIPv4(value)) return isForbiddenIpv4Octets(value.split('.').map(Number))
-  if (value.includes(':')) {
-    const bytes = ipv6ToBytes(value)
-    if (!bytes) return true // unparseable IPv6 literal → fail closed
-    if (bytes.every(byte => byte === 0)) return true                       // :: unspecified
-    if (bytes[0] === 0xfe && (bytes[1]! & 0xc0) === 0x80) return true       // fe80::/10 link-local
-    const ipv4Mapped = bytes.slice(0, 10).every(byte => byte === 0) && bytes[10] === 0xff && bytes[11] === 0xff
-    if (ipv4Mapped) return isForbiddenIpv4Octets([bytes[12]!, bytes[13]!, bytes[14]!, bytes[15]!])
-    return false
-  }
-  return false // plain hostname: the exact-match allowlist governs trust
-}
-
-function isForbiddenIpv4Octets(octets: number[]): boolean {
-  if (octets.length !== 4 || octets.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true
-  if (octets[0] === 0) return true                       // 0.0.0.0/8 (incl. unspecified)
-  if (octets[0] === 169 && octets[1] === 254) return true // 169.254.0.0/16 link-local / cloud metadata
-  return false
-}
-
-/** Expand an IPv6 literal (incl. an embedded dotted-quad tail) to 16 bytes, or null if malformed. */
-function ipv6ToBytes(addr: string): number[] | null {
-  let text = addr
-  const dotted = text.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
-  if (dotted) {
-    const octets = [Number(dotted[2]), Number(dotted[3]), Number(dotted[4]), Number(dotted[5])]
-    if (octets.some(n => n > 255)) return null
-    text = `${dotted[1]}${((octets[0]! << 8) | octets[1]!).toString(16)}:${((octets[2]! << 8) | octets[3]!).toString(16)}`
-  }
-  const halves = text.split('::')
-  if (halves.length > 2) return null
-  const head = halves[0] ? halves[0].split(':') : []
-  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : []
-  let groups: string[]
-  if (halves.length === 2) {
-    const fill = 8 - head.length - tail.length
-    if (fill < 0) return null
-    groups = [...head, ...Array(fill).fill('0'), ...tail]
-  } else {
-    groups = head
-  }
-  if (groups.length !== 8) return null
-  const bytes: number[] = []
-  for (const group of groups) {
-    if (!/^[0-9a-f]{1,4}$/.test(group)) return null
-    const value = parseInt(group, 16)
-    bytes.push((value >> 8) & 0xff, value & 0xff)
-  }
-  return bytes
 }
 
 function applyEnvironmentConfigOverrides(config: GatewayConfig, env: EnvSource = process.env): GatewayConfig {
@@ -1731,39 +1391,6 @@ function normalizeStageProfiles(stageProfiles: Record<string, string>, pipeline:
   }
   return normalized
 }
-
-function boundedInteger(value: unknown, min: number, max: number, label: string): number {
-  const number = Number(value)
-  if (!Number.isInteger(number) || number < min || number > max) throw new Error(`${label} must be an integer between ${min} and ${max}`)
-  return number
-}
-
-function boundedNumber(value: unknown, min: number, max: number, label: string): number {
-  const number = Number(value)
-  if (!Number.isFinite(number) || number < min || number > max) throw new Error(`${label} must be a number between ${min} and ${max}`)
-  return number
-}
-
-function assertProfileName(name: string): void {
-  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('profile name must be 1-64 letters, numbers, underscores, or dashes')
-}
-
-function deepMerge<T extends Record<string, any>>(defaults: T, overrides: T): T {
-  const result = { ...defaults }
-  for (const key of Object.keys(overrides)) {
-    if (overrides[key] && typeof overrides[key] === 'object' && !Array.isArray(overrides[key]) && typeof defaults[key] === 'object') {
-      (result as any)[key] = deepMerge(defaults[key], overrides[key])
-    } else {
-      (result as any)[key] = overrides[key]
-    }
-  }
-  return result
-}
-
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value))
-}
-
 
 function backupExistingFile(file: string): void {
   if (!fs.existsSync(file)) return

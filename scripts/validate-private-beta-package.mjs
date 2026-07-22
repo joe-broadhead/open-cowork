@@ -43,6 +43,8 @@ function log(message) {
   process.stdout.write(`[private-beta-validate] ${message}\n`)
 }
 
+// Machine-checkable inventory: public package templates + runbooks must exist.
+// Hosted go still requires private ops evidence outside this list.
 const requiredFiles = [
   'docs/runbooks/private-beta-launch.md',
   'docs/runbooks/private-beta-support.md',
@@ -53,6 +55,7 @@ const requiredFiles = [
   'docs/security-model.md',
   'docs/privacy.md',
   'docs/release-checklist.md',
+  'docs/evidence/private-beta-ops-evidence-package-2026-07-21.md',
   'deploy/private-beta/README.md',
   'deploy/private-beta/hosted-byok.config.example.json',
   'deploy/private-beta/self-host-oss.config.example.json',
@@ -67,7 +70,45 @@ const requiredFiles = [
   'package.json',
 ]
 
+// Explicit public-package inventory (templates + public decision summary).
+// All of these must remain present for package completeness; none of them
+// alone constitutes hosted private-beta go.
+const requiredPublicPackageTemplates = [
+  'deploy/private-beta/hosted-byok.config.example.json',
+  'deploy/private-beta/self-host-oss.config.example.json',
+  'deploy/private-beta/managed-byok-readiness-contract.template.json',
+  'deploy/private-beta/private-beta-plans.json',
+  'deploy/private-beta/private-beta-launch-profile.template.json',
+  'deploy/private-beta/launch-evidence-record.template.json',
+  'deploy/private-beta/design-partner-onboarding.template.md',
+  'deploy/private-beta/go-no-go-report.template.md',
+  'deploy/private-beta/private-beta-go-no-go.public.md',
+  'deploy/private-beta/README.md',
+  'docs/evidence/private-beta-ops-evidence-package-2026-07-21.md',
+]
+
 for (const path of requiredFiles) assertFile(path)
+for (const path of requiredPublicPackageTemplates) assertFile(path)
+
+// Completeness language: public package COMPLETE, campaign still required, no-go.
+for (const phrase of [
+  'Public package',
+  'COMPLETE',
+  'Private campaign items',
+  'Still required for go',
+  'no-go',
+]) {
+  assertIncludes('deploy/private-beta/README.md', phrase)
+  assertIncludes('docs/evidence/private-beta-ops-evidence-package-2026-07-21.md', phrase)
+}
+
+// Go/no-go must remain no-go in the public summary until private evidence lands.
+// Do not flip to go from this public package alone.
+const goNoGoPath = 'deploy/private-beta/private-beta-go-no-go.public.md'
+assertIncludes(goNoGoPath, 'no-go')
+assertIncludes(goNoGoPath, 'Decision: `no-go`')
+// Fail closed if someone promotes to go without private campaign evidence.
+assertNotIncludes(goNoGoPath, 'Decision: `go`')
 
 for (const phrase of [
   'Managed BYOK Onboarding Checklist',
@@ -142,6 +183,7 @@ for (const phrase of [
   'design-partner-onboarding.template.md',
   'go-no-go-report.template.md',
   'private-beta-go-no-go.public.md',
+  'private-beta-ops-evidence-package-2026-07-21.md',
   'provider-neutral',
   'cloud.billing.provider=none',
   'pnpm deploy:private-beta:validate',
