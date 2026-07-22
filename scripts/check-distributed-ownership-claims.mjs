@@ -6,6 +6,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+const scriptLog = (...args) => { process.stdout.write(args.map(String).join(' ') + String.fromCharCode(10)) }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const registry = JSON.parse(
@@ -68,7 +69,7 @@ const failures = []
 const files = SCAN_ROOTS.flatMap((rel) => walk(resolve(root, rel)))
 
 if (registry.status === 'ready') {
-  console.log('Distributed ownership proving registry status=ready; claim scan is advisory only')
+  scriptLog('Distributed ownership proving registry status=ready; claim scan is advisory only')
 } else {
   for (const file of files) {
     const text = readFileSync(file, 'utf8')
@@ -107,6 +108,6 @@ if (failures.length) {
   process.exit(1)
 }
 
-console.log(
+scriptLog(
   `Distributed ownership claims OK (registry status=${registry.status}, scanned ${files.length} files)`,
 )

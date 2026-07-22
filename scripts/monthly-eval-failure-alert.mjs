@@ -17,6 +17,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
+const scriptLog = (...args) => { process.stdout.write(args.map(String).join(' ') + String.fromCharCode(10)) }
 
 const workflow = process.env.OPEN_COWORK_EVAL_WORKFLOW?.trim() || 'monthly-evals.yml'
 const streakNeeded = Math.max(1, Number.parseInt(process.env.OPEN_COWORK_EVAL_FAIL_STREAK || '2', 10) || 2)
@@ -72,7 +73,7 @@ for (const run of completed) {
 }
 
 if (consecutiveFailures.length < streakNeeded) {
-  console.log(
+  scriptLog(
     `monthly-eval-failure-alert: streak=${consecutiveFailures.length} < threshold=${streakNeeded}; no issue`,
   )
   process.exit(0)
@@ -124,7 +125,7 @@ if (existing.length > 0) {
     runLinks,
   ].join('\n')
   gh(['issue', 'comment', String(issue.number), '--repo', repo, '--body', comment])
-  console.log(`monthly-eval-failure-alert: commented on existing issue #${issue.number}`)
+  scriptLog(`monthly-eval-failure-alert: commented on existing issue #${issue.number}`)
   process.exit(0)
 }
 
@@ -135,4 +136,4 @@ const created = gh([
   '--body', body,
   '--label', 'bug',
 ])
-console.log(`monthly-eval-failure-alert: opened ${created}`)
+scriptLog(`monthly-eval-failure-alert: opened ${created}`)

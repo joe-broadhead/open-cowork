@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+const scriptLog = (...args) => { process.stdout.write(args.map(String).join(' ') + String.fromCharCode(10)) }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -72,16 +73,16 @@ try {
 }
 
 if (process.argv.includes('--json')) {
-  console.log(JSON.stringify({ status: failures.length ? 'fail' : 'pass', rows, failures }, null, 2))
+  scriptLog(JSON.stringify({ status: failures.length ? 'fail' : 'pass', rows, failures }, null, 2))
 } else {
   const expected = [...sdkVersions][0] || 'unknown'
-  console.log(`OpenCode pin lockstep: sdk=${expected} packages=${rows.length}`)
+  scriptLog(`OpenCode pin lockstep: sdk=${expected} packages=${rows.length}`)
   for (const r of rows) {
-    console.log(`  ${r.path}: sdk=${r.sdk}${r.runtime ? ` runtime=${r.runtime}` : ''}`)
+    scriptLog(`  ${r.path}: sdk=${r.sdk}${r.runtime ? ` runtime=${r.runtime}` : ''}`)
   }
   if (failures.length) {
     console.error('OpenCode pin lockstep failed:\n' + failures.map((f) => `  - ${f}`).join('\n'))
     process.exit(1)
   }
-  console.log('OpenCode pin lockstep OK')
+  scriptLog('OpenCode pin lockstep OK')
 }

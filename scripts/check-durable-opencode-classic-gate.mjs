@@ -9,6 +9,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+const scriptLog = (...args) => { process.stdout.write(args.map(String).join(' ') + String.fromCharCode(10)) }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const gatewaySrc = join(root, 'products/gateway/src')
@@ -73,4 +74,4 @@ if (failures.length) {
   console.error('Durable OpenCode V2 gate (JOE-941):\n' + failures.map((f) => `  - ${f}`).join('\n'))
   process.exit(1)
 }
-console.log('Durable OpenCode V2 gate OK (V2 construction + façade-only session I/O)')
+scriptLog('Durable OpenCode V2 gate OK (V2 construction + façade-only session I/O)')

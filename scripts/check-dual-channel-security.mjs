@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+const scriptLog = (...args) => { process.stdout.write(args.map(String).join(' ') + String.fromCharCode(10)) }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const failures = []
@@ -87,4 +88,4 @@ if (failures.length) {
   console.error('Dual-channel security kernel drift:\n' + failures.map((f) => `  - ${f}`).join('\n'))
   process.exit(1)
 }
-console.log('Dual-channel security kernel wiring OK')
+scriptLog('Dual-channel security kernel wiring OK')

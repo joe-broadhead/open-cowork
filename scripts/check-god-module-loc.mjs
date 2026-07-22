@@ -2,6 +2,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+const scriptLog = (...args) => { process.stdout.write(args.map(String).join(' ') + String.fromCharCode(10)) }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const budgetPath = resolve(root, 'docs/development/god-module-loc-budgets.json')
@@ -23,14 +24,14 @@ for (const entry of budget.files || []) {
 }
 
 if (process.argv.includes('--json')) {
-  console.log(JSON.stringify({ status: failures.length ? 'fail' : 'pass', results, failures }, null, 2))
+  scriptLog(JSON.stringify({ status: failures.length ? 'fail' : 'pass', results, failures }, null, 2))
 } else {
   for (const r of results) {
-    console.log(`${r.path}: ${r.lines}/${r.maxLines}`)
+    scriptLog(`${r.path}: ${r.lines}/${r.maxLines}`)
   }
   if (failures.length) {
     console.error('God-module LOC budget exceeded:\n' + failures.map((f) => `  - ${f}`).join('\n'))
     process.exit(1)
   }
-  console.log('God-module LOC budgets OK')
+  scriptLog('God-module LOC budgets OK')
 }
