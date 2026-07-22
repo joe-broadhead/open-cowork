@@ -5,7 +5,7 @@
  * Events: session.created, session.updated, message.updated, tool calls, etc.
  */
 
-import type { OpencodeClient } from '@opencode-ai/sdk/v2'
+import type { DurableOpencodeClient as OpencodeClient } from './opencode-session-runtime.js'
 import { queueEvent } from './wakeup.js'
 import { getConfig } from './config.js'
 import { isLocalOrigin, redactSensitiveText } from './security.js'

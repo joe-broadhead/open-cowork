@@ -5,7 +5,7 @@ import { schedulerCycleSnapshots } from './scheduler.js'
 import { createLogger } from './logger.js'
 import type { RunRecord, WorkState } from './work-store.js'
 import { getDaemonClient } from './gateway-runtime.js'
-import type { OpencodeClient } from '@opencode-ai/sdk/v2'
+import type { DurableOpencodeClient as OpencodeClient } from './opencode-session-runtime.js'
 
 const log = createLogger({ component: 'heartbeat' })
 

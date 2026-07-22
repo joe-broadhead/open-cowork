@@ -67,15 +67,10 @@ const allowedSdkImportPaths = new Set([
   'packages/runtime-host/src/runtime-state.ts',
   'packages/runtime-host/src/runtime.ts',
   'packages/runtime-host/src/session-history-loader.ts',
-  // products/gateway durable OpenCode client (classic residual session APIs on V2 client)
+  // products/gateway durable OpenCode: only construction + session façade import SDK.
+  // Other modules take DurableOpencodeClient from opencode-session-runtime (JOE-941).
   'products/gateway/src/opencode-client.ts',
-  'products/gateway/src/gateway-runtime.ts',
-  'products/gateway/src/channel-sync.ts',
   'products/gateway/src/opencode-session-runtime.ts',
-  'products/gateway/src/live.ts',
-  'products/gateway/src/heartbeat.ts',
-  'products/gateway/src/scheduler.ts',
-  'products/gateway/src/observability.ts',
 ])
 
 test('OpenCode SDK imports stay inside documented runtime boundary modules', () => {
@@ -232,7 +227,7 @@ test('classic SDK calls are limited to documented native-V2 capability gaps', ()
 
 test('JOE-845: classic gap residual runway is documented and pin-gated', () => {
   const burndownDoc = readFileSync(join(root, 'docs/opencode-classic-sdk-burndown.md'), 'utf8')
-  assert.match(burndownDoc, /Won't Do \(full burn-down\) while pinned to OpenCode 1\.18\.1/)
+  assert.match(burndownDoc, /Won't Do \(full burn-down\)\*{0,2}\s+while\s+pinned to OpenCode 1\.18\.1/)
   assert.match(burndownDoc, new RegExp(escapeRegex(OPENCODE_CLASSIC_GAP_PIN)))
   assert.match(boundaryDoc, /opencode-classic-sdk-burndown\.md/)
 

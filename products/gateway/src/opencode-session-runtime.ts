@@ -5,7 +5,8 @@
  * client; falls back to classic `client.session.*` for partial mocks/tests.
  * All production session I/O goes through this façade.
  */
-import type { OpencodeClient } from '@opencode-ai/sdk/v2'
+// Accept classic or V2 client shapes (production uses V2; tests use classic mocks).
+import type { OpencodeClient as OpencodeV2Client } from '@opencode-ai/sdk/v2'
 import { getDaemonClient } from './gateway-runtime.js'
 import { getConfig } from './config.js'
 import { loadWorkState, openWorkDb, withWorkDbLeadershipEpoch, workStatePath, type WorkDbLeadershipEpoch } from './work-store.js'
@@ -13,6 +14,9 @@ import { listChannelSessions } from './channel-sessions.js'
 import { randomUUID } from 'node:crypto'
 import * as path from 'node:path'
 import { captureCurrentDaemonLeadershipEpoch, getCurrentDaemonLeadershipStatus } from './daemon-leadership.js'
+
+/** Production V2 client or classic/partial test mocks with session surfaces. */
+export type DurableOpencodeClient = OpencodeV2Client | { session?: any; v2?: any }
 
 export interface SessionCreateInput {
   title: string
@@ -64,13 +68,13 @@ export interface OpenCodeSessionRuntime {
   messages(sessionId: string, directory?: string, limit?: number): Promise<any[]>
 }
 
-function clientOrThrow(explicit?: OpencodeClient): OpencodeClient {
+function clientOrThrow(explicit?: DurableOpencodeClient): DurableOpencodeClient {
   const client = explicit || getDaemonClient()
   if (!client) throw new Error('OpenCode client is not available (daemon not started?)')
   return client
 }
 
-function v2Session(client: OpencodeClient): any | undefined {
+function v2Session(client: DurableOpencodeClient): any | undefined {
   const v2 = (client as any)?.v2?.session
   return v2 && typeof v2 === 'object' ? v2 : undefined
 }
@@ -85,7 +89,7 @@ function unwrapSessionPayload(value: any): any {
   return outer
 }
 
-export function createOpenCodeSessionRuntime(client?: OpencodeClient): OpenCodeSessionRuntime {
+export function createOpenCodeSessionRuntime(client?: DurableOpencodeClient): OpenCodeSessionRuntime {
   return {
     async createSession(input) {
       const c = clientOrThrow(client)

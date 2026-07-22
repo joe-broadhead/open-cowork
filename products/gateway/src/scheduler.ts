@@ -1,4 +1,4 @@
-import type { OpencodeClient } from '@opencode-ai/sdk/v2'
+import type { DurableOpencodeClient as OpencodeClient } from './opencode-session-runtime.js'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { createHash } from 'node:crypto'

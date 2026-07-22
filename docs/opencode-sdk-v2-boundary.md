@@ -96,16 +96,11 @@ Desktop residual seams and removal plan: [desktop-composition-shell.md](desktop-
 - `packages/runtime-host/src/runtime-state.ts`
 - `packages/runtime-host/src/runtime.ts`
 - `packages/runtime-host/src/session-history-loader.ts`
-- `products/gateway/src/opencode-client.ts` (classic entry at pin 1.18.1;
-  session I/O collapsed onto `opencode-session-runtime.ts` façade; V2 migration
-  pin-gated JOE-941 + `scripts/check-durable-opencode-classic-gate.mjs`)
-- `products/gateway/src/gateway-runtime.ts`
-- `products/gateway/src/channel-sync.ts`
-- `products/gateway/src/opencode-session-runtime.ts`
-- `products/gateway/src/live.ts`
-- `products/gateway/src/heartbeat.ts`
-- `products/gateway/src/scheduler.ts`
-- `products/gateway/src/observability.ts`
+- `products/gateway/src/opencode-client.ts` (V2 entry at pin 1.18.1; peer
+  allowlist + Basic auth; JOE-941 + `scripts/check-durable-opencode-classic-gate.mjs`)
+- `products/gateway/src/opencode-session-runtime.ts` (session I/O façade prefers
+  `client.v2.session.*` with classic mock fallback; other Durable modules take
+  `DurableOpencodeClient` from here and must not import `@opencode-ai/sdk` directly)
 
 ## Native V2 Capability Gaps
 
