@@ -29,8 +29,13 @@
 ## Commits on branch (newest first)
 
 ```
-ea28479c refactor(JOE-942): supervisor + project-binding helpers
-… (earlier JOE-942 alerts/channel/event-append, retention; JOE-921/922/917/… )
+3155448b refactor(JOE-977): split postgres-runtime queries catalog and counts
+74828baa refactor(JOE-941): Durable session façade collapse (pin-gated V2 prep)
+3f36047b feat(JOE-923): shared webhook rate limiter + Telegram secret kernel
+c4b2112f refactor(JOE-977): progressive wiki module splits (oauth + graph)
+09adf600 fix(JOE-980): drop CSP style-src unsafe-inline
+79684ee5 fix(JOE-979,JOE-975): multi-replica OAuth guard + hosted-readiness CI policy
+… (earlier OpenCode kernel, channel kernel, work-store/environments, quality/security …)
 ```
 
 ## Next unfinished work (when continuing)
@@ -40,7 +45,7 @@ ea28479c refactor(JOE-942): supervisor + project-binding helpers
    - JOE-941 full Durable classic→V2 (needs OpenCode pin reopen + live probes)  
    - JOE-923 full Durable → monorepo provider body migrate  
    - Wiki watch-band residual (doctor/jobs/tool-router) when seams appear  
-3. **Open single PR** when ready to burn Actions once.
+3. **Open single PR** — ready (this is the planned Actions burn).
 
 ## Non-claims
 
