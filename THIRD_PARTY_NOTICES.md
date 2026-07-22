@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `c7197f6c98b0b033ba72c494d881a9de4c407a14413e1d3713350c5c7e9197de`
+- pnpm lockfile SHA-256: `c5f627175dc25b904d6bb6fe8086c353eda06c7603f05f32d0fc596c0ea432c6`
 - Production package entries: 403
 - Bundled license directories: 388 (15 package entries have no standalone license file or are workspace links)
 
@@ -61,7 +61,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @fontsource-variable/mona-sans | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__mona-sans@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @fontsource-variable/schibsted-grotesk | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__schibsted-grotesk@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @grammyjs/types | 3.28.0 | MIT | THIRD_PARTY_LICENSES/@grammyjs__types@3.28.0/ | git+https://github.com/grammyjs/types.git |
-| @hono/node-server | 1.19.13 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@1.19.13/ | https://github.com/honojs/node-server.git |
+| @hono/node-server | 2.0.10 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@2.0.10/ | git+https://github.com/honojs/node-server.git |
 | @iconify/types | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@iconify__types@2.0.0/ | https://github.com/iconify/iconify.git |
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
 | @mermaid-js/parser | 1.2.0 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.2.0/ | https://github.com/mermaid-js/mermaid.git |
@@ -211,7 +211,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | extend | 3.0.2 | MIT | THIRD_PARTY_LICENSES/extend@3.0.2/ | https://github.com/justmoon/node-extend.git |
 | fast-deep-equal | 3.1.3 | MIT | THIRD_PARTY_LICENSES/fast-deep-equal@3.1.3/ | git+https://github.com/epoberezkin/fast-deep-equal.git |
 | fast-json-patch | 3.1.1 | MIT | THIRD_PARTY_LICENSES/fast-json-patch@3.1.1/ | git://github.com/Starcounter-Jack/JSON-Patch.git |
-| fast-uri | 3.1.2 | BSD-3-Clause | THIRD_PARTY_LICENSES/fast-uri@3.1.2/ | git+https://github.com/fastify/fast-uri.git |
+| fast-uri | 4.1.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/fast-uri@4.1.1/ | git+https://github.com/fastify/fast-uri.git |
 | fetch-blob | 3.2.0 | MIT | THIRD_PARTY_LICENSES/fetch-blob@3.2.0/ | https://github.com/node-fetch/fetch-blob.git |
 | finalhandler | 2.1.1 | MIT | THIRD_PARTY_LICENSES/finalhandler@2.1.1/ | pillarjs/finalhandler |
 | formdata-polyfill | 4.0.10 | MIT | THIRD_PARTY_LICENSES/formdata-polyfill@4.0.10/ | git+https://jimmywarting@github.com/jimmywarting/FormData.git |
