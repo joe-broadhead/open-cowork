@@ -23,7 +23,7 @@
     "@open-cowork/shared": "workspace:*",
     "@open-cowork/ui": "workspace:*",
     "@tanstack/react-virtual": "^3.14.5",
-    "dompurify": "^3.4.6",
+    "dompurify": "^3.4.12",
     "lucide-react": "^1.23.0",
     "marked": "^18.0.5",
     "mermaid": "^11.16.0",
