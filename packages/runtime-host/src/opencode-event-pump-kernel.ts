@@ -68,3 +68,37 @@ export function waitForAbortableDelay(signal: AbortSignal, delayMs: number): Pro
     signal.addEventListener('abort', finish, { once: true })
   })
 }
+
+/** Named desktop reconnect delay so product tails do not re-encode constants. */
+export function desktopDurableReconnectDelayMs(consecutiveFailures: number): number {
+  return exponentialReconnectDelayMs(
+    consecutiveFailures,
+    OPENCODE_DURABLE_RECONNECT_INITIAL_MS_DESKTOP,
+    OPENCODE_DURABLE_RECONNECT_MAX_MS_DESKTOP,
+  )
+}
+
+/** Named cloud reconnect delay so worker subscriptions do not re-encode constants. */
+export function cloudDurableReconnectDelayMs(consecutiveFailures: number): number {
+  return exponentialReconnectDelayMs(
+    consecutiveFailures,
+    OPENCODE_DURABLE_RECONNECT_INITIAL_MS_CLOUD,
+    OPENCODE_DURABLE_RECONNECT_MAX_MS_CLOUD,
+  )
+}
+
+/**
+ * Attempt-based retry delay for transport subscriptions that count attempts
+ * from 0 (first retry after first failure). Caps by attempt count when
+ * `maxAttempts` is finite; returns null when retries are exhausted.
+ */
+export function attemptReconnectDelayMs(
+  attempt: number,
+  baseMs: number,
+  maxMs: number,
+  maxAttempts: number,
+): number | null {
+  if (maxAttempts === 0) return null
+  if (attempt >= maxAttempts) return null
+  return Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt))
+}

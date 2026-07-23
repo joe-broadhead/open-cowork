@@ -31,10 +31,8 @@ import {
   createOpencodeV2Client,
 } from '@open-cowork/runtime-host/opencode-client-kernel'
 import {
-  exponentialReconnectDelayMs,
+  cloudDurableReconnectDelayMs,
   nextReconnectFailureCount,
-  OPENCODE_DURABLE_RECONNECT_INITIAL_MS_CLOUD,
-  OPENCODE_DURABLE_RECONNECT_MAX_MS_CLOUD,
   OPENCODE_SSE_OWNED_MAX_RETRY_ATTEMPTS,
   waitForAbortableDelay,
 } from '@open-cowork/runtime-host'
@@ -669,11 +667,7 @@ function waitForRuntimeEventReconnect(signal: AbortSignal, delayMs: number) {
 }
 
 function cloudReconnectDelayMs(consecutiveFailures: number) {
-  return exponentialReconnectDelayMs(
-    consecutiveFailures,
-    OPENCODE_DURABLE_RECONNECT_INITIAL_MS_CLOUD,
-    OPENCODE_DURABLE_RECONNECT_MAX_MS_CLOUD,
-  )
+  return cloudDurableReconnectDelayMs(consecutiveFailures)
 }
 
 export function subscribeToOpencodeCloudRuntimeEvents(

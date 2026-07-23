@@ -1,6 +1,5 @@
 import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
 import type { SessionRecord } from '@open-cowork/runtime-host/session-registry'
-import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import { ensureRuntimeContextDirectory } from '@open-cowork/runtime-host/runtime-context'
 import type {
@@ -8,15 +7,16 @@ import type {
   ScopedArtifactRef,
 } from '@open-cowork/shared'
 import { getBrandName } from '@open-cowork/runtime-host/config'
+import { getLocalSessionPort } from './local-workspace-session.ts'
 type RuntimeContextDependencies = {
   ensureSessionRecord: (sessionId: string) => SessionRecord | null
   resolveGrantedProjectDirectory: (directory?: string | null) => string | null
 }
 
 export function createIpcRuntimeContext(dependencies: RuntimeContextDependencies) {
-  function resolveSessionRuntimeModel(sessionId: string) {
+  async function resolveSessionRuntimeModel(sessionId: string) {
     const settings = getEffectiveSettings()
-    const view = sessionEngine.getSessionView(sessionId)
+    const view = await getLocalSessionPort().getSessionView(sessionId)
     const latestModeledMessage = [...view.messages]
       .reverse()
       .find((message) => message.providerId || message.modelId) || null

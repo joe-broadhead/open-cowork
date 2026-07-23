@@ -4,7 +4,7 @@ import { getEffectiveSettings, getIntegrationCredentials, getProviderCredentials
 import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { syncSessionView } from '@open-cowork/runtime-host/session-history-loader'
 import { publishSessionMetadata, publishSessionView } from '@open-cowork/runtime-host/session-event-dispatcher'
-import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { getLocalSessionPort } from '../local-workspace-session.ts'
 import { getClient, getClientForDirectory, getModelInfoAsync } from '@open-cowork/runtime-host/runtime'
 import { invalidateRuntimeCatalogSnapshotCache } from '@open-cowork/runtime-host/runtime-catalog-snapshot'
 import { getRuntimeStatus } from '@open-cowork/runtime-host/runtime-status'
@@ -550,7 +550,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     if (!sessionRecord) {
       throw new Error('Chart artifact save requires an existing session.')
     }
-    const sessionView = sessionEngine.getSessionView(request.sessionId)
+    const sessionView = await getLocalSessionPort().getSessionView(request.sessionId)
     if (!isKnownChartArtifactToolCall(sessionView, request)) {
       throw new Error('Chart artifact save requires a known chart tool call for this session.')
     }

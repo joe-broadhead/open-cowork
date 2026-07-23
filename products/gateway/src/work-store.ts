@@ -191,6 +191,7 @@ export {
   recomputeRoadmapStatusInState,
 } from './work-store/task-helpers.js'
 export { appendWorkEventRow } from './work-store/event-append.js'
+export { getWorkTaskReadiness, listWorkDependencies, summarizeWorkTasks } from './work-store/work-queries.js'
 
 import {
   OPEN_HUMAN_GATE_STATUSES,
@@ -257,16 +258,6 @@ import type {
 
 
 
-export function getWorkTaskReadiness(taskId: string, filePath = workStatePath()): WorkTaskReadiness | undefined {
-  const state = loadWorkState(filePath)
-  const task = state.tasks.find(row => row.id === taskId)
-  return task ? calculateTaskReadiness(task, state) : undefined
-}
-
-export function listWorkDependencies(taskId?: string, filePath = workStatePath()): WorkDependencyRecord[] {
-  const deps = loadWorkState(filePath).dependencies || []
-  return taskId ? deps.filter(dep => dep.taskId === taskId) : deps
-}
 
 
 export function decideHumanGate(id: string, input: HumanGateDecisionInput, filePath = workStatePath()): HumanGateDecisionResult | undefined {
@@ -377,21 +368,6 @@ export function deleteWorkDependency(taskId: string, dependsOnTaskId: string, ty
   })
 }
 
-export function summarizeWorkTasks(tasks: Array<{ status: WorkStatus; priority: string }>) {
-  return {
-    total: tasks.length,
-    pending: tasks.filter(t => t.status === 'pending').length,
-    running: tasks.filter(t => t.status === 'running').length,
-    done: tasks.filter(t => t.status === 'done').length,
-    blocked: tasks.filter(t => t.status === 'blocked').length,
-    paused: tasks.filter(t => t.status === 'paused').length,
-    cancelled: tasks.filter(t => t.status === 'cancelled').length,
-    archived: tasks.filter(t => t.status === 'archived').length,
-    high: tasks.filter(t => t.priority === 'HIGH').length,
-    medium: tasks.filter(t => t.priority === 'MEDIUM').length,
-    low: tasks.filter(t => t.priority === 'LOW').length,
-  }
-}
 
 export function markWorkTaskDone(text: string, filePath = workStatePath()): boolean {
   return mutateWorkState(filePath, (state, db) => {

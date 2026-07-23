@@ -817,7 +817,7 @@
    "path": "src/work-store.ts",
    "maxLines": 1550,
    "owner": "work_store",
-   "note": "Hard LOC budget (JOE-919/JOE-942); post-#961 project-orchestration extract; hard max 1550 (soft \u22641500); current ~1497 — leave drive-by headroom like work routes"
+   "note": "Hard LOC budget (JOE-919/JOE-942/JOE-992); work-queries peel; hard max 1550 (soft \u22641500)"
   },
   {
    "path": "src/environments.ts",
@@ -845,9 +845,9 @@
   },
   {
    "path": "src/mcp.ts",
-   "maxLines": 1650,
+   "maxLines": 1600,
    "owner": "daemon_cli_edge",
-   "note": "Hard LOC budget (post-#961); mcp-tools-ops extract for backup/storage tools; current ~1614 under 1650 hard max"
+   "note": "Hard LOC budget (post-#961/JOE-992); mcp-tools-ops + mcp-formatters peels; hard max 1600 (soft \u22641550)"
   },
   {
    "path": "src/channel-commands.ts",

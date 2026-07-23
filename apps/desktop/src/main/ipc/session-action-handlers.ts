@@ -2,6 +2,7 @@ import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/th
 import { getSessionRecord, removeSessionRecord, updateSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs } from '@open-cowork/runtime-host/session-diff-fallback'
+import { getLocalSessionPort } from '../local-workspace-session.ts'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import { getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import {
@@ -159,7 +160,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
       if (messageId) return diffs
 
       const record = getSessionRecord(sessionId)
-      const view = sessionEngine.getSessionView(sessionId)
+      const view = await getLocalSessionPort().getSessionView(sessionId)
       const rootDir = record?.opencodeDirectory || getRuntimeHomeDir()
       return mergeSessionDiffsWithSynthetic(diffs, view, rootDir)
     } catch (err) {

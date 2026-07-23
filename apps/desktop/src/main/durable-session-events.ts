@@ -13,10 +13,8 @@ import {
   advanceDurableCursor,
   durableAfterCursor,
   type DurableSequenceCursor,
-  exponentialReconnectDelayMs,
+  desktopDurableReconnectDelayMs,
   nextReconnectFailureCount,
-  OPENCODE_DURABLE_RECONNECT_INITIAL_MS_DESKTOP,
-  OPENCODE_DURABLE_RECONNECT_MAX_MS_DESKTOP,
   OPENCODE_SSE_OWNED_MAX_RETRY_ATTEMPTS,
   readDurableSequenceFromEvent,
   readSessionStatusType,
@@ -132,11 +130,7 @@ async function durableStreamLoop(hub: DirectoryDurableHub, state: DurableSession
       const message = error instanceof Error ? error.message : String(error)
       log('events', `Durable session stream error [${state.sessionId}]: ${message}`)
       consecutiveFailures = nextReconnectFailureCount(consecutiveFailures, receivedEvent)
-      const retryDelayMs = exponentialReconnectDelayMs(
-        consecutiveFailures,
-        OPENCODE_DURABLE_RECONNECT_INITIAL_MS_DESKTOP,
-        OPENCODE_DURABLE_RECONNECT_MAX_MS_DESKTOP,
-      )
+      const retryDelayMs = desktopDurableReconnectDelayMs(consecutiveFailures)
       await waitForAbortableDelay(hub.signal, retryDelayMs)
     }
   }
