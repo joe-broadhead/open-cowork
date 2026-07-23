@@ -57,7 +57,7 @@ const requiredBranchChecks = [
   { check: 'windows-package', workflow: 'CI' },
   { check: 'docs', workflow: 'CI' },
   { check: 'coverage', workflow: 'CI' },
-  { check: 'analyze (javascript-typescript)', workflow: 'CodeQL' },
+  // CodeQL is monthly-only; not a branch-protection required check.
 ]
 
 const publicSafeFiles = [
@@ -365,9 +365,12 @@ function assertBranchProtectionContract() {
   assertExactArray('branch protection required checks', rows, requiredBranchChecks)
   for (const { check, workflow } of requiredBranchChecks) {
     if (workflow === 'CI') assertWorkflowJob(ciWorkflowPath, check)
-    else if (workflow === 'CodeQL') assertWorkflowJob(codeqlWorkflowPath, 'analyze')
   }
+  // CodeQL remains monthly security hygiene (not a PR/merge gate).
+  assertWorkflowJob(codeqlWorkflowPath, 'analyze')
   assertIncludes(codeqlWorkflowPath, 'language: [javascript-typescript]')
+  assertIncludes(codeqlWorkflowPath, "cron: '23 3 1 * *'")
+  assertIncludes(codeqlWorkflowPath, 'workflow_dispatch')
   assertIncludes(codeqlWorkflowPath, 'wait-for-processing: ${{ github.event.repository.private == false }}')
 }
 

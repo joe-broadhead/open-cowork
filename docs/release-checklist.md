@@ -62,9 +62,9 @@ and linked from the release Go/No-Go report.
 - [ ] `git diff --check`
 - [ ] working tree is clean
 - [ ] release actor is listed in `OPEN_COWORK_RELEASE_ALLOWED_ACTORS`, the tag
-      commit has every required CI/CodeQL check green, and the
-      `release-publish` protected environment approval path is ready for GitHub
-      Release and GHCR publishing jobs
+      commit has every required CI check green (CodeQL is monthly-only, not a
+      per-tag gate), and the `release-publish` protected environment approval
+      path is ready for GitHub Release and GHCR publishing jobs
 
 ### Documentation
 

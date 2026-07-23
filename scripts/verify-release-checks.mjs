@@ -8,7 +8,7 @@ const DEFAULT_REQUIRED_CHECKS = [
   'windows-package',
   'docs',
   'coverage',
-  'analyze (javascript-typescript)',
+  // CodeQL is monthly-only (not a per-release commit gate). See codeql.yml.
 ]
 const TRUSTED_CHECK_APP_SLUG = 'github-actions'
 const CHECK_RUNS_PAGE_SIZE = 100

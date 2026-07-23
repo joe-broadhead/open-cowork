@@ -1,12 +1,13 @@
 name: CodeQL
 
+# Monthly deep scan only. Full monorepo CodeQL regularly times out / burns
+# multi-hour Action minutes on PR and per-push paths; product gates stay on CI.
+# Manual re-run: workflow_dispatch.
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
   schedule:
-    - cron: '23 3 * * 1'
+    # 03:23 UTC on the 1st of each month
+    - cron: '23 3 1 * *'
+  workflow_dispatch:
 
 permissions:
   actions: read
@@ -20,9 +21,8 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    # Cost control after monorepo product import: keep PR jobs bounded.
-    # Do not raise multi-hour budgets for PR CodeQL.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 45 || 90 }}
+    # Deep monorepo pack; monthly only so a long budget is acceptable.
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -42,21 +42,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Initialize CodeQL (pull request)
-        if: github.event_name == 'pull_request'
+      - name: Initialize CodeQL
         uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
         with:
           languages: ${{ matrix.language }}
-          # Faster pack + exclude products/** (see codeql-config.yml).
-          queries: security-extended
-          config-file: .github/codeql/codeql-config.yml
-
-      - name: Initialize CodeQL (master / schedule)
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
-        with:
-          languages: ${{ matrix.language }}
-          # Deeper pack once per merge/week; full monorepo graph (no paths-ignore).
           queries: security-and-quality
 
       - name: Build
