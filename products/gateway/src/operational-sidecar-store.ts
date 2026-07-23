@@ -268,7 +268,16 @@ export function loadWorkerSessions(filePath = operationalSidecarPath()): WorkerS
     const rows = db.prepare(`
       SELECT id, title, parent_id, status, started_at, last_check, last_todo, last_message
       FROM worker_sessions
-    `).all() as Array<Record<string, unknown>>
+    `).all() as Array<{
+      id: unknown
+      title: unknown
+      parent_id: unknown
+      status: unknown
+      started_at: unknown
+      last_check: unknown
+      last_todo: unknown
+      last_message: unknown
+    }>
     return rows.map((row) => ({
       id: String(row.id),
       title: String(row.title),
