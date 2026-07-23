@@ -175,13 +175,13 @@ runtime registration, so public-looking hostnames that resolve into
 private networks at those policy checkpoints are skipped before OpenCode
 receives the MCP entry.
 
-**DNS pin / residual SSRF (JOE-826, revalidated 2026-07-21 / JOE-962):** At
+**DNS pin / residual SSRF (JOE-826, revalidated 2026-07-23 / JOE-962):** At
 runtime handoff, cleartext `http:` MCP entries are rewritten to connect to a
 policy-validated resolved address while preserving the original `Host` header
 (`pinHttpMcpRemoteEntry` in `packages/runtime-host/src/runtime-mcp.ts`). That
 closes the DNS-rebinding window for HTTP.
 
-**HTTPS residual (accepted — reaffirmed post-#961 hardening):** OpenCode owns the TLS
+**HTTPS residual (accepted — reaffirmed 2026-07-23 / JOE-962):** OpenCode owns the TLS
 transport; IP-pinning would break SNI and certificate hostname checks, so
 `https:` MCPs stay hostname-based after the pre-connect DNS policy check
 (`evaluateHttpMcpUrlResolved` still rejects private/link-local/metadata
@@ -191,6 +191,10 @@ resolver is compromised or TTL is hostile. **Operators who need stronger
 guarantees** should terminate TLS at a trusted reverse proxy with a fixed
 upstream IP, or restrict MCPs to known static endpoints. Cloud-metadata targets
 remain hard-denied on every policy check regardless of protocol.
+
+Regression coverage: `tests/runtime-mcp-opt-in.test.ts` (HTTP pin + HTTPS
+hostname retention), `tests/mcp-url-policy.test.ts` (DNS-resolved private /
+metadata denial). Re-run those suites when touching MCP handoff.
 
 **Reopen when:** OpenCode exposes a connect-IP + SNI/Host override for remote
 MCP transport, or we add an optional local HTTPS MITM pin path for lab-only
@@ -328,16 +332,20 @@ lifecycle, lease/fencing contract, recovery behavior, and threat model live in
 
 ## Chart frame isolation
 
-**Parent SPA CSP (JOE-946 / P2-7):** Cloud `writeBrowserRendererHtml` and the
-desktop main-window CSP keep `script-src 'self'` with **no** `'unsafe-eval'`.
-Interactive Vega must not execute in the parent document.
+**Parent SPA CSP (JOE-946 / P2-7, reaffirmed 2026-07-23):** Cloud
+`writeBrowserRendererHtml` and the desktop main-window CSP keep
+`script-src 'self'` with **no** `'unsafe-eval'`. Interactive Vega must not
+execute in the parent document. Regression: `tests/http-response-writers.test.ts`,
+`tests/content-security-policy.test.ts`.
 
-**Chart iframe residual (accepted — reaffirmed post-#961 hardening):** Chart rendering
-uses Vega, which compiles its specs with `new Function()` (the reactive
-dataflow interpreter evaluates expressions at runtime). That means the **chart
-iframe** must allow `unsafe-eval` — there is no AOT path without reimplementing
-Vega or compiling charts server-side. Parent SPA CSP continues to forbid
-`unsafe-eval` (JOE-946).
+**Chart iframe residual (accepted — reaffirmed 2026-07-23 / JOE-946):** Chart
+rendering uses Vega, which compiles its specs with `new Function()` (the
+reactive dataflow interpreter evaluates expressions at runtime). That means the
+**chart iframe** must allow `unsafe-eval` — there is no AOT path without
+reimplementing Vega or compiling charts server-side. Parent SPA CSP continues
+to forbid `unsafe-eval` (JOE-946). Full residual closure (server-side compile /
+WASM no-eval Vega) remains a future capacity item, not an incomplete parent CSP
+bug.
 
 We scope the residual risk by keeping charts inside a dedicated iframe
 (`chart-frame.html` / cloud chart-frame response) with a separate, stricter CSP
@@ -512,6 +520,10 @@ URL credentials, or local home-directory paths.
   ignores cannot rot silently. Prefer real upgrades/`pnpm.overrides` over
   permanent `ignoreGhsas`. Every ignore entry must carry an expiry comment in
   the PR description (and ideally a tracking issue).
+- **Weekly Durable Gateway matrix (JOE-969):** `.github/workflows/weekly-gateway.yml`
+  runs `pnpm test:gateway` (plus Durable build/typecheck/standalone smoke) on a
+  Monday schedule outside path-filtered `ci-gateway.yml`. Failures open/comment
+  a GitHub issue so monorepo-only script drift cannot hide gateway breakage.
 - Renderer bundles are split per-feature so a CVE in a heavy, rarely
   loaded dependency (e.g. a Vega module) does not block a patch
   release of the shell.

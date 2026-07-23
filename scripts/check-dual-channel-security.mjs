@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * JOE-932 (light): fail closed if Durable Gateway re-implements native Meta /
- * Discord webhook verify instead of importing the shared kernel.
+ * Dual-stack kernel wiring guard (complements JOE-932 PR-body checklist):
+ * fail closed if Durable Gateway re-implements native Meta / Discord webhook
+ * verify instead of importing the shared kernel.
  *
- * Not a full dual-stack CI bot — only catches copy-paste regressions on the
- * highest-risk security paths after JOE-934.
+ * PR checklist gate: scripts/check-dual-channel-pr-checklist.mjs (CI on
+ * channel-security path diffs). This script only catches copy-paste regressions
+ * on the highest-risk security paths after JOE-934.
  */
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'

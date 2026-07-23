@@ -125,6 +125,12 @@ The repository includes:
     OpenCode SDK/runtime drift
   - exists to catch maintenance issues without a noisy nightly signal
 
+- `weekly-gateway.yml` (JOE-969)
+  - runs every Monday (and `workflow_dispatch`)
+  - runs full Durable Gateway matrix: `pnpm test:gateway`, typecheck, knip,
+    release:check, standalone smoke — **outside** path-filtered `ci-gateway.yml`
+  - failures open/comment a GitHub issue so path-filter misses are not silent
+
 ## Verify a download
 
 Release assets include `SHA256SUMS.txt`. After downloading an artifact

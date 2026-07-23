@@ -1,0 +1,95 @@
+name: Weekly Gateway Matrix
+
+# JOE-969: Path-filtered `ci-gateway.yml` remains intentional for PR cost.
+# This weekly full-matrix job runs `pnpm test:gateway` (and the Durable
+# Gateway typecheck/build smoke) even when monorepo scripts change without
+# touching products/gateway/**, so regressions outside the path filter stay
+# visible. Failures open/comment a GitHub issue — not silent.
+
+on:
+  schedule:
+    # Monday 04:17 UTC — offset from monthly maintenance (1st 02:00) and evals.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: weekly-gateway
+  cancel-in-progress: true
+
+jobs:
+  gateway-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Product boundaries
+        run: pnpm boundaries:check
+
+      # products/gateway depends on @open-cowork/shared (dist-only package exports).
+      - name: Build shared workspace package
+        run: pnpm --filter @open-cowork/shared build
+
+      - name: Build Gateway
+        run: pnpm --filter cowork-gateway build
+
+      - name: Typecheck Gateway
+        run: pnpm --filter cowork-gateway typecheck
+
+      - name: Dead code (knip)
+        run: pnpm --filter cowork-gateway knip
+
+      - name: Test Gateway (full matrix)
+        id: gateway-test
+        run: pnpm test:gateway
+
+      - name: Release check (if present)
+        run: pnpm --filter cowork-gateway release:check
+
+      - name: Standalone install smoke
+        run: node products/gateway/scripts/standalone-smoke.mjs
+
+      - name: Alert on weekly gateway matrix failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Weekly gateway matrix red (pnpm test:gateway)"
+          body="$(cat <<EOF
+          Weekly Gateway Matrix found Durable Gateway checks red outside path-filtered PR CI.
+
+          Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Path-filtered \`ci-gateway.yml\` remains intentional for PR cost (JOE-969).
+          This scheduled job is the backstop when monorepo scripts or shared packages
+          change without touching \`products/gateway/**\`.
+
+          Reproduce locally:
+          \`\`\`
+          pnpm --filter @open-cowork/shared build
+          pnpm test:gateway
+          \`\`\`
+          EOF
+          )"
+          existing="$(gh issue list --state open --search "${title} in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
