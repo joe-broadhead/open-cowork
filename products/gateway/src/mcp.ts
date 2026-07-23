@@ -5,13 +5,21 @@ import { z } from 'zod'
 import { pathToFileURL } from 'node:url'
 import { getConfigDir } from './config.js'
 import { readPackageVersion } from './version.js'
-import { buildOperationsCockpit, buildMissionControlDataPlaneV2, missionControlWindow, type MissionControlSourceContract } from './mission-control-view-model.js'
+import { buildOperationsCockpit, buildMissionControlDataPlaneV2, missionControlWindow } from './mission-control-view-model.js'
 import { decideMcpRequestSecurityPolicy } from './security-policy.js'
 import { mcpModeAllowsHttpCapability, resolveMcpToolMode, toolEnabledForMode, type McpToolTier } from './mcp-tool-tiers.js'
 import { buildGatewayToolCatalog } from './gateway-tools.js'
 import { httpCapabilityForRequest, type HttpCapability } from './security.js'
 import { readScopedHttpTokenFile } from './secrets-lifecycle.js'
 import { registerMcpOpsTools } from './mcp-tools-ops.js'
+import {
+  formatBulkTaskCreateText,
+  formatEnvironmentActionText,
+  formatEnvironmentListText,
+  formatEnvironmentReconcileText,
+  formatGatewayDashboardText,
+  formatSchedulerRunOnceText,
+} from './mcp-formatters.js'
 
 const DAEMON_URL = process.env['GATEWAY_DAEMON_URL'] || 'http://127.0.0.1:4097'
 const REQUEST_TIMEOUT_MS = 15000
@@ -132,7 +140,7 @@ export {
   formatEnvironmentListText,
   formatEnvironmentActionText,
   formatEnvironmentReconcileText,
-} from './mcp-formatters.js'
+}
 
 export const server = new McpServer({ name: 'gateway-proxy', version: readPackageVersion() })
 

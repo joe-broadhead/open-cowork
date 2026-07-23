@@ -88,7 +88,6 @@ export {
 } from './work-store/human-gates.js'
 import {
   listWorkTaskViews,
-  calculateTaskReadiness,
   applyTaskUpdate,
   createRoadmapInState,
   createWorkTaskInState,
@@ -245,7 +244,6 @@ import type {
   WorkTaskBulkUpdateInput,
   WorkTaskCreateInput,
   WorkTaskDeleteResult,
-  WorkTaskReadiness,
   WorkTaskRecord,
   WorkTaskRunCompleteResult,
   WorkTaskRunFailResult,
