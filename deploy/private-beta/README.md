@@ -15,7 +15,7 @@ Do **not** invent or attach fake private-beta go evidence in this repo. Public
 templates alone never promote hosted private-beta claims.
 
 Public campaign package (validators + explicit private gaps with owners):
-`docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` (JOE-922).
+`deploy/private-beta/ops-evidence-package.md` (JOE-922).
 
 Files:
 

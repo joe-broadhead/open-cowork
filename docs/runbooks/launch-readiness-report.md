@@ -13,7 +13,7 @@ identifiers redacted.
 
 For the public-repo private-beta campaign package (validators, gap matrix,
 support ownership, go/no-go links), start from
-`docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` and
+`deploy/private-beta/ops-evidence-package.md` and
 `deploy/private-beta/private-beta-go-no-go.public.md` (Linear JOE-922 / JOE-971).
 
 ## Release Candidate

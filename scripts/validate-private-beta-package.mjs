@@ -55,7 +55,7 @@ const requiredFiles = [
   'docs/security-model.md',
   'docs/privacy.md',
   'docs/release-checklist.md',
-  'docs/evidence/private-beta-ops-evidence-package-2026-07-21.md',
+  'deploy/private-beta/ops-evidence-package.md',
   'deploy/private-beta/README.md',
   'deploy/private-beta/hosted-byok.config.example.json',
   'deploy/private-beta/self-host-oss.config.example.json',
@@ -84,7 +84,7 @@ const requiredPublicPackageTemplates = [
   'deploy/private-beta/go-no-go-report.template.md',
   'deploy/private-beta/private-beta-go-no-go.public.md',
   'deploy/private-beta/README.md',
-  'docs/evidence/private-beta-ops-evidence-package-2026-07-21.md',
+  'deploy/private-beta/ops-evidence-package.md',
 ]
 
 for (const path of requiredFiles) assertFile(path)
@@ -99,7 +99,7 @@ for (const phrase of [
   'no-go',
 ]) {
   assertIncludes('deploy/private-beta/README.md', phrase)
-  assertIncludes('docs/evidence/private-beta-ops-evidence-package-2026-07-21.md', phrase)
+  assertIncludes('deploy/private-beta/ops-evidence-package.md', phrase)
 }
 
 // Go/no-go must remain no-go in the public summary until private evidence lands.
@@ -183,7 +183,7 @@ for (const phrase of [
   'design-partner-onboarding.template.md',
   'go-no-go-report.template.md',
   'private-beta-go-no-go.public.md',
-  'private-beta-ops-evidence-package-2026-07-21.md',
+  'ops-evidence-package.md',
   'provider-neutral',
   'cloud.billing.provider=none',
   'pnpm deploy:private-beta:validate',

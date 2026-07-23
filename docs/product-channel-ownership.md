@@ -2,7 +2,7 @@
 
 **Status:** Dual-stack **protocol freeze** retained (intentional residual, not incomplete P1)
 **Security body:** **Done** — shared verify kernels + rate-limit primitives in `@open-cowork/shared/node` (JOE-934 / post-#958/#959)
-**Related:** `docs/evidence/opencode-sdk-duplication-audit-2026-07-18.md`, `docs/evidence/channel-stack-security-matrix-2026-07-21.md`
+**Related:** dual-stack security guard `scripts/check-dual-channel-security.mjs`; shared kernels in `@open-cowork/shared/node`
 
 ## Disposition (post-#959)
 
@@ -52,7 +52,6 @@ Native platform webhook verify and rate-limit kernels live in
 - `webhook-rate-limiter.ts`: fixed-window `WebhookRateLimiter` (Durable façade;
   monorepo `gateway-channel` keeps an algorithm twin for package boundaries)
 
-Inventory: `docs/evidence/channel-stack-security-matrix-2026-07-21.md`.
 Regression guard: `scripts/check-dual-channel-security.mjs`.
 
 ## Dual-stack security checklist (required on channel security PRs)

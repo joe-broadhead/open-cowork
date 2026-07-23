@@ -52,7 +52,7 @@ pnpm deploy:validate
 | Field | Value |
 | --- | --- |
 | Last public refresh | 2026-07-21 |
-| Commit SHA (package) | see `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` |
+| Commit SHA (package) | see `deploy/private-beta/ops-evidence-package.md` |
 | `pnpm ops:validate` | pass on package date |
 | Live target restore | **not run in public repo** — required private ops gap (JOE-960) |
 | Owner (interim) | Platform / Joseph Broadhead |

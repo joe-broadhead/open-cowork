@@ -63,7 +63,7 @@ notes. Store that evidence outside this public repository.
 
 The public-repo operator package for private-beta campaign prep is:
 
-- `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` (JOE-922)
+- `deploy/private-beta/ops-evidence-package.md` (JOE-922)
 - `deploy/private-beta/private-beta-go-no-go.public.md` (hosted decision remains
   `no-go` until private records pass)
 - `docs/runbooks/launch-readiness-report.md` (release evidence template)

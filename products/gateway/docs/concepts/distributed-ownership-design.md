@@ -2,7 +2,7 @@
 
 **Status:** Design accepted for implementation sequencing; **not** production multi-replica ready.
 **Depends on:** [Multi-Daemon Scaling Design Record](multi-daemon-scaling.md)
-**Hazards:** [gateway-multi-writer-hazards-2026-07-21](../../../../docs/evidence/gateway-multi-writer-hazards-2026-07-21.md)
+**Hazards:** [multi-writer-hazards](./multi-writer-hazards.md)
 **Proving suite:** [distributed-ownership-proving](../../src/__tests__/distributed-ownership-proving.test.ts) + registry below
 
 ## Goal
