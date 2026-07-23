@@ -1457,7 +1457,7 @@
     },
     "/storage/export": {
       "get": {
-        "summary": "Export durable Gateway state as JSON. Requires admin for non-local requests.",
+        "summary": "Export durable Gateway state as JSON. Requires admin for non-local requests and localAdmin=true dual-intent (JOE-952; always unredacted; rate-limited).",
         "tags": [
           "Service"
         ],

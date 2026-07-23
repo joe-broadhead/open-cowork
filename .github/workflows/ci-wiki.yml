@@ -41,6 +41,9 @@ jobs:
       - name: Typecheck Wiki workspace
         run: pnpm --filter cowork-wiki-workspace typecheck
 
+      - name: Dead code (knip)
+        run: pnpm --filter cowork-wiki-workspace check:dead-code
+
       # Unit suite includes hosted-readiness-evidence dry-run contract (JOE-975).
       # Full dual-replica --enforce is release/operator-gated, not PR CI.
       - name: Test Wiki (unit)

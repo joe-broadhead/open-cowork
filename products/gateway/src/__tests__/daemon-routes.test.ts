@@ -1115,6 +1115,48 @@ describe.sequential('daemon JSON routes', () => {
     expect((deniedEvidence?.body as any).error).toBe('localAdmin intent required')
   })
 
+  it('requires localAdmin dual-intent for storage export and allows with intent', async () => {
+    const denied = await dispatchRoute(routes, context('GET', '/storage/export'))
+    expect(denied?.status).toBe(403)
+    expect((denied?.body as any).error).toBe('localAdmin intent required')
+
+    const allowed = await dispatchRoute(routes, context('GET', '/storage/export?localAdmin=true'))
+    expect(allowed?.status).toBe(200)
+    expect(allowed?.body).toBeTruthy()
+  })
+
+  it('defaults session messages to redacted and requires dual-intent for raw messages', async () => {
+    const client = {
+      session: {
+        messages: async () => ({
+          data: [
+            { id: 'm1', role: 'user', content: 'token=secret-transcript-value' },
+          ],
+        }),
+      },
+    }
+    const redacted = await dispatchRoute(routes, {
+      ...context('GET', '/opencode/sessions/ses_msg/messages'),
+      client,
+    })
+    expect(redacted?.status).toBe(200)
+    expect(JSON.stringify(redacted?.body)).not.toContain('secret-transcript-value')
+
+    const denied = await dispatchRoute(routes, {
+      ...context('GET', '/opencode/sessions/ses_msg/messages?raw=true'),
+      client,
+    })
+    expect(denied?.status).toBe(403)
+    expect((denied?.body as any).error).toBe('localAdmin intent required')
+
+    const raw = await dispatchRoute(routes, {
+      ...context('GET', '/opencode/sessions/ses_msg/messages?raw=true&localAdmin=true'),
+      client,
+    })
+    expect(raw?.status).toBe(200)
+    expect(JSON.stringify(raw?.body)).toContain('secret-transcript-value')
+  })
+
   it('exposes roadmap supervisor CRUD routes', async () => {
     const roadmap = createRoadmap({ title: 'HTTP supervised project' })
 

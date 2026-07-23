@@ -43,9 +43,14 @@ belongs to the caller — pass it in as an argument rather than reaching upward.
 Circular import chains are the most common cause of fragile initialization
 order (`Cannot access 'X' before initialization`), un-tree-shakeable bundles,
 and confusing refactors. `scripts/check-import-cycles.mjs` statically scans the
-first-party **relative** imports inside `packages/app/src` and `packages/ui/src`
-and fails if any circular chain exists. The current cycle count is **zero** and
-the gate keeps it there.
+first-party **relative** imports inside the configured `SCAN_ROOTS` (`packages/app/src`,
+`packages/ui/src`, `packages/shared/src`) and fails if any circular chain exists.
+The current cycle count is **zero** and the gate keeps it there.
+
+**Widen note (post-#961 hardening):** `packages/runtime-host/src` was evaluated
+for inclusion but **skipped** because it still has a value-import cycle
+(`runtime` → `runtime-config-builder` → `custom-agents-utils` → `runtime-tools`
+→ `runtime`). Break that cycle before ratcheting `SCAN_ROOTS`.
 
 - Only value imports are considered — `import type` / `export type` are erased
   by the compiler and cannot form a runtime cycle.

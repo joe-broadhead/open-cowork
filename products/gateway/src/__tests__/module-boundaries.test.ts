@@ -49,9 +49,9 @@ describe('module boundary budget', () => {
           edgeDelta: 12,
         },
         runtimeRisk: {
-          // Types extraction (audit 2026-07-21) + work/config façade LOC split (post-959).
-          moduleDelta: 15,
-          edgeDelta: 110,
+          // Types extraction (audit 2026-07-21) + work/config façade LOC split (post-959) + post-961 façade extracts.
+          moduleDelta: 19,
+          edgeDelta: 150,
         },
       },
     })

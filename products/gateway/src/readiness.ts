@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getConfig, getConfigDir } from './config.js'
 import { getHeartbeatStatus } from './heartbeat.js'
 import { getWorkQueueSnapshot, getWorkQueueSnapshotReadOnly } from './scheduler.js'
@@ -94,6 +95,7 @@ export async function buildReadinessReport(client?: any, options: { readOnly?: b
   }
 
   addCheck('daemon_leadership', () => checkDaemonLeadership())
+  addCheck('multi_writer_ownership', () => checkMultiWriterOwnership())
   addCheck('scheduler', () => checkScheduler(config.scheduler, snapshot.counts))
   addCheck('heartbeat', () => checkHeartbeat(heartbeat, config.scheduler.enabled ? config.scheduler.intervalMs : config.heartbeat.intervalMs))
   addCheck('storage', () => checkStorage(options.readOnly))
@@ -212,6 +214,57 @@ function checkDaemonLeadership(): ReadinessCheck {
         ? 'No Gateway daemon owns the local writer lease'
         : 'Gateway leadership state is unavailable',
     details: snapshot as unknown as Record<string, unknown>,
+  }
+}
+
+/**
+ * Informational multi-writer ownership posture (JOE-948/949).
+ * Passes for the supported single-daemon production shape while still surfacing
+ * open migrate hazards so experimental multi-replica is never mistaken for HA.
+ * Does not degrade readiness (warn would permanently mark single-daemon degraded).
+ */
+function checkMultiWriterOwnership(): ReadinessCheck {
+  const registryPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../docs/development/distributed-ownership-proving-registry.json',
+  )
+  try {
+    const raw = fs.readFileSync(registryPath, 'utf8')
+    const registry = JSON.parse(raw) as {
+      status?: string
+      openMigrateHazards?: string[]
+    }
+    const open = Array.isArray(registry.openMigrateHazards) ? registry.openMigrateHazards : []
+    const registryStatus = typeof registry.status === 'string' ? registry.status : 'unknown'
+    if (open.length === 0 && registryStatus === 'ready') {
+      return {
+        name: 'multi_writer_ownership',
+        status: 'pass',
+        severity: 'info',
+        summary: 'Distributed-ownership proving registry is ready (no open migrate hazards)',
+        details: { registryStatus, openMigrateHazards: open },
+      }
+    }
+    return {
+      name: 'multi_writer_ownership',
+      status: 'pass',
+      severity: 'info',
+      summary: `Single-writer production only; experimental multi-replica still fails open migrate hazards (${open.join(', ') || 'none listed'}; registry status=${registryStatus})`,
+      details: {
+        registryStatus,
+        openMigrateHazards: open,
+        productionShape: 'single-daemon-per-state-dir',
+        experimentalMultiReplica: 'lab-only-not-ha',
+      },
+    }
+  } catch (err: any) {
+    return {
+      name: 'multi_writer_ownership',
+      status: 'pass',
+      severity: 'info',
+      summary: `Proving registry unavailable; assume single-daemon production only (${redactSensitiveText(err?.message || String(err))})`,
+      details: { registryPath },
+    }
   }
 }
 

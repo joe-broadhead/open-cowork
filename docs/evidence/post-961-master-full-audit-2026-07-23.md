@@ -131,10 +131,10 @@ Desktop sandbox + IPC sender checks; cloud CSRF + OIDC path-only returnTo; webho
 1. **#961 structural win:** `config.ts` and `daemon-routes/work.ts` under soft 1500 with real headroom (hard maxes now loose — should ratchet).  
 2. **Still soft-fail:** work-store, scheduler, cloud HTTP/app, desktop workspace-gateway.  
 3. **Unbudgeted gods:** `mcp.ts`, `channel-commands.ts`, `channel-sync.ts`.  
-4. **Import cycles:** monorepo SCAN_ROOTS = app + ui + shared only; runtime-host / cloud / desktop main unscanned.  
-5. **`createLocalWorkspaceSessionPort` exists** but **no production IPC wiring** (sessionEngine still direct).  
+4. **Import cycles:** monorepo SCAN_ROOTS = app + ui + shared only; runtime-host skipped on known cycle (see Hardening PR); cloud / desktop main still unscanned.  
+5. **`createLocalWorkspaceSessionPort`:** progressive IPC wiring started (`local-workspace-session` + artifact handlers); full IPC cutover still open.  
 6. **Dual-stack freeze honest**; protocol body still dual.  
-7. **Root knip ignores products/***; product-local knip not root-linted.
+7. **Root knip ignores products/***; product-local knip now CI-gated on gateway/wiki workflows (Hardening PR).
 
 ---
 
@@ -227,6 +227,25 @@ Private evidence campaign (load/soak/restore/failover/BYOK/support/cost/rollback
 - Ops explore (claims, CI, HA, private-beta, evals)  
 
 **Related evidence:** `post-959-master-full-audit-2026-07-22.md`, multi-writer hazards, channel security matrix, private-beta ops package, wiki surface audit.
+
+---
+
+## Hardening PR (progressive structural — branch `fix/post-961-hardening-p0-p3`)
+
+Follow-on hardening against this audit's P2 progressive + P3 pin/process items.
+Does **not** invent private-beta go or multi-AZ HA claims.
+
+| Close | Item | Notes |
+| --- | --- | --- |
+| P2-1 | Wire `createLocalWorkspaceSessionPort` | `apps/desktop/src/main/local-workspace-session.ts` + `artifact-handlers.ts` uses `getLocalSessionPort().getSessionView` (progressive; not full IPC rewrite) |
+| P2-4 (attempted) | Widen import-cycle `SCAN_ROOTS` | **Skipped** `packages/runtime-host/src` — known cycle `runtime → runtime-config-builder → custom-agents-utils → runtime-tools → runtime`; documented in `scripts/check-import-cycles.mjs` |
+| P2-5 | Wiki `tool-router` peel | Helpers → `tool-router-helpers.ts`; router ~643 LOC (under 650/800) |
+| P2-6 (docs + flag) | HA migrate hazards honesty | Hazards inventory + multi-daemon doc reaffirm experimental multi-replica still fails `openMigrateHazards`; readiness `multi_writer_ownership` + doctor line |
+| P3-6 | Product knip in CI | `ci-gateway.yml` runs `knip`; `ci-wiki.yml` runs `check:dead-code` |
+| P0 package | Private-beta validate | Still green; public decision remains **`no-go`** (no invented go) |
+| P3-1/2/4 | Docs reaffirm | Classic Won't Do, chart CSP, HTTPS MCP in `security-model.md`; Dependabot #960 superseded by monorepo override |
+
+**Still open (not this PR):** MCP `state_export` dual-intent (P1), route export integration tests, hard budget ratchets, full HA migrate code, full IPC port cutover, classic burn-down wait on pin >1.18.1.
 
 ---
 

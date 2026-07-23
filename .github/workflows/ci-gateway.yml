@@ -52,6 +52,9 @@ jobs:
       - name: Typecheck Gateway
         run: pnpm --filter cowork-gateway typecheck
 
+      - name: Dead code (knip)
+        run: pnpm --filter cowork-gateway knip
+
       - name: Test Gateway
         run: pnpm --filter cowork-gateway test
 
