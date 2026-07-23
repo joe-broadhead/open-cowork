@@ -63,7 +63,7 @@ These failure modes are acceptable for the current local deployment model but mu
 | Scheduler cycle lock | The in-process cycle promise only protects one daemon. Two daemons can both enter scheduling logic, relying on later SQLite task transitions to decide the winner. |
 | Channel sync | `channel-sync.json` checkpoints and `pendingInbound` entries are file sidecars. Concurrent writers can overwrite each other and may duplicate or skip relays. |
 | Recent events | Operational activity is in `operational-sidecar.sqlite` (`operational_events`; JOE-996 H3). Not an append-only cluster event log. |
-| Session sidecar | Worker projection is in `operational-sidecar.sqlite` (`worker_sessions`; JOE-996 H4). Multiple daemons can still diverge about runtime ownership without H1/H13 fencing. |
+| Session sidecar | Worker projection is in `operational-sidecar.sqlite` (`worker_sessions`; JOE-996 H4). Lab multi-daemon still needs leadership-aware ownership fields for exclusive runtime ownership. |
 | Notification locks | Several send paths have process-local in-flight guards. Duplicate visible notifications remain possible when two daemons handle the same event. |
 | OpenCode runtime ownership | OpenCode sessions are local runtime assets. A remote daemon cannot assume another host can inspect, prompt, or abort that session. |
 | Backups | Backup and restore capture current durable files plus sidecars, but sidecars are not safe multi-writer coordination state. |
@@ -103,7 +103,7 @@ For local personal mode, the coordinator and worker remain the same process. No 
 | Task and run state | `gateway.db` | Keep as the durable source of truth. Continue using transactional transitions and extend tests around leadership fencing. |
 | Channel checkpoints | `channel-sync.json` | Move delivery checkpoints, `seenMessageIds`, and `pendingInbound` into SQLite tables. Keep JSON only as a transitional compatibility shadow if needed. |
 | Recent events | `operational-sidecar.sqlite` + workflow events in `gateway.db` | H3 migrated (JOE-996). Keep operator activity that affects recovery/audit in gateway.db; operational ring buffer is sidecar SQLite. |
-| Session projection | `operational-sidecar.sqlite` | H4 migrated (JOE-996). Still needs runtime owner / recovery fields for exclusive multi-daemon ownership (residual with H1/H13). |
+| Session projection | `operational-sidecar.sqlite` | H4 migrated (JOE-996). Follow-up: runtime owner / recovery fields for exclusive multi-daemon ownership (lab only). |
 | Notification locks | Process-local maps plus workflow events | Replace in-flight locks with durable send leases and dedupe receipts keyed by route, target, subject, and policy window. |
 | OpenCode sessions | Local OpenCode runtime | Add explicit runtime affinity. A worker can only act on sessions owned by its runtime, and the coordinator must route commands accordingly. |
 | Configuration | `config.json` | Keep local config simple. Cluster or hosted config should be opt-in and fail closed unless leadership, auth, and state migrations are complete. |

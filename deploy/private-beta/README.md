@@ -17,6 +17,11 @@ templates alone never promote hosted private-beta claims.
 Public campaign package (validators + explicit private gaps with owners):
 `deploy/private-beta/ops-evidence-package.md` (JOE-922).
 
+**Private campaign path (JOE-993):** operator checklist
+`private-campaign-evidence-checklist.md` + redacted summary template
+`redacted-evidence-summary.template.md`. Completing the checklist offline does
+not alone flip hosted go.
+
 Files:
 
 - `hosted-byok.config.example.json`: managed BYOK SaaS-style config with OIDC,
@@ -45,6 +50,11 @@ Files:
 - `private-beta-go-no-go.public.md`: current public-safe go/no-go summary. It
   remains `no-go` for managed private beta until private evidence is attached
   and redacted summaries are approved.
+- `private-campaign-evidence-checklist.md`: JOE-993 operator path for private
+  campaign items (load/soak, restore, failover, BYOK, support, cost/SLO,
+  rollback) without inventing public go evidence.
+- `redacted-evidence-summary.template.md`: public-safe summary shape per
+  evidence id (checksum + roles; no secrets).
 
 These examples are provider-neutral. They use placeholder domains such as
 `cowork.example.com`, placeholder secret refs such as

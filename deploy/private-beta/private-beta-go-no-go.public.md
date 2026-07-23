@@ -16,7 +16,10 @@ bundles.
   of the in-repo package does **not** equal hosted private-beta go.
 - **Private campaign items:** still required for go (every blocking evidence
   row below remains `pending-private-evidence`).
-- Last public package review: 2026-07-21 (JOE-922)
+- **Campaign path (JOE-993):**
+  `deploy/private-beta/private-campaign-evidence-checklist.md` +
+  `deploy/private-beta/redacted-evidence-summary.template.md`
+- Last public package review: 2026-07-23 (JOE-922 / JOE-993 path)
 - Public ops evidence package:
   `deploy/private-beta/ops-evidence-package.md`
 - Public package validators (`deploy:private-beta:validate`,

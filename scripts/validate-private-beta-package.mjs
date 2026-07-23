@@ -66,6 +66,8 @@ const requiredFiles = [
   'deploy/private-beta/design-partner-onboarding.template.md',
   'deploy/private-beta/go-no-go-report.template.md',
   'deploy/private-beta/private-beta-go-no-go.public.md',
+  'deploy/private-beta/private-campaign-evidence-checklist.md',
+  'deploy/private-beta/redacted-evidence-summary.template.md',
   'mkdocs.yml',
   'package.json',
 ]
@@ -83,6 +85,8 @@ const requiredPublicPackageTemplates = [
   'deploy/private-beta/design-partner-onboarding.template.md',
   'deploy/private-beta/go-no-go-report.template.md',
   'deploy/private-beta/private-beta-go-no-go.public.md',
+  'deploy/private-beta/private-campaign-evidence-checklist.md',
+  'deploy/private-beta/redacted-evidence-summary.template.md',
   'deploy/private-beta/README.md',
   'deploy/private-beta/ops-evidence-package.md',
 ]
@@ -109,6 +113,15 @@ assertIncludes(goNoGoPath, 'no-go')
 assertIncludes(goNoGoPath, 'Decision: `no-go`')
 // Fail closed if someone promotes to go without private campaign evidence.
 assertNotIncludes(goNoGoPath, 'Decision: `go`')
+
+// JOE-993: campaign evidence path must stay linked and honest.
+assertIncludes(goNoGoPath, 'JOE-993')
+assertIncludes('deploy/private-beta/ops-evidence-package.md', 'JOE-993')
+assertIncludes('deploy/private-beta/private-campaign-evidence-checklist.md', 'JOE-993')
+assertIncludes('deploy/private-beta/private-campaign-evidence-checklist.md', 'Does not unlock hosted go')
+assertIncludes('deploy/private-beta/private-campaign-evidence-checklist.md', 'pending-private-evidence')
+assertIncludes('deploy/private-beta/redacted-evidence-summary.template.md', 'Does not alone flip hosted private-beta go')
+assertIncludes('deploy/private-beta/redacted-evidence-summary.template.md', 'Private evidence checksum')
 
 for (const phrase of [
   'Managed BYOK Onboarding Checklist',
@@ -184,6 +197,9 @@ for (const phrase of [
   'go-no-go-report.template.md',
   'private-beta-go-no-go.public.md',
   'ops-evidence-package.md',
+  'private-campaign-evidence-checklist.md',
+  'redacted-evidence-summary.template.md',
+  'JOE-993',
   'provider-neutral',
   'cloud.billing.provider=none',
   'pnpm deploy:private-beta:validate',

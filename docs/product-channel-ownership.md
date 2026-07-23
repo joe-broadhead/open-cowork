@@ -37,6 +37,10 @@ local `channels/*`. That is a large product change and is **out of band** for
 security body work (already shared). Track as a dedicated capacity epic when
 ready — **do not re-open as incomplete dual-stack security P1**.
 
+**Epic plan:** [product-channel-protocol-unification.md](product-channel-protocol-unification.md)
+([JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)).
+Inventory guard: `node scripts/check-channel-protocol-inventory.mjs`.
+
 Until then, this freeze document is the source of truth for dual-stack ownership.
 
 ### Shared security kernel (2026-07-21)

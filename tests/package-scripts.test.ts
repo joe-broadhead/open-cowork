@@ -384,6 +384,14 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
   )
 })
 
+test('channel protocol inventory and private-beta campaign path scripts are wired (JOE-994 / JOE-993)', () => {
+  assert.equal(requireScript('channels:protocol:inventory'), 'node scripts/check-channel-protocol-inventory.mjs')
+  assert.match(requireScript('boundaries:check'), /check-channel-protocol-inventory\.mjs/)
+  assert.equal(requireScript('deploy:private-beta:validate'), 'node scripts/validate-private-beta-package.mjs')
+  assert.ok(existsSync(new URL('../docs/product-channel-protocol-unification.md', import.meta.url)))
+  assert.ok(existsSync(new URL('../deploy/private-beta/private-campaign-evidence-checklist.md', import.meta.url)))
+})
+
 test('weekly gateway matrix and dual-channel PR checklist are wired (JOE-969 / JOE-932)', () => {
   assert.match(weeklyGatewayWorkflow, /pnpm test:gateway/)
   assert.match(weeklyGatewayWorkflow, /cron: "17 4 \* \* 1"/)
