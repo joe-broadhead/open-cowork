@@ -22,9 +22,17 @@ describe('distributed ownership proving suite (JOE-949)', () => {
     marketingForbiddenClaims: string[]
   }
 
-  it('registry is present and not falsely marked ready while migrate hazards remain', () => {
-    expect(registry.openMigrateHazards.length).toBeGreaterThan(0)
-    expect(registry.status).not.toBe('ready')
+  it('registry is ready only when open migrate hazards are empty (JOE-996)', () => {
+    expect(Array.isArray(registry.openMigrateHazards)).toBe(true)
+    if (registry.openMigrateHazards.length > 0) {
+      expect(registry.status).not.toBe('ready')
+    } else {
+      expect(registry.status).toBe('ready')
+    }
+  })
+
+  it('still forbids multi-AZ HA marketing claims even when migrate hazards are closed', () => {
+    expect(registry.marketingForbiddenClaims.join(' ')).toMatch(/multi-AZ HA|multi-az high availability/i)
   })
 
   it('required tests and scripts exist on disk', () => {

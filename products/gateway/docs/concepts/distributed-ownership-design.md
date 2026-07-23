@@ -49,10 +49,9 @@ Work-store refuses stale epochs (`StaleWorkDbLeadershipError`). Channel claims a
 | Leadership lease | **Implemented** | `daemon-leadership.ts` |
 | Fenced SQLite mutations | **Implemented** | work-store epoch validation |
 | Multi-process DB tests | **Implemented** | `multi-process-store.test.ts` |
-| Channel-sync out of JSON multi-writer | **Partial** | Outbox SQLite companion exists; JSON still coordinates pendingInbound |
+| Channel-sync out of JSON multi-writer | **Done (JOE-996)** | H1: coordination + outbox in `channel-sync.json.sqlite` |
 | sessions.json / events.json / telegram-polling migration | **Done (JOE-996)** | H3/H4/H8 → `operational-sidecar.sqlite` |
-| channel-sync JSON coordination | **Open** | Hazard H1 |
-| notification send leases | **Open** | Hazard H13 |
+| notification send leases | **Done (JOE-996)** | H13: `notification_send_leases` in operational sidecar |
 | Proving suite gate for Helm experimental flag | **This design** | Suite must pass; claims script fail-closed |
 | Sidecar dual-write shadow then cutover | Planned | Follow multi-daemon state migration map |
 
@@ -71,7 +70,7 @@ Helm `gateway.experimentalDistributedOwnership=true` means:
 
 - Operator acknowledges lab/experimental risk.
 - **Does not** mean multi-AZ HA or public production claim.
-- Must only be used when proving suite is green **and** operators accept residual JSON sidecar risks listed in the hazard inventory until migrate items close.
+- Must only be used when proving suite is green. Migrate hazards H1/H3/H4/H8/H13 are closed (JOE-996); residual process-local debounce maps remain single-daemon.
 
 Default remains `false`. Chart fails closed for `replicaCount > 1` without the flag.
 
@@ -90,15 +89,15 @@ Any PR that sets marketing language implying multi-AZ HA for Durable Gateway wit
 ## Rollout plan
 
 1. Keep single-replica production.
-2. Close remaining open migrate hazards (H1, H13). H3/H4/H8 migrated to `operational-sidecar.sqlite` (JOE-996 progressive slice).
+2. ~~Close migrate hazards H1/H3/H4/H8/H13~~ — done (JOE-996).
 3. Run proving suite in CI (`pnpm --filter cowork-gateway test` already includes multi-process + proving tests when present).
 4. Lab: writer/standby with experimental flag only.
-5. Only then revisit public multi-replica docs.
+5. Product decision required before any multi-AZ HA marketing (claims script remains fail-closed).
 
 ## Non-claims
 
-Until the proving registry status is `ready` (all migrate hazards closed):
+Even with proving registry `status=ready` (migrate hazards closed, JOE-996):
 
-- No multi-AZ HA for Durable Gateway.
-- No active-active multi-daemon on one state dir.
+- No multi-AZ HA for Durable Gateway without an explicit product decision.
+- No active-active multi-daemon on one state dir as a production default.
 - No “just set replicaCount: 3” guidance outside lab experimental docs.

@@ -137,7 +137,7 @@ export function storageSourceSpecs(stateDir: string): StorageSourceSpec[] {
     },
     {
       id: 'channel_sync_checkpoint',
-      label: 'Channel sync checkpoint cache',
+      label: 'Channel sync checkpoint cache (legacy JSON)',
       kind: 'derived_cache',
       rawPath: path.join(resolved, 'channel-sync.json'),
       fileName: 'channel-sync.json',
@@ -145,8 +145,8 @@ export function storageSourceSpecs(stateDir: string): StorageSourceSpec[] {
       required: false,
       backedUp: true,
       owner: 'channel-sync',
-      description: 'Derived delivery checkpoint and pending inbound cache used to avoid duplicate cross-surface messages.',
-      remediation: 'Restore channel-sync.json from backup or rebuild it intentionally during a quiet maintenance window.',
+      description: 'Legacy JSON coordination state. JOE-996 H1 moved deliveries/pendingInbound/receipts into channel-sync.json.sqlite; JSON is imported once if present.',
+      remediation: 'Prefer channel-sync.json.sqlite; restore legacy channel-sync.json only for older backups.',
     },
     {
       id: 'operational_sidecar',

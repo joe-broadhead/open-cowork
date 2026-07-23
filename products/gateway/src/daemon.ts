@@ -40,13 +40,15 @@ import { safeOpenCodeBaseUrlString } from './opencode-url-policy.js'
 import { withDeadline } from './deadlines.js'
 import { reconcilePendingSessionAdmissions } from './opencode-session-runtime.js'
 import { resolveEnvironmentSpec } from './environments.js'
+import { releaseNotificationSendLease, tryAcquireNotificationSendLease } from './operational-sidecar-store.js'
 
 const log = createLogger({ component: 'gateway' })
 const PORT = getConfig().httpPort
 const REQUEST_NOTIFICATION_TTL_MS = 24 * 60 * 60 * 1000
 const CHANNEL_START_TIMEOUT_MS = 10_000
-const requestNotificationInFlight = new Set<string>()
 let progressNotificationsInFlight: Promise<unknown> | null = null
+const NOTIFICATION_SEND_LEASE_MS = 30_000
+const notificationLeaseOwner = `daemon-${process.pid}`
 const daemonInFlightOperations = new Set<Promise<unknown>>()
 type ProgressNotificationDelivery = () => Promise<unknown>
 
@@ -886,9 +888,9 @@ export async function notifyOpenCodeRequest(event: any, channels: Map<string, an
     if (wasOpenCodeRequestNotified(subjectId, targetKey)) continue
     const channel = channels.get(target.provider)
     if (!channel?.sendMessage && !channel?.sendStructuredMessage) continue
+    // JOE-996 / H13: durable exclusive send lease (multi-process safe).
     const inFlightKey = `${subjectId}:${targetKey}`
-    if (requestNotificationInFlight.has(inFlightKey)) continue
-    requestNotificationInFlight.add(inFlightKey)
+    if (!tryAcquireNotificationSendLease(inFlightKey, notificationLeaseOwner, NOTIFICATION_SEND_LEASE_MS)) continue
     try {
       if (wasOpenCodeRequestNotified(subjectId, targetKey)) continue
       if (channel.sendStructuredMessage) await channel.sendStructuredMessage(target.chatId, message, { threadId: target.threadId })
@@ -900,7 +902,7 @@ export async function notifyOpenCodeRequest(event: any, channels: Map<string, an
       upsertAlert({ key: `opencode-request:${kind}:${targetKey}`, severity: 'warning', source: 'opencode.requests', target: subjectId, summary: `OpenCode ${kind} notification delivery failed`, evidence: [target.provider || 'unknown', error], nextAction: 'Check channel credentials, allowlists, and OpenCode request routing.' })
       queueEvent(`OpenCode ${kind} notification failed for ${subjectId} via ${target.provider}: ${error}`)
     } finally {
-      requestNotificationInFlight.delete(inFlightKey)
+      releaseNotificationSendLease(inFlightKey, notificationLeaseOwner)
     }
   }
 }
