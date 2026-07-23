@@ -195,10 +195,10 @@ describe('telegram channel', () => {
     await vi.waitFor(() => expect(handled).toHaveLength(1))
     await telegramChannel.stop()
 
-    const cursor = JSON.parse(fs.readFileSync(__telegramTest.pollingCursorPath(), 'utf-8'))
-    expect(cursor).toMatchObject({ lastUpdateId: 41 })
-    expect(JSON.stringify(cursor)).not.toContain('chat-1')
-    expect(JSON.stringify(cursor)).not.toContain('/status')
+    expect(__telegramTest.getPollingCursor()).toBe(41)
+    expect(fs.existsSync(__telegramTest.pollingCursorPath())).toBe(true)
+    expect((fs.statSync(__telegramTest.pollingCursorPath()).mode & 0o777).toString(8)).toBe('600')
+    expect(fs.existsSync(path.join(process.env['OPENCODE_GATEWAY_STATE_DIR'] || '', 'telegram-polling.json'))).toBe(false)
 
     __telegramTest.resetInMemoryPollingCursorForTest()
     telegramChannel.onMessage(async () => {
@@ -251,8 +251,7 @@ describe('telegram channel', () => {
     // The transient failure re-fetched the same offset instead of advancing.
     expect(attempts).toBe(2)
     expect(updateOffsets.filter(offset => offset === '1').length).toBeGreaterThanOrEqual(2)
-    const cursor = JSON.parse(fs.readFileSync(__telegramTest.pollingCursorPath(), 'utf-8'))
-    expect(cursor).toMatchObject({ lastUpdateId: 61 })
+    expect(__telegramTest.getPollingCursor()).toBe(61)
     // Transient deferrals are retried, never skipped as poison.
     expect(listWorkEvents(20).some(event => event.type === 'telegram.update.skipped')).toBe(false)
     expect(getQueuedEvents().join('\n')).not.toContain('failed and was skipped')
@@ -315,8 +314,7 @@ describe('telegram channel', () => {
     await vi.waitFor(() => expect(updateOffsets.at(-1)).toBe('53'))
     await telegramChannel.stop()
 
-    const cursor = JSON.parse(fs.readFileSync(__telegramTest.pollingCursorPath(), 'utf-8'))
-    expect(cursor).toMatchObject({ lastUpdateId: 52 })
+    expect(__telegramTest.getPollingCursor()).toBe(52)
     expect(listWorkEvents(20)).toEqual(expect.arrayContaining([
       expect.objectContaining({
         type: 'telegram.update.skipped',

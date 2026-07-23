@@ -1,49 +1,41 @@
 /**
  * Event queue for heartbeat logging and dashboard replay.
+ *
+ * JOE-996 / H3: authoritative persistence is operational-sidecar.sqlite
+ * (not events.json). Legacy events.json is imported once on first open.
  */
-import * as fs from 'node:fs'
-import * as path from 'node:path'
-import { getConfig, getConfigDir } from './config.js'
+import { getConfig } from './config.js'
 import { redactSensitiveText } from './security.js'
+import {
+  loadOperationalEvents,
+  replaceOperationalEvents,
+} from './operational-sidecar-store.js'
 
 let queuedEvents: string[] = []
 let loaded = false
-// events.json is a bounded operational-telemetry sidecar. Rewriting the whole
-// file on every queued line makes a busy channel session issue hundreds of
-// synchronous filesystem writes per minute, so persistence is throttled: the
-// in-memory queue stays authoritative and the file is rewritten at most once
-// per interval, with skipped lines flushed by the next write. A hard crash can
-// lose at most the last interval of telemetry lines, which is acceptable for
-// this sidecar (durable workflow events live in SQLite).
+// operational_events is bounded telemetry. Rewriting SQLite on every queued
+// line under a busy channel would thrash the DB, so persistence is throttled:
+// the in-memory queue stays authoritative and the store is flushed at most once
+// per interval. A hard crash can lose at most the last interval of telemetry
+// lines, which is acceptable (durable workflow events live in gateway.db).
 const SAVE_MIN_INTERVAL_MS = 1000
 let lastSaveMs = 0
-
-function eventStorePath(): string {
-  return path.join(process.env['OPENCODE_GATEWAY_STATE_DIR'] || getConfigDir(), 'events.json')
-}
 
 function ensureLoaded(): void {
   if (loaded) return
   loaded = true
   try {
-    const parsed = JSON.parse(fs.readFileSync(eventStorePath(), 'utf-8'))
-    queuedEvents = Array.isArray(parsed?.events) ? parsed.events.filter((e: any) => typeof e === 'string').slice(-100) : []
-  } catch {}
+    queuedEvents = loadOperationalEvents()
+  } catch {
+    queuedEvents = []
+  }
 }
 
 function saveEvents(): void {
-  let tmp = ''
   try {
-    const file = eventStorePath()
-    const dir = path.dirname(file)
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
-    try { fs.chmodSync(dir, 0o700) } catch {}
-    tmp = `${file}.tmp-${process.pid}-${Date.now()}`
-    fs.writeFileSync(tmp, JSON.stringify({ savedAt: new Date().toISOString(), events: queuedEvents }, null, 2), { mode: 0o600 })
-    fs.renameSync(tmp, file)
-    try { fs.chmodSync(file, 0o600) } catch {}
+    replaceOperationalEvents(queuedEvents)
   } catch {
-    if (tmp) try { fs.rmSync(tmp, { force: true }) } catch {}
+    // Best-effort operational telemetry — do not take down the daemon.
   }
 }
 
@@ -71,7 +63,9 @@ export function getQueuedEvents(): string[] {
 }
 
 export function clearEventsForTest(): void {
+  // Memory only — persist/reload tests call getQueuedEvents after clear.
   loaded = false
   queuedEvents = []
   lastSaveMs = 0
 }
+

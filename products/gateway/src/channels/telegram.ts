@@ -10,13 +10,17 @@
  * Responses from OpenCode sessions are sent back to the user.
  */
 
-import * as fs from 'node:fs'
-import * as path from 'node:path'
 import { createHash } from 'node:crypto'
 import type { ChannelAdapter, ChannelMessage } from './provider.js'
 import { createStructuredMessage, planNativeActionDelivery, renderStructuredMessage, type ChannelCapabilities, type MessageAction, type NativeActionDeliveryItem, type RichMessageBlock, type StructuredGatewayMessage } from './renderer.js'
 import { telegramAdapterCapabilities } from './capabilities.js'
-import { getConfig, getConfigDir } from '../config.js'
+import { getConfig } from '../config.js'
+import {
+  clearChannelPollCursor,
+  loadChannelPollCursor,
+  operationalSidecarPath,
+  saveChannelPollCursor,
+} from '../operational-sidecar-store.js'
 import { queueEvent } from '../wakeup.js'
 import { appendWorkEvent, listRecentWorkEvents } from '../work-store.js'
 import { appendChannelInboundDenialAudit } from '../channel-audit.js'
@@ -616,9 +620,9 @@ function isTelegramTargetFailureDetail(detail: string): boolean {
   return /\b(chat not found|bot was blocked|user is deactivated|message thread not found|not enough rights)\b/i.test(detail)
 }
 
-function telegramUpdateCursorPath(): string {
-  return path.join(process.env['OPENCODE_GATEWAY_STATE_DIR'] || getConfigDir(), 'telegram-polling.json')
-}
+// JOE-996 / H8: Telegram long-poll cursor lives in operational-sidecar.sqlite
+// (channel_poll_cursors). Legacy telegram-polling.json is imported once.
+const TELEGRAM_POLL_PROVIDER = 'telegram'
 
 function normalizeUpdateId(value: unknown): number {
   const id = typeof value === 'number' ? value : Number(value)
@@ -627,11 +631,9 @@ function normalizeUpdateId(value: unknown): number {
 
 function loadTelegramUpdateCursor(): number {
   try {
-    const raw = fs.readFileSync(telegramUpdateCursorPath(), 'utf-8')
-    const parsed = JSON.parse(raw) as { lastUpdateId?: unknown }
-    return normalizeUpdateId(parsed.lastUpdateId)
+    return loadChannelPollCursor(TELEGRAM_POLL_PROVIDER)
   } catch (err: any) {
-    if (err?.code !== 'ENOENT') queueEvent(`Telegram polling cursor ignored: ${cleanText(err?.message || String(err), 240)}`)
+    queueEvent(`Telegram polling cursor ignored: ${cleanText(err?.message || String(err), 240)}`)
     return 0
   }
 }
@@ -639,13 +641,8 @@ function loadTelegramUpdateCursor(): number {
 function saveTelegramUpdateCursor(updateId: number): void {
   const normalized = normalizeUpdateId(updateId)
   if (!normalized) return
-  const file = telegramUpdateCursorPath()
-  const dir = path.dirname(file)
   try {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
-    const tmp = `${file}.tmp`
-    fs.writeFileSync(tmp, JSON.stringify({ lastUpdateId: normalized, updatedAt: new Date().toISOString() }, null, 2) + '\n', { mode: 0o600 })
-    fs.renameSync(tmp, file)
+    saveChannelPollCursor(TELEGRAM_POLL_PROVIDER, normalized)
   } catch (err: any) {
     queueEvent(`Telegram polling cursor write failed: ${cleanText(err?.message || String(err), 240)}`)
   }
@@ -658,7 +655,7 @@ export const __telegramTest = {
   },
   resetPollingCursorForTest() {
     lastUpdateId = 0
-    try { fs.rmSync(telegramUpdateCursorPath(), { force: true }) } catch {}
+    try { clearChannelPollCursor(TELEGRAM_POLL_PROVIDER) } catch {}
   },
   resetInMemoryPollingCursorForTest() {
     lastUpdateId = 0
@@ -666,7 +663,9 @@ export const __telegramTest = {
   setTransientRetryBackoffForTest(ms = TRANSIENT_RETRY_BACKOFF_MS) {
     transientRetryBackoffMs = ms
   },
-  pollingCursorPath: telegramUpdateCursorPath,
+  /** Durable operational sidecar path (cursor is a row, not a JSON file). */
+  pollingCursorPath: operationalSidecarPath,
+  getPollingCursor: loadTelegramUpdateCursor,
 }
 
 function sleep(ms: number): Promise<void> {

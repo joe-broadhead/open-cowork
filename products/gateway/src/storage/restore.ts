@@ -16,6 +16,7 @@ import {
 import { assertSupportedWorkStoreSchemaVersion, workStoreSchemaVersion } from '../work-store/schema.js'
 import {
   CHANNEL_SYNC_OUTBOX_FILE,
+  OPERATIONAL_SIDECAR_FILE,
   SIDECAR_FILES,
   DEFAULT_BACKUP_RETENTION,
   storageStateDir,
@@ -119,8 +120,8 @@ export function recoverStorageRestoreToStateDir(targetStateDir: string): Storage
 }
 
 function restoreManagedFileNames(): string[] {
-  const names = new Set(['gateway.db', CHANNEL_SYNC_OUTBOX_FILE, ...SIDECAR_FILES])
-  for (const sqlite of ['gateway.db', CHANNEL_SYNC_OUTBOX_FILE]) {
+  const names = new Set(['gateway.db', CHANNEL_SYNC_OUTBOX_FILE, OPERATIONAL_SIDECAR_FILE, ...SIDECAR_FILES])
+  for (const sqlite of ['gateway.db', CHANNEL_SYNC_OUTBOX_FILE, OPERATIONAL_SIDECAR_FILE]) {
     names.add(`${sqlite}-wal`)
     names.add(`${sqlite}-shm`)
   }

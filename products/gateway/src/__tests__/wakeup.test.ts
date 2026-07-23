@@ -57,12 +57,25 @@ describe('wakeup', () => {
     expect(event).not.toContain('abc123')
   })
 
-  it('writes the event sidecar with private permissions', () => {
+  it('writes the operational sidecar with private permissions (H3 SQLite)', () => {
     queueEvent('private event')
-    const file = path.join(testDir, 'events.json')
+    const file = path.join(testDir, 'operational-sidecar.sqlite')
 
+    expect(fs.existsSync(file)).toBe(true)
     expect((fs.statSync(file).mode & 0o777).toString(8)).toBe('600')
     expect((fs.statSync(testDir).mode & 0o777).toString(8)).toBe('700')
-    expect(fs.readdirSync(testDir).filter(name => name.startsWith('events.json.tmp-'))).toEqual([])
+    expect(fs.existsSync(path.join(testDir, 'events.json'))).toBe(false)
+  })
+
+  it('imports legacy events.json once into the operational sidecar', () => {
+    fs.mkdirSync(testDir, { recursive: true, mode: 0o700 })
+    fs.writeFileSync(
+      path.join(testDir, 'events.json'),
+      JSON.stringify({ events: ['2026-01-01T00:00:00.000Z: legacy event'] }, null, 2),
+      { mode: 0o600 },
+    )
+    clearEventsForTest()
+    const events = getQueuedEvents()
+    expect(events.some(e => e.includes('legacy event'))).toBe(true)
   })
 })
