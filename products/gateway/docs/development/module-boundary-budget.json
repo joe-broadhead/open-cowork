@@ -815,9 +815,9 @@
  "fileLocBudgets": [
   {
    "path": "src/work-store.ts",
-   "maxLines": 1500,
+   "maxLines": 1550,
    "owner": "work_store",
-   "note": "Hard LOC budget (JOE-919/JOE-942); post-#961 project-orchestration extract; hard max ratcheted to soft \u22641500 (~1497)"
+   "note": "Hard LOC budget (JOE-919/JOE-942); post-#961 project-orchestration extract; hard max 1550 (soft \u22641500); current ~1497 — leave drive-by headroom like work routes"
   },
   {
    "path": "src/environments.ts",

@@ -454,13 +454,6 @@ export interface DaemonHttpServerInput {
 }
 
 /**
- * The real daemon HTTP surface: security check before any dispatch, the 403
- * denial body, CORS origin reflection, OPTIONS handling, webhooks, SSE, and
- * JSON route dispatch. Extracted from serve() unchanged so integration tests
- * can boot the actual server on an ephemeral port; the returned server is not
- * yet listening.
- */
-/**
  * Defense-in-depth headers for Durable Mission Control HTML surfaces.
  * Script is restricted to 'self' (dashboard) or inline only on the tiny live page.
  * Frame ancestors none; no object plugins.
@@ -486,6 +479,13 @@ function applyDurableHtmlSecurityHeaders(res: http.ServerResponse, options: { al
   res.setHeader('X-Frame-Options', 'DENY')
 }
 
+/**
+ * The real daemon HTTP surface: security check before any dispatch, the 403
+ * denial body, CORS origin reflection, OPTIONS handling, webhooks, SSE, and
+ * JSON route dispatch. Extracted from serve() unchanged so integration tests
+ * can boot the actual server on an ephemeral port; the returned server is not
+ * yet listening.
+ */
 export function createDaemonHttpServer(input: DaemonHttpServerInput): http.Server {
   return http.createServer(async (req, res) => {
     const port = input.resolvePort()

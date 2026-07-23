@@ -1,7 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
-import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import { getConfig } from '../../config.js'
 import { redactSecret } from '../../security.js'
@@ -145,22 +144,21 @@ export async function doctor() {
     console.log(`- ${entry.id}: ${entry.statusCode} — ${entry.remediation || entry.summary}`)
   }
   // Multi-writer ownership posture (non-blocking): experimental multi-replica still fails open migrate hazards.
-  try {
-    const registryPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../docs/development/distributed-ownership-proving-registry.json')
-    if (fs.existsSync(registryPath)) {
-      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8')) as { status?: string; openMigrateHazards?: string[] }
-      const open = Array.isArray(registry.openMigrateHazards) ? registry.openMigrateHazards : []
-      const registryStatus = typeof registry.status === 'string' ? registry.status : 'unknown'
+  // Shared loader with readiness so path resolution cannot drift.
+  {
+    const { loadDistributedOwnershipProvingRegistry } = await import('../../distributed-ownership-registry.js')
+    const loaded = loadDistributedOwnershipProvingRegistry()
+    if (!loaded.ok) {
+      console.log(`Multi-writer ownership: proving registry unavailable (assume single-daemon production only; ${loaded.reason})`)
+    } else {
+      const open = Array.isArray(loaded.registry.openMigrateHazards) ? loaded.registry.openMigrateHazards : []
+      const registryStatus = typeof loaded.registry.status === 'string' ? loaded.registry.status : 'unknown'
       if (open.length === 0 && registryStatus === 'ready') {
         console.log(`Multi-writer ownership: ready (registry status=${registryStatus})`)
       } else {
         console.log(`Multi-writer ownership: single-daemon production only; experimental multi-replica still fails open migrate hazards (${open.join(', ') || 'none'}; registry status=${registryStatus})`)
       }
-    } else {
-      console.log('Multi-writer ownership: proving registry not found (assume single-daemon production only)')
     }
-  } catch {
-    console.log('Multi-writer ownership: could not load proving registry (assume single-daemon production only)')
   }
   console.log()
 

@@ -1122,7 +1122,14 @@ describe.sequential('daemon JSON routes', () => {
 
     const allowed = await dispatchRoute(routes, context('GET', '/storage/export?localAdmin=true'))
     expect(allowed?.status).toBe(200)
-    expect(allowed?.body).toBeTruthy()
+    const body = allowed?.body as Record<string, unknown>
+    expect(body).toEqual(expect.objectContaining({
+      exportedAt: expect.any(String),
+      state: expect.anything(),
+      channelBindings: expect.any(Array),
+      recentEvents: expect.any(Array),
+    }))
+    expect(Number.isFinite(Date.parse(String(body['exportedAt'])))).toBe(true)
   })
 
   it('defaults session messages to redacted and requires dual-intent for raw messages', async () => {

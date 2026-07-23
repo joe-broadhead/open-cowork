@@ -1,6 +1,5 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { getConfig, getConfigDir } from './config.js'
 import { getHeartbeatStatus } from './heartbeat.js'
 import { getWorkQueueSnapshot, getWorkQueueSnapshotReadOnly } from './scheduler.js'
@@ -19,6 +18,7 @@ import { getCurrentDaemonLeadershipStatus, redactDaemonLeadershipSnapshot } from
 import { buildLocalReadinessCatalog } from './agent-catalog.js'
 import { openCodeFetch } from './opencode-client.js'
 import { withDeadline } from './deadlines.js'
+import { loadDistributedOwnershipProvingRegistry } from './distributed-ownership-registry.js'
 
 export type ReadinessState = 'ready' | 'degraded' | 'not_ready'
 export type ReadinessCheckStatus = 'pass' | 'warn' | 'fail'
@@ -224,47 +224,39 @@ function checkDaemonLeadership(): ReadinessCheck {
  * Does not degrade readiness (warn would permanently mark single-daemon degraded).
  */
 function checkMultiWriterOwnership(): ReadinessCheck {
-  const registryPath = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '../../../docs/development/distributed-ownership-proving-registry.json',
-  )
-  try {
-    const raw = fs.readFileSync(registryPath, 'utf8')
-    const registry = JSON.parse(raw) as {
-      status?: string
-      openMigrateHazards?: string[]
-    }
-    const open = Array.isArray(registry.openMigrateHazards) ? registry.openMigrateHazards : []
-    const registryStatus = typeof registry.status === 'string' ? registry.status : 'unknown'
-    if (open.length === 0 && registryStatus === 'ready') {
-      return {
-        name: 'multi_writer_ownership',
-        status: 'pass',
-        severity: 'info',
-        summary: 'Distributed-ownership proving registry is ready (no open migrate hazards)',
-        details: { registryStatus, openMigrateHazards: open },
-      }
-    }
+  const loaded = loadDistributedOwnershipProvingRegistry()
+  if (!loaded.ok) {
     return {
       name: 'multi_writer_ownership',
       status: 'pass',
       severity: 'info',
-      summary: `Single-writer production only; experimental multi-replica still fails open migrate hazards (${open.join(', ') || 'none listed'}; registry status=${registryStatus})`,
-      details: {
-        registryStatus,
-        openMigrateHazards: open,
-        productionShape: 'single-daemon-per-state-dir',
-        experimentalMultiReplica: 'lab-only-not-ha',
-      },
+      summary: `Proving registry unavailable; assume single-daemon production only (${redactSensitiveText(loaded.reason)})`,
+      details: { registryPath: loaded.registryPath },
     }
-  } catch (err: any) {
+  }
+  const open = Array.isArray(loaded.registry.openMigrateHazards) ? loaded.registry.openMigrateHazards : []
+  const registryStatus = typeof loaded.registry.status === 'string' ? loaded.registry.status : 'unknown'
+  if (open.length === 0 && registryStatus === 'ready') {
     return {
       name: 'multi_writer_ownership',
       status: 'pass',
       severity: 'info',
-      summary: `Proving registry unavailable; assume single-daemon production only (${redactSensitiveText(err?.message || String(err))})`,
-      details: { registryPath },
+      summary: 'Distributed-ownership proving registry is ready (no open migrate hazards)',
+      details: { registryStatus, openMigrateHazards: open, registryPath: loaded.registryPath },
     }
+  }
+  return {
+    name: 'multi_writer_ownership',
+    status: 'pass',
+    severity: 'info',
+    summary: `Single-writer production only; experimental multi-replica still fails open migrate hazards (${open.join(', ') || 'none listed'}; registry status=${registryStatus})`,
+    details: {
+      registryStatus,
+      openMigrateHazards: open,
+      productionShape: 'single-daemon-per-state-dir',
+      experimentalMultiReplica: 'lab-only-not-ha',
+      registryPath: loaded.registryPath,
+    },
   }
 }
 

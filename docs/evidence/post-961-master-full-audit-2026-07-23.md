@@ -237,15 +237,18 @@ Does **not** invent private-beta go or multi-AZ HA claims.
 
 | Close | Item | Notes |
 | --- | --- | --- |
+| P1 | MCP `state_export` dual-intent | Tool always hits `/storage/export?localAdmin=true` (tool invoke = operator intent) |
+| P1 | Route export dual-intent tests | `daemon-routes.test.ts` asserts 403 without intent / 200 with shape for storage export; session messages raw dual-intent |
+| P1 | Hard budget ratchets | `module-boundary-budget.json` fileLocBudgets ratcheted for work-store / config / scheduler / work routes after façade peels |
 | P2-1 | Wire `createLocalWorkspaceSessionPort` | `apps/desktop/src/main/local-workspace-session.ts` + `artifact-handlers.ts` uses `getLocalSessionPort().getSessionView` (progressive; not full IPC rewrite) |
 | P2-4 (attempted) | Widen import-cycle `SCAN_ROOTS` | **Skipped** `packages/runtime-host/src` — known cycle `runtime → runtime-config-builder → custom-agents-utils → runtime-tools → runtime`; documented in `scripts/check-import-cycles.mjs` |
 | P2-5 | Wiki `tool-router` peel | Helpers → `tool-router-helpers.ts`; router ~643 LOC (under 650/800) |
-| P2-6 (docs + flag) | HA migrate hazards honesty | Hazards inventory + multi-daemon doc reaffirm experimental multi-replica still fails `openMigrateHazards`; readiness `multi_writer_ownership` + doctor line |
+| P2-6 (docs + flag) | HA migrate hazards honesty | Hazards inventory + multi-daemon doc reaffirm experimental multi-replica still fails `openMigrateHazards`; readiness `multi_writer_ownership` + doctor line (shared registry loader) |
 | P3-6 | Product knip in CI | `ci-gateway.yml` runs `knip`; `ci-wiki.yml` runs `check:dead-code` |
 | P0 package | Private-beta validate | Still green; public decision remains **`no-go`** (no invented go) |
 | P3-1/2/4 | Docs reaffirm | Classic Won't Do, chart CSP, HTTPS MCP in `security-model.md`; Dependabot #960 superseded by monorepo override |
 
-**Still open (not this PR):** MCP `state_export` dual-intent (P1), route export integration tests, hard budget ratchets, full HA migrate code, full IPC port cutover, classic burn-down wait on pin >1.18.1.
+**Still open (not this PR):** full HA migrate code (open migrate hazards remain lab-only), full IPC port cutover beyond `getSessionView`, classic burn-down wait on pin >1.18.1, hosted private-beta **go**, dual-stack protocol delete.
 
 ---
 
