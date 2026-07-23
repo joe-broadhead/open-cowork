@@ -3,7 +3,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { ChannelSyncBridge, clearChannelSyncForTest, getChannelSyncSummary } from '../channel-sync.js'
+import { ChannelSyncBridge, clearChannelSyncForTest, getChannelSyncSummary, readChannelSyncStateForTest } from '../channel-sync.js'
 import { clearChannelSessionsForTest, setChannelSession } from '../channel-sessions.js'
 import { clearEventsForTest } from '../wakeup.js'
 import { clearCurrentDaemonLeadershipForTest, createDaemonLeadership, setCurrentDaemonLeadership } from '../daemon-leadership.js'
@@ -63,7 +63,7 @@ describe('channel sync bridge', () => {
     await expect(bridge.initialize('ses_1', 'telegram', 'chat-1')).rejects.toThrow('OpenCode unavailable')
 
     if (fs.existsSync(stateFile)) {
-      const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'))
+      const state = readChannelSyncStateForTest(stateFile)!
       expect(state.deliveries || {}).toEqual({})
     }
     expect(sent).toEqual([])
@@ -95,7 +95,7 @@ describe('channel sync bridge', () => {
     bridge.markInboundSubmitted('telegram', 'chat-1', 'hello again', 'topic-1', 'provider-message-1')
     expect(bridge.recordInbound('ses_1', 'telegram', 'chat-1', 'hello again', 'topic-1', 'provider-message-1')).toBe(false)
 
-    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'))
+    const state = readChannelSyncStateForTest(stateFile)!
     expect(state.pendingInbound).toHaveLength(3)
     expect(Object.keys(state.inboundReceipts)).toHaveLength(3)
     expect(Object.values(state.inboundReceipts)).toEqual(expect.arrayContaining([
@@ -113,7 +113,7 @@ describe('channel sync bridge', () => {
     bridge.forgetInbound('telegram', 'chat-1', 'retry me', 'topic-1', 'provider-message-1')
 
     expect(bridge.recordInbound('ses_1', 'telegram', 'chat-1', 'retry me', 'topic-1', 'provider-message-1')).toBe(true)
-    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'))
+    const state = readChannelSyncStateForTest(stateFile)!
     expect(state.pendingInbound).toHaveLength(1)
     expect(Object.keys(state.inboundReceipts)).toHaveLength(1)
   })
@@ -212,7 +212,7 @@ describe('channel sync bridge', () => {
     expect(getChannelSyncSummary({ stateFile, now }).outbox?.providerBackoff).toEqual([
       expect.objectContaining({ provider: 'telegram', retryAfter: new Date(now + 2000).toISOString(), pending: 1 }),
     ])
-    const failedCheckpoint = JSON.parse(fs.readFileSync(stateFile, 'utf-8')).deliveries['ses_1:telegram:chat-1:']
+    const failedCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']
     expect(failedCheckpoint.seenMessageIds).toEqual([])
 
     await bridge.syncOnce()
@@ -243,7 +243,7 @@ describe('channel sync bridge', () => {
     expect(readOutboxRows()).toEqual([
       expect.objectContaining({ status: 'dead_letter', attempts: 1, provider_error_kind: 'terminal', dead_lettered_at: new Date(now).toISOString() }),
     ])
-    const checkpoint = JSON.parse(fs.readFileSync(stateFile, 'utf-8')).deliveries['ses_1:whatsapp:chat-1:']
+    const checkpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:whatsapp:chat-1:']
     expect(checkpoint.seenMessageIds).not.toContain('a1')
     expect(getChannelSyncSummary({ stateFile }).outbox).toMatchObject({ deadLetter: 1 })
   })
@@ -264,7 +264,7 @@ describe('channel sync bridge', () => {
     messages.push(message('a2', 'assistant', 'second waits behind failure', 1_000_200))
     await firstBridge.syncOnce()
 
-    const failedCheckpoint = JSON.parse(fs.readFileSync(stateFile, 'utf-8')).deliveries['ses_1:telegram:chat-1:']
+    const failedCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']
     expect(sent).toEqual([])
     expect(failedCheckpoint.lastMessageCreated).toBe(0)
     expect(failedCheckpoint.seenMessageIds).not.toContain('a2')
@@ -276,7 +276,7 @@ describe('channel sync bridge', () => {
       { provider: 'telegram', chatId: 'chat-1', text: 'first must retry' },
       { provider: 'telegram', chatId: 'chat-1', text: 'second waits behind failure' },
     ])
-    const recoveredCheckpoint = JSON.parse(fs.readFileSync(stateFile, 'utf-8')).deliveries['ses_1:telegram:chat-1:']
+    const recoveredCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']
     expect(recoveredCheckpoint.lastMessageCreated).toBe(1_000_200)
     expect(recoveredCheckpoint.seenMessageIds).toEqual(expect.arrayContaining(['a1', 'a2']))
   })
@@ -378,7 +378,7 @@ describe('channel sync bridge', () => {
     await bridge.syncOnce()
 
     expect(sent).toEqual([{ provider: 'telegram', chatId: 'chat-1', text: 'lease sensitive reply' }])
-    const checkpoint = JSON.parse(fs.readFileSync(stateFile, 'utf-8')).deliveries['ses_1:telegram:chat-1:']
+    const checkpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']
     expect(checkpoint.seenMessageIds).not.toContain('a1')
     expect(readOutboxRows()).toEqual([
       expect.objectContaining({ status: 'leased', lease_owner: 'other-bridge' }),
@@ -485,9 +485,12 @@ describe('channel sync bridge', () => {
 
     bridge.recordInbound('ses_1', 'telegram', 'chat-1', 'sensitive customer note')
 
-    const raw = fs.readFileSync(stateFile, 'utf-8')
-    expect(raw).toContain('textHash')
-    expect(raw).not.toContain('sensitive customer note')
+    const state = readChannelSyncStateForTest(stateFile)!
+    expect(state.pendingInbound.some(row => typeof row.textHash === 'string' && row.textHash.length > 0)).toBe(true)
+    expect(JSON.stringify(state)).not.toContain('sensitive customer note')
+    for (const file of [stateFile, `${stateFile}.sqlite`, `${stateFile}.sqlite-wal`, `${stateFile}.sqlite-shm`]) {
+      if (fs.existsSync(file)) expect(fs.readFileSync(file).includes(Buffer.from('sensitive customer note'))).toBe(false)
+    }
   })
 
   it('does not persist delivered outbound plaintext in the durable outbox', async () => {

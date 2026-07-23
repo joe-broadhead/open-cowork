@@ -13,12 +13,12 @@
 | Experimental multi-replica (`experimentalDistributedOwnership=true`) | **Lab-only** — Helm can set `replicaCount > 1`, but migrate hazards remain open |
 | Multi-AZ / production multi-replica HA | **Forbidden** until registry `status=ready` **and** `openMigrateHazards` is empty |
 
-**As of 2026-07-23 (post JOE-996 H3/H4/H8 slice):** registry `status=partial`,
-`openMigrateHazards: ["H1","H13"]`. H3/H4/H8 now use
-`operational-sidecar.sqlite` (legacy JSON imported once). Experimental
-multi-replica **still fails** remaining open migrate hazards — do not market as
-HA. Doctor / readiness surface a non-blocking `multi_writer_ownership` check
-that reports this posture.
+**As of 2026-07-23 (JOE-996 complete):** registry `status=ready`,
+`openMigrateHazards: []`. H1/H3/H4/H8/H13 closed in code (channel-sync
+coordination SQLite, operational sidecar, notification send leases). Experimental
+multi-replica is **lab-only** and still **not multi-AZ HA** — marketing claims
+remain fail-closed (`marketingForbiddenClaims`). Doctor / readiness report
+`multi_writer_ownership` as ready when the registry is.
 
 ## Disposition legend
 
@@ -32,7 +32,7 @@ that reports this posture.
 
 | ID | Hazard | Location (code) | Disposition | Rationale / owner |
 | --- | --- | --- | --- | --- |
-| H1 | Channel-sync JSON sidecar (checkpoints, pendingInbound, deliveries) | `products/gateway/src/channel-sync.ts` (`channel-sync.json`, `save` via pid tmp) | **migrate** (not migrated) | Last-writer-wins under two daemons; dual-write to SQLite outbox partially exists but JSON remains coordination. **Single-daemon production shape; multi-replica experimental only.** Proving registry `status=partial` (`docs/development/distributed-ownership-proving-registry.json`). Do not claim migrated until code + suite close the hazard. |
+| H1 | Channel-sync coordination (checkpoints, pendingInbound, receipts) | `channel-sync-state-store.ts` → `channel-sync.json.sqlite` | **migrated** (JOE-996) | Deliveries / pending inbound / inbound receipts in SQLite with BEGIN IMMEDIATE. Legacy `channel-sync.json` imported once. Outbox already SQLite. |
 | H2 | channel-sync process-local `syncInFlight` promise | `channel-sync.ts` ~173–175 | **accept** | Single-process debounce only |
 | H3 | events.json operational sidecar | `products/gateway/src/wakeup.ts` → `operational-sidecar.sqlite` | **migrated** (JOE-996) | Bounded operational telemetry now in SQLite (`operational_events`). Legacy `events.json` imported once. Not a cluster log; multi-replica still experimental. |
 | H4 | sessions.json worker/session projection | `products/gateway/src/workers.ts` → `operational-sidecar.sqlite` | **migrated** (JOE-996) | Worker projection in SQLite (`worker_sessions`). Legacy `sessions.json` imported once. Multi-replica still experimental. |
@@ -44,7 +44,7 @@ that reports this posture.
 | H10 | Warm pools / env maps | `products/gateway/src/environments.ts` (warm pool maps) | **accept** / **fence** | Single-daemon warm pools; multi-daemon needs durable env ownership |
 | H11 | Unredacted export rate-limit buckets | `products/gateway/src/unredacted-export-guard.ts` | **accept** | Per-process; multi-daemon weakens limit (documented) |
 | H12 | Exposed HTTP rate-limit maps | `products/gateway/src/security.ts` exposedRateBuckets | **accept** | Same as H11 for exposed mode |
-| H13 | Notification / send in-flight paths | channel command + sync notification paths (process-local) | **migrate** (not migrated) | Multi-daemon can double-notify without durable send leases. **Single-daemon production shape; multi-replica experimental only.** Proving registry `status=partial`. Do not claim migrated until code exists. |
+| H13 | Notification / send in-flight paths | `operational-sidecar.sqlite` `notification_send_leases` | **migrated** (JOE-996) | OpenCode request notify path acquires exclusive SQLite send leases (multi-process safe). Project/delegation paths already use durable work-event attempting/sent markers. |
 | H14 | JSON sidecar backup bundle | `products/gateway/src/storage/internal.ts` `SIDECAR_FILES` | **fence** | Backups capture sidecars; not multi-writer coord |
 
 ## Already fenced (partial)
@@ -60,15 +60,13 @@ that reports this posture.
 
 - **Single daemon per state directory is the supported production shape.**
 - Process-local maps (H2, H6, H9–H12) are acceptable under that shape.
-- Open migrate hazards **H1, H13** remain **not migrated** under production
-  shape; multi-replica is **experimental only** (Helm fail-closed without
-  experimental flag). H3/H4/H8 closed via `operational-sidecar.sqlite` (JOE-996
-  progressive slice). Proving registry:
+- Open migrate hazards are **empty** after JOE-996 (H1–H13 closed as applicable).
+  Multi-replica remains **experimental only** (Helm fail-closed without
+  experimental flag). Proving registry:
   `docs/development/distributed-ownership-proving-registry.json` with
-  **`status=partial`** and `openMigrateHazards: ["H1","H13"]`.
-- Marketing must not claim multi-AZ / multi-replica HA until remaining hazards
-  migrate in code **and** proving suite reaches `status=ready` (JOE-949).
-  Do **not** claim multi-AZ HA from this partial slice.
+  **`status=ready`** and `openMigrateHazards: []`.
+- Marketing must **still** not claim multi-AZ / production multi-replica HA —
+  that is a product decision beyond migrate-hazard closure (`marketingForbiddenClaims`).
 
 ## Owner
 

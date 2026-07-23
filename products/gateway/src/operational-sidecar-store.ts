@@ -6,9 +6,7 @@
  *   H3 events.json        → operational_events
  *   H4 sessions.json      → worker_sessions
  *   H8 telegram-polling.json → channel_poll_cursors
- *
- * Still open (not this module): H1 channel-sync.json coordination, H13 notify
- * in-flight leases. Registry remains status=partial until those close.
+ *   H13 notification send in-flight → notification_send_leases
  *
  * SQLite + BEGIN IMMEDIATE avoids JSON rewrite corruption under concurrent
  * writers on a shared volume. Production shape remains single-daemon until
@@ -74,6 +72,12 @@ function openSidecarDb(filePath = operationalSidecarPath()): DatabaseSync {
         provider TEXT PRIMARY KEY,
         cursor INTEGER NOT NULL,
         updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS notification_send_leases (
+        lease_key TEXT PRIMARY KEY,
+        owner TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
       );
     `)
     restrictSqliteDbPermissions(dbPath)
@@ -315,6 +319,75 @@ export function clearChannelPollCursor(provider: string, filePath = operationalS
     db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare('DELETE FROM channel_poll_cursors WHERE provider = ?').run(provider)
+      db.exec('COMMIT')
+    } catch (err) {
+      try { db.exec('ROLLBACK') } catch {}
+      throw err
+    }
+  }, filePath)
+}
+
+/**
+ * JOE-996 / H13: exclusive multi-process send lease for channel notifications.
+ * Uses BEGIN IMMEDIATE so two daemons cannot both believe they hold the key.
+ */
+export function tryAcquireNotificationSendLease(
+  leaseKey: string,
+  owner: string,
+  ttlMs: number,
+  filePath = operationalSidecarPath(),
+  now = Date.now(),
+): boolean {
+  const key = String(leaseKey || '').trim()
+  const who = String(owner || '').trim()
+  if (!key || !who) return false
+  const ttl = Math.max(1000, Math.floor(ttlMs))
+  const expiresAt = new Date(now + ttl).toISOString()
+  const createdAt = new Date(now).toISOString()
+  return withSidecarDb((db) => {
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const existing = db.prepare('SELECT owner, expires_at FROM notification_send_leases WHERE lease_key = ?').get(key) as
+        | { owner?: string; expires_at?: string }
+        | undefined
+      if (existing) {
+        const exp = Date.parse(String(existing.expires_at || ''))
+        // Exclusive send: any unexpired lease blocks (including same-owner refresh)
+        // so concurrent same-process callers cannot double-send.
+        if (Number.isFinite(exp) && exp > now) {
+          db.exec('COMMIT')
+          return false
+        }
+      }
+      db.prepare(`
+        INSERT INTO notification_send_leases (lease_key, owner, expires_at, created_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(lease_key) DO UPDATE SET
+          owner = excluded.owner,
+          expires_at = excluded.expires_at,
+          created_at = excluded.created_at
+      `).run(key, who, expiresAt, createdAt)
+      db.exec('COMMIT')
+      return true
+    } catch (err) {
+      try { db.exec('ROLLBACK') } catch {}
+      throw err
+    }
+  }, filePath)
+}
+
+export function releaseNotificationSendLease(
+  leaseKey: string,
+  owner: string,
+  filePath = operationalSidecarPath(),
+): void {
+  const key = String(leaseKey || '').trim()
+  const who = String(owner || '').trim()
+  if (!key || !who) return
+  withSidecarDb((db) => {
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('DELETE FROM notification_send_leases WHERE lease_key = ? AND owner = ?').run(key, who)
       db.exec('COMMIT')
     } catch (err) {
       try { db.exec('ROLLBACK') } catch {}

@@ -10,50 +10,18 @@ import { listChannelSessions, type ChannelSessionLink } from './channel-sessions
 import { listChannelBindings, recoverInterruptedStorageRestore, restrictSqliteDbPermissions } from './work-store.js'
 import { queueEvent } from './wakeup.js'
 import { redactSensitiveText, redactedChannelTargetLabel } from './security.js'
+import {
+  emptyChannelSyncState,
+  loadChannelSyncCoordinationState,
+  readChannelSyncCoordinationState,
+  saveChannelSyncCoordinationState,
+  type ChannelSyncState,
+  type DeliveryCheckpoint,
+  type PendingInbound,
+} from './channel-sync-state-store.js'
 
-interface DeliveryCheckpoint {
-  sessionId: string
-  provider: string
-  chatId: string
-  threadId?: string
-  initializedAt: string
-  updatedAt: string
-  lastMessageCreated: number
-  lastMessageCreatedIds: string[]
-  seenMessageIds: string[]
-}
-
-interface PendingInbound {
-  sessionId: string
-  provider: string
-  chatId: string
-  threadId?: string
-  textHash: string
-  createdAt: number
-  submitLeaseUntil?: number
-  submittedAt?: number
-  providerMessageId?: string
-  messageId?: string
-}
-
-interface InboundReceipt {
-  sessionId: string
-  provider: string
-  chatId: string
-  threadId?: string
-  providerMessageId: string
-  textHash: string
-  createdAt: number
-  submitLeaseUntil?: number
-  submittedAt?: number
-}
-
-interface ChannelSyncState {
-  savedAt: string
-  deliveries: Record<string, DeliveryCheckpoint>
-  pendingInbound: PendingInbound[]
-  inboundReceipts: Record<string, InboundReceipt>
-}
+// JOE-996 / H1: coordination state (deliveries, pendingInbound, receipts) lives in
+// channel-sync.json.sqlite. Legacy channel-sync.json is imported once.
 
 export interface ChannelSyncSummary {
   active: boolean
@@ -462,44 +430,15 @@ export class ChannelSyncBridge {
 
   private loadState(): ChannelSyncState {
     if (this.state) return this.state
-    if (!fs.existsSync(this.stateFile)) {
-      this.state = { savedAt: new Date(this.now()).toISOString(), deliveries: {}, pendingInbound: [], inboundReceipts: {} }
-      return this.state
-    }
-    try {
-      const parsed = JSON.parse(fs.readFileSync(this.stateFile, 'utf-8'))
-      this.state = {
-        savedAt: typeof parsed?.savedAt === 'string' ? parsed.savedAt : new Date(this.now()).toISOString(),
-        deliveries: normalizeDeliveries(parsed?.deliveries),
-        pendingInbound: normalizePending(parsed?.pendingInbound),
-        inboundReceipts: normalizeInboundReceipts(parsed?.inboundReceipts),
-      }
-    } catch (err: any) {
-      // Quarantine the corrupt file and reinitialize rather than halting all
-      // channel traffic forever. Fresh checkpoints mark existing session
-      // messages as seen before delivering, so the duplicate-send window stays
-      // bounded to in-flight messages.
-      const quarantine = `${this.stateFile}.corrupt-${new Date(this.now()).toISOString().replace(/[:.]/g, '-')}`
-      try {
-        fs.renameSync(this.stateFile, quarantine)
-      } catch (renameErr: any) {
-        throw new Error(`channel sync state is unreadable and could not be quarantined; refusing to reset delivery checkpoints: ${err?.message || String(err)} (quarantine failed: ${renameErr?.message || String(renameErr)})`)
-      }
-      console.error(`[channel-sync] state file was unreadable (${err?.message || String(err)}); quarantined to ${quarantine} and reinitialized delivery checkpoints`)
-      queueEvent(`Channel sync state was corrupt; quarantined to ${path.basename(quarantine)} and reinitialized delivery checkpoints`)
-      this.state = { savedAt: new Date(this.now()).toISOString(), deliveries: {}, pendingInbound: [], inboundReceipts: {} }
-    }
+    this.state = loadChannelSyncCoordinationState(this.outboxFile, this.stateFile, this.now())
+      || emptyChannelSyncState(this.now())
     return this.state
   }
 
   private saveState(): void {
     if (!this.state) return
     this.state.savedAt = new Date(this.now()).toISOString()
-    fs.mkdirSync(path.dirname(this.stateFile), { recursive: true, mode: 0o700 })
-    const tmp = `${this.stateFile}.${process.pid}.${Date.now()}.tmp`
-    fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2), { mode: 0o600 })
-    fs.renameSync(tmp, this.stateFile)
-    try { fs.chmodSync(this.stateFile, 0o600) } catch {}
+    saveChannelSyncCoordinationState(this.outboxFile, this.state)
   }
 
   private prunePending(state: ChannelSyncState): void {
@@ -779,17 +718,12 @@ function cleanError(reason: string): string {
 }
 
 function readChannelSyncState(filePath: string): ChannelSyncState | null {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-    return {
-      savedAt: typeof parsed?.savedAt === 'string' ? parsed.savedAt : '',
-      deliveries: normalizeDeliveries(parsed?.deliveries),
-      pendingInbound: normalizePending(parsed?.pendingInbound),
-      inboundReceipts: normalizeInboundReceipts(parsed?.inboundReceipts),
-    }
-  } catch {
-    return null
-  }
+  return readChannelSyncCoordinationState(defaultOutboxFile(filePath), filePath)
+}
+
+/** Test/diagnostics helper: read authoritative coordination state from SQLite (H1). */
+export function readChannelSyncStateForTest(stateFile = defaultStateFile()): ChannelSyncState | null {
+  return readChannelSyncState(stateFile)
 }
 
 function summarizeChannelSyncState(state: ChannelSyncState | null, active: boolean, outboxFile?: string, now = Date.now()): ChannelSyncSummary {
@@ -912,74 +846,6 @@ function hashText(text: string): string {
 
 function normalizeIntervalMs(value: number | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 1000 ? value : DEFAULT_INTERVAL_MS
-}
-
-function normalizeDeliveries(value: any): Record<string, DeliveryCheckpoint> {
-  const out: Record<string, DeliveryCheckpoint> = {}
-  if (!value || typeof value !== 'object') return out
-  for (const [key, row] of Object.entries(value)) {
-    if (!row || typeof row !== 'object') continue
-    const r = row as any
-    if (typeof r.sessionId !== 'string' || typeof r.provider !== 'string' || typeof r.chatId !== 'string') continue
-    out[key] = {
-      sessionId: r.sessionId,
-      provider: r.provider,
-      chatId: r.chatId,
-      threadId: normalizeThreadId(r.threadId) || undefined,
-      initializedAt: typeof r.initializedAt === 'string' ? r.initializedAt : new Date().toISOString(),
-      updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : new Date().toISOString(),
-      lastMessageCreated: Number(r.lastMessageCreated || 0),
-      lastMessageCreatedIds: Array.isArray(r.lastMessageCreatedIds) ? r.lastMessageCreatedIds.filter((id: any) => typeof id === 'string').slice(-RECENT_SEEN_LIMIT) : [],
-      seenMessageIds: Array.isArray(r.seenMessageIds) ? r.seenMessageIds.filter((id: any) => typeof id === 'string').slice(-RECENT_SEEN_LIMIT) : [],
-    }
-  }
-  return out
-}
-
-function normalizePending(value: any): PendingInbound[] {
-  if (!Array.isArray(value)) return []
-  return value.filter((row: any) =>
-    row &&
-    typeof row.sessionId === 'string' &&
-    typeof row.provider === 'string' &&
-    typeof row.chatId === 'string' &&
-    (typeof row.textHash === 'string' || typeof row.text === 'string') &&
-    typeof row.createdAt === 'number',
-  ).map((row: any) => ({
-    sessionId: row.sessionId,
-    provider: row.provider,
-    chatId: row.chatId,
-    threadId: normalizeThreadId(row.threadId) || undefined,
-    textHash: typeof row.textHash === 'string' ? row.textHash : hashText(row.text),
-    createdAt: row.createdAt,
-    submitLeaseUntil: typeof row.submitLeaseUntil === 'number' ? row.submitLeaseUntil : undefined,
-    submittedAt: typeof row.submittedAt === 'number' ? row.submittedAt : undefined,
-    providerMessageId: normalizeProviderMessageId(row.providerMessageId),
-    messageId: typeof row.messageId === 'string' ? row.messageId : undefined,
-  }))
-}
-
-function normalizeInboundReceipts(value: any): Record<string, InboundReceipt> {
-  const out: Record<string, InboundReceipt> = {}
-  if (!value || typeof value !== 'object') return out
-  for (const [key, row] of Object.entries(value)) {
-    const r = row as any
-    const providerMessageId = normalizeProviderMessageId(r?.providerMessageId)
-    if (!r || typeof r !== 'object' || typeof r.provider !== 'string' || typeof r.chatId !== 'string' || !providerMessageId || typeof r.textHash !== 'string' || typeof r.createdAt !== 'number') continue
-    const normalized: InboundReceipt = {
-      sessionId: typeof r.sessionId === 'string' ? r.sessionId : '',
-      provider: r.provider,
-      chatId: r.chatId,
-      threadId: normalizeThreadId(r.threadId) || undefined,
-      providerMessageId,
-      textHash: r.textHash,
-      createdAt: r.createdAt,
-      submitLeaseUntil: typeof r.submitLeaseUntil === 'number' ? r.submitLeaseUntil : undefined,
-      submittedAt: typeof r.submittedAt === 'number' ? r.submittedAt : undefined,
-    }
-    out[key || inboundReceiptKey(normalized.provider, normalized.chatId, normalized.threadId, providerMessageId)] = normalized
-  }
-  return out
 }
 
 function sameInbound(row: PendingInbound, provider: string, chatId: string, threadId: string | undefined, providerMessageId: string | undefined, textHash: string): boolean {

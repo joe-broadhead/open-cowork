@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "durable-gateway-distributed-ownership",
-  "status": "partial",
-  "description": "Proving suite for experimentalDistributedOwnership / multi-replica safety (JOE-949). status=ready only when migrate hazards are closed and all requiredTests pass in CI.",
+  "status": "ready",
+  "description": "Proving suite for experimentalDistributedOwnership / multi-replica safety (JOE-949/996). status=ready when migrate hazards are closed and requiredTests pass in CI. Still NOT multi-AZ HA marketing — see marketingForbiddenClaims.",
   "relatedDocs": [
     "products/gateway/docs/concepts/distributed-ownership-design.md",
     "products/gateway/docs/concepts/multi-daemon-scaling.md",
@@ -37,7 +37,9 @@
       "purpose": "Fail closed on multi-AZ HA marketing language"
     }
   ],
-  "openMigrateHazards": ["H1", "H13"],
+  "openMigrateHazards": [],
+  "closedMigrateHazards": ["H1", "H3", "H4", "H8", "H13"],
+  "closedNote": "JOE-996: H3/H4/H8 operational-sidecar; H1 channel-sync coordination SQLite; H13 notification_send_leases. Multi-AZ HA remains forbidden.",
   "marketingAllowedClaims": [
     "single-writer per state directory",
     "replicaCount 1 supported",
