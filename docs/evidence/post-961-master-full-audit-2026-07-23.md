@@ -1,8 +1,8 @@
 # Full deep & wide codebase audit — post-#961 `master`
 
-**Date:** 2026-07-23  
-**HEAD:** `12320da7` (`fix(post-959): close P0–P3 audit residuals (#961)`)  
-**Prior audit:** `docs/evidence/post-959-master-full-audit-2026-07-22.md` (as-of #959 / `12e48c9c`)  
+**Date:** 2026-07-23
+**HEAD:** `12320da7` (`fix(post-959): close P0–P3 audit residuals (#961)`)
+**Prior audit:** `docs/evidence/post-959-master-full-audit-2026-07-22.md` (as-of #959 / `12e48c9c`)
 **Method:** Local quantitative gates + three parallel read-only deep audits (security, architecture, ops/claims). Skeptical re-check of #961 “closed” items against source.
 
 ---
@@ -128,12 +128,12 @@ Desktop sandbox + IPC sender checks; cloud CSRF + OIDC path-only returnTo; webho
 
 ## Architecture findings
 
-1. **#961 structural win:** `config.ts` and `daemon-routes/work.ts` under soft 1500 with real headroom (hard maxes now loose — should ratchet).  
-2. **Still soft-fail:** work-store, scheduler, cloud HTTP/app, desktop workspace-gateway.  
-3. **Unbudgeted gods:** `mcp.ts`, `channel-commands.ts`, `channel-sync.ts`.  
-4. **Import cycles:** monorepo SCAN_ROOTS = app + ui + shared only; runtime-host skipped on known cycle (see Hardening PR); cloud / desktop main still unscanned.  
-5. **`createLocalWorkspaceSessionPort`:** progressive IPC wiring started (`local-workspace-session` + artifact handlers); full IPC cutover still open.  
-6. **Dual-stack freeze honest**; protocol body still dual.  
+1. **#961 structural win:** `config.ts` and `daemon-routes/work.ts` under soft 1500 with real headroom (hard maxes now loose — should ratchet).
+2. **Still soft-fail:** work-store, scheduler, cloud HTTP/app, desktop workspace-gateway.
+3. **Unbudgeted gods:** `mcp.ts`, `channel-commands.ts`, `channel-sync.ts`.
+4. **Import cycles:** monorepo SCAN_ROOTS = app + ui + shared only; runtime-host skipped on known cycle (see Hardening PR); cloud / desktop main still unscanned.
+5. **`createLocalWorkspaceSessionPort`:** progressive IPC wiring started (`local-workspace-session` + artifact handlers); full IPC cutover still open.
+6. **Dual-stack freeze honest**; protocol body still dual.
 7. **Root knip ignores products/***; product-local knip now CI-gated on gateway/wiki workflows (Hardening PR).
 
 ---
@@ -196,11 +196,11 @@ Private evidence campaign (load/soak/restore/failover/BYOK/support/cost/rollback
 
 ## Non-claims (re-affirmed at HEAD)
 
-1. Multi-AZ HA / production multi-replica Durable Gateway  
-2. Hosted private-beta **go**  
-3. Full dual-stack **protocol** delete  
-4. Full Desktop classic SDK burn-down on pin 1.18.1  
-5. Public multi-tenant Wiki product readiness  
+1. Multi-AZ HA / production multi-replica Durable Gateway
+2. Hosted private-beta **go**
+3. Full dual-stack **protocol** delete
+4. Full Desktop classic SDK burn-down on pin 1.18.1
+5. Public multi-tenant Wiki product readiness
 
 **Do claim (accurate):** local/self-host beta; Durable V2 construction + session façade; pin lockstep 1.18.1; JOE-952 dual-intent on sensitive HTTP dumps; trusted-proxy webhook rate keys; soft-budget façades for config + work routes; empty advisory graph at this audit; public private-beta package COMPLETE with decision **no-go**.
 
@@ -221,10 +221,10 @@ Private evidence campaign (load/soak/restore/failover/BYOK/support/cost/rollback
 
 ## Method appendix
 
-- Local: `pnpm audit:*`, LOC inventories, all check scripts, residual greps  
-- Security explore (post-#961 remediations + residual hunt)  
-- Architecture explore (budgets, cycles, ports, dual-stack)  
-- Ops explore (claims, CI, HA, private-beta, evals)  
+- Local: `pnpm audit:*`, LOC inventories, all check scripts, residual greps
+- Security explore (post-#961 remediations + residual hunt)
+- Architecture explore (budgets, cycles, ports, dual-stack)
+- Ops explore (claims, CI, HA, private-beta, evals)
 
 **Related evidence:** `post-959-master-full-audit-2026-07-22.md`, multi-writer hazards, channel security matrix, private-beta ops package, wiki surface audit.
 
