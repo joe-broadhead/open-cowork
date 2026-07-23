@@ -18,11 +18,14 @@ checks:
 | `windows-package` | CI | Windows NSIS packaging and packaged-app smoke validation. |
 | `docs` | CI | Strict MkDocs build for every PR. |
 | `coverage` | CI | Coverage ratchet and PR coverage summary. |
-| `analyze (javascript-typescript)` | CodeQL | JavaScript/TypeScript security and quality analysis. |
 
-Keep these names in sync with `.github/workflows/ci.yml` and
-`.github/workflows/codeql.yml`. If a workflow job is renamed, update branch
-protection in GitHub before merging the rename.
+Keep these names in sync with `.github/workflows/ci.yml`. If a workflow job is
+renamed, update branch protection in GitHub before merging the rename.
+
+**CodeQL is not a required PR/merge check.** Full monorepo CodeQL regularly
+times out and burns multi-hour Action minutes. `.github/workflows/codeql.yml`
+runs a deep `security-and-quality` scan **monthly** (and on `workflow_dispatch`)
+only — not on every PR or every `master` push.
 
 ## Recommended Settings
 
