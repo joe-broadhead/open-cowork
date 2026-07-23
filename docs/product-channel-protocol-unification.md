@@ -1,8 +1,8 @@
 # Dual-stack channel protocol unification (JOE-994)
 
-**Status:** Capacity epic — **protocol freeze retained**  
-**Security body:** Done (shared kernels + dual-stack checklist / CI gate)  
-**Linear:** [JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)  
+**Status:** Capacity epic — **protocol freeze retained**
+**Security body:** Done (shared kernels + dual-stack checklist / CI gate)
+**Linear:** [JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)
 **Freeze source of truth:** [`product-channel-ownership.md`](product-channel-ownership.md)
 
 This document is the monorepo plan for **when** capacity prioritizes collapsing

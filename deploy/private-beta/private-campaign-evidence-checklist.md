@@ -1,8 +1,8 @@
 # Private campaign evidence checklist (JOE-993)
 
-**Status:** Public monorepo path for collecting private campaign evidence  
-**Does not unlock hosted go by itself** — public package COMPLETE ≠ go  
-**Linear:** [JOE-993](https://linear.app/joe-broadhead/issue/JOE-993/launch-private-beta-campaign-evidence-path-unlock-hosted-go)  
+**Status:** Public monorepo path for collecting private campaign evidence
+**Does not unlock hosted go by itself** — public package COMPLETE ≠ go
+**Linear:** [JOE-993](https://linear.app/joe-broadhead/issue/JOE-993/launch-private-beta-campaign-evidence-path-unlock-hosted-go)
 **Related:** `ops-evidence-package.md`, `private-beta-go-no-go.public.md`, `launch-evidence-record.template.json`
 
 This checklist is the **operator run path** for the private campaign items that

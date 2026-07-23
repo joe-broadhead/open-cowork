@@ -1,8 +1,8 @@
 # Redacted evidence summary (public-safe)
 
-**Evidence id:** `{evidence_id}`  
-**Campaign:** private-beta (JOE-993)  
-**Decision:** `{pass|fail|blocked}`  
+**Evidence id:** `{evidence_id}`
+**Campaign:** private-beta (JOE-993)
+**Decision:** `{pass|fail|blocked}`
 **Date (UTC):** `{YYYY-MM-DD}`
 
 ## Redacted notes
