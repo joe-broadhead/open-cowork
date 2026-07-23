@@ -305,7 +305,7 @@ export function setupIpcHandlers(
     let directory = getRuntimeHomeDir()
 
     if (options?.sessionId) {
-      const sessionContext = runtimeContext.resolveSessionRuntimeModel(options.sessionId)
+      const sessionContext = await runtimeContext.resolveSessionRuntimeModel(options.sessionId)
       provider = options?.provider || sessionContext.provider
       model = options?.model || sessionContext.model
       directory = sessionContext.directory

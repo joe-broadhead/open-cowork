@@ -1,18 +1,21 @@
 /**
- * Progressive local WorkspaceSessionPort wiring (post-#961 hardening).
+ * Progressive local WorkspaceSessionPort wiring (JOE-995 / post-#961 hardening).
  *
  * Adapts the process-local sessionEngine singleton behind the shared port so
  * high-traffic IPC can migrate off direct engine imports without inventing a
  * second session implementation.
  *
- * Scope today: only `getSessionView` is wired — that is what artifact-handlers
- * need. Other core port methods (`createSession`, `listSessions`, `promptSession`,
- * etc.) are intentionally unmapped: sessionEngine does not expose matching
- * shapes, and inventing stubs would fake a full IPC cutover. Callers that need
- * those operations still use sessionEngine (or cloud adapter) directly until a
- * later progressive PR maps them.
+ * Wired today (honest sessionEngine mappings only):
+ * - getSessionView
+ * - getSessionInfo (from engine meta + registry title when available)
+ *
+ * Other core port methods remain unmapped until sessionEngine exposes matching
+ * shapes. Callers that need those still use sessionEngine / OpenCode client
+ * directly — no fake cutover.
  */
 import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
+import { getSessionRecord } from '@open-cowork/runtime-host/session-registry'
+import type { SessionInfo } from '@open-cowork/shared'
 import {
   createLocalWorkspaceSessionPort,
   type WorkspaceSessionPort,
@@ -20,15 +23,28 @@ import {
 
 let localPort: WorkspaceSessionPort | null = null
 
+function localGetSessionInfo(sessionId: string): SessionInfo | null {
+  const meta = sessionEngine.getSessionMeta(sessionId)
+  if (!meta) return null
+  const record = getSessionRecord(sessionId)
+  const now = new Date(meta.lastEventAt || Date.now()).toISOString()
+  return {
+    id: sessionId,
+    title: record?.title || sessionId,
+    createdAt: record?.createdAt || now,
+    updatedAt: record?.updatedAt || now,
+  }
+}
+
 /**
  * Module-level local session port for progressive port-shaped surfaces.
- * Currently: getSessionView only. Other core methods throw
- * `Local WorkspaceSessionPort method not available` by design.
+ * Unmapped core methods throw `Local WorkspaceSessionPort method not available`.
  */
 export function getLocalSessionPort(): WorkspaceSessionPort {
   if (!localPort) {
     localPort = createLocalWorkspaceSessionPort({
       getSessionView: (sessionId) => sessionEngine.getSessionView(sessionId),
+      getSessionInfo: (sessionId) => localGetSessionInfo(sessionId),
     })
   }
   return localPort

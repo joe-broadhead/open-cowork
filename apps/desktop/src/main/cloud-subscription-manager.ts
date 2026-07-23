@@ -3,6 +3,7 @@ import type {
   CloudTransportSubscription,
   CloudTransportWorkspaceEvent,
 } from '@open-cowork/cloud-server/transport-adapter'
+import { attemptReconnectDelayMs } from '@open-cowork/runtime-host'
 import type { CloudWorkspaceSessionAdapter } from './cloud-workspace-adapter.ts'
 import type { WorkspaceInfo } from '@open-cowork/shared'
 
@@ -206,9 +207,13 @@ export class CloudSubscriptionManager {
   }
 
   private cloudSubscriptionRetryDelayMs(attempt: number) {
-    if (this.deps.reconnectMaxAttempts === 0) return null
-    if (attempt >= this.deps.reconnectMaxAttempts) return null
-    return Math.min(this.deps.reconnectMaxMs, this.deps.reconnectBaseMs * 2 ** Math.max(0, attempt))
+    // Shared kernel (JOE-943): same attempt-based backoff math as OpenCode event pump.
+    return attemptReconnectDelayMs(
+      attempt,
+      this.deps.reconnectBaseMs,
+      this.deps.reconnectMaxMs,
+      this.deps.reconnectMaxAttempts,
+    )
   }
 
   private scheduleCloudSubscriptionRetry(
