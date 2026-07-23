@@ -35,6 +35,7 @@
     "build:web": "node --no-warnings --import tsx packages/web/scripts/build.mjs",
     "check:bundle": "node --no-warnings --import tsx packages/web/scripts/check-bundle.mjs",
     "check:dead-code": "knip --config knip.json --include files,dependencies --reporter compact --no-config-hints",
+    "knip": "pnpm check:dead-code",
     "check:deploy-docs": "node --no-warnings scripts/openwiki-validate-deploy-docs.mjs",
     "check:modules": "node --no-warnings scripts/openwiki-module-size-report.mjs --check",
     "coverage": "node --no-warnings scripts/openwiki-coverage.mjs",

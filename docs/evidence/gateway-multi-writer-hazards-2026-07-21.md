@@ -1,8 +1,21 @@
 # Process-local multi-writer hazards inventory (JOE-948)
 
-**Date:** 2026-07-21
+**Date:** 2026-07-21 (reaffirmed 2026-07-23 post-#961 hardening)
 **Scope:** Durable Gateway (`products/gateway`) + Channel Gateway process-local maps
 **Related:** JOE-931, JOE-954, `products/gateway/docs/concepts/multi-daemon-scaling.md`
+**Proving registry:** `docs/development/distributed-ownership-proving-registry.json`
+
+## Current claim posture (fail-closed)
+
+| Claim | Status |
+| --- | --- |
+| Single daemon per state directory | **Supported** production shape |
+| Experimental multi-replica (`experimentalDistributedOwnership=true`) | **Lab-only** — Helm can set `replicaCount > 1`, but migrate hazards remain open |
+| Multi-AZ / production multi-replica HA | **Forbidden** until registry `status=ready` **and** `openMigrateHazards` is empty |
+
+**As of 2026-07-23:** registry `status=partial`, `openMigrateHazards: ["H1","H3","H4","H8","H13"]`.
+Experimental multi-replica **still fails** these open migrate hazards — do not market as HA.
+Doctor / readiness surface a non-blocking `multi_writer_ownership` check that reports this posture.
 
 ## Disposition legend
 

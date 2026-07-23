@@ -57,6 +57,7 @@ const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
   'ipc-handlers.ts',
   'ipc-runtime-context.ts',
   'keyed-serializer.ts',
+  'local-workspace-session.ts',
   'main-window-controller.ts',
   'main-window-lifecycle.ts',
   'main-window-security.ts',

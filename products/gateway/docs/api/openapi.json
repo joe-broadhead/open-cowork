@@ -1457,7 +1457,7 @@
     },
     "/storage/export": {
       "get": {
-        "summary": "Export durable Gateway state as JSON. Requires admin for non-local requests.",
+        "summary": "Export durable Gateway state as JSON. Requires admin for non-local requests and localAdmin=true dual-intent (JOE-952; always unredacted; rate-limited).",
         "tags": [
           "Service"
         ],
@@ -1467,12 +1467,27 @@
           }
         ],
         "x-required-capability": "admin",
+        "parameters": [
+          {
+            "name": "localAdmin",
+            "in": "query",
+            "required": true,
+            "description": "JOE-952 dual-intent. Must be true to export unredacted durable state. MCP state_export supplies this automatically because tool invocation is the operator intent.",
+            "schema": {
+              "type": "boolean",
+              "enum": [true]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful response"
           },
           "403": {
-            "description": "Forbidden"
+            "description": "Forbidden — missing admin capability or localAdmin dual-intent"
+          },
+          "429": {
+            "description": "Rate limited (unredacted storage export budget)"
           }
         }
       }

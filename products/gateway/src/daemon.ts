@@ -454,6 +454,32 @@ export interface DaemonHttpServerInput {
 }
 
 /**
+ * Defense-in-depth headers for Durable Mission Control HTML surfaces.
+ * Script is restricted to 'self' (dashboard) or inline only on the tiny live page.
+ * Frame ancestors none; no object plugins.
+ */
+function applyDurableHtmlSecurityHeaders(res: http.ServerResponse, options: { allowInlineScript?: boolean } = {}): void {
+  const scriptSrc = options.allowInlineScript ? "'self' 'unsafe-inline'" : "'self'"
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'none'",
+      `script-src ${scriptSrc}`,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "connect-src 'self'",
+      "base-uri 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "object-src 'none'",
+    ].join('; '),
+  )
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  res.setHeader('X-Frame-Options', 'DENY')
+}
+
+/**
  * The real daemon HTTP surface: security check before any dispatch, the 403
  * denial body, CORS origin reflection, OPTIONS handling, webhooks, SSE, and
  * JSON route dispatch. Extracted from serve() unchanged so integration tests
@@ -524,7 +550,9 @@ export function createDaemonHttpServer(input: DaemonHttpServerInput): http.Serve
       // Web dashboard
       if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/dashboard')) {
         const html = await renderDashboard(url.searchParams)
-        res.setHeader('Content-Type', 'text/html')
+        // Mission Control HTML embeds inline script/style (self-contained page).
+        applyDurableHtmlSecurityHeaders(res, { allowInlineScript: true })
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.writeHead(200)
         return res.end(html)
       }
@@ -539,7 +567,9 @@ export function createDaemonHttpServer(input: DaemonHttpServerInput): http.Serve
 
       // Live dashboard HTML
       if (req.method === 'GET' && url.pathname === '/live') {
-        res.setHeader('Content-Type', 'text/html')
+        // Live page embeds a small inline EventSource script (no external assets).
+        applyDurableHtmlSecurityHeaders(res, { allowInlineScript: true })
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
         res.writeHead(200)
         return res.end(`<!DOCTYPE html>
 <html><head>

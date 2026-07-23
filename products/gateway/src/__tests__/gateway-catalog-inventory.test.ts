@@ -6,25 +6,30 @@ import { GATEWAY_TOOL_CATALOG, GATEWAY_TOOL_GROUPS, buildGatewayToolCatalog, for
 import { classifyGatewayTool } from '../mcp-tool-tiers.js'
 
 /**
- * Every tool registered in src/mcp.ts, including the task_/project_ lifecycle
- * families registered via loops. The literal `server.tool('name'` matches plus
- * the two documented loop families give the full runtime surface.
+ * Every tool registered in src/mcp.ts + src/mcp-tools-ops.ts, including the
+ * task_/project_ lifecycle families registered via loops. The literal
+ * `server.tool('name'` matches plus the two documented loop families give the
+ * full runtime surface.
  */
 function registeredToolNames(): string[] {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  const source = fs.readFileSync(path.join(repoRoot, 'src', 'mcp.ts'), 'utf-8')
+  const sources = ['mcp.ts', 'mcp-tools-ops.ts'].map((file) =>
+    fs.readFileSync(path.join(repoRoot, 'src', file), 'utf-8'),
+  )
   const names = new Set<string>()
-  for (const match of source.matchAll(/server\.tool\(\s*'([a-z0-9_]+)'/g)) names.add(match[1]!)
-  // Loop-registered families use template literals, not string literals.
-  for (const match of source.matchAll(/for \(const action of \[([^\]]+)\] as const\) \{\s*server\.tool\(`([a-z]+)_\$\{action\}`/g)) {
-    const actions = [...match[1]!.matchAll(/'([a-z]+)'/g)].map(m => m[1]!)
-    for (const action of actions) names.add(`${match[2]}_${action}`)
+  for (const source of sources) {
+    for (const match of source.matchAll(/server\.tool\(\s*'([a-z0-9_]+)'/g)) names.add(match[1]!)
+    // Loop-registered families use template literals, not string literals.
+    for (const match of source.matchAll(/for \(const action of \[([^\]]+)\] as const\) \{\s*server\.tool\(`([a-z]+)_\$\{action\}`/g)) {
+      const actions = [...match[1]!.matchAll(/'([a-z]+)'/g)].map(m => m[1]!)
+      for (const action of actions) names.add(`${match[2]}_${action}`)
+    }
   }
   return [...names].sort()
 }
 
 describe('Gateway MCP tool catalog', () => {
-  it('covers exactly the tools registered in src/mcp.ts', () => {
+  it('covers exactly the tools registered in src/mcp.ts + mcp-tools-ops.ts', () => {
     const catalogNames = GATEWAY_TOOL_CATALOG.map(entry => entry.name).sort()
     expect(catalogNames).toEqual(registeredToolNames())
   })

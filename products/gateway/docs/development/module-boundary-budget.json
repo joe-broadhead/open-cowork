@@ -6,8 +6,8 @@
  "sourceRoot": "src",
  "dependencyBudget": {
   "includeTests": false,
-  "maxModuleCount": 243,
-  "maxEdgeCount": 1080,
+  "maxModuleCount": 247,
+  "maxEdgeCount": 1120,
   "maxCycleComponents": 0,
   "maxCycleComponentSize": 4,
   "knownCycles": []
@@ -19,6 +19,7 @@
    "changeRule": "Change orchestration calculations in the kernel before adapting scheduler or route execution code.",
    "ownerModules": [
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/orchestration-kernel.ts",
     "src/capacity.ts"
    ],
@@ -47,7 +48,8 @@
     "src/work-store/validators.ts",
     "src/work-store/queries.ts",
     "src/work-store/db.ts",
-    "src/work-store/row-mappers.ts"
+    "src/work-store/row-mappers.ts",
+    "src/work-store/project-orchestration.ts"
    ],
    "edgeAdapters": [
     "src/storage.ts",
@@ -59,7 +61,9 @@
     "src/storage/integrity.ts",
     "src/storage/drills.ts",
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/channel-commands.ts",
+    "src/channel-commands-helpers.ts",
     "src/agent-presence.ts",
     "src/persona.ts"
    ],
@@ -80,6 +84,7 @@
    "ownerModules": [
     "src/channel-actions.ts",
     "src/channel-commands.ts",
+    "src/channel-commands-helpers.ts",
     "src/channels/capabilities.ts",
     "src/channels/renderer.ts",
     "src/channels/provider.ts"
@@ -186,6 +191,7 @@
    "edgeAdapters": [
     "src/dashboard.ts",
     "src/mcp.ts",
+    "src/mcp-tools-ops.ts",
     "src/daemon-routes/system.ts"
    ],
    "primaryTests": [
@@ -294,6 +300,7 @@
    "from": [
     "src/channel-actions.ts",
     "src/channel-commands.ts",
+    "src/channel-commands-helpers.ts",
     "src/channels/capabilities.ts",
     "src/channels/renderer.ts",
     "src/channels/provider.ts"
@@ -317,11 +324,13 @@
    ],
    "blocked": [
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/daemon.ts",
     "src/daemon-router.ts",
     "src/daemon-routes/**",
     "src/dashboard.ts",
     "src/mcp.ts",
+    "src/mcp-tools-ops.ts",
     "src/mission-data.ts"
    ],
    "exceptions": []
@@ -337,6 +346,7 @@
    ],
    "blocked": [
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/cli.ts",
     "src/daemon.ts",
     "src/daemon-router.ts",
@@ -344,7 +354,8 @@
     "src/channels/**",
     "src/channel-sync.ts",
     "src/dashboard.ts",
-    "src/mcp.ts"
+    "src/mcp.ts",
+    "src/mcp-tools-ops.ts"
    ],
    "exceptions": []
   },
@@ -360,6 +371,7 @@
     "src/work-store.ts",
     "src/work-store/**",
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/storage.ts",
     "src/wakeup.ts",
     "src/workers.ts",
@@ -383,6 +395,7 @@
     "src/work-store.ts",
     "src/work-store/**",
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/storage.ts",
     "src/channel-sync.ts",
     "src/channels/telegram.ts",
@@ -390,6 +403,7 @@
     "src/channels/discord.ts",
     "src/dashboard.ts",
     "src/mcp.ts",
+    "src/mcp-tools-ops.ts",
     "src/daemon.ts",
     "src/daemon-router.ts",
     "src/daemon-routes/**"
@@ -406,6 +420,7 @@
    ],
    "blocked": [
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/capacity.ts",
     "src/workers.ts",
     "src/daemon.ts",
@@ -415,7 +430,8 @@
     "src/channels/whatsapp.ts",
     "src/channels/discord.ts",
     "src/dashboard.ts",
-    "src/mcp.ts"
+    "src/mcp.ts",
+    "src/mcp-tools-ops.ts"
    ],
    "exceptions": []
   },
@@ -433,9 +449,11 @@
     "src/work-store/**",
     "src/storage.ts",
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/capacity.ts",
     "src/workers.ts",
     "src/channel-commands.ts",
+    "src/channel-commands-helpers.ts",
     "src/channel-sync.ts",
     "src/channels/telegram.ts",
     "src/channels/whatsapp.ts",
@@ -443,7 +461,8 @@
     "src/daemon.ts",
     "src/daemon-router.ts",
     "src/daemon-routes/**",
-    "src/mcp.ts"
+    "src/mcp.ts",
+    "src/mcp-tools-ops.ts"
    ],
    "exceptions": []
   },
@@ -453,16 +472,19 @@
    "reason": "MCP tools are local edge surfaces; they must authorize, call daemon endpoints, and format typed view-model data rather than importing mutable storage, scheduler, dashboard, or provider-adapter owners.",
    "reviewCondition": "Expose behavior through a daemon route, security policy, or Mission Control view model before wiring a new MCP tool.",
    "from": [
-    "src/mcp.ts"
+    "src/mcp.ts",
+    "src/mcp-tools-ops.ts"
    ],
    "blocked": [
     "src/work-store.ts",
     "src/work-store/**",
     "src/storage.ts",
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/capacity.ts",
     "src/workers.ts",
     "src/channel-commands.ts",
+    "src/channel-commands-helpers.ts",
     "src/channel-sync.ts",
     "src/channels/telegram.ts",
     "src/channels/whatsapp.ts",
@@ -489,6 +511,7 @@
     "src/channels/whatsapp.ts",
     "src/channels/discord.ts",
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/daemon-routes/**"
    ],
    "exceptions": []
@@ -507,6 +530,7 @@
     "src/work-store/**",
     "src/storage.ts",
     "src/scheduler.ts",
+    "src/scheduler-helpers.ts",
     "src/capacity.ts",
     "src/workers.ts",
     "src/daemon.ts",
@@ -515,6 +539,7 @@
     "src/dashboard/**",
     "src/dashboard.ts",
     "src/mcp.ts",
+    "src/mcp-tools-ops.ts",
     "src/channels/telegram.ts",
     "src/channels/whatsapp.ts",
     "src/channels/discord.ts",
@@ -536,7 +561,8 @@
     "src/channels/telegram.ts",
     "src/channels/whatsapp.ts",
     "src/channels/discord.ts",
-    "src/channel-commands.ts"
+    "src/channel-commands.ts",
+    "src/channel-commands-helpers.ts"
    ],
    "exceptions": []
   }
@@ -730,7 +756,7 @@
     "ownerCategory": "daemon_cli_edge",
     "growthKind": "runtime",
     "rationale": "Extract work-presentation helpers and config schema/normalize leaves so work.ts and config.ts stay under soft LOC target 1500 without expanding release claims.",
-    "consolidationPath": "Keep leaves pure; consumers continue to import façades (workRoutes/config) unless a second extraction needs direct leaf imports."
+    "consolidationPath": "Keep leaves pure; consumers continue to import fa\u00e7ades (workRoutes/config) unless a second extraction needs direct leaf imports."
    },
    {
     "id": "post_959_facade_loc_remediation_edges",
@@ -741,8 +767,32 @@
     "delta": 30,
     "ownerCategory": "daemon_cli_edge",
     "growthKind": "runtime",
-    "rationale": "work.ts→work-presentation and config.ts→config-schema/config-normalize plus presentation helper imports increase graph edges during LOC façade split.",
-    "consolidationPath": "Prefer keeping presentation helpers behind workRoutes; collapse duplicate façade re-export edges if leaves stabilize."
+    "rationale": "work.ts\u2192work-presentation and config.ts\u2192config-schema/config-normalize plus presentation helper imports increase graph edges during LOC fa\u00e7ade split.",
+    "consolidationPath": "Prefer keeping presentation helpers behind workRoutes; collapse duplicate fa\u00e7ade re-export edges if leaves stabilize."
+   },
+   {
+    "id": "post_961_facade_loc_hardening_modules",
+    "issue": "POST-961-P0-P3",
+    "metric": "module_count",
+    "previous": 243,
+    "current": 247,
+    "delta": 4,
+    "ownerCategory": "runtime_scheduler",
+    "growthKind": "runtime",
+    "rationale": "Extract scheduler-helpers, work-store/project-orchestration, mcp-tools-ops, and channel-commands-helpers so god fa\u00e7ades approach soft LOC 1500 without expanding release claims.",
+    "consolidationPath": "Keep leaves pure/orchestration-only; consumers continue to import fa\u00e7ades (scheduler/work-store/mcp/channel-commands) unless a second extraction needs direct leaf imports."
+   },
+   {
+    "id": "post_961_facade_loc_hardening_edges",
+    "issue": "POST-961-P0-P3",
+    "metric": "edge_count",
+    "previous": 1080,
+    "current": 1120,
+    "delta": 40,
+    "ownerCategory": "runtime_scheduler",
+    "growthKind": "runtime",
+    "rationale": "Fa\u00e7ade\u2192leaf imports for scheduler, work-store orchestration, MCP ops tools, and channel-command helpers increase graph edges during LOC split.",
+    "consolidationPath": "Prefer fa\u00e7ade re-exports; collapse duplicate re-export edges if leaves stabilize."
    }
   ],
   "directionalImportPilots": [
@@ -765,33 +815,51 @@
  "fileLocBudgets": [
   {
    "path": "src/work-store.ts",
-   "maxLines": 2000,
+   "maxLines": 1550,
    "owner": "work_store",
-   "note": "Hard LOC budget (JOE-919/JOE-942); current ~1956 after state-io + event-queries + final helper moves; at ≤2000 target"
+   "note": "Hard LOC budget (JOE-919/JOE-942); post-#961 project-orchestration extract; hard max 1550 (soft \u22641500); current ~1497 — leave drive-by headroom like work routes"
   },
   {
    "path": "src/environments.ts",
    "maxLines": 1300,
    "owner": "environments",
-   "note": "Hard LOC budget (JOE-919/JOE-936); current ~1262 after util/lifecycle/local-container/remote-crabbox extract; ≤2000"
+   "note": "Hard LOC budget (JOE-919/JOE-936); current ~1262 after util/lifecycle/local-container/remote-crabbox extract; \u22642000"
   },
   {
    "path": "src/config.ts",
-   "maxLines": 1800,
+   "maxLines": 1500,
    "owner": "config",
-   "note": "Hard LOC budget (JOE-919); current ~1408 after config-schema + config-normalize extract; soft target ≤1500"
+   "note": "Hard LOC budget (JOE-919); post-#961 extract ratcheted hard max to soft target \u22641500; current ~1407"
   },
   {
    "path": "src/scheduler.ts",
-   "maxLines": 1820,
+   "maxLines": 1500,
    "owner": "scheduler_replay",
-   "note": "Hard LOC budget (JOE-919); current 1800 lines; under 2000"
+   "note": "Hard LOC budget (JOE-919); post-#961 scheduler-helpers extract; hard max ratcheted to soft \u22641500 (~1461)"
   },
   {
    "path": "src/daemon-routes/work.ts",
-   "maxLines": 1960,
+   "maxLines": 1550,
    "owner": "scheduler_replay",
-   "note": "Hard LOC budget (JOE-919); current ~1495 after work-presentation extract; soft target ≤1500"
+   "note": "Hard LOC budget (JOE-919); post-#961 work-presentation extract; hard max ratcheted to 1550 (soft \u22641500); current ~1495"
+  },
+  {
+   "path": "src/mcp.ts",
+   "maxLines": 1650,
+   "owner": "daemon_cli_edge",
+   "note": "Hard LOC budget (post-#961); mcp-tools-ops extract for backup/storage tools; current ~1614 under 1650 hard max"
+  },
+  {
+   "path": "src/channel-commands.ts",
+   "maxLines": 1450,
+   "owner": "channels",
+   "note": "Hard LOC budget (post-#961); channel-commands-helpers extract; current ~1300 under soft 1400 / hard 1450"
+  },
+  {
+   "path": "src/channel-sync.ts",
+   "maxLines": 1100,
+   "owner": "channels",
+   "note": "Hard LOC budget (post-#961); current ~1004; HA migrate residual H1 surface"
   }
  ]
 }

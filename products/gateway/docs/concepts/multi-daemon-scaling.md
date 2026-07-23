@@ -4,7 +4,9 @@ Status: accepted design record; implementation is future work. (This record date
 
 Gateway is currently a local, single-operator control plane. It can run unattended and recover work after restarts, but it is not yet a multi-host or hosted/team scheduler. This record defines what is true today, what architecture Gateway should grow toward next, and which state must become durable before more than one daemon can safely participate.
 
-**Operator runbook (audit 2026-07-21 / JOE-931):** Never run two full daemons against one state directory. The open-cowork Helm chart fails closed when `replicaCount > 1` unless experimental distributed ownership is explicitly enabled. Chart fail-closed must not be bypassed for production.
+**Operator runbook (audit 2026-07-21 / JOE-931; reaffirmed 2026-07-23):** Never run two full daemons against one state directory. The open-cowork Helm chart fails closed when `replicaCount > 1` unless experimental distributed ownership is explicitly enabled. Chart fail-closed must not be bypassed for production.
+
+**Experimental multi-replica still fails open migrate hazards.** Enabling `gateway.experimentalDistributedOwnership=true` is **lab-only**. While the proving registry reports `status=partial` and non-empty `openMigrateHazards` (`H1`, `H3`, `H4`, `H8`, `H13` as of 2026-07-23), multi-replica is **not** multi-AZ HA and must not be marketed as production-ready. See the [hazard inventory](../../../../docs/evidence/gateway-multi-writer-hazards-2026-07-21.md). Gateway doctor and `/readiness` include a non-blocking `multi_writer_ownership` check that reports open migrate hazards.
 
 **Follow-on design:** [Distributed ownership + fencing](distributed-ownership-design.md) (JOE-954).
 **Hazard inventory:** [gateway-multi-writer-hazards-2026-07-21](../../../../docs/evidence/gateway-multi-writer-hazards-2026-07-21.md) (JOE-948).

@@ -1,4 +1,3 @@
-import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { listLocalArtifactIndex, listLocalSessionArtifacts, updateLocalArtifactStatus } from '@open-cowork/runtime-host/artifact-index'
 import electron from 'electron'
 import { resolve } from 'path'
@@ -30,6 +29,7 @@ import { buildArtifactAttachmentPayload, inferArtifactMime } from '../artifact-a
 import { getChartArtifactsRoot } from '../chart-artifacts.ts'
 import { cleanupSandboxStorage, getSandboxStorageStats } from '../sandbox-storage.ts'
 import { log } from '@open-cowork/shared/node'
+import { getLocalSessionPort } from '../local-workspace-session.ts'
 import { isReadableSessionArtifact } from '../session-artifact-access.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
@@ -146,10 +146,11 @@ function electronTempPath(app: typeof electron.app | null | undefined) {
   }
 }
 
-function isAuthorizedLocalArtifact(root: string, source: string, sessionId: string) {
+async function isAuthorizedLocalArtifact(root: string, source: string, sessionId: string) {
   const chartRoot = resolve(getChartArtifactsRoot(sessionId))
   if (root === safeRealPath(chartRoot)) return true
-  return isReadableSessionArtifact(sessionEngine.getSessionView(sessionId), source)
+  const view = await getLocalSessionPort().getSessionView(sessionId)
+  return isReadableSessionArtifact(view, source)
 }
 
 export function registerArtifactHandlers(context: IpcHandlerContext) {
@@ -211,7 +212,7 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
 
     const { root, source } = context.resolvePrivateArtifactPath(request)
     safeArtifactOpenFilename(basename(source), inferArtifactMime(source), basename(source))
-    if (!isAuthorizedLocalArtifact(root, source, request.sessionId)) {
+    if (!(await isAuthorizedLocalArtifact(root, source, request.sessionId))) {
       throw new Error('Only surfaced session artifacts can be opened directly.')
     }
     log('artifact', `Opened artifact ${basename(source)} from ${shortSessionId(request.sessionId)}`)
@@ -235,7 +236,7 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
     }
 
     const { root, source } = context.resolvePrivateArtifactPath(request)
-    if (!isAuthorizedLocalArtifact(root, source, request.sessionId)) {
+    if (!(await isAuthorizedLocalArtifact(root, source, request.sessionId))) {
       throw new Error('Only surfaced session artifacts can be exported.')
     }
 
@@ -256,7 +257,7 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
       throw new Error('Cloud artifacts cannot be revealed in the local filesystem. Export the artifact instead.')
     }
     const { root, source } = context.resolvePrivateArtifactPath(request)
-    if (!isAuthorizedLocalArtifact(root, source, request.sessionId)) {
+    if (!(await isAuthorizedLocalArtifact(root, source, request.sessionId))) {
       throw new Error('Only surfaced session artifacts can be revealed.')
     }
     shell.showItemInFolder(source)
@@ -270,7 +271,7 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
       return context.workspaceGateway.readCloudArtifactAttachment(event, request.sessionId, request.filePath, workspaceId)
     }
     const { root, source } = context.resolvePrivateArtifactPath(request)
-    if (!isAuthorizedLocalArtifact(root, source, request.sessionId)) {
+    if (!(await isAuthorizedLocalArtifact(root, source, request.sessionId))) {
       throw new Error('Only surfaced session artifacts can be attached to the thread.')
     }
     return buildArtifactAttachmentPayload(source)

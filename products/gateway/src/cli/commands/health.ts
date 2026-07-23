@@ -143,6 +143,23 @@ export async function doctor() {
   for (const entry of [...blockedReadiness, ...attentionReadiness].slice(0, 5)) {
     console.log(`- ${entry.id}: ${entry.statusCode} — ${entry.remediation || entry.summary}`)
   }
+  // Multi-writer ownership posture (non-blocking): experimental multi-replica still fails open migrate hazards.
+  // Shared loader with readiness so path resolution cannot drift.
+  {
+    const { loadDistributedOwnershipProvingRegistry } = await import('../../distributed-ownership-registry.js')
+    const loaded = loadDistributedOwnershipProvingRegistry()
+    if (!loaded.ok) {
+      console.log(`Multi-writer ownership: proving registry unavailable (assume single-daemon production only; ${loaded.reason})`)
+    } else {
+      const open = Array.isArray(loaded.registry.openMigrateHazards) ? loaded.registry.openMigrateHazards : []
+      const registryStatus = typeof loaded.registry.status === 'string' ? loaded.registry.status : 'unknown'
+      if (open.length === 0 && registryStatus === 'ready') {
+        console.log(`Multi-writer ownership: ready (registry status=${registryStatus})`)
+      } else {
+        console.log(`Multi-writer ownership: single-daemon production only; experimental multi-replica still fails open migrate hazards (${open.join(', ') || 'none'}; registry status=${registryStatus})`)
+      }
+    }
+  }
   console.log()
 
   // Check daemon health

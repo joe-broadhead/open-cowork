@@ -181,7 +181,7 @@ policy-validated resolved address while preserving the original `Host` header
 (`pinHttpMcpRemoteEntry` in `packages/runtime-host/src/runtime-mcp.ts`). That
 closes the DNS-rebinding window for HTTP.
 
-**HTTPS residual (accepted — still accepted post-#959):** OpenCode owns the TLS
+**HTTPS residual (accepted — reaffirmed post-#961 hardening):** OpenCode owns the TLS
 transport; IP-pinning would break SNI and certificate hostname checks, so
 `https:` MCPs stay hostname-based after the pre-connect DNS policy check
 (`evaluateHttpMcpUrlResolved` still rejects private/link-local/metadata
@@ -332,7 +332,7 @@ lifecycle, lease/fencing contract, recovery behavior, and threat model live in
 desktop main-window CSP keep `script-src 'self'` with **no** `'unsafe-eval'`.
 Interactive Vega must not execute in the parent document.
 
-**Chart iframe residual (accepted — still accepted post-#959):** Chart rendering
+**Chart iframe residual (accepted — reaffirmed post-#961 hardening):** Chart rendering
 uses Vega, which compiles its specs with `new Function()` (the reactive
 dataflow interpreter evaluates expressions at runtime). That means the **chart
 iframe** must allow `unsafe-eval` — there is no AOT path without reimplementing
@@ -490,6 +490,14 @@ URL credentials, or local home-directory paths.
   - Several CVE forces raise transitive dependencies past their patched
     versions (for example `dompurify`, `form-data`, `hono`, `js-yaml`, `qs`,
     `tar`, `tmp`, `undici`, and `vite`).
+  - **Dependabot PR #960** (dompurify 3.4.12 alone) was **superseded by the
+    monorepo `dompurify` override landed in #961**; close #960 if it is still
+    open rather than double-applying the bump.
+- **Classic OpenCode SDK full burn-down (Won't Do on pin 1.18.1):** Desktop
+  keeps an intentional classic allowlist residual while pinned to OpenCode
+  `1.18.1`. Full burn-down is **Won't Do** until a later pin grows native V2
+  routes for those residual methods — see `docs/opencode-classic-sdk-burndown.md`
+  and `docs/opencode-sdk-v2-boundary.md`.
 - Audit-gate exceptions: when an advisory that trips the CI audit gate has no
   fixed release yet, add only its `CVE-*` or `GHSA-*` identifier to
   `pnpm.auditConfig.ignoreCves` or `pnpm.auditConfig.ignoreGhsas` in the root

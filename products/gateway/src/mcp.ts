@@ -12,6 +12,7 @@ import { buildGatewayToolCatalog } from './gateway-tools.js'
 import { formatTaskCounts } from './task-summary.js'
 import { httpCapabilityForRequest, type HttpCapability } from './security.js'
 import { readScopedHttpTokenFile } from './secrets-lifecycle.js'
+import { registerMcpOpsTools } from './mcp-tools-ops.js'
 
 const DAEMON_URL = process.env['GATEWAY_DAEMON_URL'] || 'http://127.0.0.1:4097'
 const REQUEST_TIMEOUT_MS = 15000
@@ -777,23 +778,7 @@ server.tool('config_get', 'Read Gateway configuration with secrets redacted.', {
 server.tool('config_update', 'Update Gateway configuration deterministically. Destructive-action approval is required by default: first call returns a gate, then retry with approvedGateId after approval. Pass dryRun=true to preview the affected config sections (redacted) without writing.', { config: zStringRecord(z.any()), approvedGateId: z.string().optional(), dryRun: z.boolean().optional() },
   async (args: { config: Record<string, unknown>; approvedGateId?: string; dryRun?: boolean }) => runTool(async () => JSON.stringify(await fetchJSON('PATCH', '/config', { ...args.config, approvedGateId: args.approvedGateId, dryRun: args.dryRun }), null, 2)))
 
-server.tool('backup_create', 'Create a timestamped Gateway state backup. Refuses active runs and starting dispatches unless allowActiveRuns=true is supplied during an operator-controlled maintenance window.', { label: z.string().optional(), retention: z.number().optional(), allowActiveRuns: z.boolean().optional() },
-  async (args: { label?: string; retention?: number; allowActiveRuns?: boolean }) => runTool(async () => JSON.stringify(await fetchJSON('POST', '/storage/backups', args), null, 2)))
-
-server.tool('backup_list', 'List Gateway state backups and verification status.', {},
-  async () => runTool(async () => JSON.stringify(await fetchJSON('GET', '/storage/backups'), null, 2)))
-
-server.tool('backup_verify', 'Verify a Gateway state backup checksum, metadata, and SQLite integrity.', { path: z.string() },
-  async (args: { path: string }) => runTool(async () => JSON.stringify(await fetchJSON('POST', '/storage/backups/verify', args), null, 2)))
-
-server.tool('recovery_drill', 'Restore a backup into an isolated state directory and prove scheduler, storage, and channel recovery behavior. Writes evidence under recovery-drills/.', { path: z.string().optional(), label: z.string().optional(), outputDir: z.string().optional(), retryLimit: z.number().optional() },
-  async (args: { path?: string; label?: string; outputDir?: string; retryLimit?: number }) => runTool(async () => JSON.stringify(await fetchJSON('POST', '/storage/recovery-drills', args), null, 2)))
-
-server.tool('state_export', 'Export Gateway durable state as JSON for audit or machine transfer.', {},
-  async () => runTool(async () => JSON.stringify(await fetchJSON('GET', '/storage/export'), null, 2)))
-
-server.tool('restore', 'Restore Gateway state from a verified backup. Requires maintenanceMode=true while daemon is active and destructive-action approval by default. Pass dryRun=true to preview the backup verification and current state that would be replaced without restoring.', { path: z.string(), maintenanceMode: z.boolean().optional(), skipSafetyBackup: z.boolean().optional(), approvedGateId: z.string().optional(), dryRun: z.boolean().optional() },
-  async (args: { path: string; maintenanceMode?: boolean; skipSafetyBackup?: boolean; approvedGateId?: string; dryRun?: boolean }) => runTool(async () => JSON.stringify(await fetchJSON('POST', '/storage/restore', args), null, 2)))
+registerMcpOpsTools(server, runTool, fetchJSON)
 
 server.tool('restart', 'Request Gateway daemon restart. Requires the admin MCP tool tier (admin HTTP capability for non-local requests) and is audited; no human approval gate applies. A service manager must be installed for the daemon to come back automatically.', {},
   async () => runTool(async () => JSON.stringify(await fetchJSON('POST', '/restart', {}), null, 2)))

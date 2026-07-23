@@ -16,18 +16,36 @@ import { channelTargetFingerprint, isTrustedChannelActor, isTrustedChannelTarget
 import { decideChannelCommandSecurityPolicy, summarizeSecurityPolicyDecision } from './security-policy.js'
 import { channelActionMenuItems, formatChannelUxTruthForHelp } from './channel-actions.js'
 import { channelActionDeniedDecision, type OperatorDecisionSummary } from './operator-decisions.js'
+import {
+  bindingMatches,
+  channelPreTrustHelpText,
+  cleanTitle,
+  commandOperation,
+  describeChannelBinding,
+  displayBindingMode,
+  formatChannelDecisionHint,
+  formatCompletionProposal,
+  formatProjectBinding,
+  formatTaskSummary,
+  gatewaySessionTitle,
+  isActionDenial,
+  isChannelCommandMenuRequest,
+  isClockTime,
+  isExpired,
+  isPrivilegedChannelAction,
+  parseChannelCommand,
+  type ChannelCommandAction,
+  type ParsedChannelCommand,
+} from './channel-commands-helpers.js'
 
-export interface ParsedChannelCommand {
-  name: string
-  args: string[]
-  rest: string
-}
-
-export interface ChannelCommandAction {
-  label: string
-  command: string
-  description: string
-}
+export type { ParsedChannelCommand, ChannelCommandAction } from './channel-commands-helpers.js'
+export {
+  parseChannelCommand,
+  isChannelCommandMenuRequest,
+  isPreTrustChannelCommandText,
+  channelPreTrustHelpText,
+  channelBindingSystemContext,
+} from './channel-commands-helpers.js'
 
 export interface ChannelCommandClient {
   session: {
@@ -42,13 +60,6 @@ const ACTION_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 const CHANNEL_ACTION_RECEIPT_EVENT = 'channel.action.accepted'
 const projectBindings = createSqliteWorkStoreBindingsPort()
 
-export function parseChannelCommand(text: string): ParsedChannelCommand | null {
-  const trimmed = text.trim()
-  if (!trimmed.startsWith('/')) return null
-  const [raw = '', ...args] = trimmed.split(/\s+/)
-  const name = raw.slice(1).split('@')[0]!.toLowerCase().replace(/_/g, '-')
-  return { name, args, rest: trimmed.slice(raw.length).trim() }
-}
 
 export async function handleChannelCommand(client: ChannelCommandClient, msg: ChannelMessage): Promise<string | null> {
   const command = parseChannelCommand(msg.text)
@@ -227,34 +238,6 @@ export function channelCommandHelpText(): string {
 
 export function channelCommandMenuActions(): ChannelCommandAction[] {
   return channelActionMenuItems()
-}
-
-export function isChannelCommandMenuRequest(commandName: string): boolean {
-  return ['help', 'start', 'commands'].includes(commandName)
-}
-
-export function isPreTrustChannelCommandText(text: string): boolean {
-  const command = parseChannelCommand(text)
-  if (!command) return false
-  return command.name === 'whereami' || isChannelCommandMenuRequest(command.name)
-}
-
-export function channelPreTrustHelpText(): string {
-  return [
-    'Gateway setup',
-    '',
-    'This channel is not trusted yet, so only setup-safe commands are available.',
-    'Ask the local operator to create a Gateway channel claim for this provider, then send the displayed claim code here before it expires.',
-    '',
-    'Safe before trust: /start, /help, /commands, /whereami.',
-  ].join('\n')
-}
-
-export function channelBindingSystemContext(binding?: ChannelSessionLink): string {
-  if (!binding) return ''
-  if (binding.mode === 'task' && binding.taskId) return `This channel is bound to Gateway Issue ${binding.taskId}. Keep replies focused on that Issue unless the user asks otherwise.`
-  if (binding.mode === 'roadmap' && binding.roadmapId) return `This channel is bound to Gateway Project ${binding.roadmapId}. Keep replies focused on that Project unless the user asks otherwise.`
-  return ''
 }
 
 async function newSession(client: ChannelCommandClient, msg: ChannelMessage, title: string): Promise<string> {
@@ -550,10 +533,6 @@ function completionCommand(args: string[], msg: ChannelMessage): string {
   return [`Completion ${action}: ${result.proposal.id}`, `Status: ${result.proposal.status}`, result.roadmap ? `Project: ${result.roadmap.title} (${result.roadmap.status})` : ''].filter(Boolean).join('\n')
 }
 
-function formatCompletionProposal(proposal: { id: string; roadmapId: string; recommendation: string; unresolvedRisks: string[]; evidence: string[] }): string {
-  return `Project completion proposal ${proposal.id}: ${proposal.roadmapId}\nRecommendation: ${proposal.recommendation}\nProof: ${proposal.evidence.length}; risks: ${proposal.unresolvedRisks.length}\nAction: /completion approve ${proposal.id} OR /completion reject ${proposal.id} [note]`
-}
-
 async function projectCommand(client: ChannelCommandClient, msg: ChannelMessage, args: string[]): Promise<string> {
   const action = args[0] || 'status'
   if (action === 'create') return createProject(client, msg, args.slice(1))
@@ -713,10 +692,6 @@ function updateCurrentProjectBinding(msg: ChannelMessage, alias?: string) {
   return binding
 }
 
-function isClockTime(value: string | undefined): value is string {
-  return typeof value === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(value)
-}
-
 function projectDecisions(msg: ChannelMessage, alias?: string): string {
   const resolution = projectBindings.resolveProjectContext(projectContextInput(msg, alias))
   if (resolution.status === 'ambiguous') return `${resolution.reason}\nCandidates:\n${(resolution.candidates || []).slice(0, 6).map(formatProjectBinding).join('\n')}`
@@ -785,11 +760,6 @@ function unbindProject(msg: ChannelMessage, alias?: string): string {
   return projectBindings.deleteProjectBinding(binding.id) ? `Project unbound: ${binding.alias}` : `Project binding not found: ${binding.id}`
 }
 
-function formatProjectBinding(binding: { alias: string; roadmapId: string; scope: string; provider?: string; chatId?: string; threadId?: string }): string {
-  const channel = binding.provider && binding.chatId ? ` ${binding.provider}:${binding.chatId}${binding.threadId ? `:${binding.threadId}` : ''}` : ''
-  return `- ${binding.alias} -> ${binding.roadmapId} (${binding.scope}${channel})`
-}
-
 function projectContextInput(msg: ChannelMessage, value?: string): { alias?: string; roadmapId?: string; provider: string; chatId: string; threadId?: string } {
   const state = value ? loadWorkState() : undefined
   const roadmapId = value && (state?.roadmaps.some(roadmap => roadmap.id === value) || value.startsWith('roadmap_')) ? value : undefined
@@ -808,24 +778,6 @@ function currentBinding(msg: ChannelMessage): ChannelSessionLink | undefined {
 
 function isTrustedCommandTarget(msg: ChannelMessage): boolean {
   return isTrustedChannelTarget(msg.provider, msg.chatId, msg.threadId, getConfig())
-}
-
-function bindingMatches(binding: ChannelSessionLink, kind: string, id: string): boolean {
-  if (kind === 'task') return binding.mode === 'task' && binding.taskId === id
-  if (kind === 'roadmap') return binding.mode === 'roadmap' && binding.roadmapId === id
-  return false
-}
-
-function describeChannelBinding(binding: ChannelSessionLink): string {
-  if (binding.mode === 'task' && binding.taskId) return `Issue ${binding.taskId} (Session ${binding.sessionId})`
-  if (binding.mode === 'roadmap' && binding.roadmapId) return `Project ${binding.roadmapId} (Session ${binding.sessionId})`
-  return `Session ${binding.sessionId}`
-}
-
-function displayBindingMode(mode?: string): string {
-  if (mode === 'task') return 'issue'
-  if (mode === 'roadmap') return 'project'
-  return mode || 'session'
 }
 
 interface RelevantSessionRow {
@@ -907,17 +859,6 @@ function resolveOpenTarget(_msg: ChannelMessage, requested: string): OpenTargetR
 function boundTask(msg: ChannelMessage): WorkTaskView | undefined {
   const binding = currentBinding(msg)
   return binding?.taskId ? getWorkTask(binding.taskId) : undefined
-}
-
-function formatTaskSummary(task: WorkTaskView): string[] {
-  return [
-    `Issue: ${task.title}`,
-    `ID: ${task.id}`,
-    `Status: ${task.status}`,
-    `Priority: ${task.priority}`,
-    `Stage: ${task.currentStage || 'complete'}`,
-    task.lastRun ? `Latest run: ${task.lastRun.status} ${task.lastRun.stage} (${task.lastRun.id})` : 'Latest run: none',
-  ]
 }
 
 async function sessionLinksText(client: ChannelCommandClient, sessionId: string): Promise<string> {
@@ -1097,34 +1038,6 @@ async function denyPermission(requestId: string | undefined, message: string | u
 // unless it is on this explicit allowlist of known-safe read-only surfaces. A
 // new mutating command is therefore actor-gated by default instead of silently
 // skipping the preflight in a trusted group chat.
-const READ_ONLY_CHANNEL_COMMANDS = new Set([
-  'help', 'start', 'commands', 'whereami',
-  'status', 'current', 'open', 'latest',
-  'tasks', 'issues', 'roadmaps', 'initiatives',
-  'governance', 'budget', 'attention', 'needs-attention',
-  'gates', 'alerts', 'incident', 'questions', 'permissions', 'digest',
-])
-const READ_ONLY_PROJECT_ACTIONS = new Set(['status', 'digest', 'decisions', 'open'])
-
-function isPrivilegedChannelAction(command: ParsedChannelCommand): boolean {
-  if (READ_ONLY_CHANNEL_COMMANDS.has(command.name)) return false
-  if (command.name === 'session' || command.name === 'sessions') {
-    const action = command.args[0] || 'list'
-    // Listing is read-only; select/switch rebinds this chat and stays privileged.
-    return action !== 'list' && action !== 'recent'
-  }
-  if (command.name === 'scheduler') return (command.args[0] || 'status') !== 'status'
-  if (command.name === 'completion' || command.name === 'complete') {
-    const action = command.args[0] || 'list'
-    return action !== 'list' && action !== 'status'
-  }
-  if (command.name === 'project' || command.name === 'p') {
-    return !READ_ONLY_PROJECT_ACTIONS.has(command.args[0] || 'status')
-  }
-  // Everything else — including unknown/new commands — is privileged by default.
-  return true
-}
-
 function preflightPrivilegedChannelAction(msg: ChannelMessage, command: ParsedChannelCommand): string | null {
   if (isStaleChannelAction(msg)) return denyChannelAction(msg, commandOperation(command), 'this channel action is too old to process', actionReceiptKey(msg) || command.name, 'stale')
   if (hasAcceptedActionReceipt(msg)) return denyChannelAction(msg, commandOperation(command), 'this channel action was already processed', actionReceiptKey(msg), 'replayed')
@@ -1214,12 +1127,6 @@ function actionReceiptKey(msg: ChannelMessage): string | undefined {
     : `fallback:${msg.userId || msg.provider}:${msg.timestamp || ''}:${String(msg.text || '').trim()}`
   if (!msg.messageId && (!msg.timestamp || !String(msg.text || '').trim())) return undefined
   return `${redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)}:${msg.messageId ? 'message' : 'fallback'}:${channelTargetFingerprint(msg.provider, source, msg.threadId)}`.substring(0, 500)
-}
-
-function commandOperation(command: ParsedChannelCommand): string {
-  if (command.name === 'approve' || command.name === 'deny') return 'opencode_permission.reply'
-  if (command.name === 'answer' || command.name === 'reject-question') return 'opencode_question.reply'
-  return `${command.name}${command.args[0] ? `.${command.args[0]}` : ''}`.substring(0, 120)
 }
 
 function authorizeHumanGateAction(msg: ChannelMessage, gateId: string): string | null {
@@ -1320,11 +1227,6 @@ function configuredGatewayBaseUrl(): string {
   return gatewayLocalBaseUrl(config.httpPort, config.security.httpHost)
 }
 
-function isExpired(iso: string | undefined): boolean {
-  const expires = Date.parse(iso || '')
-  return Number.isFinite(expires) && expires <= Date.now()
-}
-
 function denyChannelAction(msg: ChannelMessage, operation: string, reason: string, target: string | undefined, detail: string): string {
   const decision = channelActionDeniedDecision({ operation, targetId: target, reason, reasonCode: detail })
   appendSecurityAudit(msg, operation, target, detail, decision)
@@ -1342,27 +1244,8 @@ function appendSecurityAudit(msg: ChannelMessage, operation: string, target: str
   })
 }
 
-function formatChannelDecisionHint(decision: OperatorDecisionSummary): string {
-  return [
-    `Decision owner: ${formatDecisionOwner(decision)}; State: ${decision.state}.`,
-    `Authority: ${decision.authority}`,
-    `Next action: ${decision.safeNextAction}`,
-    `Evidence: ${decision.evidenceRef}`,
-  ].join('\n')
-}
-
-function formatDecisionOwner(decision: OperatorDecisionSummary): string {
-  if (decision.owner === 'opencode') return 'OpenCode'
-  if (decision.owner === 'gateway') return 'Gateway'
-  return 'Gateway channel security'
-}
-
 function channelSource(msg: ChannelMessage): string {
   return redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)
-}
-
-function isActionDenial(reply: string): boolean {
-  return reply.startsWith('Action denied:')
 }
 
 async function currentOrNewSession(client: ChannelCommandClient, msg: ChannelMessage, title: string): Promise<string> {
@@ -1416,11 +1299,3 @@ async function createFreshSession(client: ChannelCommandClient, msg: ChannelMess
   return created.id
 }
 
-function gatewaySessionTitle(msg: ChannelMessage, title: string): string {
-  const thread = msg.threadId ? `:${msg.threadId}` : ''
-  return `GW:${msg.provider}:${msg.chatId}${thread}: ${title}`.substring(0, 200)
-}
-
-function cleanTitle(title: string | undefined): string | undefined {
-  return title?.replace(/^GW:/, '').trim()
-}

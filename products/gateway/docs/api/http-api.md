@@ -71,7 +71,7 @@ Routes are currently served unprefixed and are treated as **v1**. A future `/v1`
 | `POST` | `/storage/backups` | Create a timestamped backup. Refuses while runs or starting dispatches are active unless `allowActiveRuns=true`; requires `admin` for non-local requests. |
 | `POST` | `/storage/backups/verify` | Verify backup metadata, checksums, and SQLite integrity. Requires `admin` for non-local requests. |
 | `POST` | `/storage/recovery-drills` | Restore a backup into isolated state and write scheduler/storage/channel recovery evidence. Requires `admin` for non-local requests. |
-| `GET` | `/storage/export` | Export durable Gateway state as JSON. Requires `admin` for non-local requests. |
+| `GET` | `/storage/export?localAdmin=true` | Export durable Gateway state as JSON. Requires `admin` for non-local requests **and** explicit `localAdmin=true` dual-intent (JOE-952; always treated as unredacted; rate-limited). |
 | `POST` | `/storage/restore` | Restore a verified backup; requires stopped daemon or `maintenanceMode=true`. Requires `admin` for non-local requests and a destructive human gate when approval gating is enabled; retry with `approvedGateId` after approval. |
 | `POST` | `/restart` | Request restart. Requires `admin` for non-local requests; the action is audited and no human approval gate applies. A service manager must be installed for the daemon to come back automatically. |
 | `POST` | `/shutdown` | Request shutdown. Requires `admin` for non-local requests; the action is audited and no human approval gate applies. |

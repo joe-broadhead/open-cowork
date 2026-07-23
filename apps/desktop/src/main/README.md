@@ -27,8 +27,9 @@ new behavior has more than one file or clear lifecycle ownership.
 - `runtime-*` — OpenCode SDK/server composition and runtime-home isolation.
 - `session-*` — session registry, replay, view projection, and reconciliation.
 - `event-*` — runtime event handlers and task-run lineage projection.
-- `cloud-workspace-*` / `gateway-workspace-*` / `workspace-gateway*` —
-  local/cloud/gateway workspace control-plane adapters.
+- `cloud-workspace-*` / `gateway-workspace-*` / `workspace-gateway*` /
+  `local-workspace-session` / `workspace-session-port` — local/cloud/gateway
+  workspace control-plane adapters and progressive local session port wiring.
 - `chart-*` / `artifact-*` — chart rendering and private artifact handling.
 - `main-window-*` / `window-*` — BrowserWindow lifecycle, state, zoom, and
   security policy.
