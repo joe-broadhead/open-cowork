@@ -212,7 +212,8 @@ describe('channel sync bridge', () => {
     expect(getChannelSyncSummary({ stateFile, now }).outbox?.providerBackoff).toEqual([
       expect.objectContaining({ provider: 'telegram', retryAfter: new Date(now + 2000).toISOString(), pending: 1 }),
     ])
-    const failedCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']
+    const failedCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']!
+    expect(failedCheckpoint).toBeDefined()
     expect(failedCheckpoint.seenMessageIds).toEqual([])
 
     await bridge.syncOnce()
@@ -243,7 +244,8 @@ describe('channel sync bridge', () => {
     expect(readOutboxRows()).toEqual([
       expect.objectContaining({ status: 'dead_letter', attempts: 1, provider_error_kind: 'terminal', dead_lettered_at: new Date(now).toISOString() }),
     ])
-    const checkpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:whatsapp:chat-1:']
+    const checkpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:whatsapp:chat-1:']!
+    expect(checkpoint).toBeDefined()
     expect(checkpoint.seenMessageIds).not.toContain('a1')
     expect(getChannelSyncSummary({ stateFile }).outbox).toMatchObject({ deadLetter: 1 })
   })
@@ -264,7 +266,8 @@ describe('channel sync bridge', () => {
     messages.push(message('a2', 'assistant', 'second waits behind failure', 1_000_200))
     await firstBridge.syncOnce()
 
-    const failedCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']
+    const failedCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']!
+    expect(failedCheckpoint).toBeDefined()
     expect(sent).toEqual([])
     expect(failedCheckpoint.lastMessageCreated).toBe(0)
     expect(failedCheckpoint.seenMessageIds).not.toContain('a2')
@@ -276,7 +279,8 @@ describe('channel sync bridge', () => {
       { provider: 'telegram', chatId: 'chat-1', text: 'first must retry' },
       { provider: 'telegram', chatId: 'chat-1', text: 'second waits behind failure' },
     ])
-    const recoveredCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']
+    const recoveredCheckpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']!
+    expect(recoveredCheckpoint).toBeDefined()
     expect(recoveredCheckpoint.lastMessageCreated).toBe(1_000_200)
     expect(recoveredCheckpoint.seenMessageIds).toEqual(expect.arrayContaining(['a1', 'a2']))
   })
@@ -378,7 +382,8 @@ describe('channel sync bridge', () => {
     await bridge.syncOnce()
 
     expect(sent).toEqual([{ provider: 'telegram', chatId: 'chat-1', text: 'lease sensitive reply' }])
-    const checkpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']
+    const checkpoint = readChannelSyncStateForTest(stateFile)!.deliveries['ses_1:telegram:chat-1:']!
+    expect(checkpoint).toBeDefined()
     expect(checkpoint.seenMessageIds).not.toContain('a1')
     expect(readOutboxRows()).toEqual([
       expect.objectContaining({ status: 'leased', lease_owner: 'other-bridge' }),
