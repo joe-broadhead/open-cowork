@@ -8,7 +8,6 @@ import { getConfig } from './config.js'
 import { redactSensitiveText } from './security.js'
 import {
   loadOperationalEvents,
-  operationalSidecarPath,
   replaceOperationalEvents,
 } from './operational-sidecar-store.js'
 
@@ -70,13 +69,3 @@ export function clearEventsForTest(): void {
   lastSaveMs = 0
 }
 
-/** Path of the durable operational sidecar (tests / diagnostics). */
-export function operationalEventsStorePath(): string {
-  return operationalSidecarPath()
-}
-
-export function flushQueuedEventsForTest(): void {
-  ensureLoaded()
-  lastSaveMs = 0
-  saveEvents()
-}

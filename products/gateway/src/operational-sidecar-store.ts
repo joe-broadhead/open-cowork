@@ -44,10 +44,6 @@ export function operationalSidecarPath(stateDir?: string): string {
   return path.join(root, OPERATIONAL_SIDECAR_FILE)
 }
 
-function stateDirFromDbPath(dbPath: string): string {
-  return path.dirname(path.resolve(dbPath))
-}
-
 function openSidecarDb(filePath = operationalSidecarPath()): DatabaseSync {
   const dbPath = path.resolve(filePath)
   const dir = path.dirname(dbPath)
@@ -225,44 +221,6 @@ export function replaceOperationalEvents(events: string[], filePath = operationa
   }, filePath)
 }
 
-export function appendOperationalEvent(line: string, filePath = operationalSidecarPath()): string[] {
-  return withSidecarDb((db) => {
-    const now = new Date().toISOString()
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      db.prepare('INSERT INTO operational_events (line, created_at) VALUES (?, ?)').run(line, now)
-      const count = Number((db.prepare('SELECT COUNT(*) AS c FROM operational_events').get() as { c?: number }).c || 0)
-      if (count > MAX_OPERATIONAL_EVENTS) {
-        db.prepare(`
-          DELETE FROM operational_events
-          WHERE id NOT IN (
-            SELECT id FROM operational_events ORDER BY id DESC LIMIT ?
-          )
-        `).run(MAX_OPERATIONAL_EVENTS)
-      }
-      db.exec('COMMIT')
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-    const rows = db.prepare('SELECT line FROM operational_events ORDER BY id ASC').all() as Array<{ line: string }>
-    return rows.map((r) => String(r.line))
-  }, filePath)
-}
-
-export function clearOperationalEvents(filePath = operationalSidecarPath()): void {
-  withSidecarDb((db) => {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      db.prepare('DELETE FROM operational_events').run()
-      db.exec('COMMIT')
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  }, filePath)
-}
-
 export function loadWorkerSessions(filePath = operationalSidecarPath()): WorkerSessionRow[] {
   return withSidecarDb((db) => {
     const rows = db.prepare(`
@@ -324,19 +282,6 @@ export function replaceWorkerSessions(sessions: WorkerSessionRow[], filePath = o
   }, filePath)
 }
 
-export function clearWorkerSessions(filePath = operationalSidecarPath()): void {
-  withSidecarDb((db) => {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      db.prepare('DELETE FROM worker_sessions').run()
-      db.exec('COMMIT')
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  }, filePath)
-}
-
 export function loadChannelPollCursor(provider: string, filePath = operationalSidecarPath()): number {
   return withSidecarDb((db) => {
     const row = db.prepare('SELECT cursor FROM channel_poll_cursors WHERE provider = ?').get(provider) as { cursor?: number } | undefined
@@ -378,24 +323,3 @@ export function clearChannelPollCursor(provider: string, filePath = operationalS
   }, filePath)
 }
 
-/** Test helper: wipe all operational sidecar tables for the current state dir. */
-export function clearOperationalSidecarForTest(filePath = operationalSidecarPath()): void {
-  const dbPath = path.resolve(filePath)
-  if (!fs.existsSync(dbPath)) return
-  withSidecarDb((db) => {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      db.prepare('DELETE FROM operational_events').run()
-      db.prepare('DELETE FROM worker_sessions').run()
-      db.prepare('DELETE FROM channel_poll_cursors').run()
-      db.exec('COMMIT')
-    } catch (err) {
-      try { db.exec('ROLLBACK') } catch {}
-      throw err
-    }
-  }, filePath)
-}
-
-export function operationalSidecarStateDir(filePath = operationalSidecarPath()): string {
-  return stateDirFromDbPath(filePath)
-}
