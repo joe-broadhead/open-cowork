@@ -210,12 +210,13 @@ test('resolveCustomMcpRuntimeEntryForRuntime pins cleartext HTTP MCP to resolved
   assert.equal(pinned.headers?.Host, 'mcp.example.com:8080')
   assert.equal(pinned.headers?.Authorization, 'Bearer t')
 
-  // HTTPS is not IP-pinned (SNI/cert require the original hostname).
+  // HTTPS is not IP-pinned (SNI/cert require the original hostname) — JOE-962 residual.
   const httpsPinned = pinHttpMcpRemoteEntry({
     url: new URL('https://mcp.example.com/api'),
     resolvedAddresses: ['203.0.113.10'],
   })
   assert.equal(httpsPinned.url, 'https://mcp.example.com/api')
+  assert.equal(httpsPinned.headers, undefined)
 
   const entry = await resolveCustomMcpRuntimeEntryForRuntime({
     scope: 'machine',
@@ -234,6 +235,38 @@ test('resolveCustomMcpRuntimeEntryForRuntime pins cleartext HTTP MCP to resolved
     assert.equal(entry.headers?.Host, 'mcp.example.com')
     assert.equal(entry.headers?.['x-api-key'], 'k')
   }
+})
+
+test('resolveCustomMcpRuntimeEntryForRuntime keeps HTTPS hostname after public DNS policy (JOE-962 residual)', async () => {
+  // HTTPS residual: policy still re-resolves at handoff and rejects private/metadata
+  // answers, but the connect URL stays the original hostname (OpenCode TLS/SNI).
+  const httpsEntry = await resolveCustomMcpRuntimeEntryForRuntime({
+    scope: 'machine',
+    name: 'https-host',
+    type: 'http',
+    url: 'https://mcp.example.com/tools',
+    headers: { 'x-api-key': 'k' },
+  }, {
+    resolveHostname: async () => [{ address: '8.8.8.8', family: 4 }],
+  })
+  assert.ok(httpsEntry)
+  assert.equal(httpsEntry?.type, 'remote')
+  if (httpsEntry?.type === 'remote') {
+    assert.equal(httpsEntry.url, 'https://mcp.example.com/tools')
+    assert.equal(httpsEntry.headers?.['x-api-key'], 'k')
+    // No synthetic Host pin for HTTPS (would fight SNI/cert hostname checks).
+    assert.equal(httpsEntry.headers?.Host, undefined)
+  }
+
+  const rebindDenied = await resolveCustomMcpRuntimeEntryForRuntime({
+    scope: 'machine',
+    name: 'https-rebind',
+    type: 'http',
+    url: 'https://mcp.example.com/api',
+  }, {
+    resolveHostname: async () => [{ address: '10.0.0.5', family: 4 }],
+  })
+  assert.equal(rebindDenied, null)
 })
 
 test('evaluateBuiltInMcp — local MCP missing required credentials is skipped as not-configured', () => {

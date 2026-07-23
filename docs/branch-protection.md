@@ -50,9 +50,15 @@ Path-filtered workflows (not always required on Desktop-only PRs):
 - `CI Gateway` (`.github/workflows/ci-gateway.yml`) — `products/gateway/**` (includes standalone smoke)
 - `CI Wiki` (`.github/workflows/ci-wiki.yml`) — `products/wiki/**` (includes standalone smoke)
 
+**Weekly backstop (not a PR merge gate):**
+
+- `Weekly Gateway Matrix` (`.github/workflows/weekly-gateway.yml`, JOE-969) — scheduled Monday run of `pnpm test:gateway` + Durable Gateway build/typecheck/standalone smoke outside path filters. Failures open/comment a GitHub issue. Use this when monorepo scripts change without touching `products/gateway/**`.
+
 Product release workflows (independent of Desktop `v*` tags):
 
 - `Release Gateway` (`.github/workflows/release-gateway.yml`) — `gateway@v*` / manual
 - `Release Wiki` (`.github/workflows/release-wiki.yml`) — `wiki@v*` / manual
 
 Core `CI` workflow remains the branch-protection baseline for monorepo master.
+
+**Dual-channel checklist (JOE-932):** On PRs that touch channel security paths, `CI` / `validate` runs `scripts/check-dual-channel-pr-checklist.mjs` (PR-body gate). Unrelated PRs skip. Not a separate required-check name — it is part of the existing `validate` job.

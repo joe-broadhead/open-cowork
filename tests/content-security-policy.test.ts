@@ -14,6 +14,7 @@ test('buildContentSecurityPolicy keeps the packaged renderer self-contained and 
 
   assert.match(devPolicy, /script-src 'self'/)
   assert.match(devPolicy, /script-src[^;]*'unsafe-inline'/)
+  // JOE-946: parent main-window CSP must never allow unsafe-eval (Vega is chart-iframe only).
   assert.doesNotMatch(devPolicy, /unsafe-eval/)
   assert.doesNotMatch(packagedPolicy, /unsafe-eval/)
   assert.doesNotMatch(packagedPolicy, /unsafe-inline'[^;]*;[^;]*script-src/)
@@ -25,6 +26,19 @@ test('buildContentSecurityPolicy keeps the packaged renderer self-contained and 
   assert.match(packagedPolicy, /img-src 'self' data: blob: open-cowork-asset:/)
   assert.match(packagedPolicy, /frame-src 'self'/)
   assert.doesNotMatch(packagedPolicy, /img-src[^;]*https:/)
+})
+
+test('parent SPA CSP and chart-frame CSP isolation contract (JOE-946 reaffirmation)', () => {
+  const parent = buildContentSecurityPolicy()
+  const chart = buildChartFrameContentSecurityPolicy()
+
+  // Parent: no eval. Chart frame: eval scoped + no network egress.
+  assert.doesNotMatch(parent, /unsafe-eval/)
+  assert.match(chart, /'unsafe-eval'/)
+  assert.match(chart, /connect-src 'none'/)
+  assert.match(chart, /frame-ancestors 'self'/)
+  // Parent keeps frame-src self so the chart iframe can load; chart is not the parent.
+  assert.match(parent, /frame-src 'self'/)
 })
 
 test('index.html does not ship a meta CSP (main process attaches the authoritative header)', () => {

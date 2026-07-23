@@ -30,6 +30,7 @@ const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.me
 const docsWorkflow = readFileSync(new URL('../.github/workflows/docs.yml', import.meta.url), 'utf8')
 const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
 const monthlyMaintenanceWorkflow = readFileSync(new URL('../.github/workflows/monthly-maintenance.yml', import.meta.url), 'utf8')
+const weeklyGatewayWorkflow = readFileSync(new URL('../.github/workflows/weekly-gateway.yml', import.meta.url), 'utf8')
 const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', import.meta.url), 'utf8')
 const npmrc = readFileSync(new URL('../.npmrc', import.meta.url), 'utf8')
 const readmeDocs = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
@@ -174,7 +175,7 @@ test('contributor setup docs and dependency update governance match enforced eng
   }
   assert.match(readmeDocs, /\[!\[pnpm 10\.32\.1\]/)
   assert.doesNotMatch(readmeDocs, /\[!\[pnpm 10\+\]/)
-  for (const workflow of [ciWorkflow, docsWorkflow, releaseWorkflow, monthlyMaintenanceWorkflow]) {
+  for (const workflow of [ciWorkflow, docsWorkflow, releaseWorkflow, monthlyMaintenanceWorkflow, weeklyGatewayWorkflow]) {
     assert.match(workflow, /version: 10\.32\.1/)
   }
 
@@ -381,6 +382,19 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
     /export async function assertRuntimeComponentProvenance/,
     'desktop smoke helpers must expose a runtime component provenance assertion',
   )
+})
+
+test('weekly gateway matrix and dual-channel PR checklist are wired (JOE-969 / JOE-932)', () => {
+  assert.match(weeklyGatewayWorkflow, /pnpm test:gateway/)
+  assert.match(weeklyGatewayWorkflow, /cron: "17 4 \* \* 1"/)
+  assert.match(weeklyGatewayWorkflow, /Weekly gateway matrix red/)
+  assert.match(weeklyGatewayWorkflow, /workflow_dispatch/)
+  assert.match(ciWorkflow, /check-dual-channel-pr-checklist\.mjs/)
+  assert.match(ciWorkflow, /OPEN_COWORK_PR_BODY/)
+  assert.match(securityModelDocs, /weekly-gateway\.yml/)
+  assert.match(securityModelDocs, /JOE-969/)
+  assert.match(securityModelDocs, /revalidated 2026-07-23 \/ JOE-962/)
+  assert.match(securityModelDocs, /reaffirmed 2026-07-23 \/ JOE-946/)
 })
 
 test('ci and release workflows use canonical release gate scripts', () => {

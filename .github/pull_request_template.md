@@ -16,6 +16,8 @@
 
 Required when this PR touches **channel security or protocol** (signatures, SSRF/webhook URLs, auth tokens, rate limits, constant-time compares, trusted-target allowlists). See `docs/product-channel-ownership.md`.
 
+CI gate (JOE-932): `scripts/check-dual-channel-pr-checklist.mjs` runs on PRs that touch Durable channels, monorepo providers, or shared channel-security kernels. Unrelated PRs skip. Satisfy by ticking below, or put `Dual-stack checklist: exempt` in Notes with a one-line rationale.
+
 - [ ] N/A — not a channel security/protocol change
 - [ ] Reviewed **monorepo providers** (`packages/gateway-provider-*`, `packages/gateway-channel`, `apps/channel-gateway`)
 - [ ] Reviewed **Durable Gateway channels** (`products/gateway/src/channels/*` and related security)
