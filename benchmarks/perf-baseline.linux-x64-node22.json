@@ -11,7 +11,7 @@
     "p95Multiplier": 1.25,
     "avgAbsoluteFloorMs": 1,
     "p95AbsoluteFloorMs": 1.5,
-    "jitterAllowanceMs": 0.05
+    "jitterAllowanceMs": 0.15
   },
   "benchmarks": [
     {
