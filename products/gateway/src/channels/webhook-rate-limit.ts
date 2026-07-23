@@ -3,9 +3,15 @@
  *
  * Algorithm kernel: `@open-cowork/shared/node` {@link WebhookRateLimiter}
  * (shared with monorepo channel gateways via `@open-cowork/gateway-channel`).
+ *
+ * Client identity uses the same trusted-proxy walk as exposed HTTP guards
+ * (`resolveHttpClientAddress`) so spoofed `X-Forwarded-For` cannot multiply
+ * rate-limit buckets when the socket peer is not a trusted proxy.
  */
 
 import { WebhookRateLimiter, type WebhookRateLimitResult } from '@open-cowork/shared/node'
+import { getConfig } from '../config.js'
+import { resolveHttpClientAddress } from '../security.js'
 
 export type DurableWebhookRateLimitResult = WebhookRateLimitResult
 
@@ -44,12 +50,36 @@ export function clearInboundWebhookRateLimitForTest(): void {
   inboundWebhookRateLimiter.clear()
 }
 
-/** Rate-limit key: provider + remote address (falls closed to `unknown`). */
-export function inboundWebhookRateKey(provider: string, req: { socket?: { remoteAddress?: string | null }; headers?: Record<string, string | string[] | undefined> }): string {
-  const forwarded = req.headers?.['x-forwarded-for']
-  const forwardedFirst = Array.isArray(forwarded) ? forwarded[0] : forwarded
-  const remote = (forwardedFirst?.split(',')[0]?.trim()
-    || req.socket?.remoteAddress
-    || 'unknown').replace(/[^a-zA-Z0-9:._-]/g, '_')
+export interface InboundWebhookRateKeyOptions {
+  /** Override trusted proxy CIDRs (tests). Defaults to exposedHttp config when non-local HTTP is allowed. */
+  trustedProxyCidrs?: string[]
+}
+
+/**
+ * Rate-limit key: provider + resolved client address.
+ * Forwarding headers are ignored unless the socket peer is a configured trusted proxy.
+ */
+export function inboundWebhookRateKey(
+  provider: string,
+  req: {
+    socket?: { remoteAddress?: string | null }
+    headers?: Record<string, string | string[] | undefined>
+  },
+  options: InboundWebhookRateKeyOptions = {},
+): string {
+  let trustedProxyCidrs = options.trustedProxyCidrs
+  if (trustedProxyCidrs === undefined) {
+    const security = getConfig().security
+    trustedProxyCidrs = security.allowNonLocalHttp === true
+      ? (security.exposedHttp?.trustedProxyCidrs || [])
+      : []
+  }
+  const client = resolveHttpClientAddress({
+    remoteAddress: req.socket?.remoteAddress || undefined,
+    forwarded: req.headers?.['forwarded'],
+    xForwardedFor: req.headers?.['x-forwarded-for'],
+    trustedProxyCidrs,
+  })
+  const remote = client.replace(/[^a-zA-Z0-9:._-]/g, '_') || 'unknown'
   return `${provider}:${remote}`
 }

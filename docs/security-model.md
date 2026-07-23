@@ -181,16 +181,16 @@ policy-validated resolved address while preserving the original `Host` header
 (`pinHttpMcpRemoteEntry` in `packages/runtime-host/src/runtime-mcp.ts`). That
 closes the DNS-rebinding window for HTTP.
 
-**HTTPS residual (accepted):** OpenCode owns the TLS transport; IP-pinning
-would break SNI and certificate hostname checks, so `https:` MCPs stay
-hostname-based after the pre-connect DNS policy check (`evaluateHttpMcpUrlResolved`
-still rejects private/link-local/metadata resolutions at handoff). Residual
-risk: a hostile DNS rebind between the policy resolve and OpenCode’s own TLS
-connect is theoretically possible if the resolver is compromised or TTL is
-hostile. **Operators who need stronger guarantees** should terminate TLS at a
-trusted reverse proxy with a fixed upstream IP, or restrict MCPs to known
-static endpoints. Cloud-metadata targets remain hard-denied on every policy
-check regardless of protocol.
+**HTTPS residual (accepted — still accepted post-#959):** OpenCode owns the TLS
+transport; IP-pinning would break SNI and certificate hostname checks, so
+`https:` MCPs stay hostname-based after the pre-connect DNS policy check
+(`evaluateHttpMcpUrlResolved` still rejects private/link-local/metadata
+resolutions at handoff). Residual risk: a hostile DNS rebind between the policy
+resolve and OpenCode’s own TLS connect is theoretically possible if the
+resolver is compromised or TTL is hostile. **Operators who need stronger
+guarantees** should terminate TLS at a trusted reverse proxy with a fixed
+upstream IP, or restrict MCPs to known static endpoints. Cloud-metadata targets
+remain hard-denied on every policy check regardless of protocol.
 
 **Reopen when:** OpenCode exposes a connect-IP + SNI/Host override for remote
 MCP transport, or we add an optional local HTTPS MITM pin path for lab-only
@@ -332,11 +332,12 @@ lifecycle, lease/fencing contract, recovery behavior, and threat model live in
 desktop main-window CSP keep `script-src 'self'` with **no** `'unsafe-eval'`.
 Interactive Vega must not execute in the parent document.
 
-**Chart iframe residual (accepted):** Chart rendering uses Vega, which compiles
-its specs with `new Function()` (the reactive dataflow interpreter evaluates
-expressions at runtime). That means the **chart iframe** must allow
-`unsafe-eval` — there is no AOT path without reimplementing Vega or compiling
-charts server-side.
+**Chart iframe residual (accepted — still accepted post-#959):** Chart rendering
+uses Vega, which compiles its specs with `new Function()` (the reactive
+dataflow interpreter evaluates expressions at runtime). That means the **chart
+iframe** must allow `unsafe-eval` — there is no AOT path without reimplementing
+Vega or compiling charts server-side. Parent SPA CSP continues to forbid
+`unsafe-eval` (JOE-946).
 
 We scope the residual risk by keeping charts inside a dedicated iframe
 (`chart-frame.html` / cloud chart-frame response) with a separate, stricter CSP

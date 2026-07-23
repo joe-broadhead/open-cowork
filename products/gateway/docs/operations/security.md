@@ -99,9 +99,10 @@ The following surfaces are **operator high-sensitivity** and must never be expos
 | --- | --- | --- |
 | Redacted config / evidence export | Safe for authenticated read | — |
 | `GET /config?redact=false` | Denied without admin | Admin (+ local intent where required) |
-| Evidence/session export `unredacted=true` / `redact=false` | Denied without admin | Admin; some paths also require `localAdmin=true` |
-| OpenCode sessions/MCP `raw` / `unredacted` / `redact=false` | Denied without admin | Admin |
-| Run/events `raw` / `unredacted` | Denied without admin; runs also require `localAdmin=true` | Admin + local intent |
+| Evidence/session export `unredacted=true` / `redact=false` | Denied without admin | Admin + `localAdmin=true` dual-intent + JOE-952 rate limit |
+| OpenCode sessions/MCP/messages `raw` / `unredacted` / `redact=false` | Denied without admin | Admin + `localAdmin=true` dual-intent + JOE-952 rate limit |
+| Run/events `raw` / `unredacted` | Denied without admin | Admin + `localAdmin=true` dual-intent + JOE-952 rate limit |
+| `GET /storage/export` (full gateway state dump) | Denied without admin | Admin + `localAdmin=true` dual-intent + JOE-952 rate limit (always treated as unredacted) |
 | Channel diagnostic credential fields | Length-only fingerprints | Never return live secret material |
 
 **Operator rules:**

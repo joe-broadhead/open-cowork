@@ -735,7 +735,7 @@ describe.sequential('daemon JSON routes', () => {
       client: { session: { get: async () => ({ data: { id: 'ses_route', title: 'private project', directory: '/tmp/route-project' } }) } },
     })
     const withDirectory = await dispatchRoute(routes, {
-      ...context('GET', '/opencode/sessions/ses_route?raw=true'),
+      ...context('GET', '/opencode/sessions/ses_route?raw=true&localAdmin=true'),
       client: { session: { get: async () => ({ data: { id: 'ses_route', directory: '/tmp/route-project' } }) } },
     })
     const withoutDirectory = await dispatchRoute(routes, {
@@ -845,7 +845,9 @@ describe.sequential('daemon JSON routes', () => {
     expect(JSON.stringify(compactRun)).not.toContain('evidence-secret-value')
     expect(JSON.stringify(compactRun)).not.toContain('decision-secret-value')
     expect(JSON.stringify(compactRun)).not.toContain('decision-summary-secret')
-    await expect(dispatchRoute(routes, context('GET', `/runs/${encodeURIComponent(started.run.id)}?raw=true`))).rejects.toThrow('explicit local/admin intent')
+    const deniedRaw = await dispatchRoute(routes, context('GET', `/runs/${encodeURIComponent(started.run.id)}?raw=true`))
+    expect(deniedRaw?.status).toBe(403)
+    expect((deniedRaw?.body as any).error).toBe('localAdmin intent required')
 
     const raw = await dispatchRoute(routes, context('GET', `/runs/${encodeURIComponent(started.run.id)}?raw=true&localAdmin=true`))
     expect((raw?.body as any).run.result.raw).toContain('raw private channel content')
@@ -1108,7 +1110,9 @@ describe.sequential('daemon JSON routes', () => {
     expect(serialized).not.toContain('/Users/joe/private-notes')
     expect(String(markdownResponse?.body)).not.toContain('trusted-chat-http')
     expect(serialized).toContain('<redacted:telegram.chat:')
-    await expect(dispatchRoute(routes, context('GET', '/evidence/export?redact=false'))).rejects.toThrow('explicit local/admin intent')
+    const deniedEvidence = await dispatchRoute(routes, context('GET', '/evidence/export?redact=false'))
+    expect(deniedEvidence?.status).toBe(403)
+    expect((deniedEvidence?.body as any).error).toBe('localAdmin intent required')
   })
 
   it('exposes roadmap supervisor CRUD routes', async () => {

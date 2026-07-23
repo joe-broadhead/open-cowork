@@ -11,14 +11,19 @@ Freeze date: **2026-07-18**.
 | Runbook | [docs/runbooks/product-repo-archive.md](../../runbooks/product-repo-archive.md) |
 | Readiness check | `node scripts/check-product-archive-readiness.mjs` |
 
-## Status (2026-07-18)
+## Status (revalidated 2026-07-22 post-#959)
 
 | Step | Status |
 | --- | --- |
 | Monorepo SoT docs + readiness script | **Pass** (`node scripts/check-product-archive-readiness.mjs`) |
 | Freeze banners on private repos | **Wiki:** merged [open-wiki#49](https://github.com/joe-broadhead/open-wiki/pull/49). **Gateway:** merged [opencode-gateway#239](https://github.com/joe-broadhead/opencode-gateway/pull/239) |
 | GH repo descriptions | Updated to MOVED → open-cowork `products/{gateway,wiki}` |
-| GitHub `gh repo archive` | **Pending** monorepo PR merge to `master` + product smoke/release gate (maintainer) |
+| Monorepo on `master` (partition + post-#958/#959) | **Done** — product partitions and subsequent production next-steps are on `master` |
+| GitHub `gh repo archive` | **Still pending maintainer ops** — not an in-repo code residual; freeze banners + SoT are done. Final `gh repo archive` for `opencode-gateway` / `open-wiki` remains an offline maintainer step when product smoke/release gate is accepted. |
+
+**JOE-915 freeze residual (process):** freeze and monorepo SoT are complete;
+only the private-repo **archive** action is stale-as-open (maintainer gate).
+Do not re-open engineering work for freeze banners or SoT docs.
 
 ## Freeze PRs
 

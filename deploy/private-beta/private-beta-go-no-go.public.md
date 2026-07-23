@@ -12,6 +12,10 @@ bundles.
 - Reason: private deployed evidence has not been attached to a private
   operations record for every blocking item in
   `deploy/private-beta/launch-evidence-record.template.json`.
+- **Public package:** **COMPLETE** (templates + validators green). Completeness
+  of the in-repo package does **not** equal hosted private-beta go.
+- **Private campaign items:** still required for go (every blocking evidence
+  row below remains `pending-private-evidence`).
 - Last public package review: 2026-07-21 (JOE-922)
 - Public ops evidence package:
   `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md`

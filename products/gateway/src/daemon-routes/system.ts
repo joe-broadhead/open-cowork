@@ -173,11 +173,12 @@ export function systemRoutes(): RouteHandler[] {
         operation: 'evidence.export.unredacted',
         target: 'evidence/export',
         unredacted,
+        url,
       })
       if (limited) return limited
       const bundle = buildEvidenceBundle({
         mode: unredacted ? 'unredacted' : 'redacted',
-        allowUnredacted: unredacted && url.searchParams.get('localAdmin') === 'true',
+        allowUnredacted: unredacted,
         eventLimit: Number(url.searchParams.get('limit') || 250),
         target: {
           taskId: url.searchParams.get('taskId') || undefined,
@@ -344,6 +345,7 @@ export function systemRoutes(): RouteHandler[] {
         operation: 'config.read.unredacted',
         target: 'config',
         unredacted: !redact,
+        url,
       })
       if (limited) return limited
       return json({ config: redact ? redactGatewayConfig(getConfig()) : getConfig(), path: getConfigPath() })
@@ -392,7 +394,14 @@ export function systemRoutes(): RouteHandler[] {
     }
 
     if (req.method === 'GET' && url.pathname === '/storage/export') {
-      auditHttp(req, 'storage.export', 'gateway-state', 'ok')
+      // Full state dump is always unredacted-sensitive (JOE-952 / post-#959 SEC-2).
+      const limited = guardUnredactedExport(req, {
+        operation: 'storage.export.unredacted',
+        target: 'gateway-state',
+        unredacted: true,
+        url,
+      })
+      if (limited) return limited
       return json(exportGatewayState())
     }
 

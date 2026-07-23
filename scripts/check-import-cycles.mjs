@@ -31,6 +31,8 @@ const root = process.cwd()
 export const SCAN_ROOTS = [
   'packages/app/src',
   'packages/ui/src',
+  // post-#959: widen ratchet toward runtime packages once proven cycle-free
+  'packages/shared/src',
 ]
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx']

@@ -356,3 +356,56 @@ export async function exerciseWorkspaceSessionPort(port: WorkspaceSessionPort): 
     methodCount: WORKSPACE_SESSION_PORT_FULL_METHODS.length,
   }
 }
+
+/**
+ * Progressive local WorkspaceSessionPort (post-#959 JOE-921 residual).
+ * Wraps an engine-like object already used by desktop IPC so call sites can
+ * migrate off raw sessionEngine without inventing a second implementation.
+ * Full IPC cutover remains progressive; this port is the contract boundary.
+ */
+export function createLocalWorkspaceSessionPort(engine: {
+  policy?: () => Promise<WorkspacePolicy> | WorkspacePolicy
+  createSession?: (input?: { projectSource?: unknown }) => Promise<SessionInfo> | SessionInfo
+  listSessions?: () => Promise<SessionInfo[]> | SessionInfo[]
+  getSessionInfo?: (sessionId: string) => Promise<SessionInfo | null> | SessionInfo | null
+  getSessionView?: (sessionId: string) => Promise<SessionView> | SessionView
+  promptSession?: (sessionId: string, input: WorkspaceSessionPromptInput) => Promise<void> | void
+  abortSession?: (sessionId: string) => Promise<void> | void
+}): WorkspaceSessionPort {
+  const call = async <T>(name: string, fn: (() => Promise<T> | T) | undefined, fallback?: () => Promise<T>): Promise<T> => {
+    if (typeof fn === 'function') return await fn()
+    if (fallback) return await fallback()
+    throw new Error(`Local WorkspaceSessionPort method not available: ${name}`)
+  }
+  return {
+    async policy() {
+      return await call('policy', engine.policy ? () => engine.policy!() : undefined, async (): Promise<WorkspacePolicy> => ({
+        features: {},
+        allowedAgents: null,
+        allowedTools: null,
+        allowedMcps: null,
+        localFiles: 'enabled',
+        localStdioMcps: 'enabled',
+        machineRuntimeConfig: 'allowlisted',
+      }))
+    },
+    async createSession(input) {
+      return await call('createSession', engine.createSession ? () => engine.createSession!(input) : undefined)
+    },
+    async listSessions() {
+      return await call('listSessions', engine.listSessions ? () => engine.listSessions!() : undefined, async () => [])
+    },
+    async getSessionInfo(sessionId) {
+      return await call('getSessionInfo', engine.getSessionInfo ? () => engine.getSessionInfo!(sessionId) : undefined, async () => null)
+    },
+    async getSessionView(sessionId) {
+      return await call('getSessionView', engine.getSessionView ? () => engine.getSessionView!(sessionId) : undefined)
+    },
+    async promptSession(sessionId, input) {
+      return await call('promptSession', engine.promptSession ? () => engine.promptSession!(sessionId, input) : undefined, async () => undefined)
+    },
+    async abortSession(sessionId) {
+      return await call('abortSession', engine.abortSession ? () => engine.abortSession!(sessionId) : undefined, async () => undefined)
+    },
+  }
+}

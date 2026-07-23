@@ -3,6 +3,20 @@
 This directory contains launch-package examples for managed BYOK private beta
 and OSS self-host deployment.
 
+## Package completeness (public vs private)
+
+| Layer | Status | Notes |
+| --- | --- | --- |
+| **Public package** | **COMPLETE** | Templates, configs, validators, public go/no-go summary, and ops evidence package are in-repo and CI-checked (`pnpm deploy:private-beta:validate`) |
+| **Private campaign items** | **Still required for go** | Deployed load/soak, restore, failover, live BYOK, support roster, cost/SLO, rollback, and redacted summaries + checksums (see `launch-evidence-record.template.json`) |
+| **Go / no-go** | **`no-go`** until private evidence | `private-beta-go-no-go.public.md` must stay `no-go` until a private ops record passes every blocking item |
+
+Do **not** invent or attach fake private-beta go evidence in this repo. Public
+templates alone never promote hosted private-beta claims.
+
+Public campaign package (validators + explicit private gaps with owners):
+`docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` (JOE-922).
+
 Files:
 
 - `hosted-byok.config.example.json`: managed BYOK SaaS-style config with OIDC,
@@ -31,8 +45,6 @@ Files:
 - `private-beta-go-no-go.public.md`: current public-safe go/no-go summary. It
   remains `no-go` for managed private beta until private evidence is attached
   and redacted summaries are approved.
-- Public campaign package (validators + explicit private gaps with owners):
-  `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md` (JOE-922).
 
 These examples are provider-neutral. They use placeholder domains such as
 `cowork.example.com`, placeholder secret refs such as
