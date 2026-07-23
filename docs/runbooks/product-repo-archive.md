@@ -73,7 +73,7 @@ Do **not** publish new major features under legacy package names after freeze.
 ## README banner (copy for legacy repos)
 
 Place at the **top** of each private repo `README.md` (see also templates under
-`docs/evidence/archive-plan/`):
+`docs/runbooks/archive-plan/`):
 
 ```markdown
 > **DEVELOPMENT MOVED (frozen 2026-07-18).**
@@ -103,7 +103,7 @@ pnpm smoke:wiki-standalone
 
 ### Private repo freeze commits
 
-1. Apply README banner (templates in `docs/evidence/archive-plan/`).
+1. Apply README banner (templates in `docs/runbooks/archive-plan/`).
 2. Optionally disable Actions workflows or add a workflow that fails with a
    monorepo pointer message.
 3. Push freeze commit to private default branch (`main` / `master`).
@@ -142,4 +142,4 @@ Unarchive is possible via GitHub UI/API but dual-development must not resume.
 - [Monorepo privacy ADR](../adr/monorepo-privacy.md)
 - [Product partitions ADR](../adr/product-partitions.md)
 - [Packaging and product modes](../packaging-and-product-modes.md)
-- Archive plan templates: `docs/evidence/archive-plan/`
+- Archive plan templates: `docs/runbooks/archive-plan/`

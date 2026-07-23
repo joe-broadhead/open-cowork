@@ -1,4 +1,4 @@
-# Public Release Docs Audit
+# Public Release Docs Checklist
 
 Run this checklist before tagging a release candidate, publishing a package, or
 switching repository visibility.

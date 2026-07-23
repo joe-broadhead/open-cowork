@@ -58,8 +58,8 @@ mustContain('.github/workflows/release-wiki.yml', 'standalone-smoke', 'wiki rele
 
 // Freeze / archive docs
 must('docs/runbooks/product-repo-archive.md')
-must('docs/evidence/archive-plan/freeze-banner-gateway.md')
-must('docs/evidence/archive-plan/freeze-banner-wiki.md')
+must('docs/runbooks/archive-plan/freeze-banner-gateway.md')
+must('docs/runbooks/archive-plan/freeze-banner-wiki.md')
 mustContain('docs/runbooks/product-repo-archive.md', '2026-07-18', 'freeze date')
 mustContain('docs/runbooks/product-repo-archive.md', 'products/gateway', 'gateway monorepo path')
 mustContain('docs/runbooks/product-repo-archive.md', 'products/wiki', 'wiki monorepo path')
@@ -76,7 +76,7 @@ mustContain('SUPPORT.md', 'products/wiki', 'SUPPORT mentions wiki partition')
 must('scripts/check-product-boundaries.mjs')
 
 // Secret-scan evidence from import
-must('docs/evidence/secret-scans/README.md')
+must('deploy/archive/secret-scans/README.md')
 
 const report = {
   schemaVersion: 1,

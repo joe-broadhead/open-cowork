@@ -18,7 +18,7 @@ bundles.
   row below remains `pending-private-evidence`).
 - Last public package review: 2026-07-21 (JOE-922)
 - Public ops evidence package:
-  `docs/evidence/private-beta-ops-evidence-package-2026-07-21.md`
+  `deploy/private-beta/ops-evidence-package.md`
 - Public package validators (`deploy:private-beta:validate`,
   `deploy:launch:validate`, `ops:validate`, private-beta load **plan**): green
 - Current public tier: `local-self-host-beta`

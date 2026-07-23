@@ -252,7 +252,7 @@
    "failureClass": "release_contract",
    "severity": "critical",
    "detection": "npm run release:check names a failed release/evidence gate.",
-   "safeNextAction": "Run npm run release:check, inspect the named failed check, update docs/evidence/scripts, then rerun evidence:safety when public wording changed.",
+   "safeNextAction": "Run npm run release:check, inspect the named failed check, update the named docs/scripts, then rerun evidence:safety when public wording changed.",
    "forbiddenShortcut": "Do not bypass release:check or weaken unsupported-claim checks to make release wording pass.",
    "evidenceRefs": [
     "scripts/check-release.mjs",

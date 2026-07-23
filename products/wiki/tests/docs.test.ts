@@ -31,7 +31,7 @@ test("MkDocs site has a strict public-release documentation scaffold", async () 
   assert.match(mkdocs, /reference\/compatibility\.md/);
   assert.match(mkdocs, /deployment\/operations\.md/);
   assert.match(mkdocs, /deployment\/operations\/matrix\.md/);
-  assert.match(mkdocs, /development\/public-release-docs-audit\.md/);
+  assert.match(mkdocs, /development\/public-release-docs-checklist\.md/);
   assert.match(mkdocs, /spec\/openwiki-protocol-v0\.1\.md/);
   assert.match(mkdocs, /adr\/0009-pglite-local-runtime-spike\.md/);
   assert.match(mkdocs, /security\/threat-model\.md/);
@@ -143,7 +143,7 @@ test("public repository community files are present", async () => {
   assert.match(docsHome, /CHANGELOG\.md/);
 });
 
-test("release docs and public config avoid stale audit regressions", async () => {
+test("release docs and public config avoid stale documentation regressions", async () => {
   const contributing = await readFile(path.join(process.cwd(), "CONTRIBUTING.md"), "utf8");
   assert.match(contributing, /Node\.js `>=22\.22\.3`/);
   assert.match(contributing, /pnpm docs:build/);
@@ -198,7 +198,7 @@ test("release docs and public config avoid stale audit regressions", async () =>
   assert.match(install, /npm install -g \.\/artifacts\/npm\/openwiki-cli-0\.0\.0\.tgz/);
   assert.match(install, /npm install -g @openwiki\/cli@0\.0\.0/);
 
-  const audit = await readFile(path.join(process.cwd(), "docs", "development", "public-release-docs-audit.md"), "utf8");
+  const checklist = await readFile(path.join(process.cwd(), "docs", "development", "public-release-docs-checklist.md"), "utf8");
   for (const required of [
     "Distribution Clarity",
     "Navigation Hygiene",
@@ -207,7 +207,7 @@ test("release docs and public config avoid stale audit regressions", async () =>
     "Ownership And Review",
     "pnpm docs:reference -- --check",
   ]) {
-    assert.match(audit, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(checklist, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
 });
 

@@ -1,5 +1,5 @@
 /**
- * Shared workspace session port (audit 2026-07-21 P2-8 / JOE-921).
+ * Shared workspace session port (JOE-921).
  *
  * Local Durable session engines, Desktop pairing executors, and cloud workspace
  * adapters all own session/workflow surfaces. Product code should depend on this
@@ -10,8 +10,6 @@
  * sync methods are optional so limited transports (gateway status-only, partial
  * mocks) can still satisfy `mode: 'core'`; `CloudWorkspaceAdapter` implements the
  * full surface (`mode: 'full'`).
- *
- * Inventory: `docs/evidence/workspace-session-port-inventory-2026-07-21.md`.
  */
 import {
   emptySessionImportItemCounts,

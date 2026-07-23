@@ -6,7 +6,7 @@
   "relatedDocs": [
     "products/gateway/docs/concepts/distributed-ownership-design.md",
     "products/gateway/docs/concepts/multi-daemon-scaling.md",
-    "docs/evidence/gateway-multi-writer-hazards-2026-07-21.md"
+    "products/gateway/docs/concepts/multi-writer-hazards.md"
   ],
   "requiredTests": [
     {

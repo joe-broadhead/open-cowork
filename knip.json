@@ -9,8 +9,7 @@
     "apps/desktop/release/**",
     "THIRD_PARTY_LICENSES/**",
     "products/gateway/**",
-    "products/wiki/**",
-    "docs/evidence/**"
+    "products/wiki/**"
   ],
   "ignoreDependencies": [
     "opencode-ai"

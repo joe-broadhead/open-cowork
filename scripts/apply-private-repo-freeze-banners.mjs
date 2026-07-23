@@ -14,7 +14,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const monorepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const planDir = path.join(monorepoRoot, 'docs/evidence/archive-plan')
+const planDir = path.join(monorepoRoot, 'docs/runbooks/archive-plan')
 
 const defaults = {
   gateway: path.resolve(monorepoRoot, '../../opencode-gateway'),

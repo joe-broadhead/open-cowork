@@ -159,7 +159,7 @@ nav:
       - Contributing: development/contributing.md
       - Release: development/release.md
       - Release Notes Template: development/release-notes-template.md
-      - Public Release Docs Audit: development/public-release-docs-audit.md
+      - Public Release Docs Checklist: development/public-release-docs-checklist.md
       - UI QA: testing/openwiki-ui-qa.md
       - ADR 0001: adr/0001-language-and-runtime-strategy.md
       - ADR 0002: adr/0002-git-ledger-and-derived-stores.md

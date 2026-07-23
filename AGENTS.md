@@ -1,201 +1,115 @@
-# Open Cowork Repository
+# AGENTS.md
 
-This file is for coding contributors and local coding agents working in the Open Cowork repository.
+Open Cowork is an Electron + TypeScript monorepo: desktop product layer on **OpenCode** (execution engine), plus Durable Gateway, Cloud, and Wiki. Package manager: **pnpm@10.32.1**. Node: see `.nvmrc` (**≥22.13**). Default branch: `master`.
 
-## First principle
+**OpenCode owns execution** (sessions, MCP, approvals, tools, streaming). **Open Cowork owns composition** (desktop UI, packaging, config, workflows, branding). Do not invent a second agent runtime.
 
-Open Cowork is a **product layer on top of OpenCode**, not a second runtime.
-
-Preserve this split:
-- **OpenCode owns execution**: sessions, child sessions, MCP execution,
-  approvals, questions, agent runtime behavior, streaming events, tool
-  semantics, native skills.
-- **Open Cowork owns composition**: desktop UI, packaging, branding,
-  configuration, capability curation, event projection, workflow control plane, and user-facing ergonomics.
-
-If a change starts to mirror or replace OpenCode runtime behavior rather than compose it, stop and simplify first.
-
-## Scope and sources of truth
-
-- Product runtime behavior lives in
-  [apps/desktop/runtime-config/AGENTS.md](apps/desktop/runtime-config/AGENTS.md).
-- Built-in agent policy lives in
-  [packages/runtime-host/src/agent-config.ts](packages/runtime-host/src/agent-config.ts).
-- Architecture and ownership boundaries live in
-  [docs/architecture.md](docs/architecture.md).
-- Workflow product behavior lives in
-  [docs/workflows.md](docs/workflows.md) plus the durable `workflow-*` control-plane files in `apps/desktop/src/main/`.
-
-Do not duplicate product agent behavior across multiple prompt files when code or generated prompts are the real source of truth.
-
-## Where concepts live
-
-Start changes in the layer that owns the concept.
-
-### Runtime composition
-
-Use these files when the change is about the OpenCode runtime boundary:
-- `packages/runtime-host/src/runtime.ts`
-- `packages/runtime-host/src/runtime-config-builder.ts`
-- `packages/runtime-host/src/runtime-mcp.ts`
-- `packages/runtime-host/src/effective-skills.ts`
-- `packages/runtime-host/src/agent-config.ts`
-
-Rules:
-- Prefer SDK-native config surfaces over app-side reinvention.
-- Treat custom agents as OpenCode-native agents generated into runtime config.
-- Keep managed skill/MCP discovery app-owned and deterministic.
-
-### Event projection and session replay
-
-Use these files when the change is about chat state, subagents, replay, or
-hydration:
-- `apps/desktop/src/main/event-runtime-handlers.ts`
-- `apps/desktop/src/main/event-message-handlers.ts`
-- `apps/desktop/src/main/event-task-state.ts`
-- `packages/runtime-host/src/session-engine.ts`
-- `packages/runtime-host/src/session-history-loader.ts`
-- `packages/runtime-host/src/session-history-projector.ts`
-- `packages/shared/src/session-view-model.ts`
-
-Rules:
-- Preserve the separation between parent-session UI and delegated child-session task runs.
-- Preserve reopen parity: approvals, questions, task state, and timing must survive reload/history hydration.
-- Do not introduce fuzzy or suffix-based session-id matching.
-
-### Workflow control plane
-
-Workflows are a durable product layer wrapped around OpenCode-native
-execution.
-
-Primary files:
-- `packages/runtime-host/src/workflow/workflow-store.ts`
-- `apps/desktop/src/main/workflow/workflow-service.ts`
-- `packages/runtime-host/src/workflow/workflow-tool-actions.ts`
-- `packages/shared/src/node/workflow-webhook-server.ts`
-- `mcps/workflows/src/index.ts`
-- `packages/app/src/components/workflows/`
-
-Rules:
-- Workflow setup is thread-based: the Workflow Designer agent clarifies the task, then creates the saved workflow through the Workflows MCP.
-- Keep saved workflow execution simple and OpenCode-native: create a run thread, prompt the selected agent, and project the result back into workflow state.
-- Keep workflow state durable and transactional; do not turn it into a thin wrapper around transient chat UI state.
-
-### Renderer and navigation
-
-Primary files:
-- `packages/app/src/App.tsx`
-- `packages/app/src/components/`
-- `packages/app/src/stores/`
-
-Rules:
-- Keep navigation state app-owned, not trapped inside a leaf component.
-- Prefer lazy loading and fast surface transitions.
-- When changing nav wiring, update or extend `apps/desktop/tests/navigation-wiring.smoke.test.ts`.
-
-## Editing guidance
-
-- Prefer changing runtime behavior in code and generated agent config rather
-  than patching prompts alone.
-- Keep the runtime prompt high-level and stable; keep exact orchestration rules
-  centralized in code.
-- Prefer MCP tools over shell behavior when a target system already has an MCP.
-- Keep product-layer policy explicit and typed where possible.
-- Add the narrowest test that proves the behavior you changed.
-
-## Documentation and naming conventions
-
-This repo is now the public `open-cowork` repo. Use that form in:
-- docs
-- README
-- repo metadata
-- GitHub links
-
-Keep the historical `opencowork` form only where it is intentionally required
-for back-compat, such as:
-- bundle id / app id
-- on-disk project namespace
-- legacy migration notes
-
-### Product language (user-facing)
-
-Prefer product names in UI copy, docs, and PR titles. Keep code identifiers
-when they are the real API surface.
-
-| Prefer (product) | Avoid in user-facing copy | Code / internal OK |
-| --- | --- | --- |
-| **Projects** | Threads page / Threads workspace | `threads:search`, `thread-index`, route ids |
-| **Team** / **coworker** | Agents page as the nav label | `agents` package paths, OpenCode agent ids |
-| **Playbooks** | Workflows page as the nav label | `workflows` store/MCP, `workflow-*` files |
-| **Tools & Skills** | Capabilities as the only label | `capabilities` routes/components |
-| **Chat**, **Knowledge**, **Approvals**, **Channels**, **Artifacts** | Inventing alternate studio names | feature flags under `DesktopFeatureKey` |
-
-Canonical UI surface list: [Desktop App Guide](docs/desktop-app.md). Glossary:
-[docs/glossary.md](docs/glossary.md). Icon inventory: [docs/iconography.md](docs/iconography.md).
-
-### Design-system adoption map
-
-| Layer | Status | Where |
-| --- | --- | --- |
-| Tokens + CSS variables | **Adopted** | `packages/shared` design tokens → generated CSS; see [docs/design-system.md](docs/design-system.md) |
-| Core primitives (`Button`, `Input`, `Select`, `Dialog`, `Icon`, …) | **Adopted** for new work | `@open-cowork/ui` (`packages/ui`) |
-| Studio primitives (shell, coworker cards, lanes, wiki, channels, …) | **Partial** | Prefer `packages/ui` Studio exports; some renderer surfaces still half-adopted (see JOE-854) |
-| Setup / Agent builder / Custom MCP forms | **Partial** | Migrate raw `<button>`/`<input>` to design-system controls (JOE-848, JOE-894) |
-| `globals.css` / large surface CSS | **In progress** | Split and token-ratchet work (JOE-851); do not add new raw palette or ad-hoc type scales |
-
-Rules for agents changing UI:
-- Import from `@open-cowork/ui`; do not grow a private `components/ui` barrel.
-- New chrome/nav icons go through `Icon` / `IconButton` and `docs/iconography.md`.
-- Do not reintroduce demo-era copy (gated by `tests/product-language.test.ts`).
-
-If you change a user-visible product surface, update the relevant docs:
-- `README.md`
-- `docs/index.md`
-- `docs/getting-started.md`
-- `docs/desktop-app.md`
-- `docs/projects.md` (Projects history surface; formerly `threads.md`)
-- `docs/workflows.md`
-- `docs/architecture.md`
-- `docs/iconography.md`
-- `docs/glossary.md`
-- `docs/release-checklist.md`
-
-## Validation expectations
-
-For meaningful changes, run the smallest relevant subset first, then the full repo checks before release-sensitive commits.
-
-Common commands:
+## Commands
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm test:gateway   # Durable Gateway (cowork-gateway); not included in root `pnpm test`
-pnpm test:e2e
-pnpm test:e2e:evals # Monthly UI journeys (admin/approvals/charts); needs display or xvfb
-pnpm docs:build
-git diff --check
+pnpm install                          # install (frozen lockfile in CI)
+pnpm dev                              # desktop dev
+pnpm lint                             # eslint + design tokens + cycles + knip + boundaries
+pnpm typecheck                        # packages + desktop (slow; prefer scoped below)
+pnpm test                             # monorepo unit/integration (excludes full gateway suite path in some flows)
+pnpm test:gateway                     # Durable Gateway (cowork-gateway) vitest
+pnpm test:renderer                    # packages/app renderer tests
+pnpm test:e2e                         # desktop e2e (needs display)
+pnpm docs:build                       # MkDocs strict
+pnpm build                            # full monorepo build (ask first unless release)
+git diff --check                      # no trailing whitespace
 ```
 
-Use extra targeted checks when relevant:
-- `pnpm perf:check` for renderer/runtime performance-sensitive changes
-- `pnpm audit:prod` / `pnpm audit:full` for dependency/security work
-- `pnpm --dir apps/desktop dist:ci` for packaging / release-path changes
-- Monthly UI evals: `.github/workflows/monthly-evals.yml` (cron + workflow_dispatch). Not a required release check; consecutive failures open a GitHub issue (`scripts/monthly-eval-failure-alert.mjs`). Operator notes: `docs/packaging-and-releases.md` → Monthly UI eval flows.
+**Scoped / fast loops**
 
-## Branch and repo conventions
+```bash
+pnpm --filter @open-cowork/desktop typecheck
+pnpm --filter cowork-gateway exec vitest run src/__tests__/some.test.ts
+pnpm --filter @open-cowork/app exec vitest run path/to/file.test.ts
+pnpm eslint --fix path/to/file.ts
+pnpm exec tsc -p products/gateway/tsconfig.json --noEmit
+```
 
-- The default branch is `master`.
-- The canonical public remote is `origin` -> `joe-broadhead/open-cowork`.
-- Pull request titles should be plain, descriptive change titles. Do not add
-  actor/tool prefixes such as `[codex]`.
+Extra when relevant: `pnpm audit:prod` / `pnpm audit:full` (dependency security), `pnpm perf:check`, `pnpm boundaries:check`, `pnpm --dir apps/desktop dist:ci`.
 
-## Anti-patterns
+## Boundaries
 
-Avoid these unless the change explicitly requires them:
-- adding prompt-only behavior when code/config should own it
-- inventing a parallel agent runtime beside OpenCode
-- rebuilding durable workflow state out of ephemeral renderer state
-- hardcoding local user paths, repo paths, or machine-specific assumptions
-- silently changing repo/public naming back toward `opencowork` outside
-  back-compat boundaries
+**Always**
+- Read files, list dirs, search the repo
+- Run scoped lint / typecheck / unit tests for files you touch
+- Preserve OpenCode-vs-composition ownership; change behavior in code/config, not prompt-only patches
+- Prefer MCP tools over shell when a target system has an MCP
+- Use design tokens / `@open-cowork/ui` for UI (no raw palette hard-codes)
+
+**Ask first**
+- Add/remove packages or change lockfile
+- Full monorepo `pnpm build`, e2e, packaging, or release workflows
+- Edit CI (`.github/workflows/**`), branch protection, or Helm/deploy topology
+- Destructive git (`reset --hard`, force-push) or push without confirmation
+- Flip private-beta go/no-go or marketing HA claims
+
+**Never**
+- Commit secrets, `.env*`, API keys, or real customer data
+- Commit **audit artifacts** (dated “full audit”, surface audits, PR audit dumps under `docs/`, `docs/evidence/`, or similar). Audits are throwaway — leave them local or outside the repo
+- Edit `node_modules/`, `dist/`, packaged `release/`, or generated design-token CSS by hand
+- Mirror OpenCode runtime behavior in app code instead of composing the SDK
+- Hard-code machine-local paths or silently rename public `open-cowork` back to `opencowork` outside back-compat IDs
+
+## Project structure
+
+| Path | Purpose |
+| --- | --- |
+| `apps/desktop/` | Electron shell, IPC, packaging |
+| `packages/app/` | Renderer UI (React) |
+| `packages/runtime-host/` | Runtime composition, session engine, workflows |
+| `packages/shared/`, `packages/ui/` | Shared types/tokens and design system |
+| `products/gateway/` | Durable Gateway (daemon, MCP, channels) — package `cowork-gateway` |
+| `products/wiki/` | Wiki product |
+| `packages/cloud-server/`, cloud scripts | Cloud control plane |
+| `mcps/` | Bundled MCP servers |
+| `docs/` | Product docs (MkDocs) — **not** audit dumps |
+| `deploy/`, `helm/` | Deploy configs and private-beta package |
+| `scripts/` | CI validators and repo tooling |
+| `apps/desktop/runtime-config/AGENTS.md` | **Runtime agent** persona (shipped with app; not repo contributor rules) |
+
+Entry points: `packages/runtime-host/src/runtime.ts`, `packages/runtime-host/src/session-engine.ts`, `packages/app/src/App.tsx`, `products/gateway/src/daemon.ts`.
+
+## Code style
+
+- TypeScript strict; match neighboring file style (quotes/semicolons)
+- Prefer small, testable modules; respect module LOC budgets (`products/gateway/docs/development/module-boundary-budget.json`)
+- Product UI language: **Projects / Team / Playbooks / Tools & Skills** (see `docs/glossary.md`); keep code ids (`workflows`, `agents`) when they are the API
+- Import UI from `@open-cowork/ui`; icons via `Icon` / `docs/iconography.md`
+- Prefer SDK-native OpenCode config over app-side reinvention
+
+### Good
+
+```ts
+// Compose OpenCode; keep dual-intent explicit for unredacted dumps
+return fetchJSON('GET', '/storage/export?localAdmin=true')
+```
+
+### Bad
+
+```ts
+// Parallel runtime or silent unredacted export
+return fetchJSON('GET', '/storage/export')
+```
+
+## Testing & PR
+
+- Add/update the **narrowest** test that proves the change (`*.test.ts` next to code or under `tests/`)
+- Before commit: scoped tests green; for release-sensitive work: `pnpm lint && pnpm typecheck && pnpm test` (and `pnpm test:gateway` if gateway-touched)
+- Commits: conventional, descriptive (`fix(gateway): …`, `docs: …`). PR titles: plain description — **no** `[codex]` / tool prefixes
+- Diffs: small and focused; do not land throwaway audit markdown
+- Required CI on `master` PRs: validate, cloud-gates, OS packages, docs, coverage — **not** CodeQL (monthly-only)
+
+## Security
+
+- Never log secrets, tokens, or PII; prefer redacted export defaults
+- JOE-952 dual-intent: unredacted dumps need explicit `localAdmin=true` (or documented equivalent)
+- Do not claim multi-AZ HA / private-beta **go** unless proving registry + private campaign evidence say so (`deploy/private-beta/`, gateway multi-writer hazards)
+
+## When stuck
+
+Ask a clarifying question or propose a short plan. Do not guess at release claims, OpenCode pin bumps, or HA posture.

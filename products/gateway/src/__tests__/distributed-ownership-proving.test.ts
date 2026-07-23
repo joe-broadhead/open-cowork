@@ -40,7 +40,7 @@ describe('distributed ownership proving suite (JOE-949)', () => {
 
   it('hazard inventory documents migrate items H1/H3/H4', () => {
     const inventory = fs.readFileSync(
-      path.join(monorepoRoot, 'docs/evidence/gateway-multi-writer-hazards-2026-07-21.md'),
+      path.join(monorepoRoot, 'products/gateway/docs/concepts/multi-writer-hazards.md'),
       'utf8',
     )
     for (const id of ['H1', 'H3', 'H4', 'H8', 'H13']) {
