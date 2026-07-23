@@ -17,8 +17,15 @@ import type {
 export const CURRENT_BACKUP_VERSION = 1
 export const DEFAULT_BACKUP_RETENTION = 20
 export const CHANNEL_SYNC_OUTBOX_FILE = 'channel-sync.json.sqlite'
+export const OPERATIONAL_SIDECAR_FILE = 'operational-sidecar.sqlite'
+/** Legacy JSON sidecars (still backed up for restore of older states). */
 export const SIDECAR_FILES = ['channel-sync.json', 'events.json', 'sessions.json']
-export const BACKUP_FILE_NAMES = new Set(['gateway.db', CHANNEL_SYNC_OUTBOX_FILE, ...SIDECAR_FILES])
+export const BACKUP_FILE_NAMES = new Set([
+  'gateway.db',
+  CHANNEL_SYNC_OUTBOX_FILE,
+  OPERATIONAL_SIDECAR_FILE,
+  ...SIDECAR_FILES,
+])
 export const RECOVERY_DRILL_RETENTION = 20
 export const BACKUP_COUNT_KEYS = ['roadmaps', 'supervisors', 'projectBindings', 'completionProposals', 'tasks', 'runs', 'channelBindings', 'events'] as const
 export function storageStateDir(): string {
@@ -35,6 +42,21 @@ export function listStorageSources(options: { stateDir?: string } = {}): Storage
   return storageSourceSpecs(stateDir).map(spec => sourceRecord(spec, stateDir))
 }
 export function readSessionSidecarIds(stateDir: string): Set<string> | undefined {
+  // JOE-996 / H4: prefer operational-sidecar.sqlite worker_sessions; fall back to legacy sessions.json.
+  const sqlitePath = path.join(stateDir, OPERATIONAL_SIDECAR_FILE)
+  if (fs.existsSync(sqlitePath)) {
+    try {
+      const db = new DatabaseSync(sqlitePath, { readOnly: true })
+      try {
+        const rows = db.prepare('SELECT id FROM worker_sessions').all() as Array<{ id?: unknown }>
+        return new Set(rows.map((row) => String(row?.id || '').trim()).filter(Boolean))
+      } finally {
+        try { db.close() } catch {}
+      }
+    } catch {
+      // fall through to legacy JSON
+    }
+  }
   const sessionPath = path.join(stateDir, 'sessions.json')
   if (!fs.existsSync(sessionPath)) return undefined
   const parsed = readJsonArtifact(sessionPath)
@@ -67,7 +89,12 @@ export function uniqueStrings(values: unknown[]): string[] {
 }
 export function backupSourceFiles(stateDir = storageStateDir()): string[] {
   const resolved = path.resolve(stateDir)
-  return [workStatePathForStateDir(resolved), channelSyncOutboxPath(resolved), ...SIDECAR_FILES.map(name => path.join(resolved, name))]
+  return [
+    workStatePathForStateDir(resolved),
+    channelSyncOutboxPath(resolved),
+    path.join(resolved, OPERATIONAL_SIDECAR_FILE),
+    ...SIDECAR_FILES.map(name => path.join(resolved, name)),
+  ]
 }
 export function storageSourceSpecs(stateDir: string): StorageSourceSpec[] {
   const resolved = path.resolve(stateDir)
@@ -122,8 +149,20 @@ export function storageSourceSpecs(stateDir: string): StorageSourceSpec[] {
       remediation: 'Restore channel-sync.json from backup or rebuild it intentionally during a quiet maintenance window.',
     },
     {
+      id: 'operational_sidecar',
+      label: 'Operational sidecar store',
+      kind: 'transactional_sqlite',
+      rawPath: path.join(resolved, OPERATIONAL_SIDECAR_FILE),
+      fileName: OPERATIONAL_SIDECAR_FILE,
+      required: false,
+      backedUp: true,
+      owner: 'operational-sidecar',
+      description: 'SQLite store for operational events, worker session projection, and channel poll cursors (JOE-996 H3/H4/H8).',
+      remediation: 'Restore operational-sidecar.sqlite from backup or let Gateway recreate it after confirming local tooling no longer needs prior telemetry/cursors.',
+    },
+    {
       id: 'events_sidecar',
-      label: 'Events sidecar',
+      label: 'Events sidecar (legacy JSON)',
       kind: 'append_only_evidence',
       rawPath: path.join(resolved, 'events.json'),
       fileName: 'events.json',
@@ -131,12 +170,12 @@ export function storageSourceSpecs(stateDir: string): StorageSourceSpec[] {
       required: false,
       backedUp: true,
       owner: 'wakeup',
-      description: 'Append-only bounded operational telemetry written live by wakeup event capture.',
-      remediation: 'Restore from backup if still used by local tooling; otherwise it can be absent.',
+      description: 'Legacy bounded operational telemetry JSON. Migrated into operational-sidecar.sqlite on first open (H3).',
+      remediation: 'Prefer operational-sidecar.sqlite; restore legacy events.json only for older backups.',
     },
     {
       id: 'sessions_sidecar',
-      label: 'Sessions sidecar',
+      label: 'Sessions sidecar (legacy JSON)',
       kind: 'derived_cache',
       rawPath: path.join(resolved, 'sessions.json'),
       fileName: 'sessions.json',
@@ -144,8 +183,8 @@ export function storageSourceSpecs(stateDir: string): StorageSourceSpec[] {
       required: false,
       backedUp: true,
       owner: 'workers',
-      description: 'Live worker registry state written by the worker supervisor to track running sessions.',
-      remediation: 'Restore from backup if still used by local tooling; otherwise it can be absent.',
+      description: 'Legacy worker registry JSON. Migrated into operational-sidecar.sqlite on first open (H4).',
+      remediation: 'Prefer operational-sidecar.sqlite; restore legacy sessions.json only for older backups.',
     },
     {
       id: 'backups',

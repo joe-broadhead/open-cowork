@@ -6,7 +6,7 @@ Gateway is currently a local, single-operator control plane. It can run unattend
 
 **Operator runbook (audit 2026-07-21 / JOE-931; reaffirmed 2026-07-23):** Never run two full daemons against one state directory. The open-cowork Helm chart fails closed when `replicaCount > 1` unless experimental distributed ownership is explicitly enabled. Chart fail-closed must not be bypassed for production.
 
-**Experimental multi-replica still fails open migrate hazards.** Enabling `gateway.experimentalDistributedOwnership=true` is **lab-only**. While the proving registry reports `status=partial` and non-empty `openMigrateHazards` (`H1`, `H3`, `H4`, `H8`, `H13` as of 2026-07-23), multi-replica is **not** multi-AZ HA and must not be marketed as production-ready. See the [hazard inventory](./multi-writer-hazards.md). Gateway doctor and `/readiness` include a non-blocking `multi_writer_ownership` check that reports open migrate hazards.
+**Experimental multi-replica still fails open migrate hazards.** Enabling `gateway.experimentalDistributedOwnership=true` is **lab-only**. While the proving registry reports `status=partial` and non-empty `openMigrateHazards` (`H1`, `H13` as of JOE-996 progressive H3/H4/H8 slice), multi-replica is **not** multi-AZ HA and must not be marketed as production-ready. See the [hazard inventory](./multi-writer-hazards.md). Gateway doctor and `/readiness` include a non-blocking `multi_writer_ownership` check that reports open migrate hazards.
 
 **Follow-on design:** [Distributed ownership + fencing](distributed-ownership-design.md) (JOE-954).
 **Hazard inventory:** [multi-writer-hazards](./multi-writer-hazards.md) (JOE-948).
@@ -62,8 +62,8 @@ These failure modes are acceptable for the current local deployment model but mu
 | --- | --- |
 | Scheduler cycle lock | The in-process cycle promise only protects one daemon. Two daemons can both enter scheduling logic, relying on later SQLite task transitions to decide the winner. |
 | Channel sync | `channel-sync.json` checkpoints and `pendingInbound` entries are file sidecars. Concurrent writers can overwrite each other and may duplicate or skip relays. |
-| Recent events | `events.json` is an operational activity view, not an append-only cluster event log. Concurrent writes are last-writer-wins. |
-| Session sidecar | `sessions.json` is a recent Gateway/OpenCode session projection. Multiple daemons can diverge about which process owns or can open a session. |
+| Recent events | Operational activity is in `operational-sidecar.sqlite` (`operational_events`; JOE-996 H3). Not an append-only cluster event log. |
+| Session sidecar | Worker projection is in `operational-sidecar.sqlite` (`worker_sessions`; JOE-996 H4). Multiple daemons can still diverge about runtime ownership without H1/H13 fencing. |
 | Notification locks | Several send paths have process-local in-flight guards. Duplicate visible notifications remain possible when two daemons handle the same event. |
 | OpenCode runtime ownership | OpenCode sessions are local runtime assets. A remote daemon cannot assume another host can inspect, prompt, or abort that session. |
 | Backups | Backup and restore capture current durable files plus sidecars, but sidecars are not safe multi-writer coordination state. |
@@ -102,8 +102,8 @@ For local personal mode, the coordinator and worker remain the same process. No 
 | Scheduler leadership | Process memory plus run/supervisor leases in SQLite | Add a durable `daemon_instances` or `scheduler_leadership` lease with owner, generation, expiration, heartbeat, and fencing token. |
 | Task and run state | `gateway.db` | Keep as the durable source of truth. Continue using transactional transitions and extend tests around leadership fencing. |
 | Channel checkpoints | `channel-sync.json` | Move delivery checkpoints, `seenMessageIds`, and `pendingInbound` into SQLite tables. Keep JSON only as a transitional compatibility shadow if needed. |
-| Recent events | `events.json` plus workflow events in SQLite | Store operator activity that affects recovery, replay, or audit in SQLite. Keep bounded JSON only as a derived cache or remove it. |
-| Session projection | `sessions.json` | Persist worker/session projection in SQLite with runtime owner, source daemon, last seen time, and recovery state. |
+| Recent events | `operational-sidecar.sqlite` + workflow events in `gateway.db` | H3 migrated (JOE-996). Keep operator activity that affects recovery/audit in gateway.db; operational ring buffer is sidecar SQLite. |
+| Session projection | `operational-sidecar.sqlite` | H4 migrated (JOE-996). Still needs runtime owner / recovery fields for exclusive multi-daemon ownership (residual with H1/H13). |
 | Notification locks | Process-local maps plus workflow events | Replace in-flight locks with durable send leases and dedupe receipts keyed by route, target, subject, and policy window. |
 | OpenCode sessions | Local OpenCode runtime | Add explicit runtime affinity. A worker can only act on sessions owned by its runtime, and the coordinator must route commands accordingly. |
 | Configuration | `config.json` | Keep local config simple. Cluster or hosted config should be opt-in and fail closed unless leadership, auth, and state migrations are complete. |
@@ -194,7 +194,7 @@ The current local beta does not include:
 These follow-ups are dependency-aware and should stay behind this design record:
 
 1. Persist channel-sync checkpoints and pending inbound state in `gateway.db`, with JSON shadow-read compatibility and backup/restore drill coverage.
-2. Persist the `sessions.json` worker/session projection in `gateway.db`, including runtime owner, last seen time, recovery status, and OpenCode session affinity.
+2. ~~Persist the `sessions.json` worker/session projection~~ — done in `operational-sidecar.sqlite` (JOE-996 H4). Follow-up: runtime owner / recovery fields for exclusive multi-daemon ownership.
 3. Add a scheduler leadership lease and daemon-instance health projection, then expose leader age, generation, and stale-leader warnings in readiness.
 4. Define the remote worker work/result packet contract and require coordinator-only durable state mutation.
 

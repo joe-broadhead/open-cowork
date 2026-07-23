@@ -13,8 +13,8 @@ Included files:
 - `gateway.db`
 - `channel-sync.json` when present
 - `channel-sync.json.sqlite` when present, containing durable channel delivery receipts and leases without message plaintext
-- `events.json` when present
-- `sessions.json` when present
+- `operational-sidecar.sqlite` when present (operational events, worker sessions, channel poll cursors)
+- `events.json` / `sessions.json` when present (legacy JSON; still backed up for older states)
 
 Metadata in `metadata.json` includes:
 
@@ -107,7 +107,7 @@ Backup verification checks:
 - `metadata.json` is present and parseable.
 - Backup format is supported.
 - Required manifest fields are present, including `version`, `schema.current`, `files`, and `checksum`.
-- Metadata references only known Gateway backup basenames: `gateway.db`, `channel-sync.json`, `channel-sync.json.sqlite`, `events.json`, and `sessions.json`.
+- Metadata references only known Gateway backup basenames: `gateway.db`, `channel-sync.json`, `channel-sync.json.sqlite`, `operational-sidecar.sqlite`, `events.json`, and `sessions.json`.
 - Every recorded file exists.
 - File sizes match metadata.
 - SHA-256 checksums match metadata.

@@ -71,8 +71,8 @@ The daemon keeps runtime wiring in `src/daemon.ts` and JSON route behavior in ex
 | `~/.config/opencode-gateway/gateway.db` | Authoritative SQLite source for durable work, runs, events, channel bindings, gates, alerts, and local daemon leadership. |
 | `~/.config/opencode-gateway/channel-sync.json.sqlite` | Transactional channel sync outbox for pending, leased, and delivered outbound sync messages. |
 | `~/.config/opencode-gateway/channel-sync.json` | Derived channel delivery checkpoint cache. |
-| `~/.config/opencode-gateway/events.json` | Recent in-process activity events. |
-| `~/.config/opencode-gateway/sessions.json` | Recent Gateway OpenCode session sidecar state. |
+| `~/.config/opencode-gateway/operational-sidecar.sqlite` | Operational events, worker session projection, channel poll cursors (JOE-996). |
+| `~/.config/opencode-gateway/events.json` / `sessions.json` | Legacy JSON (imported once into the operational sidecar if present). |
 | `~/.config/opencode-gateway/backups/` | Operator-created verified local backups. |
 | `~/.config/opencode-gateway/recovery-drills/` | Recovery drill evidence and reports. |
 | `~/.config/opencode-gateway/observability/` | Execution traces and stage analysis artifacts. |

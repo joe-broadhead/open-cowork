@@ -115,7 +115,7 @@ The following surfaces are **operator high-sensitivity** and must never be expos
 
 ## Multi-writer / HA limits (operator)
 
-Durable Gateway is a **single-writer** control plane per state directory. Helm charts refuse `replicaCount > 1` unless `gateway.experimentalDistributedOwnership=true` (lab-only; not multi-AZ HA). Process-local stream/replay maps and JSON sidecars (`sessions.json`, `channel-sync.json`, `events.json`) are **not** multi-writer safe. See [Multi-Daemon Scaling](../concepts/multi-daemon-scaling.md) and [Distributed ownership design](../concepts/distributed-ownership-design.md). Do not claim multi-AZ HA for Durable Gateway until the proving registry status is `ready` and migrate hazards are closed (JOE-949/963).
+Durable Gateway is a **single-writer** control plane per state directory. Helm charts refuse `replicaCount > 1` unless `gateway.experimentalDistributedOwnership=true` (lab-only; not multi-AZ HA). Process-local stream/replay maps and remaining multi-writer hazards (`channel-sync.json` coordination H1, notification in-flight H13) are **not** multi-writer safe. H3/H4/H8 operational telemetry, worker projection, and Telegram poll cursors use `operational-sidecar.sqlite` (JOE-996 progressive slice). See [Multi-Daemon Scaling](../concepts/multi-daemon-scaling.md) and [Distributed ownership design](../concepts/distributed-ownership-design.md). Do not claim multi-AZ HA for Durable Gateway until the proving registry status is `ready` and open migrate hazards are empty (JOE-949/963/996).
 
 Route, MCP, trusted-channel-command, and CLI capability classification is enforced in code by `src/security.ts` (`httpCapabilityForRequest`, `evaluateHttpRequestSecurity`) and `src/security-policy.ts`, covering local daemon routes, MCP groups, trusted-channel command groups, CLI groups, binding requirements, OpenCode-owned decision routing, and exposed-mode fail-closed invariants. Focused tests fail when a new surface is not classified. This is local evidence for the current single-operator boundary; it is not hosted/team RBAC certification.
 
@@ -322,8 +322,8 @@ Gateway writes config and sidecar files under `~/.config/opencode-gateway` with 
 - `gateway.db` (including the `gateway.db-wal` and `gateway.db-shm` SQLite sidecars, which are re-restricted on every write-open)
 - `channel-sync.json`
 - `channel-sync.json.sqlite`
-- `events.json`
-- `sessions.json`
+- `operational-sidecar.sqlite` (events / worker sessions / poll cursors)
+- `events.json` / `sessions.json` (legacy; imported once if present)
 
 ## OpenCode Permissions
 

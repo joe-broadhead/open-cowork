@@ -564,6 +564,7 @@ function gatewayFileStatus(): Record<string, unknown> {
     path.join(dir, 'gateway.db'),
     path.join(dir, 'channel-sync.json'),
     path.join(dir, 'channel-sync.json.sqlite'),
+    path.join(dir, 'operational-sidecar.sqlite'),
     path.join(dir, 'events.json'),
     path.join(dir, 'sessions.json'),
   ]

@@ -50,7 +50,9 @@ Work-store refuses stale epochs (`StaleWorkDbLeadershipError`). Channel claims a
 | Fenced SQLite mutations | **Implemented** | work-store epoch validation |
 | Multi-process DB tests | **Implemented** | `multi-process-store.test.ts` |
 | Channel-sync out of JSON multi-writer | **Partial** | Outbox SQLite companion exists; JSON still coordinates pendingInbound |
-| sessions.json / events.json migration | **Open** | Hazard H3/H4 |
+| sessions.json / events.json / telegram-polling migration | **Done (JOE-996)** | H3/H4/H8 → `operational-sidecar.sqlite` |
+| channel-sync JSON coordination | **Open** | Hazard H1 |
+| notification send leases | **Open** | Hazard H13 |
 | Proving suite gate for Helm experimental flag | **This design** | Suite must pass; claims script fail-closed |
 | Sidecar dual-write shadow then cutover | Planned | Follow multi-daemon state migration map |
 
@@ -88,7 +90,7 @@ Any PR that sets marketing language implying multi-AZ HA for Durable Gateway wit
 ## Rollout plan
 
 1. Keep single-replica production.
-2. Close H1/H3/H4/H8/H13 migrations behind fixtures.
+2. Close remaining open migrate hazards (H1, H13). H3/H4/H8 migrated to `operational-sidecar.sqlite` (JOE-996 progressive slice).
 3. Run proving suite in CI (`pnpm --filter cowork-gateway test` already includes multi-process + proving tests when present).
 4. Lab: writer/standby with experimental flag only.
 5. Only then revisit public multi-replica docs.

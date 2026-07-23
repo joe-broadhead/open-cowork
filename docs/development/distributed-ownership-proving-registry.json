@@ -37,7 +37,7 @@
       "purpose": "Fail closed on multi-AZ HA marketing language"
     }
   ],
-  "openMigrateHazards": ["H1", "H3", "H4", "H8", "H13"],
+  "openMigrateHazards": ["H1", "H13"],
   "marketingAllowedClaims": [
     "single-writer per state directory",
     "replicaCount 1 supported",

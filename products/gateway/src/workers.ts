@@ -1,25 +1,21 @@
-import * as fs from 'node:fs'
-import * as path from 'node:path'
-import { getConfigDir } from './config.js'
+/**
+ * Worker / session projection for Mission Control.
+ *
+ * JOE-996 / H4: authoritative persistence is operational-sidecar.sqlite
+ * (not sessions.json). Legacy sessions.json is imported once on first open.
+ */
+import {
+  loadWorkerSessions,
+  operationalSidecarPath,
+  replaceWorkerSessions,
+  type WorkerSessionRow,
+} from './operational-sidecar-store.js'
 import { openCodeFetch } from './opencode-client.js'
 
-export interface WorkerState {
-  id: string
-  title: string
-  parentId: string
-  status: 'running' | 'idle' | 'completed' | 'errored' | 'unknown'
-  startedAt: string
-  lastCheck: string
-  lastTodo: string | null
-  lastMessage: string | null
-}
+export type WorkerState = WorkerSessionRow
 
 const workers = new Map<string, WorkerState>()
 let loaded = false
-
-function workerStorePath(): string {
-  return path.join(process.env['OPENCODE_GATEWAY_STATE_DIR'] || getConfigDir(), 'sessions.json')
-}
 
 function ensureLoaded(): void {
   if (!loaded) loadWorkerState()
@@ -30,7 +26,6 @@ export function trackWorker(state: WorkerState): void {
   workers.set(state.id, state)
   saveWorkerState()
 }
-
 
 export function updateWorker(id: string, patch: Partial<Omit<WorkerState, 'id'>>): void {
   ensureLoaded()
@@ -46,7 +41,6 @@ export function listWorkers(): WorkerState[] {
     .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
 }
 
-
 export function getWorkerCounts(): { total: number; running: number; idle: number; completed: number } {
   const all = listWorkers()
   return {
@@ -57,34 +51,23 @@ export function getWorkerCounts(): { total: number; running: number; idle: numbe
   }
 }
 
-export function loadWorkerState(filePath = workerStorePath()): WorkerState[] {
+export function loadWorkerState(_filePath?: string): WorkerState[] {
   loaded = true
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-    const rows = Array.isArray(parsed?.sessions) ? parsed.sessions : []
+    const rows = loadWorkerSessions()
     workers.clear()
-    for (const row of rows) {
-      if (isWorkerState(row)) workers.set(row.id, row)
-    }
-  } catch {}
+    for (const row of rows) workers.set(row.id, row)
+  } catch {
+    // Fail closed to empty map on corrupt/missing store (same as prior JSON).
+  }
   return Array.from(workers.values())
 }
 
-export function saveWorkerState(filePath = workerStorePath()): void {
-  let tmp = ''
+export function saveWorkerState(_filePath?: string): void {
   try {
-    const dir = path.dirname(filePath)
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
-    try { fs.chmodSync(dir, 0o700) } catch {}
-    const rows = Array.from(workers.values())
-      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-      .slice(0, 200)
-    tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`
-    fs.writeFileSync(tmp, JSON.stringify({ savedAt: new Date().toISOString(), sessions: rows }, null, 2), { mode: 0o600 })
-    fs.renameSync(tmp, filePath)
-    try { fs.chmodSync(filePath, 0o600) } catch {}
+    replaceWorkerSessions(Array.from(workers.values()))
   } catch {
-    if (tmp) try { fs.rmSync(tmp, { force: true }) } catch {}
+    // Best-effort projection — do not take down the daemon.
   }
 }
 
@@ -144,23 +127,17 @@ function hasSessionActivity(session: any): boolean {
     tokens.output > 0 ||
     tokens.reasoning > 0 ||
     tokens.cache?.read > 0 ||
-    tokens.cache?.write > 0
-  )
-}
-
-function isWorkerState(row: any): row is WorkerState {
-  return Boolean(
-    row &&
-    typeof row.id === 'string' &&
-    typeof row.title === 'string' &&
-    typeof row.parentId === 'string' &&
-    ['running', 'idle', 'completed', 'errored', 'unknown'].includes(row.status) &&
-    typeof row.startedAt === 'string' &&
-    typeof row.lastCheck === 'string'
+    tokens.cache?.write > 0,
   )
 }
 
 export function clearWorkersForTest(): void {
+  // Memory only — persist/reload tests call loadWorkerState after clear.
   loaded = true
   workers.clear()
+}
+
+/** Path of the durable operational sidecar (tests / diagnostics). */
+export function workerSessionsStorePath(): string {
+  return operationalSidecarPath()
 }
