@@ -1,12 +1,14 @@
 # Private-beta launch / ops evidence package
 
-**Date:** 2026-07-21
+**Date:** 2026-07-21 (campaign path refreshed 2026-07-23 / JOE-993)
 **Linear epic:** JOE-922
+**Campaign path:** [JOE-993](https://linear.app/joe-broadhead/issue/JOE-993/launch-private-beta-campaign-evidence-path-unlock-hosted-go)
 **Children:** JOE-958 (load/soak), JOE-960 (restore), JOE-961 (BYOK), JOE-968 (support), JOE-971 (go/no-go)
-**HEAD:** `0f28fb8836230907cfee7e9028bcaf648da8a5e3` (`fix/milestone-post-958-quality-signal`)
 **Profile:** `private-beta` (design-partner managed BYOK)
 **Public claim tier:** remains **`local-self-host-beta` only**
 **Hosted private-beta decision:** **`no-go`** until private ops records pass (see `deploy/private-beta/private-beta-go-no-go.public.md`)
+**Operator checklist:** `deploy/private-beta/private-campaign-evidence-checklist.md`
+**Redacted summary template:** `deploy/private-beta/redacted-evidence-summary.template.md`
 
 This package is the **public-repo** side of JOE-922. Real customer logs, domains, digests from a live target, support rosters, and metrics exports stay outside this repository per `docs/runbooks/managed-byok-saas-boundary.md`.
 

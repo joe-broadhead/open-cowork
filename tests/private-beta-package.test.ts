@@ -12,6 +12,28 @@ function readJson(path: string) {
   return JSON.parse(readRepoFile(path))
 }
 
+test('JOE-993 private campaign evidence path is wired and stays no-go', () => {
+  const checklist = readRepoFile('deploy/private-beta/private-campaign-evidence-checklist.md')
+  for (const phrase of [
+    'JOE-993',
+    'Does not unlock hosted go',
+    'pending-private-evidence',
+    'deployedLoadTest',
+    'redacted-evidence-summary.template.md',
+  ]) {
+    assert.match(checklist, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+
+  const summary = readRepoFile('deploy/private-beta/redacted-evidence-summary.template.md')
+  assert.match(summary, /Does not alone flip hosted private-beta go/)
+  assert.match(summary, /Private evidence checksum/)
+
+  const goNoGo = readRepoFile('deploy/private-beta/private-beta-go-no-go.public.md')
+  assert.match(goNoGo, /Decision: `no-go`/)
+  assert.match(goNoGo, /JOE-993/)
+  assert.doesNotMatch(goNoGo, /Decision: `go`/)
+})
+
 test('private beta launch package documents managed and self-host promises', () => {
   const launch = readRepoFile('docs/runbooks/private-beta-launch.md')
   for (const phrase of [
