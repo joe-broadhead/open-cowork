@@ -88,6 +88,7 @@ const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
   'startup-splash.ts',
   'voice-capture.ts',
   'voice-host.ts',
+  'voice-partial-window.ts',
   'voice-pcm-buffer.ts',
   'voice-permission-policy.ts',
   'voice-stt.ts',

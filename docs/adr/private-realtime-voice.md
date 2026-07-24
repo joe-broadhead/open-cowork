@@ -66,6 +66,7 @@ Rules:
 5. **Capture (JOE-1097):** host accumulates mono **16 kHz f32** PCM in main (`VoicePcmBuffer`). Default backend is **ffmpeg** when available; tests inject `FakeVoiceCapture`. PCM is cleared on stop/cancel and is never sent to the renderer.
 6. **STT (JOE-1101):** on release/stop, host runs **Aurum** with **local provider only** (`--provider local`, cleanup via rules). Default model `tiny-q5_1`. **local_only** fail-closed unless `OPEN_COWORK_AURUM_ALLOW_DOWNLOAD=1`. OpenRouter/cloud ASR is never on the default path. Final text is emitted as a `voice:event` final payload (text only).
 7. **PTT UI (JOE-1105):** Chat and Home composers show a mic control when `features.voice` is on **and** the workspace support matrix allows `voice.capture` + `voice.stt` (Desktop Local). **Click-to-toggle** is the shipped interaction (start → Listening → click again → Transcribing → inject text into the composer). Control is hidden on Cloud Web / unsupported authorities.
+8. **Partials during PTT (JOE-1102):** While listening, the host runs a **PartialClock** (min ~1s audio, ~15s rolling window, ~1.2s interval, RMS energy gate) and emits `voice:event` **partial** payloads (text only). This is **not** a continuous Whisper stream — the host decides when to call STT. The composer snapshots a **baseline** at PTT start; partials/finals replace the dictation segment after the baseline (cancel/error restores baseline).
 
 ### 4. Workspace support APIs
 

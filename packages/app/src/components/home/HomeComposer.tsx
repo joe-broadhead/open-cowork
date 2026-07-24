@@ -59,6 +59,8 @@ export function HomeComposer({
   modelControlsReason?: string | null
 }) {
   const [text, setText] = useState('')
+  const textRef = useRef(text)
+  textRef.current = text
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [showModelMenu, setShowModelMenu] = useState(false)
@@ -121,8 +123,9 @@ export function HomeComposer({
 
   const voice = useVoicePtt({
     openCodeSessionId: null,
-    onFinalText: (dictated) => {
-      setText((current) => (current.trim() ? `${current.trimEnd()} ${dictated}` : dictated))
+    getComposerText: () => textRef.current,
+    setComposerText: (next) => {
+      setText(next)
       requestAnimationFrame(() => autosize())
     },
     onError: (message) => addGlobalError(message),
