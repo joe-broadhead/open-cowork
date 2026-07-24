@@ -6,6 +6,7 @@ import {
   buildFfmpegCaptureArgs,
 } from '../apps/desktop/src/main/voice-capture.ts'
 import { VoiceHost } from '../apps/desktop/src/main/voice-host.ts'
+import { FakeVoiceStt } from '../apps/desktop/src/main/voice-stt.ts'
 
 test('voice pcm buffer rolls and reports host-only stats', () => {
   const buf = new VoicePcmBuffer(8)
@@ -42,6 +43,7 @@ test('voice host captures PCM with fake backend without exposing samples on stat
   const host = new VoiceHost({
     features: { voice: true },
     capture: fake,
+    stt: new FakeVoiceStt({ text: 'capture test' }),
     probeMicrophone: async () => 'granted',
     onEvent: (e) => events.push(e),
   })
@@ -50,7 +52,7 @@ test('voice host captures PCM with fake backend without exposing samples on stat
   assert.equal(idle.enabled, true)
   assert.equal(idle.phase, 'ready')
   assert.equal(idle.capture?.backend, 'fake')
-  assert.equal(idle.stt.ready, false)
+  assert.equal(idle.stt.ready, true)
 
   const session = await host.startSession({ mode: 'ptt', openCodeSessionId: 'sess-1' })
   assert.equal(session.phase, 'listening')
@@ -82,6 +84,7 @@ test('voice host refuses start when feature flag off', async () => {
   const host = new VoiceHost({
     features: {},
     capture: new FakeVoiceCapture(),
+    stt: new FakeVoiceStt(),
     probeMicrophone: async () => 'granted',
   })
   await assert.rejects(() => host.startSession(), /disabled/i)
@@ -91,6 +94,7 @@ test('voice host fails closed on denied microphone', async () => {
   const host = new VoiceHost({
     features: { voice: true },
     capture: new FakeVoiceCapture(),
+    stt: new FakeVoiceStt(),
     probeMicrophone: async () => 'denied',
   })
   await assert.rejects(() => host.startSession(), /Microphone permission/i)
@@ -102,6 +106,7 @@ test('voice host cancel clears buffer mid-session', async () => {
   const host = new VoiceHost({
     features: { voice: true },
     capture: fake,
+    stt: new FakeVoiceStt(),
     probeMicrophone: async () => 'granted',
   })
   const session = await host.startSession()

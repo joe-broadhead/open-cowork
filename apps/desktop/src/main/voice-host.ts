@@ -1,8 +1,8 @@
 /**
- * Desktop Local private voice host (JOE-1097).
+ * Desktop Local private voice host (JOE-1097 / JOE-1101).
  *
- * Owns mic capture + PCM in main. Emits text/status events only — never raw audio.
- * STT (Aurum) remains deferred until V1.2.
+ * Owns mic capture + PCM + Aurum STT in main. Emits text/status events only —
+ * never raw audio.
  */
 import { randomUUID } from 'node:crypto'
 import {
@@ -20,10 +20,17 @@ import {
   type VoiceCaptureBackendId,
 } from './voice-capture.ts'
 import { VoicePcmBuffer } from './voice-pcm-buffer.ts'
+import {
+  createDefaultVoiceStt,
+  sttLogMeta,
+  type VoiceSttEngine,
+} from './voice-stt.ts'
+import { log } from '@open-cowork/shared/node'
 
 export type VoiceHostOptions = {
   features?: DesktopFeatureFlags
   capture?: VoiceCapture
+  stt?: VoiceSttEngine
   now?: () => Date
   /** Override OS mic permission probe (tests). */
   probeMicrophone?: () => Promise<VoicePermissionState>
@@ -37,6 +44,7 @@ type ActiveSession = VoiceSessionSnapshot & {
 export class VoiceHost {
   private features: DesktopFeatureFlags | undefined
   private capture: VoiceCapture
+  private stt: VoiceSttEngine
   private readonly now: () => Date
   private readonly probeMicrophone: () => Promise<VoicePermissionState>
   private readonly onEvent: (event: VoiceHostEvent) => void
@@ -44,10 +52,12 @@ export class VoiceHost {
   private session: ActiveSession | null = null
   private phase: VoiceHostStatus['phase'] = 'disabled'
   private lastError: string | null = null
+  private lastTranscript: string | null = null
 
   constructor(options: VoiceHostOptions = {}) {
     this.features = options.features
     this.capture = options.capture || createDefaultVoiceCapture()
+    this.stt = options.stt || createDefaultVoiceStt()
     this.now = options.now || (() => new Date())
     this.probeMicrophone = options.probeMicrophone || defaultProbeMicrophone
     this.onEvent = options.onEvent || (() => {})
@@ -69,15 +79,22 @@ export class VoiceHost {
     this.capture = capture
   }
 
+  setStt(stt: VoiceSttEngine) {
+    this.stt = stt
+  }
+
   getStatus(): VoiceHostStatus {
     const enabled = isDesktopFeatureEnabled(this.features, 'voice')
     const captureBackend = this.capture.backend
     const captureReady = captureBackend !== 'unavailable'
-    const sttReady = false
+    const sttReady = this.stt.isReady()
     let phase = this.phase
     if (!enabled) phase = 'disabled'
-    else if (this.session) phase = this.phase === 'listening' ? 'listening' : this.phase
-    else if (phase === 'listening') phase = 'ready'
+    else if (this.session) {
+      // keep current listening/transcribing
+    } else if (phase === 'listening' || phase === 'transcribing') {
+      phase = 'ready'
+    }
 
     let reason: string | null = null
     if (!enabled) {
@@ -85,12 +102,12 @@ export class VoiceHost {
     } else if (!captureReady) {
       reason = this.capture.detail
     } else if (!sttReady) {
-      reason = 'Capture host ready; Aurum STT not wired yet (V1.2).'
+      reason = this.stt.detail
     }
 
     if (this.lastError) {
       reason = this.lastError
-      if (phase !== 'listening') phase = 'error'
+      if (phase !== 'listening' && phase !== 'transcribing') phase = 'error'
     }
 
     const stats = this.session?.buffer.stats()
@@ -99,9 +116,9 @@ export class VoiceHost {
       phase,
       captureMode: 'voice_host',
       stt: {
-        engine: 'aurum_local',
-        ready: false,
-        detail: 'Aurum STT not wired yet',
+        engine: this.stt.backend === 'unavailable' ? 'unavailable' : 'aurum_local',
+        ready: sttReady,
+        detail: this.stt.detail,
       },
       tts: {
         engine: 'sibling',
@@ -136,10 +153,11 @@ export class VoiceHost {
       throw new Error('Private voice is disabled. Set features.voice to true in open-cowork.config.json to opt in.')
     }
     if (this.session) {
-      await this.stopSession(this.session.id)
+      await this.cancel(this.session.id)
     }
 
     this.lastError = null
+    this.lastTranscript = null
     this.phase = 'starting'
     this.emitStatus()
 
@@ -203,19 +221,56 @@ export class VoiceHost {
     }
 
     await this.capture.stop()
-    // PCM remains host-only until STT; drop after stop for privacy.
-    const frames = active.buffer.frameCount
+    const pcm = active.buffer.snapshot()
+    const sessionIdFinal = active.id
     active.buffer.clear()
-    this.session = null
-    this.phase = 'ready'
-    this.lastError = null
-    // Record frames in a one-shot status reason for operators/tests without retaining audio.
-    if (frames === 0) {
-      this.lastError = null
-    }
+
+    // Transcribe before dropping the session id so final events stay correlated.
+    this.phase = 'transcribing'
+    this.session = { ...active, phase: 'transcribing', buffer: new VoicePcmBuffer() }
     this.emitStatus()
-    // Clear transient note — status already emitted with final frames via getStatus before clear...
-    // Re-emit with zero frames after clear is intentional (audio not retained).
+
+    try {
+      if (pcm.length > 0) {
+        if (!this.stt.isReady()) {
+          throw new Error(this.stt.detail)
+        }
+        const result = await this.stt.transcribePcm(pcm)
+        this.lastTranscript = result.text
+        // Log metadata only — never transcript body or PCM.
+        log('voice', `stt.final ${JSON.stringify(sttLogMeta(result))}`)
+        this.onEvent({
+          type: 'final',
+          event: {
+            sessionId: sessionIdFinal,
+            text: result.text,
+            isFinal: true,
+            at: this.now().toISOString(),
+          },
+        })
+      } else {
+        this.lastTranscript = ''
+        this.onEvent({
+          type: 'final',
+          event: {
+            sessionId: sessionIdFinal,
+            text: '',
+            isFinal: true,
+            at: this.now().toISOString(),
+          },
+        })
+      }
+      this.lastError = null
+      this.phase = 'ready'
+    } catch (error) {
+      this.phase = 'error'
+      this.lastError = error instanceof Error ? error.message : String(error)
+      this.emitError(sessionIdFinal, this.lastError)
+    } finally {
+      this.session = null
+      this.emitStatus()
+    }
+
     return this.getStatus()
   }
 
@@ -232,13 +287,21 @@ export class VoiceHost {
     return this.getStatus()
   }
 
-  /** Host-only access for STT wiring (V1.2). Never expose via IPC. */
+  /** Host-only access for STT/tests. Never expose via IPC. */
   getHostPcmSnapshot(): Float32Array | null {
     return this.session ? this.session.buffer.snapshot() : null
   }
 
+  getLastTranscript(): string | null {
+    return this.lastTranscript
+  }
+
   getCaptureBackend(): VoiceCaptureBackendId {
     return this.capture.backend
+  }
+
+  getSttBackend() {
+    return this.stt.backend
   }
 
   private publicSession(session: ActiveSession): VoiceSessionSnapshot {
@@ -268,12 +331,9 @@ export class VoiceHost {
 
 async function defaultProbeMicrophone(): Promise<VoicePermissionState> {
   if (process.platform !== 'darwin') {
-    // Non-macOS: Electron media access APIs are limited; assume unknown
-    // until capture backend fails closed.
     return 'unknown'
   }
   try {
-    // Lazy import so unit tests can load VoiceHost without a full Electron runtime.
     const { systemPreferences } = await import('electron')
     const status = systemPreferences.getMediaAccessStatus('microphone')
     if (status === 'granted') return 'granted'

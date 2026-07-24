@@ -90,6 +90,7 @@ const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
   'voice-host.ts',
   'voice-pcm-buffer.ts',
   'voice-permission-policy.ts',
+  'voice-stt.ts',
   'window-state.ts',
   'window-zoom.ts',
   'workspace-gateway-cloud-artifacts.ts',

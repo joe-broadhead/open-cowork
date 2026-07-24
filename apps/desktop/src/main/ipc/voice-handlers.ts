@@ -2,7 +2,7 @@
  * Private realtime voice IPC (JOE-1096 / JOE-1097).
  *
  * Capture + PCM live in VoiceHost (main). IPC returns status/session text only —
- * never raw audio. STT remains deferred until Aurum is wired (V1.2).
+ * never raw audio. STT runs via Aurum local_only on stop (JOE-1101).
  */
 import {
   isDesktopFeatureEnabled,

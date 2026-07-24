@@ -148,7 +148,7 @@ export const VOICE_HOST_DEFERRED_REASON =
   'Private voice host is scaffolded; STT/TTS engines are not connected yet. Keep features.voice off until V1 engines land.'
 
 export const VOICE_STT_DEFERRED_REASON =
-  'Capture host ready; Aurum STT not wired yet (V1.2).'
+  'Aurum STT not ready: install aurum CLI and cache tiny-q5_1 (local_only), or set OPEN_COWORK_AURUM_BIN.'
 
 /**
  * Derive host status from feature flags alone (no live capture). Used by
@@ -165,5 +165,10 @@ export function voiceHostStatusForFeatures(features: { voice?: boolean } | undef
     ...status,
     enabled,
     phase: enabled ? 'ready' : 'disabled',
+    stt: {
+      engine: 'aurum_local',
+      ready: false,
+      detail: enabled ? VOICE_STT_DEFERRED_REASON : 'features.voice is disabled',
+    },
   }
 }
