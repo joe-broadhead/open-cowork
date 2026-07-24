@@ -1,15 +1,15 @@
 # Channel stack ownership (products/gateway vs monorepo providers)
 
-**Status:** Dual-stack **protocol freeze** retained (intentional residual, not incomplete P1)
+**Status:** Dual-stack **protocol freeze** retained (intentional residual, not incomplete P1). JOE-994 façades **Done**; native decommission **Won't Do** while defaults stay Durable.
 **Security body:** **Done** — shared verify kernels + rate-limit primitives in `@open-cowork/shared/node` (JOE-934 / post-#958/#959)
 **Related:** dual-stack security guard `scripts/check-dual-channel-security.mjs`; shared kernels in `@open-cowork/shared/node`
 
-## Disposition (post-#959)
+## Disposition (post-#959 / post-JOE-994)
 
 | Layer | Status | Meaning |
 | --- | --- | --- |
 | **Security body** (signature verify, Meta/Discord/Telegram/Slack kernels, rate-limit algorithm) | **Done** | Shared; dual-fix checklist still required for security PRs |
-| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Phase 2–3 opt-in façades** | Telegram native monorepo provider; Discord/WhatsApp monorepo **bridge** façades. Defaults remain Durable native. **Intentional residual freeze** on decommissioning native adapters until monorepo is default. |
+| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Opt-in façades + freeze** | Telegram native monorepo; Discord/WhatsApp monorepo **bridge**. Defaults remain Durable native. **Intentional residual freeze** — native decommission is Won't Do until product flips default. |
 
 ## Two stacks (intentional)
 
@@ -30,14 +30,15 @@ be casually dual-fixed. Security and protocol bugs need an explicit owner.
 | Durable Gateway (cowork-gateway) inbound/outbound chat | products/gateway channels | monorepo providers (unless migrating) |
 | Shared crypto / rate-limit / retry primitives | `packages/gateway-channel` or `@open-cowork/shared` | copy-paste into either stack |
 
-## Protocol migration (future epic — not open P1)
+## Protocol migration (JOE-994 closed — not open P1)
 
-Preferred long-term: products/gateway composes `gateway-provider-*` instead of
-local `channels/*`. That is a large product change and is **out of band** for
-security body work (already shared). Track as a dedicated capacity epic when
-ready — **do not re-open as incomplete dual-stack security P1**.
+JOE-994 shipped opt-in composition façades and shared policy. Native Durable
+adapters remain the default; full monorepo-as-default / native decommission is
+**Won't Do** for this epic (product/ops readiness required). Do **not** re-open
+as incomplete dual-stack security P1.
 
-**Epic plan:** [product-channel-protocol-unification.md](product-channel-protocol-unification.md)
+**Epic plan / residual register:**
+[product-channel-protocol-unification.md](product-channel-protocol-unification.md)
 ([JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)).
 Inventory guard: `node scripts/check-channel-protocol-inventory.mjs`.
 
@@ -56,8 +57,9 @@ Durable product policy (trust allowlists, claims, denial probes) is shared via
 `channels/channel-inbound-policy.ts` on all stacks. Security kernels remain in
 `@open-cowork/shared/node`.
 
-Native adapter decommission is still residual until monorepo (or bridge relays)
-are product-default.
+Native adapter decommission is **Won't Do** until monorepo (or bridge relays)
+are product-default. Until then, dual-stack security checklist remains required
+for channel security PRs.
 
 ### Shared security kernel (2026-07-21)
 
