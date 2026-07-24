@@ -23,12 +23,10 @@ import {
 } from '../operational-sidecar-store.js'
 import { queueEvent } from '../wakeup.js'
 import { appendWorkEvent, listRecentWorkEvents } from '../work-store.js'
-import { appendChannelInboundDenialAudit } from '../channel-audit.js'
-import { isTransientInboundError, isTrustedChannelTarget, redactedChannelTargetLabel, redactSensitiveText } from '../security.js'
-import { acceptChannelClaimFromMessage, acceptChannelDenialProbeFromMessage } from '../channel-claims.js'
-import { isPreTrustChannelCommandText } from '../channel-commands.js'
+import { isTransientInboundError, redactSensitiveText } from '../security.js'
 import { CHANNEL_ACTION_TYPING_HEARTBEAT_MS, CHANNEL_ACTION_TYPING_TIMEOUT_MS, telegramNativeSlashCommandManifest } from '../channel-actions.js'
 import { fetchWithTimeout } from '../deadlines.js'
+import { processDurableTelegramInbound } from './telegram-inbound-policy.js'
 
 let handler: ((msg: ChannelMessage) => Promise<void>) | null = null
 let polling = false
@@ -371,47 +369,17 @@ async function handleTelegramInboundMessage(update: any, rawMessage: any, text: 
     attachments: [],
     timestamp: new Date(timestampSeconds * 1000).toISOString(),
   }
-  const denialProbe = acceptChannelDenialProbeFromMessage(msg)
-  if (denialProbe.status === 'accepted') {
-    queueEvent(`Telegram denial probe accepted: ${redactedChannelTargetLabel('telegram', chatId, threadId)}`)
-    return
-  }
-  if (denialProbe.status === 'denied') return
-  if (!isTrustedChannelTarget('telegram', chatId, threadId, getConfig())) {
-    const claim = acceptChannelClaimFromMessage(msg)
-    if (claim.status === 'accepted') {
-      queueEvent(`Telegram claim accepted: ${redactedChannelTargetLabel('telegram', chatId, threadId)}`)
-      return
-    }
-    if (claim.status === 'denied') return
-    if (isPreTrustChannelCommandText(msg.text)) {
-      await inboundHandler(msg)
-      return
-    }
-    const target = redactedChannelTargetLabel('telegram', chatId, threadId)
-    queueEvent(`Telegram rejected untrusted inbound: ${target}`)
-    safeAuditInboundDenial('telegram', chatId, threadId)
-    return
-  }
-  // A valid claim code from an already-trusted target heals allowlist rules
-  // created before per-sender actor policies existed by merging the claimant
-  // into the rule's userIds (see addTrustedTarget in channel-claims).
-  const trustedClaim = acceptChannelClaimFromMessage(msg)
-  if (trustedClaim.status === 'accepted') {
-    queueEvent(`Telegram claim accepted: ${redactedChannelTargetLabel('telegram', chatId, threadId)}`)
-    return
-  }
-  if (trustedClaim.status === 'denied') return
-  const token = getToken()
-  if (!token) {
-    await inboundHandler(msg)
-    return
-  }
-  await withTelegramTyping(getApi(token), chatId, threadId, () => inboundHandler(msg))
-}
-
-function safeAuditInboundDenial(provider: string, chatId: string, threadId?: string): void {
-  try { appendChannelInboundDenialAudit({ provider, chatId, threadId }) } catch {}
+  await processDurableTelegramInbound(msg, {
+    deliver: (accepted) => inboundHandler(accepted),
+    withTyping: async (accepted, task) => {
+      const token = getToken()
+      if (!token) {
+        await task()
+        return
+      }
+      await withTelegramTyping(getApi(token), accepted.chatId, accepted.threadId, task)
+    },
+  })
 }
 
 async function registerTelegramCommands(api: string): Promise<void> {

@@ -221,7 +221,12 @@ const zScheduler = z.object({
 
 const zChannels = z.object({
   richMessages: z.object({ enabled: zBoolean }),
-  telegram: z.object({ botToken: zString.optional(), richMessages: z.object({ enabled: zBoolean }).optional() }),
+  telegram: z.object({
+    botToken: zString.optional(),
+    richMessages: z.object({ enabled: zBoolean }).optional(),
+    /** JOE-994 Phase 2: durable (default) | monorepo provider façade. Env OPEN_COWORK_TELEGRAM_PROTOCOL_STACK overrides. */
+    protocolStack: z.enum(['durable', 'monorepo']).optional(),
+  }),
   whatsapp: zStringRecord(z.unknown()),
   discord: z.object({
     enabled: zBoolean,
