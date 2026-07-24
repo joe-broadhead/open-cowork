@@ -371,7 +371,7 @@ export function App() {
 
     setResourceNavigationNotice({
       status: 'unavailable',
-      message: action.message || 'Exact navigation for this resource is not available yet.',
+      message: action.message || 'Open Cowork cannot open this deep link here. Use the sidebar to navigate.',
     })
   }, [activateExactWorkspace, navigateView, openExistingThread, openSidebarSettings])
 
