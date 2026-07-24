@@ -20,6 +20,7 @@ import {
 } from './chat-input-utils'
 import { useChatRuntimeSelection, useComposerExternalEvents, useMentionableAgents, useReasoningVariantSelection } from './useChatInputRuntime'
 import { usePromptHistory } from './usePromptHistory'
+import { useVoicePtt } from '../../hooks/useVoicePtt'
 
 function describeComposerError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -192,6 +193,15 @@ export function ChatInput() {
     element.style.height = 'auto'
     element.style.height = `${Math.min(element.scrollHeight, getComposerTextareaMaxHeight(element))}px`
   }, [])
+
+  const voice = useVoicePtt({
+    openCodeSessionId: currentSessionId,
+    onFinalText: (text) => {
+      setInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${text}` : text))
+      requestAnimationFrame(() => resizeComposerTextarea())
+    },
+    onError: (message) => addGlobalError(message),
+  })
 
   const addFiles = async (files: FileList | File[]) => {
     if (!workspaceSupport.flags.canAttachFiles) {
@@ -383,6 +393,12 @@ export function ChatInput() {
         setInlinePicker(null)
         return
       }
+    }
+
+    if (e.key === 'Escape' && voice.isActive) {
+      e.preventDefault()
+      void voice.cancel()
+      return
     }
 
     if (e.key === 'Escape' && isGenerating) {
@@ -593,6 +609,7 @@ export function ChatInput() {
             modelControlsManaged={runtimeControlsManaged}
             modelControlsReason={workspaceSupport.flags.reasons.machineRuntimeConfig}
             reasoningControlsManaged={runtimeControlsManaged}
+            voice={voice}
             onAddFiles={addFiles}
             onToggleModelMenu={() => {
               if (runtimeControlsManaged) return
