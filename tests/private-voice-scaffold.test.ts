@@ -103,7 +103,7 @@ test('private voice: host status scaffold reflects flag + STT deferred', () => {
   const on = voiceHostStatusForFeatures({ voice: true })
   assert.equal(on.enabled, true)
   assert.equal(on.phase, 'ready')
-  assert.match(on.reason || '', /Aurum STT|V1\.2/i)
+  assert.match(on.reason || '', /Aurum STT|aurum CLI|tiny-q5_1/i)
 
   const deferred = createDeferredVoiceHostStatus(VOICE_HOST_DEFERRED_REASON)
   assert.equal(deferred.phase, 'deferred')
