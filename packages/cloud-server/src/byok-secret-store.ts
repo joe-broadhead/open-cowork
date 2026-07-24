@@ -229,7 +229,10 @@ export function createByokSecretStore(
 ): ByokSecretStore {
   const ids = options.ids || { randomUUID }
   const validators = options.validators || {}
-  const activateUnvalidatedProviders = options.activateUnvalidatedProviders ?? false
+  // Default true matches the no-validator branch comment: trust the user's own
+  // credential rather than bricking it as `unsupported`. Strict deployments can
+  // set activateUnvalidatedProviders: false to require a validator per provider.
+  const activateUnvalidatedProviders = options.activateUnvalidatedProviders ?? true
 
   async function revealSecretRecord(secret: ByokSecretRecord, input: RevealByokSecretInput) {
     if (secret.ciphertext) {

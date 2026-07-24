@@ -603,10 +603,11 @@ async function createSetupWorkflow(options) {
   }, options.cloudToken, {
     title: `Launch readiness workflow ${new Date().toISOString()}`,
     instructions: 'Return a short launch readiness acknowledgement.',
-    agentName: options.agent,
+    agentName: options.agent || 'build',
     skillNames: [],
     toolIds: [],
-    triggers: [],
+    // Server validation rejects empty triggers before the manual default is applied.
+    triggers: [{ type: 'manual', enabled: true }],
   })
   const workflowId = extractWorkflowId(result.body)
   if (!workflowId) {

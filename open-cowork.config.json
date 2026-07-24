@@ -22,7 +22,7 @@
         "runtime": "builtin",
         "name": "OpenRouter",
         "description": "Use OpenRouter to access models through a single API key.",
-        "defaultModel": "qwen/qwen3-coder-flash",
+        "defaultModel": "anthropic/claude-sonnet-4",
         "credentials": [
           {
             "key": "apiKey",
@@ -77,7 +77,7 @@
       }
     },
     "defaultProvider": "openrouter",
-    "defaultModel": "qwen/qwen3-coder-flash",
+    "defaultModel": "anthropic/claude-sonnet-4",
     "custom": {}
   },
   "updates": {

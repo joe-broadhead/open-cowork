@@ -14,6 +14,8 @@ services:
       OPEN_COWORK_CLOUD_ROLE: all-in-one
       OPEN_COWORK_CLOUD_PROFILE: full
       OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: local
+      # pnpm places the OpenCode CLI under node_modules; managed prompts need it on PATH.
+      PATH: /app/node_modules/.pnpm/node_modules/.bin:/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # Default to the in-container mount targets so a config dropped at the advertised
       # bind-mount path is actually loaded out-of-box. An explicit external value still
       # wins, and the volume mounts the same path.
@@ -98,10 +100,12 @@ services:
       OPEN_COWORK_GATEWAY_PRODUCT_MODE: cloud_channel
       OPEN_COWORK_GATEWAY_MODE: self-host
       OPEN_COWORK_GATEWAY_LOG_LEVEL: info
-      OPEN_COWORK_GATEWAY_METRICS_ENABLED: "false"
+      # Local compose lab defaults: metrics + fake provider on for drills.
+      # Production overlays should pin false and network-restrict metrics/fake.
+      OPEN_COWORK_GATEWAY_METRICS_ENABLED: ${OPEN_COWORK_GATEWAY_METRICS_ENABLED:-true}
       OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED: "false"
-      OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: ${OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER:-false}
-      OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER: ${OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER:-false}
+      OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: ${OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER:-true}
+      OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER: ${OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER:-true}
       OPEN_COWORK_GATEWAY_FAKE_CHANNEL_BINDING_ID: ${OPEN_COWORK_GATEWAY_FAKE_CHANNEL_BINDING_ID:-fake-binding}
       OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: ${OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN:-}
       OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID: ${OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID:-telegram}

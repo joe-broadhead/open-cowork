@@ -1116,7 +1116,9 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
     server = await createNodeManagedOpencodeServer({
       hostname: options.hostname || '127.0.0.1',
       port: options.port ?? 0,
-      timeout: options.timeout ?? 5000,
+      // Match desktop managed-server allowance: cold OpenCode + MCP/fs scans
+      // commonly take 8–15s; 5s leaves zombies and flaky cloud prompts.
+      timeout: options.timeout ?? 30_000,
       config: serverConfig,
       env,
       cwd: options.cwd || options.paths.getRuntimeHomeDir(),

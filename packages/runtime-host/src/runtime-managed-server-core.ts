@@ -268,7 +268,8 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
   const resolved = {
     hostname: '127.0.0.1',
     port: 4096,
-    timeout: 5000,
+    // Default matches desktop/cloud cold-start needs; callers can still override.
+    timeout: 30_000,
     ...options,
   }
   const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]
