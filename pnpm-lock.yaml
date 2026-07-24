@@ -709,9 +709,15 @@ importers:
       '@open-cowork/gateway-channel':
         specifier: workspace:*
         version: link:../../packages/gateway-channel
+      '@open-cowork/gateway-provider-discord':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-discord
       '@open-cowork/gateway-provider-telegram':
         specifier: workspace:*
         version: link:../../packages/gateway-provider-telegram
+      '@open-cowork/gateway-provider-whatsapp':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-whatsapp
       '@open-cowork/shared':
         specifier: workspace:*
         version: link:../../packages/shared

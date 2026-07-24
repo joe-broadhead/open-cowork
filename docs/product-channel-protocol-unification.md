@@ -1,6 +1,6 @@
 # Dual-stack channel protocol unification (JOE-994)
 
-**Status:** Capacity epic — **Phase 2 Telegram opt-in façade shipped**; WhatsApp/Discord **protocol freeze retained**
+**Status:** Capacity epic — **Phase 2–3 opt-in façades shipped** (Telegram native monorepo; Discord/WhatsApp bridge); native decommission residual; **protocol freeze retained** for default paths
 **Security body:** Done (shared kernels + dual-stack checklist / CI gate)
 **Linear:** [JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)
 **Freeze source of truth:** [`product-channel-ownership.md`](product-channel-ownership.md)
@@ -88,9 +88,20 @@ native `setMyCommands` registration is not mirrored. Default path unchanged.
 
 ### Phase 3 — Remaining channels + decommission
 
-- [ ] Migrate remaining Durable channels
-- [ ] Remove or archive duplicate protocol code
-- [ ] Update freeze doc to “unified” with residual notes
+- [x] Migrate remaining Durable channels (opt-in monorepo façades)
+  - Discord + WhatsApp bridge façades over `gateway-provider-discord` /
+    `gateway-provider-whatsapp` (WebhookProvider bridge mode)
+  - Shared inbound policy: `channel-inbound-policy.ts` (all three providers)
+  - Defaults remain **durable native**; monorepo requires bridge credentials
+- [x] Protocol stack selectors + daemon channel-map wiring for webhook routes
+- [ ] Remove or archive duplicate **native** protocol code (only after monorepo
+  becomes default / bridge relays are product-standard)
+- [x] Update freeze/ownership docs with residual notes (bridge ≠ native)
+
+**Residuals (monorepo Discord/WhatsApp only):** bridge-mode only (relay must
+verify native platform signatures); not a drop-in for Meta/Discord interaction
+URLs pointed at Gateway; structured rich payloads degrade to text on bridge
+outbound.
 
 ## Non-goals
 

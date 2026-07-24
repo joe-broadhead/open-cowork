@@ -345,8 +345,22 @@ export interface GatewayConfig {
       phoneNumberId?: string
       verifyToken?: string
       appSecret?: string
+      /** JOE-994 Phase 3: durable native Meta (default) or monorepo webhook bridge. */
+      protocolStack?: 'durable' | 'monorepo'
+      bridgeDeliveryUrl?: string
+      bridgeSharedSecret?: string
     }
-    discord: { enabled: boolean; botToken?: string; applicationId?: string; publicKey?: string; richMessages?: { enabled: boolean } }
+    discord: {
+      enabled: boolean
+      botToken?: string
+      applicationId?: string
+      publicKey?: string
+      richMessages?: { enabled: boolean }
+      /** JOE-994 Phase 3: durable native Interactions (default) or monorepo webhook bridge. */
+      protocolStack?: 'durable' | 'monorepo'
+      bridgeDeliveryUrl?: string
+      bridgeSharedSecret?: string
+    }
   }
 }
 
@@ -914,6 +928,9 @@ function normalizeChannelsConfig(input: Partial<GatewayConfig['channels']> | und
       phoneNumberId: normalizeOptionalText(input?.whatsapp?.phoneNumberId, 256),
       verifyToken: normalizeOptionalText(input?.whatsapp?.verifyToken, 4096),
       appSecret: normalizeOptionalText(input?.whatsapp?.appSecret, 4096),
+      protocolStack: normalizeChannelProtocolStack(input?.whatsapp?.protocolStack, 'channels.whatsapp.protocolStack'),
+      bridgeDeliveryUrl: normalizeOptionalText(input?.whatsapp?.bridgeDeliveryUrl, 2048),
+      bridgeSharedSecret: normalizeOptionalText(input?.whatsapp?.bridgeSharedSecret, 4096),
     },
     discord: {
       enabled: input?.discord?.enabled === true,
@@ -921,6 +938,9 @@ function normalizeChannelsConfig(input: Partial<GatewayConfig['channels']> | und
       applicationId: normalizeOptionalText(input?.discord?.applicationId, 256),
       publicKey: normalizeOptionalText(input?.discord?.publicKey, 256),
       richMessages: { enabled: input?.discord?.richMessages?.enabled !== false },
+      protocolStack: normalizeChannelProtocolStack(input?.discord?.protocolStack, 'channels.discord.protocolStack'),
+      bridgeDeliveryUrl: normalizeOptionalText(input?.discord?.bridgeDeliveryUrl, 2048),
+      bridgeSharedSecret: normalizeOptionalText(input?.discord?.bridgeSharedSecret, 4096),
     },
   }
 }
@@ -1005,9 +1025,13 @@ function normalizeWhatsAppSetupMode(input: unknown, label: string): GatewayConfi
 }
 
 function normalizeTelegramProtocolStack(input: unknown): GatewayConfig['channels']['telegram']['protocolStack'] {
+  return normalizeChannelProtocolStack(input, 'channels.telegram.protocolStack')
+}
+
+function normalizeChannelProtocolStack(input: unknown, label: string): 'durable' | 'monorepo' | undefined {
   if (input === undefined || input === null || input === '') return undefined
   if (input === 'durable' || input === 'monorepo') return input
-  throw new Error('channels.telegram.protocolStack must be durable or monorepo')
+  throw new Error(`${label} must be durable or monorepo`)
 }
 
 function normalizeAgentTeams(input: Record<string, Partial<AgentTeamConfig>>, scheduler: GatewayConfig['scheduler'], profiles: Record<string, AgentProfile>): Record<string, AgentTeamConfig> {

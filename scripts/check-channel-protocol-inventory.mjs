@@ -41,16 +41,23 @@ for (const name of ['telegram.ts', 'whatsapp.ts', 'discord.ts', 'provider.ts']) 
   mustExist(`products/gateway/src/channels/${name}`)
 }
 
-// JOE-994 Phase 2: Telegram monorepo façade + stack selector + shared policy
+// JOE-994 Phase 2–3: monorepo façades + stack selectors + shared policy
 for (const name of [
   'telegram-monorepo-adapter.ts',
   'telegram-protocol-stack.ts',
   'telegram-inbound-policy.ts',
+  'channel-inbound-policy.ts',
+  'discord-monorepo-adapter.ts',
+  'discord-protocol-stack.ts',
+  'whatsapp-monorepo-adapter.ts',
+  'whatsapp-protocol-stack.ts',
+  'bridge-protocol-stack.ts',
 ]) {
   mustExist(`products/gateway/src/channels/${name}`)
 }
 mustContain('docs/product-channel-protocol-unification.md', 'Phase 2')
-mustContain('docs/product-channel-ownership.md', 'Telegram monorepo façade')
+mustContain('docs/product-channel-protocol-unification.md', 'Phase 3')
+mustContain('docs/product-channel-ownership.md', 'Protocol stack façades')
 
 // Monorepo provider packages (at least the production set)
 const providerRoot = mustExist('packages')

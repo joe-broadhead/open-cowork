@@ -54,7 +54,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@open-cowork/gateway-channel": "workspace:*",
+    "@open-cowork/gateway-provider-discord": "workspace:*",
     "@open-cowork/gateway-provider-telegram": "workspace:*",
+    "@open-cowork/gateway-provider-whatsapp": "workspace:*",
     "@open-cowork/shared": "workspace:*",
     "@opencode-ai/sdk": "1.18.1",
     "zod": "^4.4.3"

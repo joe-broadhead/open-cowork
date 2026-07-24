@@ -9,7 +9,7 @@
 | Layer | Status | Meaning |
 | --- | --- | --- |
 | **Security body** (signature verify, Meta/Discord/Telegram/Slack kernels, rate-limit algorithm) | **Done** | Shared; dual-fix checklist still required for security PRs |
-| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Partial Phase 2 (Telegram opt-in)** | Telegram can compose monorepo provider behind `channels.telegram.protocolStack=monorepo` (default remains Durable legacy). **Intentional residual freeze** for WhatsApp/Discord. |
+| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Phase 2–3 opt-in façades** | Telegram native monorepo provider; Discord/WhatsApp monorepo **bridge** façades. Defaults remain Durable native. **Intentional residual freeze** on decommissioning native adapters until monorepo is default. |
 
 ## Two stacks (intentional)
 
@@ -41,20 +41,23 @@ ready — **do not re-open as incomplete dual-stack security P1**.
 ([JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)).
 Inventory guard: `node scripts/check-channel-protocol-inventory.mjs`.
 
-### Telegram monorepo façade (JOE-994 Phase 2)
+### Protocol stack façades (JOE-994 Phase 2–3)
 
-| Setting | Effect |
-| --- | --- |
-| `channels.telegram.protocolStack: "durable"` (default) | Legacy Durable long-poll in `channels/telegram.ts` |
-| `channels.telegram.protocolStack: "monorepo"` | Thin façade over `@open-cowork/gateway-provider-telegram` |
-| `OPEN_COWORK_TELEGRAM_PROTOCOL_STACK=durable\|monorepo` | Process env override (rollback / canary) |
+| Channel | Setting | Monorepo meaning |
+| --- | --- | --- |
+| Telegram | `channels.telegram.protocolStack` / `OPEN_COWORK_TELEGRAM_PROTOCOL_STACK` | Native grammy provider (`gateway-provider-telegram`) |
+| Discord | `channels.discord.protocolStack` / `OPEN_COWORK_DISCORD_PROTOCOL_STACK` | Webhook **bridge** (`gateway-provider-discord`); needs `bridgeDeliveryUrl` + `bridgeSharedSecret` |
+| WhatsApp | `channels.whatsapp.protocolStack` / `OPEN_COWORK_WHATSAPP_PROTOCOL_STACK` | Webhook **bridge** (`gateway-provider-whatsapp`); needs bridge URL + secret |
+
+Defaults are **`durable`** (native Durable adapters). Env overrides config for
+rollback/canary.
 
 Durable product policy (trust allowlists, claims, denial probes) is shared via
-`channels/telegram-inbound-policy.ts` on both stacks. Security kernels remain
-in `@open-cowork/shared/node`.
+`channels/channel-inbound-policy.ts` on all stacks. Security kernels remain in
+`@open-cowork/shared/node`.
 
-Until WhatsApp/Discord compose monorepo providers, this freeze document remains
-the source of truth for dual-stack ownership on those channels.
+Native adapter decommission is still residual until monorepo (or bridge relays)
+are product-default.
 
 ### Shared security kernel (2026-07-21)
 
