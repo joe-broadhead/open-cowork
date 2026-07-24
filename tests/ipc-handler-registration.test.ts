@@ -23,6 +23,7 @@ import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/des
 import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coordination-handlers.ts'
 import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { registerKnowledgeHandlers } from '../apps/desktop/src/main/ipc/knowledge-handlers.ts'
+import { registerVoiceHandlers } from '../apps/desktop/src/main/ipc/voice-handlers.ts'
 import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 function createTestContext() {
@@ -198,6 +199,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
   registerKnowledgeHandlers(context)
+  registerVoiceHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)

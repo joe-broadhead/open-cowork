@@ -191,6 +191,7 @@ nav:
       - "ADR: Product partitions": adr/product-partitions.md
       - "ADR: Knowledge vs Wiki": adr/knowledge-vs-wiki.md
       - "ADR: Standalone Desktop session API": adr/standalone-desktop-session-api.md
+      - "ADR: Private realtime voice": adr/private-realtime-voice.md
 
 extra:
   generator: false

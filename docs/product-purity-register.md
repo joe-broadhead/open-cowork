@@ -21,7 +21,7 @@ Home → Chat → Team | Tools & Skills | Playbooks | Projects
 
 Optional secondary Studio (default off; progressive disclosure):
 
-- Knowledge, Approvals, Channels, Artifacts
+- Knowledge, Approvals, Channels, Artifacts, Voice (private realtime; Desktop Local)
 
 Optional installable siblings (not Desktop default nav):
 
@@ -53,6 +53,7 @@ Optional installable siblings (not Desktop default nav):
 | Durable Gateway (`cowork-gateway`) | Local operator / claim-gated beta | Multi-tenant production GA without evidence |
 | Tier-1 channels (Telegram/Slack/email) | Launch-tier adapters | — |
 | Tier-3 channels (Discord/WhatsApp/Signal) | Experimental / bridge-backed | Launch marketing without live smoke |
+| Private realtime voice | Desktop Local opt-in (`features.voice`); on-device STT (Aurum) + sibling TTS | Cloud Web mic, Aurum-as-TTS, shipping claim before V2 PTT + engines |
 
 ## Forbidden claims (fail closed)
 
@@ -63,6 +64,8 @@ Optional installable siblings (not Desktop default nav):
 - Knowledge = Wiki (or OpenWiki as synonym for in-app Knowledge)
 - Enterprise-ready / hosted GA without rows proven in enterprise readiness matrix
 - Mobile / Teams as shipping products (names reserved only)
+- “Private voice shipping” while `features.voice` default-off and host/STT still deferred
+- Cloud Web or remote workspace microphone capture for Open Cowork Studio
 
 ## Finding → issue map (Wave 1+)
 

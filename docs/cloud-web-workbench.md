@@ -83,6 +83,7 @@ stays explicit.
 | Local Filesystem | Unavailable in Cloud | `threads`, `artifacts` | Use git URLs, managed Cloud project sources, uploaded snapshots, and Cloud artifacts instead. | Browser sessions must not implicitly read or upload host paths from the user machine. |
 | Local Stdio MCPs | Unavailable in Cloud | `capabilities`, `agents` | Show only policy-safe MCP metadata that has been converted into the Cloud profile. | Cloud Web cannot spawn local stdio MCP processes or expose command lines, environment variables, or secret refs. |
 | Machine Runtime Config | Desktop-only | `chat`, `agents`, `capabilities` | Show current Cloud profile, feature flags, and projected runtime state. | Cloud Web does not configure the local machine runtime, provider defaults, local approvals mode, or desktop notification settings. |
+| Private realtime voice | Desktop-only | — | `voice.*` support APIs report `not_supported`; browser API stubs refuse capture/STT/TTS. | Microphone and on-device STT stay on Desktop Local voice host only ([ADR](adr/private-realtime-voice.md)). |
 
 ## Admin/Settings Surface Matrix
 

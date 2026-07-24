@@ -176,6 +176,12 @@ import type {
   KnowledgeSpaceInput,
 } from './knowledge.js'
 import type {
+  VoiceHostEvent,
+  VoiceHostStatus,
+  VoiceSessionSnapshot,
+  VoiceSessionStartInput,
+} from './voice.js'
+import type {
   AdminAccess,
   AdminAuditExport,
   AdminAuditExportInput,
@@ -261,6 +267,7 @@ export * from './tool-trace.js'
 export * from './updates.js'
 export * from './vega-spec.js'
 export * from './workspace.js'
+export * from './voice.js'
 export * from './workflow.js'
 
 export interface CoworkAPI {
@@ -356,6 +363,16 @@ export interface CoworkAPI {
     declineProposal: (proposalId: string, input?: KnowledgeReviewInput) => Promise<KnowledgeProposal>
     history: (pageId: string, options?: KnowledgeSnapshotOptions) => Promise<KnowledgePageVersion[]>
     restoreVersion: (pageId: string, versionId: string, input?: KnowledgeReviewInput) => Promise<{ page: KnowledgePageVersion }>
+  }
+  /**
+   * Private realtime voice (Desktop Local). Scaffold: status/session IPC;
+   * engines land in V1+. Prefer text events over raw audio on this surface.
+   */
+  voice: {
+    status: () => Promise<VoiceHostStatus>
+    startSession: (input?: VoiceSessionStartInput) => Promise<VoiceSessionSnapshot>
+    stopSession: (sessionId?: string | null) => Promise<VoiceHostStatus>
+    cancel: (sessionId?: string | null) => Promise<VoiceHostStatus>
   }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>
@@ -638,6 +655,7 @@ export interface CoworkAPI {
     workflowUpdated: (callback: () => void) => () => void
     coordinationUpdated: (callback: () => void) => () => void
     knowledgeUpdated: (callback: () => void) => () => void
+    voiceEvent: (callback: (data: VoiceHostEvent) => void) => () => void
   }
 }
 
