@@ -1,6 +1,6 @@
 # Dual-stack channel protocol unification (JOE-994)
 
-**Status:** Capacity epic — **protocol freeze retained**
+**Status:** Capacity epic — **Phase 2 Telegram opt-in façade shipped**; WhatsApp/Discord **protocol freeze retained**
 **Security body:** Done (shared kernels + dual-stack checklist / CI gate)
 **Linear:** [JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)
 **Freeze source of truth:** [`product-channel-ownership.md`](product-channel-ownership.md)
@@ -72,10 +72,19 @@ Until a phase below is explicitly scheduled:
 
 ### Phase 2 — Compose one Durable channel onto monorepo provider
 
-- [ ] Pick one provider (recommend Telegram or Discord)
-- [ ] Durable adapter becomes thin façade over `gateway-provider-*`
-- [ ] Dual-stack checklist + parity tests green
-- [ ] Feature-flag / config escape hatch for rollback
+- [x] Pick one provider: **Telegram**
+- [x] Durable adapter becomes thin façade over `gateway-provider-telegram`
+  (`products/gateway/src/channels/telegram-monorepo-adapter.ts` + shared
+  inbound policy in `telegram-inbound-policy.ts`)
+- [x] Dual-stack checklist + parity tests green
+  (`products/gateway/src/__tests__/telegram-monorepo-facade.test.ts`)
+- [x] Feature-flag / config escape hatch for rollback
+  (`channels.telegram.protocolStack: durable|monorepo`, default **durable**;
+  env `OPEN_COWORK_TELEGRAM_PROTOCOL_STACK` overrides)
+
+**Residuals on monorepo stack (flag-on only):** grammy poll offset is not the
+HA operational-sidecar cursor; rich HTML `sendRichMessage` falls back to text;
+native `setMyCommands` registration is not mirrored. Default path unchanged.
 
 ### Phase 3 — Remaining channels + decommission
 

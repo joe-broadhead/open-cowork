@@ -706,6 +706,12 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.29.0(zod@4.4.3)
+      '@open-cowork/gateway-channel':
+        specifier: workspace:*
+        version: link:../../packages/gateway-channel
+      '@open-cowork/gateway-provider-telegram':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-telegram
       '@open-cowork/shared':
         specifier: workspace:*
         version: link:../../packages/shared

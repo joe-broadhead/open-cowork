@@ -41,6 +41,17 @@ for (const name of ['telegram.ts', 'whatsapp.ts', 'discord.ts', 'provider.ts']) 
   mustExist(`products/gateway/src/channels/${name}`)
 }
 
+// JOE-994 Phase 2: Telegram monorepo façade + stack selector + shared policy
+for (const name of [
+  'telegram-monorepo-adapter.ts',
+  'telegram-protocol-stack.ts',
+  'telegram-inbound-policy.ts',
+]) {
+  mustExist(`products/gateway/src/channels/${name}`)
+}
+mustContain('docs/product-channel-protocol-unification.md', 'Phase 2')
+mustContain('docs/product-channel-ownership.md', 'Telegram monorepo façade')
+
 // Monorepo provider packages (at least the production set)
 const providerRoot = mustExist('packages')
 const providers = readdirSync(providerRoot)

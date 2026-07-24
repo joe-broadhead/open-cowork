@@ -8,7 +8,7 @@ import { setDaemonClient } from './gateway-runtime.js'
 import { trackWorker, loadWorkerState, reconcileWorkersFromOpenCode } from './workers.js'
 import { renderDashboard } from './dashboard.js'
 import { subscribeToOpenCodeEvents, addLiveClient, closeAllLiveClients, removeLiveClient } from './live.js'
-import { telegramChannel } from './channels/telegram.js'
+import { getTelegramChannel } from './channels/telegram-protocol-stack.js'
 import { whatsappChannel } from './channels/whatsapp.js'
 import { discordChannel } from './channels/discord.js'
 import { claimInboundWebhookRateLimit, inboundWebhookRateKey, noteInboundWebhookAuthFailure } from './channels/webhook-rate-limit.js'
@@ -112,6 +112,8 @@ export async function serve() {
   // Start heartbeat for Gateway session monitoring
   startHeartbeat()
 
+  // JOE-994 Phase 2: Telegram may be legacy Durable or monorepo-provider façade.
+  const telegramChannel = getTelegramChannel()
   const channelByName = new Map([
     [telegramChannel.name, telegramChannel],
     [whatsappChannel.name, whatsappChannel],

@@ -333,7 +333,12 @@ export interface GatewayConfig {
   }
   channels: {
     richMessages: { enabled: boolean }
-    telegram: { botToken?: string; richMessages?: { enabled: boolean } }
+    telegram: {
+      botToken?: string
+      richMessages?: { enabled: boolean }
+      /** JOE-994 Phase 2: `durable` (default) or monorepo `@open-cowork/gateway-provider-telegram` façade. */
+      protocolStack?: 'durable' | 'monorepo'
+    }
     whatsapp: {
       setupMode?: 'cloudApiDirect'
       accessToken?: string
@@ -901,6 +906,7 @@ function normalizeChannelsConfig(input: Partial<GatewayConfig['channels']> | und
     telegram: {
       botToken: normalizeOptionalText(input?.telegram?.botToken, 4096),
       richMessages: { enabled: input?.telegram?.richMessages?.enabled !== false },
+      protocolStack: normalizeTelegramProtocolStack(input?.telegram?.protocolStack),
     },
     whatsapp: {
       setupMode: normalizeWhatsAppSetupMode(input?.whatsapp?.setupMode, 'channels.whatsapp.setupMode'),
@@ -996,6 +1002,12 @@ function normalizeWhatsAppSetupMode(input: unknown, label: string): GatewayConfi
   if (input === undefined || input === null || input === '') return undefined
   if (input === 'cloudApiDirect') return input
   throw new Error(`${label} must be cloudApiDirect`)
+}
+
+function normalizeTelegramProtocolStack(input: unknown): GatewayConfig['channels']['telegram']['protocolStack'] {
+  if (input === undefined || input === null || input === '') return undefined
+  if (input === 'durable' || input === 'monorepo') return input
+  throw new Error('channels.telegram.protocolStack must be durable or monorepo')
 }
 
 function normalizeAgentTeams(input: Record<string, Partial<AgentTeamConfig>>, scheduler: GatewayConfig['scheduler'], profiles: Record<string, AgentProfile>): Record<string, AgentTeamConfig> {

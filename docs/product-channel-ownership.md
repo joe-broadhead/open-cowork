@@ -9,7 +9,7 @@
 | Layer | Status | Meaning |
 | --- | --- | --- |
 | **Security body** (signature verify, Meta/Discord/Telegram/Slack kernels, rate-limit algorithm) | **Done** | Shared; dual-fix checklist still required for security PRs |
-| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Intentional residual freeze** | Not an incomplete P1; full protocol re-home is a future epic (capacity), not a missing security fix |
+| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Partial Phase 2 (Telegram opt-in)** | Telegram can compose monorepo provider behind `channels.telegram.protocolStack=monorepo` (default remains Durable legacy). **Intentional residual freeze** for WhatsApp/Discord. |
 
 ## Two stacks (intentional)
 
@@ -41,7 +41,20 @@ ready — **do not re-open as incomplete dual-stack security P1**.
 ([JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)).
 Inventory guard: `node scripts/check-channel-protocol-inventory.mjs`.
 
-Until then, this freeze document is the source of truth for dual-stack ownership.
+### Telegram monorepo façade (JOE-994 Phase 2)
+
+| Setting | Effect |
+| --- | --- |
+| `channels.telegram.protocolStack: "durable"` (default) | Legacy Durable long-poll in `channels/telegram.ts` |
+| `channels.telegram.protocolStack: "monorepo"` | Thin façade over `@open-cowork/gateway-provider-telegram` |
+| `OPEN_COWORK_TELEGRAM_PROTOCOL_STACK=durable\|monorepo` | Process env override (rollback / canary) |
+
+Durable product policy (trust allowlists, claims, denial probes) is shared via
+`channels/telegram-inbound-policy.ts` on both stacks. Security kernels remain
+in `@open-cowork/shared/node`.
+
+Until WhatsApp/Discord compose monorepo providers, this freeze document remains
+the source of truth for dual-stack ownership on those channels.
 
 ### Shared security kernel (2026-07-21)
 
