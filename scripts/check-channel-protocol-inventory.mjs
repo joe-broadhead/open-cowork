@@ -57,7 +57,10 @@ for (const name of [
 }
 mustContain('docs/product-channel-protocol-unification.md', 'Phase 2')
 mustContain('docs/product-channel-protocol-unification.md', 'Phase 3')
+mustContain('docs/product-channel-protocol-unification.md', "Won't Do")
+mustContain('docs/product-channel-protocol-unification.md', 'Residual register')
 mustContain('docs/product-channel-ownership.md', 'Protocol stack façades')
+mustContain('docs/product-channel-ownership.md', "Won't Do")
 
 // Monorepo provider packages (at least the production set)
 const providerRoot = mustExist('packages')
