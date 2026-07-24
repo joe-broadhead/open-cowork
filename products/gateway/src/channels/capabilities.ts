@@ -1,3 +1,8 @@
+import {
+  CHANNEL_ADAPTER_CAPABILITY_KEYS as SHARED_CHANNEL_ADAPTER_CAPABILITY_KEYS,
+  type ChannelAdapterCapabilityKey,
+} from '@open-cowork/shared'
+
 export type ChannelRenderCapability =
   | 'plainText'
   | 'markdown'
@@ -12,19 +17,8 @@ export type ChannelRenderCapabilities = Partial<Record<ChannelRenderCapability, 
 
 export type ChannelRenderMode = 'rich' | 'markdown' | 'plainText'
 
-export type ChannelAdapterCapability =
-  | 'richText'
-  | 'richCards'
-  | 'inlineActions'
-  | 'callbacks'
-  | 'filesMedia'
-  | 'threading'
-  | 'identityBinding'
-  | 'deepLinks'
-  | 'notifications'
-  | 'edits'
-  | 'deletes'
-  | 'fallbackBehavior'
+/** JOE-994 Phase 1: lockstep with `@open-cowork/shared` dual-stack contract. */
+export type ChannelAdapterCapability = ChannelAdapterCapabilityKey
 
 export type ChannelCapabilityStatus = 'supported' | 'partial' | 'planned' | 'unsupported'
 export type ChannelSurfaceStage = 'production' | 'alpha' | 'planned'
@@ -225,19 +219,9 @@ export const CHANNEL_CONNECTOR_STATE_DEFINITIONS: Record<ChannelConnectorState, 
   },
 }
 
+/** JOE-994 Phase 1: single source of truth lives in `@open-cowork/shared`. */
 export const CHANNEL_ADAPTER_CAPABILITY_KEYS: ChannelAdapterCapability[] = [
-  'richText',
-  'richCards',
-  'inlineActions',
-  'callbacks',
-  'filesMedia',
-  'threading',
-  'identityBinding',
-  'deepLinks',
-  'notifications',
-  'edits',
-  'deletes',
-  'fallbackBehavior',
+  ...SHARED_CHANNEL_ADAPTER_CAPABILITY_KEYS,
 ]
 
 export const DEFAULT_RENDER_CAPABILITIES: Required<ChannelRenderCapabilities> = {
