@@ -81,7 +81,12 @@ Optional installable siblings (not Desktop default nav):
 | Cloud Web capability banner | JOE-1062 | 1 |
 | Local stays local | JOE-1077 | 1 |
 | Presence footer truthfulness | JOE-1038 | 1 |
-| Remaining purity backlog | JOE-1029 children PP-2+ | later |
+| Remaining purity backlog | JOE-1029 children PP-2+ | 2–final |
+| Final wave evidence + residuals | JOE-1075, residual-risks, final-wave | final |
+| Knowledge UI aliases | JOE-1034 | final |
+| Standalone session API (deferred) | JOE-1042 → R-1042 | final (canceled residual) |
+| Cloud coordination honesty | JOE-1058 | final |
+| Feature enablement soft gates | JOE-1063 | final |
 
 ## Progressive disclosure (defaults)
 

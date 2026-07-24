@@ -54,5 +54,5 @@ Is it local OpenCode supervision for Desktop?
 ## Related
 
 - [ADR product partitions](adr/product-partitions.md)
-- [products/README](../products/README.md)
+- [Product partitions README](https://github.com/joe-broadhead/open-cowork/blob/master/products/README.md) (repo root `products/README.md`)
 - [Packaging and product modes](packaging-and-product-modes.md)

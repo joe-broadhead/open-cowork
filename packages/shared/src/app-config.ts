@@ -429,6 +429,39 @@ export function isDesktopFeatureEnabled(features: DesktopFeatureFlags | undefine
   return !DESKTOP_SECONDARY_FEATURE_SET.has(key)
 }
 
+/**
+ * Soft readiness warnings when secondary Studio flags are enabled without the
+ * operational prerequisites purity expects (JOE-1063). Never hard-fails config
+ * load — progressive disclosure remains opt-in; doctor/docs surface these.
+ */
+export function desktopFeatureEnablementWarnings(
+  features: DesktopFeatureFlags | undefined,
+): string[] {
+  if (!features) return []
+  const warnings: string[] = []
+  if (features.channels === true) {
+    warnings.push(
+      'features.channels is enabled: Channel bindings need a Cloud workspace + Channel Gateway; Local shows restricted empty Channels UI.',
+    )
+  }
+  if (features.approvals === true) {
+    warnings.push(
+      'features.approvals is enabled: multi-thread queue is available; Always-allow is intentionally not wired as a no-op policy.',
+    )
+  }
+  if (features.knowledge === true) {
+    warnings.push(
+      'features.knowledge is enabled: in-app Knowledge is not the Wiki product; do not register cowork-wiki MCP unless intentionally linking the sibling.',
+    )
+  }
+  if (features.artifacts === true) {
+    warnings.push(
+      'features.artifacts is enabled: inspect/export stay redaction-safe; bodies are never auto-fetched.',
+    )
+  }
+  return warnings
+}
+
 export interface PublicAppConfig {
   branding: BrandingConfig
   auth: {

@@ -27,8 +27,10 @@ need evidence linked on the epic comment.
 | 10 | Local stays local claim + boundary tests | auto | `tests/workspace-gateway.test.ts` |
 | 11 | Progressive disclosure policy published | human | `docs/progressive-disclosure.md` |
 | 12 | Zero open P0 purity children without Waived | human | Linear JOE-1029 children |
-| 13 | Residual risk register filled | human | table below |
+| 13 | Residual risk register filled | human | `docs/product-purity-residual-risks.md` |
 | 14 | Release notes / marketing claim gate reviewed | human | release checklist |
+| 15 | Final wave evidence map complete | human | `docs/product-purity-final-wave.md` |
+| 16 | Zero open P0 purity children (Done or Canceled+residual) | human | Linear JOE-1029 children |
 
 ## Residual risk template
 

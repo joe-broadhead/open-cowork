@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import {
   DESKTOP_PRIMARY_FEATURE_KEYS,
   DESKTOP_SECONDARY_FEATURE_KEYS,
+  desktopFeatureEnablementWarnings,
   isDesktopFeatureEnabled,
 } from '../packages/shared/src/app-config.ts'
 
@@ -108,4 +109,123 @@ test('product purity: Home hides empty launchpad motion section', () => {
   const source = readFileSync(join(root, 'packages/app/src/components/HomePage.tsx'), 'utf8')
   assert.match(source, /never reserve Home space for an empty motion grid/)
   assert.match(source, /if \(!smartSuggestions\)/)
+})
+
+test('product purity: final-wave docs and residual register exist', () => {
+  for (const rel of [
+    'docs/product-purity-final-wave.md',
+    'docs/product-purity-residual-risks.md',
+    'docs/adr/standalone-desktop-session-api.md',
+  ]) {
+    const text = readFileSync(join(root, rel), 'utf8')
+    assert.ok(text.length > 100, `${rel} should be non-empty`)
+  }
+  const residual = readFileSync(join(root, 'docs/product-purity-residual-risks.md'), 'utf8')
+  assert.match(residual, /P0 residuals:\*\* none/)
+  assert.match(residual, /R-1042/)
+})
+
+test('product purity: Knowledge UI exports Knowledge* aliases (JOE-1034)', () => {
+  const source = readFileSync(join(root, 'packages/ui/src/index.ts'), 'utf8')
+  assert.match(source, /WikiPage as KnowledgePage/)
+  assert.match(source, /WikiSpaceRail as KnowledgeSpaceRail/)
+  assert.match(source, /WikiProposeEditDialog as KnowledgeProposeEditDialog/)
+  const knowledgePage = readFileSync(
+    join(root, 'packages/app/src/components/studio/KnowledgePage.tsx'),
+    'utf8',
+  )
+  assert.match(knowledgePage, /KnowledgeDocumentPage|KnowledgeSpaceRail|KnowledgeProposeEditDialog/)
+  assert.doesNotMatch(knowledgePage, /<WikiPage[\s>]/)
+  assert.doesNotMatch(knowledgePage, /<WikiSpaceRail[\s>]/)
+  assert.doesNotMatch(knowledgePage, /<WikiProposeEditDialog[\s>]/)
+})
+
+test('product purity: Projects board uses coordination.projects support key', () => {
+  const source = readFileSync(
+    join(root, 'packages/app/src/components/projects/ProjectsBoardPage.tsx'),
+    'utf8',
+  )
+  assert.match(source, /'coordination\.projects'/)
+  assert.match(source, /RestrictedState/)
+  assert.match(source, /disabledReason/)
+  assert.doesNotMatch(source, /'coordination\.board'/)
+})
+
+test('product purity: Chat density defaults keep inspector closed and filters gated', () => {
+  const chatView = readFileSync(join(root, 'packages/app/src/components/chat/ChatView.tsx'), 'utf8')
+  assert.match(chatView, /useState\(false\)/)
+  assert.match(chatView, /isAgentRunFiltersEnabled/)
+  const filters = readFileSync(
+    join(root, 'packages/app/src/components/chat/agent-run-filter-model.ts'),
+    'utf8',
+  )
+  assert.match(filters, /getItem\(AGENT_RUN_FILTERS_FEATURE_GATE_KEY\) === 'true'/)
+})
+
+test('product purity: Cloud Web / local thread menus hide unavailable session ops', () => {
+  const threadList = readFileSync(
+    join(root, 'packages/app/src/components/sidebar/ThreadList.tsx'),
+    'utf8',
+  )
+  assert.match(threadList, /if \(!activeWorkspaceIsLocal\)/)
+  assert.match(threadList, /onContextMenu=\{activeWorkspaceIsLocal/)
+})
+
+test('product purity: composer surfaces support matrix prompt reason', () => {
+  const source = readFileSync(join(root, 'packages/app/src/components/chat/ChatInput.tsx'), 'utf8')
+  assert.match(source, /sendBlockedReason/)
+  assert.match(source, /sendDisabledReason=\{sendBlockedReason\}/)
+  assert.match(source, /flags\.reasons\.prompt/)
+})
+
+test('product purity: feature enablement warnings for secondary flags (JOE-1063)', () => {
+  assert.deepEqual(desktopFeatureEnablementWarnings(undefined), [])
+  assert.deepEqual(desktopFeatureEnablementWarnings({}), [])
+  const warnings = desktopFeatureEnablementWarnings({
+    channels: true,
+    approvals: true,
+    knowledge: true,
+    artifacts: true,
+  })
+  assert.equal(warnings.length, 4)
+  assert.ok(warnings.some((w) => /channels/i.test(w) && /Cloud/i.test(w)))
+  assert.ok(warnings.some((w) => /approvals/i.test(w) && /Always-allow/i.test(w)))
+  assert.ok(warnings.some((w) => /knowledge/i.test(w) && /Wiki/i.test(w)))
+  assert.ok(warnings.some((w) => /artifacts/i.test(w) && /redaction/i.test(w)))
+})
+
+test('product purity: Admin billing omitted when adapter off; audit export honest', () => {
+  const billing = readFileSync(
+    join(root, 'packages/app/src/components/admin/BillingSection.tsx'),
+    'utf8',
+  )
+  assert.match(billing, /billingEnabled/)
+  const audit = readFileSync(join(root, 'packages/app/src/components/admin/AuditSection.tsx'), 'utf8')
+  assert.match(audit, /exportUnavailable/)
+  const adminTest = readFileSync(
+    join(root, 'packages/app/src/components/admin/AdminPage.test.tsx'),
+    'utf8',
+  )
+  assert.match(adminTest, /omits the Billing section when the billing adapter is off/)
+})
+
+test('product purity: Product MCP link copy keeps Wiki as optional sibling', () => {
+  const source = readFileSync(
+    join(root, 'packages/app/src/components/capabilities/ProductMcpLinkPanel.tsx'),
+    'utf8',
+  )
+  assert.match(source, /Optional installables/)
+  assert.match(source, /not the in-app Knowledge store/)
+  assert.match(source, /cowork-wiki/)
+})
+
+test('product purity: English catalog remains SoT empty table (JOE-1081)', () => {
+  const en = readFileSync(join(root, 'packages/app/src/helpers/i18n-catalogs/en.ts'), 'utf8')
+  assert.match(en, /source-of-truth language/)
+  const coverage = readFileSync(
+    join(root, 'packages/app/src/helpers/i18n-catalogs/coverage-status.ts'),
+    'utf8',
+  )
+  assert.match(coverage, /BUILT_IN_TRANSLATION_COVERAGE/)
+  assert.match(coverage, /translatedKeys/)
 })

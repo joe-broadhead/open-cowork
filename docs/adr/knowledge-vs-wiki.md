@@ -56,6 +56,15 @@ An optional adapter that mirrors selected Wiki pages into Knowledge *proposals* 
 - Knowledge: existing `features.knowledge` and built-in knowledge MCP (when enabled).
 - Wiki: optional user-managed MCP / CLI only after standalone install (`cowork-wiki`). Soft Desktop “link Wiki” UX is JOE-909 and remains **default off**.
 
+## UI primitive naming (JOE-1034)
+
+In-app Knowledge reuses Studio primitives historically named `WikiPage`,
+`WikiSpaceRail`, and `WikiProposeEditDialog` in `@open-cowork/ui`. These are
+**visual document-chrome components**, not the Wiki product. Prefer user-facing
+copy “Knowledge / Space / Page / Proposal”. Aliases
+`KnowledgePage` / `KnowledgeSpaceRail` / `KnowledgeProposeEditDialog` re-export
+the same components for new code.
+
 ## Consequences
 
 - Importing Wiki does not migrate Knowledge data.

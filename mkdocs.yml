@@ -113,6 +113,8 @@ nav:
       - Progressive disclosure: progressive-disclosure.md
       - Product purity register: product-purity-register.md
       - Product purity checklist: product-purity-checklist.md
+      - Product purity residual risks: product-purity-residual-risks.md
+      - Product purity final wave: product-purity-final-wave.md
       - Pairing connector scope: pairing-connector-scope.md
       - Product purity dogfood: runbooks/product-purity-dogfood.md
       - Cloud sync dogfood: runbooks/cloud-sync-dogfood.md
@@ -188,6 +190,7 @@ nav:
       - "ADR: Monorepo privacy": adr/monorepo-privacy.md
       - "ADR: Product partitions": adr/product-partitions.md
       - "ADR: Knowledge vs Wiki": adr/knowledge-vs-wiki.md
+      - "ADR: Standalone Desktop session API": adr/standalone-desktop-session-api.md
 
 extra:
   generator: false
