@@ -789,6 +789,10 @@ export class WorkspaceGateway {
       cloudSupport('localFiles', 'not_supported', 'Cloud workspaces do not implicitly upload local files.'),
       cloudSupport('localStdioMcps', 'not_supported', 'Cloud workspaces do not execute arbitrary local stdio MCPs.'),
       cloudSupport('machineRuntimeConfig', 'not_supported', 'Cloud workspaces do not use machine-native runtime config.'),
+      cloudSupport('voice.capture', 'not_supported', 'Private realtime voice is Desktop Local only. Cloud workspaces do not capture microphone audio on this machine.'),
+      cloudSupport('voice.stt', 'not_supported', 'On-device speech-to-text (Aurum) is Desktop Local only.'),
+      cloudSupport('voice.tts', 'not_supported', 'Private text-to-speech is Desktop Local only.'),
+      cloudSupport('voice.conversation', 'not_supported', 'Voice conversation is Desktop Local only.'),
     ]
   }
 
@@ -918,6 +922,10 @@ export class WorkspaceGateway {
       remoteSupport('localFiles', 'not_supported', input.pathReason, { artifactBody: 'none', artifactReveal: 'none' }),
       remoteSupport('localStdioMcps', 'not_supported', 'Remote workspaces do not execute this Desktop app\'s local stdio MCPs.'),
       remoteSupport('machineRuntimeConfig', 'not_supported', 'Remote workspaces do not use this Desktop app\'s machine-native runtime config.'),
+      remoteSupport('voice.capture', 'not_supported', 'Private realtime voice is Desktop Local only.'),
+      remoteSupport('voice.stt', 'not_supported', 'On-device speech-to-text is Desktop Local only.'),
+      remoteSupport('voice.tts', 'not_supported', 'Private text-to-speech is Desktop Local only.'),
+      remoteSupport('voice.conversation', 'not_supported', 'Voice conversation is Desktop Local only.'),
     ]
   }
 

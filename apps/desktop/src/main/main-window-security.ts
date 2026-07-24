@@ -5,6 +5,7 @@ import {
   isExpectedPackagedRendererFile,
   rendererUrlMatchesDevServer,
 } from './main-window-lifecycle.ts'
+import { resolveRendererMediaPermission } from './voice-permission-policy.ts'
 import { log } from '@open-cowork/shared/node'
 
 const guardedWebContents = new WeakSet<WebContents>()
@@ -59,10 +60,41 @@ export function attachWebContentsSecurityGuards(
   })
 }
 
-export function attachPermissionGuards() {
+/**
+ * Fail-closed renderer permissions (JOE-1098).
+ *
+ * Private voice owns mic capture in the voice host by default, so Chromium
+ * `media` / `microphone` for the Studio renderer stay denied unless a future
+ * ADR opts into captureMode === 'renderer' with features.voice enabled.
+ */
+export function attachPermissionGuards(options: {
+  features?: { voice?: boolean }
+  captureMode?: 'voice_host' | 'renderer'
+} = {}) {
+  const features = options.features
+  const captureMode = options.captureMode || 'voice_host'
+
   electronSession.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    log('security', `Denied renderer permission request: ${permission}`)
+    const decision = resolveRendererMediaPermission({
+      features,
+      captureMode,
+      permission,
+    })
+    if (decision.allowed) {
+      log('security', `Granted renderer permission request: ${permission} (${decision.reason})`)
+      callback(true)
+      return
+    }
+    log('security', `Denied renderer permission request: ${permission} (${decision.reason})`)
     callback(false)
   })
-  electronSession.defaultSession.setPermissionCheckHandler(() => false)
+
+  electronSession.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const decision = resolveRendererMediaPermission({
+      features,
+      captureMode,
+      permission: String(permission),
+    })
+    return decision.allowed
+  })
 }

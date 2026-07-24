@@ -104,6 +104,10 @@ const PRELOAD_INVOKE_CHANNELS = [
   'knowledge:proposal:decline',
   'knowledge:page:history',
   'knowledge:page:restore',
+  'voice:status',
+  'voice:session:start',
+  'voice:session:stop',
+  'voice:session:cancel',
   'confirm:request-destructive',
   'clipboard:write-text',
   'tool:list',
@@ -284,6 +288,7 @@ const PRELOAD_LISTEN_CHANNELS = [
   'workflow:updated',
   'coordination:updated',
   'knowledge:updated',
+  'voice:event',
 ] as const
 
 type PreloadInvokeChannel = typeof PRELOAD_INVOKE_CHANNELS[number]
@@ -408,6 +413,12 @@ const api: CoworkAPI = {
     declineProposal: (proposalId, input) => input ? invoke('knowledge:proposal:decline', proposalId, input) : invoke('knowledge:proposal:decline', proposalId),
     history: (pageId, options) => options ? invoke('knowledge:page:history', pageId, options) : invoke('knowledge:page:history', pageId),
     restoreVersion: (pageId, versionId, input) => input ? invoke('knowledge:page:restore', pageId, versionId, input) : invoke('knowledge:page:restore', pageId, versionId),
+  },
+  voice: {
+    status: () => invoke('voice:status'),
+    startSession: (input) => input ? invoke('voice:session:start', input) : invoke('voice:session:start'),
+    stopSession: (sessionId) => sessionId ? invoke('voice:session:stop', sessionId) : invoke('voice:session:stop'),
+    cancel: (sessionId) => sessionId ? invoke('voice:session:cancel', sessionId) : invoke('voice:session:cancel'),
   },
   confirm: {
     requestDestructive: (request) => invoke('confirm:request-destructive', request),
@@ -717,6 +728,10 @@ const api: CoworkAPI = {
     knowledgeUpdated: (callback: () => void) => {
       const handler = () => callback()
       return listen('knowledge:updated', handler)
+    },
+    voiceEvent: (callback: (data: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data)
+      return listen('voice:event', handler)
     },
   },
 }
