@@ -356,4 +356,3 @@ export function sttLogMeta(result: VoiceSttResult) {
     cleaned: result.cleaned,
   }
 }
-
