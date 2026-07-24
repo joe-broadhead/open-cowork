@@ -63,9 +63,11 @@ test('voice host captures PCM with fake backend without exposing samples on stat
   const listening = host.getStatus()
   assert.equal(listening.phase, 'listening')
   assert.ok((listening.capture?.frames || 0) > 0)
-  // Status must not smuggle PCM arrays.
+  // Status must not smuggle PCM arrays / raw sample buffers.
   assert.equal('samples' in (listening.capture || {}), false)
-  assert.equal(JSON.stringify(listening).includes('0.05'), false)
+  const statusJson = JSON.stringify(listening)
+  assert.doesNotMatch(statusJson, /"samples"\s*:/)
+  assert.doesNotMatch(statusJson, /ArrayBuffer|Float32Array/)
 
   const hostPcm = host.getHostPcmSnapshot()
   assert.ok(hostPcm)
