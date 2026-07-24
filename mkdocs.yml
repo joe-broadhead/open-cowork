@@ -110,6 +110,8 @@ nav:
       - Getting Started: getting-started.md
       - Desktop App Guide: desktop-app.md
       - Glossary: glossary.md
+      - Progressive disclosure: progressive-disclosure.md
+      - Product purity register: product-purity-register.md
   - Use:
       - Projects: projects.md
       - Playbooks: workflows.md

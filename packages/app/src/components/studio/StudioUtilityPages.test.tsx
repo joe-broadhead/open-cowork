@@ -135,8 +135,8 @@ describe('StudioApprovalsPage', () => {
 
     render(<StudioApprovalsPage onOpenChat={vi.fn()} onOpenHome={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: 'Always allow' })).toBeDisabled()
-    expect(screen.getByText('Persistent allow rules must be changed in Settings so the runtime can restart safely.')).toBeInTheDocument()
+    // JOE-1039: Always allow is omitted until a real policy path ships (no teaser control).
+    expect(screen.queryByRole('button', { name: 'Always allow' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
     await waitFor(() => expect(permissionRespond).toHaveBeenCalledWith('approval-1', true, 'active-session', { workspaceId: LOCAL_WORKSPACE_ID }))

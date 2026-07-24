@@ -71,9 +71,22 @@ function workspaceDescription(workspace: WorkspaceInfo, support: WorkspaceApiSup
     return t('workspace.local', 'Local workspace - private on this device')
   }
   if (workspace.authority === 'gateway_standalone') {
+    // JOE-1044: Desktop may register Standalone Gateway for health/connection only
+    // until a Desktop-safe session API exists. Never imply full chat readiness.
+    const deferredReason = workspaceSupportReason(support, 'sessions.list', 'sessions.create', 'sessions.prompt')
+    const listEntry = support?.find((item) => item.api === 'sessions.list')
+    if (listEntry?.status === 'deferred' || listEntry?.status === 'not_supported') {
+      return deferredReason
+        ? t('workspace.gatewayStandalonePreview', 'Standalone Gateway — connection only') + ` · ${deferredReason}`
+        : t('workspace.gatewayStandalonePreviewDefault', 'Standalone Gateway — connection/health only; chat sessions deferred')
+    }
     return t('workspace.gatewayStandalone', 'Standalone Gateway - private Gateway execution')
   }
   if (workspace.authority === 'desktop_paired') {
+    const listEntry = support?.find((item) => item.api === 'sessions.list')
+    if (listEntry?.status === 'deferred' || listEntry?.status === 'not_supported') {
+      return t('workspace.desktopPairedPreview', 'Paired Desktop connector — remote session ops deferred until complete')
+    }
     return t('workspace.desktopPaired', 'Paired Desktop - remote access to an opted-in local workspace')
   }
   if (workspace.authority === 'cloud_channel_gateway') {
@@ -383,7 +396,7 @@ export function WorkspaceSwitcher() {
                     fullWidth
                     onClick={() => void addGatewayWorkspace()}
                   >
-                    {t('workspace.addGateway', 'Add Gateway')}
+                    {t('workspace.addStandaloneGateway', 'Connect for health')}
                   </Button>
                   <Button
                     variant="ghost"
@@ -401,8 +414,12 @@ export function WorkspaceSwitcher() {
                 fullWidth
                 className="justify-start"
                 onClick={() => setShowGatewayForm(true)}
+                title={t(
+                  'workspace.connectStandaloneHint',
+                  'Registers Standalone Gateway URL and token for health and support. Chat sessions stay deferred until a Desktop-safe session API is available.',
+                )}
               >
-                {t('workspace.connectGateway', 'Connect Gateway workspace')}
+                {t('workspace.connectStandalone', 'Connect Standalone Gateway (health only)')}
               </Button>
             )}
           </div>

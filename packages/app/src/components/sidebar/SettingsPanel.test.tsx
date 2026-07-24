@@ -203,7 +203,7 @@ describe('SettingsPanel', () => {
     await waitFor(() => expect(getProviderCredentials).toHaveBeenCalledTimes(1))
     // Save only persists when there are unsaved edits, so make one first.
     await user.click(screen.getByRole('button', { name: /Notifications/ }))
-    await user.click(screen.getByRole('switch', { name: 'Voice replies' }))
+    await user.click(screen.getByRole('switch', { name: 'Sounds' }))
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => {
@@ -265,8 +265,8 @@ describe('SettingsPanel', () => {
 
     await screen.findByText('Settings')
     await user.click(screen.getByRole('button', { name: /Notifications/ }))
-    await user.click(screen.getByRole('switch', { name: 'Voice replies' }))
-    await user.click(screen.getByRole('switch', { name: 'Daily digest' }))
+    await user.click(screen.getByRole('switch', { name: 'Smart suggestions' }))
+    await user.click(screen.getByRole('switch', { name: 'Sounds' }))
     await user.click(screen.getByRole('button', { name: /Privacy/ }))
     expect(screen.getByText('Session retention stays managed by OpenCode runtime history and explicit storage cleanup until a verified retention policy is available.')).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: 'Help improve the product' }))
@@ -274,8 +274,8 @@ describe('SettingsPanel', () => {
 
     await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
     expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
-      notificationVoiceReplies: false,
-      notificationDailyDigest: true,
+      notificationSmartSuggestions: false,
+      notificationSounds: false,
       privacyShareAnonymizedUsage: true,
     })
   })
@@ -295,7 +295,7 @@ describe('SettingsPanel', () => {
 
     // An edit makes it dirty and enables Save.
     await user.click(screen.getByRole('button', { name: /Notifications/ }))
-    await user.click(screen.getByRole('switch', { name: 'Daily digest' }))
+    await user.click(screen.getByRole('switch', { name: 'Sounds' }))
     const dirtySave = screen.getByRole('button', { name: 'Save Changes' })
     expect(dirtySave).toBeEnabled()
 
@@ -325,7 +325,7 @@ describe('SettingsPanel', () => {
 
     // Make an edit, then attempt to close: a discard confirmation intercepts.
     await user.click(screen.getByRole('button', { name: /Notifications/ }))
-    await user.click(screen.getByRole('switch', { name: 'Daily digest' }))
+    await user.click(screen.getByRole('switch', { name: 'Sounds' }))
     await user.click(screen.getByRole('button', { name: 'Close dialog' }))
     expect(onClose).not.toHaveBeenCalled()
     expect(await screen.findByText('Discard unsaved changes?')).toBeInTheDocument()
@@ -471,7 +471,7 @@ describe('SettingsPanel', () => {
     // Save only persists when there are unsaved edits, so toggle a portable
     // preference first; the assertion below confirms only that change rides along.
     await user.click(screen.getByRole('button', { name: /Notifications/ }))
-    await user.click(screen.getByRole('switch', { name: 'Daily digest' }))
+    await user.click(screen.getByRole('switch', { name: 'Sounds' }))
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
     await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
     expect(settingsSet.mock.calls[0]?.[0]).toEqual({
@@ -484,8 +484,8 @@ describe('SettingsPanel', () => {
       workflowQuietHoursEnd: null,
       notificationVoiceReplies: true,
       notificationSmartSuggestions: true,
-      notificationDailyDigest: true,
-      notificationSounds: true,
+      notificationDailyDigest: false,
+      notificationSounds: false,
       privacyShareAnonymizedUsage: false,
     })
   })

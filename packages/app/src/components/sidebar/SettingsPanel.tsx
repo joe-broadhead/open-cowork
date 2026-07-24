@@ -189,34 +189,17 @@ function SettingsNotificationsPanel({
   settings: EffectiveAppSettings
   update: (patch: Partial<EffectiveAppSettings>) => void
 }) {
+  // Product purity (JOE-1031): only ship notification controls that have a real
+  // runtime effect. Voice replies and daily digest stay out of the UI until
+  // implemented end-to-end (settings fields may still exist for forward compat).
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-4">
-        <SettingsToggleRow
-          title={t('settings.notifications.voiceReplies', 'Voice replies')}
-          description={t(
-            'settings.notifications.voiceRepliesDescription',
-            'Preference is saved for a future voice-output path. No speech synthesis runs in this release — enablement will not change agent behavior yet.',
-          )}
-          checked={settings.notificationVoiceReplies}
-          onToggle={() => update({ notificationVoiceReplies: !settings.notificationVoiceReplies })}
-          statusLabel={t('settings.notifications.comingSoon', 'Coming soon')}
-        />
         <SettingsToggleRow
           title={t('settings.notifications.smartSuggestions', 'Smart suggestions')}
           description={t('settings.notifications.smartSuggestionsDescription', 'Show task ideas and launchpad suggestions based on recent workspace activity.')}
           checked={settings.notificationSmartSuggestions}
           onToggle={() => update({ notificationSmartSuggestions: !settings.notificationSmartSuggestions })}
-        />
-        <SettingsToggleRow
-          title={t('settings.notifications.dailyDigest', 'Daily digest')}
-          description={t(
-            'settings.notifications.dailyDigestDescription',
-            'Preference is saved for a future morning summary. Open Cowork does not send digest emails or push digests in this release.',
-          )}
-          checked={settings.notificationDailyDigest}
-          onToggle={() => update({ notificationDailyDigest: !settings.notificationDailyDigest })}
-          statusLabel={t('settings.notifications.comingSoon', 'Coming soon')}
         />
         <SettingsToggleRow
           title={t('settings.notifications.sounds', 'Sounds')}

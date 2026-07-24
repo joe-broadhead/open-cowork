@@ -75,8 +75,6 @@ export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
     window.coworkApi.permission.respond(item.id, allowed, item.sessionId, { workspaceId: item.workspaceId || activeWorkspaceId })
   )), [activeWorkspaceId, runQueueAction])
 
-  const alwaysAllowUnavailable = useCallback(() => undefined, [])
-
   const replyQuestion = useCallback((item: ApprovalsQueueQuestionItem, answers: string[][]) => runQueueAction(item, () => (
     window.coworkApi.question.reply(item.sessionId, item.id, answers, { workspaceId: item.workspaceId || activeWorkspaceId })
   )), [activeWorkspaceId, runQueueAction])
@@ -90,7 +88,7 @@ export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
       <StudioPageHeader
         eyebrow={t('studio.approvals.eyebrow', 'Review')}
         title={t('studio.approvals.title', 'Approvals')}
-        description={t('studio.approvals.description', 'Backlog across threads. Urgent asks also appear inline in the chat that is waiting — resolve either place; both clear the same request.')}
+        description={t('studio.approvals.description', 'Backlog across threads. Urgent asks also appear inline in the chat that is waiting — resolve either place; both clear the same request. Lasting allow rules live in Settings permissions — use Allow once or Deny here.')}
         actions={[{
           id: 'open-chat',
           children: currentSessionId ? t('studio.approvals.openChat', 'Open chat') : t('studio.approvals.startChat', 'Start from Home'),
@@ -106,7 +104,6 @@ export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
         emptyBody={t('studio.approvals.emptyBody', 'OpenCode permission requests and questions will appear here when any chat needs your input.')}
         onOpenSession={openQueueSession}
         onAllowOnce={(item) => respondPermission(item, true)}
-        onAlwaysAllow={alwaysAllowUnavailable}
         onDeny={(item) => respondPermission(item, false)}
         onReplyQuestion={replyQuestion}
         onRejectQuestion={rejectQuestion}

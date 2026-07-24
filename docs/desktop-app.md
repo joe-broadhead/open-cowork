@@ -8,7 +8,7 @@ Default sidebar nav when `features` is omitted or partial:
 **Primary (default on)**
 
 - `Home` — start a chat, attach context, choose a model, or @mention a coworker
-- `Projects` — searchable project-chat history, facets, tags, and saved filters
+- `Projects` — coordination board (objectives, Kanban tasks, linked work chats)
 - `Team` — built-in and custom OpenCode agents presented as coworkers with curated tools and skills
 - `Playbooks` — workflow-backed repeatable tasks created from Workflow Designer setup chats, with manual, scheduled, and webhook runs
 - `Tools & Skills` — MCP tools, OpenCode skills, credentials, and capability relationships
@@ -16,11 +16,12 @@ Default sidebar nav when `features` is omitted or partial:
 **Secondary Studio surfaces (default off — progressive disclosure)**
 
 These remain in the product and in docs, but stay hidden from default nav until
-enabled with `features.<key>: true` in `open-cowork.config.json` (or an overlay):
+enabled with `features.<key>: true` in `open-cowork.config.json` (or an overlay).
+See [Progressive disclosure](progressive-disclosure.md).
 
-- `Knowledge` — OpenWiki spaces, pages, proposals, and graph (`features.knowledge`)
+- `Knowledge` — in-app knowledge spaces, pages, proposals, and graph (`features.knowledge`). Not the optional Wiki product (`cowork-wiki`).
 - `Approvals` — cross-session permission and question review queue (`features.approvals`)
-- `Channels` — gateway channel connections, bindings, and delivery status (`features.channels`)
+- `Channels` — Channel Gateway connections, bindings, and delivery status (`features.channels`)
 - `Artifacts` — library of generated files, charts, reports, and deliverables (`features.artifacts`)
 
 In-thread chat approvals, questions, and session artifacts still work when the
@@ -51,8 +52,8 @@ skill and agent.
 flowchart TD
     Home["Home<br/>composer · attachments · @coworker pills"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
-    Projects["Projects<br/>search · facets · tags · saved context"]
-    Knowledge["Knowledge<br/>wiki spaces · proposals"]
+    Projects["Projects<br/>Kanban · objectives · linked chats"]
+    Knowledge["Knowledge<br/>spaces · proposals"]
     Approvals["Approvals<br/>cross-session review queue"]
     Playbooks["Playbooks<br/>setup chats · triggers · runs"]
     Team["Team<br/>built-in + custom coworkers"]
@@ -166,20 +167,13 @@ second execution model in the renderer.
 
 ## Projects
 
-Projects is the place to find prior project chats and saved work context. It
-is backed by OpenCode session/thread state and should optimize for fast recall:
-
-- search
-- project and status facets
-- saved filters where they are useful
-- metadata that helps users decide which project chat to reopen
-
-Projects can link to playbook runs, but it should stay focused on recall and
-reopening work.
+Projects is the **coordination board**: objectives, Kanban tasks, assignees, and
+linked OpenCode work chats. Quick recall of recent chats stays in the sidebar
+thread list. See [Projects](projects.md) for the product decision (JOE-1052).
 
 ## Knowledge
 
-Knowledge is the OpenWiki surface for spaces, pages, proposal review, and the
+Knowledge is the **in-app** knowledge surface for spaces, pages, proposal review, and the
 knowledge graph. It is a **secondary Studio surface (default off)** — enable
 with `features.knowledge: true` when you want durable notes next to Chat and
 Projects. Proposals remain review-gated; the surface does not invent a second

@@ -967,11 +967,11 @@ describe('Sidebar', () => {
     )
 
     fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect Gateway workspace' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Standalone Gateway (health only)' }))
     fireEvent.change(screen.getByLabelText('Gateway URL'), { target: { value: 'https://gateway.example.test' } })
     fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'Private Gateway' } })
     fireEvent.change(screen.getByLabelText('Gateway token'), { target: { value: 'secret-token' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add Gateway' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect for health' }))
 
     await waitFor(() => {
       expect(addGateway).toHaveBeenCalledWith({

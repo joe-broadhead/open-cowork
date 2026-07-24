@@ -98,6 +98,14 @@ export function App() {
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [metadata, setMetadata] = useState<AppMetadata | null>(null)
   const [previewNoticeDismissed, setPreviewNoticeDismissed] = useState(false)
+  const [cloudWebCapabilityDismissed, setCloudWebCapabilityDismissed] = useState(() => {
+    if (isDesktopRuntime()) return true
+    try {
+      return window.localStorage?.getItem('open-cowork.cloud-web.capability-banner.dismissed') === 'true'
+    } catch {
+      return false
+    }
+  })
   const [authChecked, setAuthChecked] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [settingsChecked, setSettingsChecked] = useState(false)
@@ -755,6 +763,7 @@ export function App() {
   // Sidebar), which was the bug this replaced.
   void localeVersion
   const showPreviewNotice = Boolean(metadata?.preview && !previewNoticeDismissed)
+  const showCloudWebCapabilityNotice = !isDesktopRuntime() && !cloudWebCapabilityDismissed
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <a
@@ -774,6 +783,8 @@ export function App() {
         metadata={metadata}
         showPreviewNotice={showPreviewNotice}
         onPreviewDismiss={() => setPreviewNoticeDismissed(true)}
+        showCloudWebCapabilityNotice={showCloudWebCapabilityNotice}
+        onCloudWebCapabilityDismiss={() => setCloudWebCapabilityDismissed(true)}
         runtimeWasReady={runtimeWasReady}
         runtimeError={runtimeError}
         onRuntimeRestart={handleRuntimeRestart}
