@@ -1,10 +1,11 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
-import type { SessionInfo } from '@open-cowork/shared'
+import { VOICE_PTT_SHORTCUT, type SessionInfo } from '@open-cowork/shared'
 
 import { normalizeAppView, type AppView } from '../app-types'
 import { t } from '../helpers/i18n'
 import { switchToSession } from '../helpers/switchToSession'
 import { useSessionStore } from '../stores/session'
+import { matchesAccelerator, normalizeAccelerator, requestVoicePttToggle } from './voice-ptt-hotkey'
 
 type UseAppGlobalEventsOptions = {
   runtimeReady: boolean
@@ -112,6 +113,17 @@ export function useAppGlobalEvents({
   setShowCommandPalette,
 }: UseAppGlobalEventsOptions) {
   useEffect(() => {
+    let cancelled = false
+    let voiceShortcut = VOICE_PTT_SHORTCUT
+    void window.coworkApi?.settings?.get?.().then((settings) => {
+      if (cancelled) return
+      if (settings && typeof settings.voicePttShortcut === 'string') {
+        voiceShortcut = normalizeAccelerator(settings.voicePttShortcut)
+      }
+    }).catch(() => {
+      // Settings unavailable — keep default accelerator.
+    })
+
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
 
@@ -147,13 +159,23 @@ export function useAppGlobalEvents({
         }
       }
 
+      // Voice PTT (JOE-1110): app-focused only; menu accelerator is the primary path.
+      if (matchesAccelerator(e, voiceShortcut)) {
+        e.preventDefault()
+        void requestVoicePttToggle()
+        return
+      }
+
       if (e.key === 'Escape') {
         if (view !== 'home') setView(currentSessionId ? 'chat' : 'home')
       }
     }
 
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    return () => {
+      cancelled = true
+      window.removeEventListener('keydown', handler)
+    }
   }, [view, currentSessionId, toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch, setView])
 
   useEffect(() => {
@@ -202,6 +224,8 @@ export function useAppGlobalEvents({
         if (sid) {
           void exportCurrentSession(sid)
         }
+      } else if (action === 'voice-ptt-toggle') {
+        void requestVoicePttToggle()
       } else if (action.startsWith('project-switch:')) {
         const index = Number.parseInt(action.slice('project-switch:'.length), 10)
         if (Number.isInteger(index)) void switchProjectByIndex(index, setView)

@@ -1,6 +1,12 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
-import type {
-  EffectiveAppSettings, PublicAppConfig, SandboxCleanupResult, SandboxStorageStats, } from '@open-cowork/shared'
+import {
+  isDesktopFeatureEnabled,
+  VOICE_PTT_SHORTCUT,
+  type EffectiveAppSettings,
+  type PublicAppConfig,
+  type SandboxCleanupResult,
+  type SandboxStorageStats,
+} from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
   getAppearancePreferences, saveAppearancePreferences, type AppearancePreferences, } from '../../helpers/theme'
@@ -83,6 +89,7 @@ function buildSaveGatedSettings(settings: EffectiveAppSettings, isLocal: boolean
         workflowDesktopNotifications: settings.workflowDesktopNotifications,
         workflowQuietHoursStart: settings.workflowQuietHoursStart,
         workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
+        voicePttShortcut: settings.voicePttShortcut ?? null,
       }
     : {
         workspaceId,
@@ -229,6 +236,8 @@ function SettingsPrivacyPanel({
     { label: t('settings.privacy.security', 'Security'), href: config.branding.securityUrl },
     { label: t('settings.privacy.legal', 'Legal'), href: config.branding.legalUrl },
   ].filter((entry) => entry.href)
+  const voiceFeatureOn = isDesktopFeatureEnabled(config.features, 'voice')
+  const voiceShortcut = (settings.voicePttShortcut || '').trim() || VOICE_PTT_SHORTCUT
 
   return (
     <div className="flex flex-col gap-5">
@@ -249,6 +258,32 @@ function SettingsPrivacyPanel({
           onToggle={() => update({ privacyShareAnonymizedUsage: !settings.privacyShareAnonymizedUsage })}
         />
       </div>
+      {voiceFeatureOn ? (
+        <div id="settings-privacy-voice" className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-3 scroll-mt-4">
+          <div className="text-xs font-semibold text-text">{t('settings.privacy.voiceTitle', 'Private voice (Desktop)')}</div>
+          <div className="text-xs leading-relaxed text-text-muted">
+            {t(
+              'settings.privacy.voiceDescription',
+              'Push-to-talk toggle works while Open Cowork is focused. It does not inject text into other apps (that is a separate system Accessibility product). Avoid the command-palette shortcut (Cmd/Ctrl+Shift+P).',
+            )}
+          </div>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-text">{t('settings.privacy.voicePttShortcut', 'Push-to-talk shortcut')}</span>
+            <Input
+              value={voiceShortcut}
+              onChange={(event) => update({ voicePttShortcut: event.target.value })}
+              placeholder={VOICE_PTT_SHORTCUT}
+              aria-label={t('settings.privacy.voicePttShortcut', 'Push-to-talk shortcut')}
+            />
+            <span className="text-[11px] leading-relaxed text-text-muted">
+              {t(
+                'settings.privacy.voicePttShortcutHint',
+                'Electron accelerator form, e.g. CmdOrCtrl+Shift+Space. Menu bar uses the default until restart; in-app key matching uses this value after Save.',
+              )}
+            </span>
+          </label>
+        </div>
+      ) : null}
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-3">
         <div className="text-xs font-semibold text-text">{t('settings.privacy.dataControls', 'Data controls')}</div>
         <div className="text-xs leading-relaxed text-text-muted">
