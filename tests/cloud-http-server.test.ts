@@ -3423,6 +3423,8 @@ test('cloud HTTP BYOK override activates an unvalidated provider with audited re
       role: 'owner',
       authSource: 'user',
     }),
+    // Require audited override when no validator exists for custom-provider.
+    byokSecretStoreOptions: { activateUnvalidatedProviders: false },
   })
   const baseUrl = await fixture.server.listen()
   try {

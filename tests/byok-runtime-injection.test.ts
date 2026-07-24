@@ -72,7 +72,12 @@ class ConfigBackedRuntime implements CloudRuntimeAdapter {
   constructor(input: WorkerScopedRuntimeFactoryInput) {
     this.context = input.execution
     const provider = input.runtimeConfig?.provider as Record<string, { options?: Record<string, unknown> }> | undefined
-    this.apiKey = String(provider?.openrouter?.options?.apiKey || '')
+    // OpenRouter BYOK is composed under OpenCode runtime id `or` (not models.dev `openrouter`).
+    this.apiKey = String(
+      provider?.or?.options?.apiKey
+      || provider?.openrouter?.options?.apiKey
+      || '',
+    )
   }
 
   async createSession() {
