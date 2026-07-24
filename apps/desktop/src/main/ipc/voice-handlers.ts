@@ -1,12 +1,11 @@
 /**
- * Private realtime voice IPC scaffold (JOE-1096 / JOE-1097).
+ * Private realtime voice IPC (JOE-1096 / JOE-1097).
  *
- * Handlers are intentional stubs until Aurum STT + sibling TTS are wired in the
- * voice host. They never capture audio in the renderer and never claim readiness.
+ * Capture + PCM live in VoiceHost (main). IPC returns status/session text only —
+ * never raw audio. STT remains deferred until Aurum is wired (V1.2).
  */
 import {
   isDesktopFeatureEnabled,
-  VOICE_HOST_DEFERRED_REASON,
   voiceHostStatusForFeatures,
   type VoiceHostStatus,
   type VoiceSessionSnapshot,
@@ -20,16 +19,7 @@ import {
   optionalStringArg,
   registerIpcInvoke,
 } from './schema.ts'
-
-function currentStatus(): VoiceHostStatus {
-  return voiceHostStatusForFeatures(getAppConfig().features)
-}
-
-function assertVoiceFeatureEnabled() {
-  if (!isDesktopFeatureEnabled(getAppConfig().features, 'voice')) {
-    throw new Error('Private voice is disabled. Set features.voice to true in open-cowork.config.json to opt in.')
-  }
-}
+import { getVoiceHost } from '../voice-host.ts'
 
 function normalizeStartInput(value: Record<string, unknown> | undefined): VoiceSessionStartInput {
   if (!value) return {}
@@ -47,21 +37,44 @@ function normalizeStartInput(value: Record<string, unknown> | undefined): VoiceS
   }
 }
 
+function syncHostFeatures() {
+  const host = getVoiceHost()
+  host.setFeatures(getAppConfig().features)
+  return host
+}
+
+function broadcastVoiceEvent(context: IpcHandlerContext, payload: unknown) {
+  const win = context.getMainWindow()
+  if (!win || win.isDestroyed()) return
+  try {
+    win.webContents.send('voice:event', payload)
+  } catch {
+    // window may be closing
+  }
+}
+
 export function registerVoiceHandlers(context: IpcHandlerContext) {
-  registerIpcInvoke(context, 'voice:status', noIpcArgs, async () => currentStatus())
+  registerIpcInvoke(context, 'voice:status', noIpcArgs, async () => {
+    const voiceHost = syncHostFeatures()
+    await voiceHost.refreshPermissions().catch(() => null)
+    const status = voiceHost.getStatus()
+    broadcastVoiceEvent(context, { type: 'status', status })
+    return status
+  })
 
   registerIpcInvoke(
     context,
     'voice:session:start',
     optionalObjectArg<VoiceSessionStartInput>('voice session start input'),
     async (_event, input) => {
-      assertVoiceFeatureEnabled()
+      const voiceHost = syncHostFeatures()
+      if (!isDesktopFeatureEnabled(getAppConfig().features, 'voice')) {
+        throw new Error('Private voice is disabled. Set features.voice to true in open-cowork.config.json to opt in.')
+      }
       const normalized = normalizeStartInput(input as Record<string, unknown> | undefined)
-      // Scaffold: refuse to open a live capture session until the host is real.
-      throw new Error(
-        `Voice session start is deferred: ${VOICE_HOST_DEFERRED_REASON}`
-        + (normalized.openCodeSessionId ? ` (session ${normalized.openCodeSessionId})` : ''),
-      )
+      const snapshot = await voiceHost.startSession(normalized)
+      broadcastVoiceEvent(context, { type: 'status', status: voiceHost.getStatus() })
+      return snapshot
     },
   )
 
@@ -69,14 +82,24 @@ export function registerVoiceHandlers(context: IpcHandlerContext) {
     context,
     'voice:session:stop',
     optionalStringArg('voice session id'),
-    async (_event, _sessionId) => currentStatus(),
+    async (_event, sessionId) => {
+      const voiceHost = syncHostFeatures()
+      const status = await voiceHost.stopSession(sessionId)
+      broadcastVoiceEvent(context, { type: 'status', status })
+      return status
+    },
   )
 
   registerIpcInvoke(
     context,
     'voice:session:cancel',
     optionalStringArg('voice session id'),
-    async (_event, _sessionId) => currentStatus(),
+    async (_event, sessionId) => {
+      const voiceHost = syncHostFeatures()
+      const status = await voiceHost.cancel(sessionId)
+      broadcastVoiceEvent(context, { type: 'status', status })
+      return status
+    },
   )
 }
 
