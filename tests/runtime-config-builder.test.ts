@@ -241,8 +241,9 @@ test('buildRuntimeConfig applies the org managed policy: tightens permissions an
     assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'managed-skill', 'SKILL.md')), true)
     assert.equal(existsSync(join(getRuntimeSkillCatalogDir(), 'custom-review', 'SKILL.md')), false)
     assert.equal(existsSync(join(getMachineSkillsDir(), 'custom-review', 'SKILL.md')), false)
-    // The provider allow-list still permits the configured provider.
-    assert.deepEqual(governed.enabled_providers, ['openrouter'])
+    // The provider allow-list still permits the configured provider (OpenRouter
+    // maps to OpenCode runtime id `or` for V2 model availability).
+    assert.deepEqual(governed.enabled_providers, ['or'])
   } finally {
     setActiveManagedPolicy(null)
     resetActiveManagedPolicyCache()
@@ -1004,10 +1005,11 @@ test('buildRuntimeConfig passes the Cowork skill catalog through SDK-native skil
   }
 })
 
-test('buildRuntimeConfig composes openrouter with openai-compatible npm for V2 serve', () => {
+test('buildRuntimeConfig composes openrouter under runtime id or with openai-compatible npm for V2 serve', () => {
   // V2 `serve` cannot load models.dev's default `@openrouter/ai-sdk-provider`
-  // (UnsupportedApiError). Cowork must force the bundled openai-compatible
-  // package and inject apiKey/baseURL while leaving the models catalog unpinned.
+  // (UnsupportedApiError), and re-registering the reserved `openrouter` id with
+  // openai-compatible never appears in model.available(). Cowork registers as
+  // `or` with apiKey/baseURL and pins the selected model id.
   const originalSettings = loadSettings()
 
   saveSettings({
@@ -1023,18 +1025,17 @@ test('buildRuntimeConfig composes openrouter with openai-compatible npm for V2 s
   try {
     const runtimeConfig = buildRuntimeConfig() as Record<string, any>
 
-    assert.equal(runtimeConfig.model, 'openrouter/anthropic/claude-sonnet-4')
-    assert.equal(runtimeConfig.small_model, 'openrouter/anthropic/claude-sonnet-4')
-    assert.deepEqual(runtimeConfig.provider?.openrouter, {
-      name: 'OpenRouter',
-      npm: '@ai-sdk/openai-compatible',
-      options: {
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: 'sk-or-test',
-      },
+    assert.equal(runtimeConfig.model, 'or/anthropic/claude-sonnet-4')
+    assert.equal(runtimeConfig.small_model, 'or/anthropic/claude-sonnet-4')
+    assert.equal(runtimeConfig.provider?.openrouter, undefined)
+    assert.equal(runtimeConfig.provider?.or?.npm, '@ai-sdk/openai-compatible')
+    assert.deepEqual(runtimeConfig.provider?.or?.options, {
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-or-test',
     })
-    assert.equal(runtimeConfig.provider?.openrouter?.models, undefined)
-    assert.ok(runtimeConfig.enabled_providers?.includes('openrouter'))
+    assert.ok(runtimeConfig.provider?.or?.models?.['anthropic/claude-sonnet-4'])
+    assert.ok(runtimeConfig.enabled_providers?.includes('or'))
+    assert.equal(runtimeConfig.enabled_providers?.includes('openrouter'), false)
   } finally {
     saveSettings(originalSettings)
   }
@@ -1057,8 +1058,8 @@ test('buildRuntimeConfig uses the user-selected small model for OpenCode lightwe
   try {
     const runtimeConfig = buildRuntimeConfig()
 
-    assert.equal(runtimeConfig.model, 'openrouter/anthropic/claude-sonnet-4')
-    assert.equal(runtimeConfig.small_model, 'openrouter/qwen/qwen3-coder-flash')
+    assert.equal(runtimeConfig.model, 'or/anthropic/claude-sonnet-4')
+    assert.equal(runtimeConfig.small_model, 'or/qwen/qwen3-coder-flash')
   } finally {
     saveSettings(originalSettings)
   }

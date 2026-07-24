@@ -112,10 +112,10 @@ The upstream build ships with **OpenRouter** as the default provider, plus
 direct **OpenAI Codex** and **GitHub Copilot** entries for users who prefer
 OpenCode-native provider login.
 
-OpenRouter routes requests to many model backends (Qwen, Anthropic,
-OpenAI, others) through a single credential. The upstream default model is the
-low-cost `qwen/qwen3-coder-flash` OpenRouter model. To use the default
-path you need an OpenRouter API key:
+OpenRouter routes requests to many model backends (DeepSeek, Qwen, Anthropic,
+OpenAI, others) through a single credential. The upstream default model is
+`deepseek/deepseek-v4-flash` (fast, low-cost OpenRouter lane). To use the
+default path you need an OpenRouter API key:
 
 1. Sign up at [openrouter.ai](https://openrouter.ai/).
 2. Create an API key at [openrouter.ai/keys](https://openrouter.ai/keys).

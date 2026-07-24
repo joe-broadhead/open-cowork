@@ -1086,18 +1086,60 @@ function writeEphemeralOpencodeConfig(paths: PathProvider, config: OpencodeServe
   }
 }
 
+/**
+ * OpenRouter managed V2 serve requires auth.json `{ type: "api", key }` in
+ * addition to the composed openai-compatible provider block (desktop path does
+ * both). Without auth.json, SessionRunnerModel.resolve marks catalog models
+ * unavailable even when options.apiKey is set.
+ */
+function writeEphemeralOpencodeAuth(
+  paths: PathProvider,
+  config: OpencodeServerOptions['config'] | undefined,
+) {
+  const providers = config?.provider
+  if (!providers || typeof providers !== 'object') return () => undefined
+  const authEntries: Record<string, { type: 'api', key: string }> = {}
+  for (const [providerId, provider] of Object.entries(providers)) {
+    const options = (provider as { options?: Record<string, unknown> } | undefined)?.options
+    const apiKey = options?.apiKey
+    if (typeof apiKey === 'string' && apiKey.trim()) {
+      authEntries[providerId] = { type: 'api', key: apiKey }
+    }
+  }
+  if (Object.keys(authEntries).length === 0) return () => undefined
+
+  const authPath = join(paths.getRuntimeXdgRoots().dataHome, 'opencode', 'auth.json')
+  mkdirSync(dirname(authPath), { recursive: true })
+  writeFileSync(authPath, `${JSON.stringify(authEntries, null, 2)}\n`, { mode: 0o600 })
+  chmodSync(authPath, 0o600)
+  return () => {
+    try {
+      unlinkSync(authPath)
+    } catch {
+      // The runtime may already have removed or moved the file.
+    }
+  }
+}
+
 export async function createNodeOpencodeCloudRuntimeAdapter(
   options: NodeOpencodeCloudRuntimeOptions,
 ): Promise<NodeOpencodeCloudRuntimeAdapter> {
   ensureNodeRuntimeDirs(options.paths)
   const auth = createManagedOpencodeServerAuth()
   const runtimePaths = options.paths.getRuntimeXdgRoots()
+  // Keep ephemeral credential-class files for the full managed-server lifetime.
+  // OpenCode V2 reloads XDG config on session/turn (not only at process boot).
+  // Deleting after listen() left empty defaults and caused free-tier fallback
+  // models like hy3-free to win over the BYOK model/provider injection.
   let cleanupEphemeralConfig: (() => void) | null = null
-  const serverConfig = options.configDelivery === 'ephemeral-file'
-    ? undefined
-    : options.config
-  if (options.configDelivery === 'ephemeral-file' && options.config !== undefined) {
+  let cleanupEphemeralAuth: (() => void) | null = null
+  // Always feed composed BYOK config through OPENCODE_CONFIG_DIR (desktop path)
+  // AND the session XDG opencode.json. OpenCode V2 session turns reload from the
+  // XDG config home; OPENCODE_CONFIG_DIR alone is not enough for model.available().
+  const serverConfig = options.config
+  if (options.config !== undefined) {
     cleanupEphemeralConfig = writeEphemeralOpencodeConfig(options.paths, options.config)
+    cleanupEphemeralAuth = writeEphemeralOpencodeAuth(options.paths, options.config)
   }
   const env = buildManagedRuntimeEnvironment({
     currentEnv: options.env || process.env,
@@ -1126,13 +1168,21 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
       opencodeBinPath: options.opencodeBinPath,
       onUnexpectedExit: options.onUnexpectedExit,
     })
-  } finally {
+  } catch (error) {
     cleanupEphemeralConfig?.()
+    cleanupEphemeralConfig = null
+    cleanupEphemeralAuth?.()
+    cleanupEphemeralAuth = null
+    throw error
   }
   const client = createOpencodeV2Client(buildNodeOpencodeCloudRuntimeClientConfig(server.url, auth))
+  // Force the composed BYOK/default model onto create/prompt. Config `model`
+  // alone is not enough: OpenCode V2 still defaults free-tier sessions to
+  // opencode/hy3-free when the session is created without an explicit ModelRef.
+  const defaultModel = typeof options.config?.model === 'string' ? options.config.model : null
   const adapter = createSdkCloudRuntimeAdapter(client, {
     directory: options.cwd || options.paths.getRuntimeHomeDir(),
-  })
+  }, { defaultModel })
   const knownRootSessions = new Set<string>()
   const eventSubscriptions = new Set<OpencodeCloudRuntimeEventSubscription>()
 
@@ -1187,6 +1237,10 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
       for (const subscription of eventSubscriptions) subscription()
       eventSubscriptions.clear()
       server.close()
+      cleanupEphemeralConfig?.()
+      cleanupEphemeralConfig = null
+      cleanupEphemeralAuth?.()
+      cleanupEphemeralAuth = null
     },
   }
 }

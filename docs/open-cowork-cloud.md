@@ -878,6 +878,14 @@ them through `/api/byok`; records remain `pending_validation` until a provider
 validator passes, or an org admin uses the audited override endpoint with a
 redacted reason.
 
+For **OpenRouter** BYOK, Cloud workers compose managed OpenCode config the same
+way as desktop: Cowork app provider id stays `openrouter`, but the OpenCode
+runtime provider id is `or` with `@ai-sdk/openai-compatible`, the public
+OpenRouter base URL, the revealed API key (options + `auth.json`), and an
+explicit models pin for the org default and featured catalog ids. Session turns
+reload that config from the session XDG tree for the full managed-server
+lifetime. See `docs/configuration.md` (OpenRouter special-case).
+
 Credentialless OpenCode-native desktop providers, including GitHub Copilot, are
 not normal Cloud BYOK providers. The upstream managed BYOK path admits only
 provider descriptors with declared secret credential fields, so Copilot is

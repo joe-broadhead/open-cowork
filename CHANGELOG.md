@@ -19,9 +19,15 @@ planned before broad distribution.
 
 ### Fixed
 
-- OpenRouter managed V2 serve: compose `@ai-sdk/openai-compatible` with the
-  stored API key (models.dev's `@openrouter/ai-sdk-provider` package is not
-  loadable in `opencode serve`); align connection-test auth with boot.
+- OpenRouter managed V2 serve: compose `@ai-sdk/openai-compatible` under the
+  runtime provider id `or` (models.dev `openrouter` is unusable in OpenCode
+  1.18.x `serve` — either `UnsupportedApiError` or `ModelUnavailable`); pin
+  selected/featured model ids; keep BYOK ephemeral config + `auth.json` for
+  the managed-server lifetime; force the default model on cloud create/prompt.
+- Lab/cloud compose campaign path (JOE-993): OpenCode supervisor resolution,
+  PATH, cold-start timeout, BYOK error mapping, unvalidated-BYOK activation,
+  workflow-trigger validation, gateway fake/metrics defaults, continuation
+  smoke wait for assistant projection.
 - Transcript double-render: scope OpenCode V2 part ids by message id so reused
   ids like `text-0` cannot overwrite earlier assistant bubbles.
 - macOS packaging integrity: rewrite runtime component hashes after codesign
@@ -35,8 +41,10 @@ planned before broad distribution.
 
 ### Changed
 
+- Upstream default OpenRouter model is `deepseek/deepseek-v4-flash` (was
+  `qwen/qwen3-coder-flash` / earlier Sonnet defaults in some docs).
 - Dropped seeding of `@openrouter/ai-sdk-provider` into temp config dirs;
-  OpenRouter uses composed openai-compatible config only.
+  OpenRouter uses composed openai-compatible config only under runtime id `or`.
 - Wired delegated permission-inheritance checks into agent composition (log
   soft warnings instead of silent policy theater).
 - Prefer MCP clock/time-keep tools over shell CLIs in skill docs.

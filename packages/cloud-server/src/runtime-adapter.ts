@@ -7,6 +7,7 @@ import {
   listNativePendingQuestions,
   normalizeSessionInfo,
   promptNativeSession,
+  type NativePromptModel,
 } from '@open-cowork/runtime-host'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { CloudProjectedSessionEventType } from '@open-cowork/shared'
@@ -95,13 +96,40 @@ function normalizeV2QuestionAnswers(value: unknown[]): string[][] {
   ))
 }
 
+/**
+ * Parse OpenCode config model strings like `or/deepseek/deepseek-v4-flash`
+ * into a V2 ModelRef. First path segment is the provider; the rest is the model id.
+ */
+export function parseCloudRuntimeModelRef(model: string | null | undefined): NativePromptModel | null {
+  const trimmed = model?.trim()
+  if (!trimmed) return null
+  const slash = trimmed.indexOf('/')
+  if (slash <= 0 || slash === trimmed.length - 1) return null
+  return {
+    providerID: trimmed.slice(0, slash),
+    id: trimmed.slice(slash + 1),
+  }
+}
+
 export function createSdkCloudRuntimeAdapter(
   client: OpencodeClient,
   location: { directory: string },
+  options?: { defaultModel?: string | null },
 ): CloudRuntimeAdapter {
+  const defaultModel = parseCloudRuntimeModelRef(options?.defaultModel)
   return {
     async createSession() {
-      const session = normalizeSessionInfo(await createNativeSession(client, { location }))
+      const session = normalizeSessionInfo(await createNativeSession(client, {
+        location,
+        ...(defaultModel
+          ? {
+            model: {
+              providerID: defaultModel.providerID,
+              id: defaultModel.id || defaultModel.modelID || '',
+            },
+          }
+          : {}),
+      }))
       if (!session) throw new Error('OpenCode returned an invalid session payload.')
       return {
         id: session.id,
@@ -116,6 +144,7 @@ export function createSdkCloudRuntimeAdapter(
         sessionID: input.sessionId,
         parts: input.parts,
         agent: input.agent,
+        model: defaultModel,
         messageID: messageId,
         signal: input.signal,
       })

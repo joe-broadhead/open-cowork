@@ -34,7 +34,12 @@ import {
   readBundledOpencodeCliVersion,
 } from './runtime-opencode-cli.js'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.js'
-import { buildRuntimeConfigForRuntime, isModelsDevAuthJsonBuiltin } from './runtime-config-builder.js'
+import {
+  buildRuntimeConfigForRuntime,
+  isModelsDevAuthJsonBuiltin,
+  isOpenRouterAppProviderId,
+  toOpenCodeRuntimeProviderId,
+} from './runtime-config-builder.js'
 import { preflightConfiguredCapabilityBundlesForRuntime } from './capability-bundle-runtime-preflight.js'
 import { recordCurrentRuntimeComponentVerification } from './runtime-component-manifest.js'
 import { copySkillsAndAgents } from './runtime-content.js'
@@ -204,7 +209,8 @@ export function writeRuntimeProviderApiAuth(providerID: string, key: string) {
  * Materialize Cowork-stored API keys into the managed OpenCode auth store
  * before the server starts. Keeps classic CLI/`opencode run` and auth-json
  * consumers working. OpenRouter chat in V2 serve additionally uses a composed
- * `@ai-sdk/openai-compatible` provider block (see runtime-config-builder).
+ * `@ai-sdk/openai-compatible` provider block under runtime id `or`
+ * (see runtime-config-builder / OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID).
  */
 export function syncRuntimeProviderAuthFromSettings() {
   const settings = getEffectiveSettings()
@@ -217,8 +223,9 @@ export function syncRuntimeProviderAuthFromSettings() {
     if (!apiKeyCredential) continue
     const key = getProviderCredentialValue(settings, providerID, apiKeyCredential.key)
     if (!key) continue
-    writeRuntimeProviderApiAuth(providerID, key)
-    log('provider', `Wrote managed OpenCode auth for ${providerID}`)
+    // Auth.json keys must match OpenCode runtime provider ids (`or` for OpenRouter).
+    writeRuntimeProviderApiAuth(toOpenCodeRuntimeProviderId(providerID), key)
+    log('provider', `Wrote managed OpenCode auth for ${providerID}→${toOpenCodeRuntimeProviderId(providerID)}`)
   }
 }
 
@@ -244,8 +251,9 @@ export async function syncProviderApiAuthForRuntime(
 
     // OpenRouter: auth.json + composed openai-compatible config is the only path
     // that works with managed V2 serve. Do not call V2 integration.connect.key.
-    if (isModelsDevAuthJsonBuiltin(providerID)) {
-      writeRuntimeProviderApiAuth(providerID, key)
+    // Auth key uses the runtime provider id (`or`), not the app id (`openrouter`).
+    if (isModelsDevAuthJsonBuiltin(providerID) || isOpenRouterAppProviderId(providerID)) {
+      writeRuntimeProviderApiAuth(toOpenCodeRuntimeProviderId(providerID), key)
       if (options.forConnectionTest) {
         log('provider', `Synced OpenRouter auth.json for connection test`)
       }
