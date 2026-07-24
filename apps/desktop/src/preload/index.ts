@@ -10,6 +10,7 @@ import type {
   SessionPatch,
   SessionView,
   UpdateInstallEvent,
+  VoiceHostEvent,
   WorkspaceSessionsUpdatedEvent,
 } from '@open-cowork/shared'
 
@@ -729,8 +730,8 @@ const api: CoworkAPI = {
       const handler = () => callback()
       return listen('knowledge:updated', handler)
     },
-    voiceEvent: (callback: (data: unknown) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data)
+    voiceEvent: (callback: (data: VoiceHostEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: VoiceHostEvent) => callback(data)
       return listen('voice:event', handler)
     },
   },

@@ -69,14 +69,14 @@ export function registerVoiceHandlers(context: IpcHandlerContext) {
     context,
     'voice:session:stop',
     optionalStringArg('voice session id'),
-    async () => currentStatus(),
+    async (_event, _sessionId) => currentStatus(),
   )
 
   registerIpcInvoke(
     context,
     'voice:session:cancel',
     optionalStringArg('voice session id'),
-    async () => currentStatus(),
+    async (_event, _sessionId) => currentStatus(),
   )
 }
 
