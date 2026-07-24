@@ -154,4 +154,10 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   const host = readFileSync(join(root, 'apps/desktop/src/main/voice-host.ts'), 'utf8')
   assert.match(host, /VoicePcmBuffer/)
   assert.match(host, /getHostPcmSnapshot/)
+  assert.match(host, /VoicePartialClock/)
+  assert.match(host, /type: 'partial'/)
+
+  const partialWindow = readFileSync(join(root, 'apps/desktop/src/main/voice-partial-window.ts'), 'utf8')
+  assert.match(partialWindow, /dictationPartialPolicy/)
+  assert.match(partialWindow, /takePartialSlice/)
 })

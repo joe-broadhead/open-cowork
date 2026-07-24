@@ -1,8 +1,8 @@
 /**
- * Desktop Local private voice host (JOE-1097 / JOE-1101).
+ * Desktop Local private voice host (JOE-1097 / JOE-1101 / JOE-1102).
  *
  * Owns mic capture + PCM + Aurum STT in main. Emits text/status events only —
- * never raw audio.
+ * never raw audio. Partials use a host-side rolling window (not continuous stream).
  */
 import { randomUUID } from 'node:crypto'
 import {
@@ -25,6 +25,11 @@ import {
   sttLogMeta,
   type VoiceSttEngine,
 } from './voice-stt.ts'
+import {
+  dictationPartialPolicy,
+  VoicePartialClock,
+  type VoicePartialWindowPolicy,
+} from './voice-partial-window.ts'
 import { log } from '@open-cowork/shared/node'
 
 export type VoiceHostOptions = {
@@ -35,6 +40,9 @@ export type VoiceHostOptions = {
   /** Override OS mic permission probe (tests). */
   probeMicrophone?: () => Promise<VoicePermissionState>
   onEvent?: (event: VoiceHostEvent) => void
+  partialPolicy?: VoicePartialWindowPolicy
+  /** Disable partial loop (tests that only exercise finalize). */
+  partialsEnabled?: boolean
 }
 
 type ActiveSession = VoiceSessionSnapshot & {
@@ -48,11 +56,17 @@ export class VoiceHost {
   private readonly now: () => Date
   private readonly probeMicrophone: () => Promise<VoicePermissionState>
   private readonly onEvent: (event: VoiceHostEvent) => void
+  private readonly partialPolicy: VoicePartialWindowPolicy
+  private readonly partialsEnabled: boolean
   private mic: VoicePermissionState = 'unknown'
   private session: ActiveSession | null = null
   private phase: VoiceHostStatus['phase'] = 'disabled'
   private lastError: string | null = null
   private lastTranscript: string | null = null
+  private partialClock = new VoicePartialClock()
+  private partialTimer: NodeJS.Timeout | null = null
+  private partialInFlight = false
+  private lastPartialText: string | null = null
 
   constructor(options: VoiceHostOptions = {}) {
     this.features = options.features
@@ -61,6 +75,9 @@ export class VoiceHost {
     this.now = options.now || (() => new Date())
     this.probeMicrophone = options.probeMicrophone || defaultProbeMicrophone
     this.onEvent = options.onEvent || (() => {})
+    this.partialPolicy = options.partialPolicy || dictationPartialPolicy()
+    this.partialsEnabled = options.partialsEnabled !== false
+    this.partialClock = new VoicePartialClock(this.partialPolicy)
     this.phase = isDesktopFeatureEnabled(this.features, 'voice') ? 'ready' : 'disabled'
   }
 
@@ -158,6 +175,8 @@ export class VoiceHost {
 
     this.lastError = null
     this.lastTranscript = null
+    this.lastPartialText = null
+    this.partialClock.reset()
     this.phase = 'starting'
     this.emitStatus()
 
@@ -206,6 +225,7 @@ export class VoiceHost {
     }
 
     this.phase = 'listening'
+    this.startPartialLoop(id)
     this.emitStatus()
     return this.publicSession(this.session)
   }
@@ -220,12 +240,15 @@ export class VoiceHost {
       return this.getStatus()
     }
 
+    this.stopPartialLoop()
+    // Wait for in-flight partial to finish so we don't race finalize on shared CLI.
+    await this.waitForPartialIdle()
+
     await this.capture.stop()
     const pcm = active.buffer.snapshot()
     const sessionIdFinal = active.id
     active.buffer.clear()
 
-    // Transcribe before dropping the session id so final events stay correlated.
     this.phase = 'transcribing'
     this.session = { ...active, phase: 'transcribing', buffer: new VoicePcmBuffer() }
     this.emitStatus()
@@ -237,7 +260,6 @@ export class VoiceHost {
         }
         const result = await this.stt.transcribePcm(pcm)
         this.lastTranscript = result.text
-        // Log metadata only — never transcript body or PCM.
         log('voice', `stt.final ${JSON.stringify(sttLogMeta(result))}`)
         this.onEvent({
           type: 'final',
@@ -261,6 +283,7 @@ export class VoiceHost {
         })
       }
       this.lastError = null
+      this.lastPartialText = null
       this.phase = 'ready'
     } catch (error) {
       this.phase = 'error'
@@ -277,10 +300,13 @@ export class VoiceHost {
   async cancel(sessionId?: string | null): Promise<VoiceHostStatus> {
     const active = this.session
     if (active && (!sessionId || active.id === sessionId)) {
+      this.stopPartialLoop()
+      await this.waitForPartialIdle()
       await this.capture.stop()
       active.buffer.clear()
       this.session = null
     }
+    this.lastPartialText = null
     this.phase = isDesktopFeatureEnabled(this.features, 'voice') ? 'ready' : 'disabled'
     this.lastError = null
     this.emitStatus()
@@ -296,12 +322,79 @@ export class VoiceHost {
     return this.lastTranscript
   }
 
+  getLastPartialText(): string | null {
+    return this.lastPartialText
+  }
+
   getCaptureBackend(): VoiceCaptureBackendId {
     return this.capture.backend
   }
 
   getSttBackend() {
     return this.stt.backend
+  }
+
+  private startPartialLoop(sessionId: string) {
+    this.stopPartialLoop()
+    if (!this.partialsEnabled || !this.stt.isReady()) return
+
+    const tick = () => {
+      void this.maybeEmitPartial(sessionId)
+    }
+    // Tick a bit faster than interval so the clock can fire promptly after min audio.
+    const period = Math.max(200, Math.floor(this.partialPolicy.intervalMs / 2))
+    this.partialTimer = setInterval(tick, period)
+    this.partialTimer.unref?.()
+  }
+
+  private stopPartialLoop() {
+    if (this.partialTimer) {
+      clearInterval(this.partialTimer)
+      this.partialTimer = null
+    }
+  }
+
+  private async waitForPartialIdle() {
+    const deadline = Date.now() + 15_000
+    while (this.partialInFlight && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 25))
+    }
+    this.partialInFlight = false
+  }
+
+  private async maybeEmitPartial(sessionId: string) {
+    if (this.partialInFlight) return
+    const active = this.session
+    if (!active || active.id !== sessionId || this.phase !== 'listening') return
+    if (!this.stt.isReady()) return
+
+    const samples = active.buffer.snapshot()
+    const slice = this.partialClock.takePartialSlice(samples, this.now().getTime())
+    if (!slice || slice.length === 0) return
+
+    this.partialInFlight = true
+    try {
+      const result = await this.stt.transcribePcm(slice)
+      // Session may have ended while STT ran.
+      if (!this.session || this.session.id !== sessionId || this.phase !== 'listening') return
+      const text = result.text.trim()
+      if (!text || text === this.lastPartialText) return
+      this.lastPartialText = text
+      log('voice', `stt.partial ${JSON.stringify({ ...sttLogMeta(result), frames: slice.length })}`)
+      this.onEvent({
+        type: 'partial',
+        event: {
+          sessionId,
+          text,
+          isFinal: false,
+          at: this.now().toISOString(),
+        },
+      })
+    } catch {
+      // Partials are best-effort; finalize still runs on stop.
+    } finally {
+      this.partialInFlight = false
+    }
   }
 
   private publicSession(session: ActiveSession): VoiceSessionSnapshot {

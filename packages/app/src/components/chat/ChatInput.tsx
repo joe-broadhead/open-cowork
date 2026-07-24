@@ -78,6 +78,8 @@ function readKeyboardHintsDismissed() {
 
 export function ChatInput() {
   const [input, setInput] = useState('')
+  const inputRef = useRef(input)
+  inputRef.current = input
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [submitInFlight, setSubmitInFlight] = useState(false)
@@ -196,8 +198,9 @@ export function ChatInput() {
 
   const voice = useVoicePtt({
     openCodeSessionId: currentSessionId,
-    onFinalText: (text) => {
-      setInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${text}` : text))
+    getComposerText: () => inputRef.current,
+    setComposerText: (text) => {
+      setInput(text)
       requestAnimationFrame(() => resizeComposerTextarea())
     },
     onError: (message) => addGlobalError(message),
