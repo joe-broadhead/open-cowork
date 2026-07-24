@@ -5,8 +5,8 @@ description: Finding register for JOE-1029 Wave 1+, public claim matrix, and for
 
 # Product purity register and claim boundary
 
-**Epic:** [JOE-1029](https://linear.app/joe-broadhead/issue/JOE-1029)  
-**Milestone:** Product Purity — World-Class Workbench (2026-07)  
+**Epic:** [JOE-1029](https://linear.app/joe-broadhead/issue/JOE-1029)
+**Milestone:** Product Purity — World-Class Workbench (2026-07)
 **Source audit:** product/UX audit on monorepo `master` (2026-07-24)
 
 This page is the **scope gate** for product purity work. New purity work must map
@@ -85,7 +85,7 @@ Optional installable siblings (not Desktop default nav):
 
 ## Progressive disclosure (defaults)
 
-Primary feature keys default **on** when omitted: `projects`, `team`, `playbooks`, `tools`.  
+Primary feature keys default **on** when omitted: `projects`, `team`, `playbooks`, `tools`.
 Secondary keys default **off**: `knowledge`, `approvals`, `channels`, `artifacts`.
 
 See [Progressive disclosure](progressive-disclosure.md) and

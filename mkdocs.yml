@@ -112,6 +112,8 @@ nav:
       - Glossary: glossary.md
       - Progressive disclosure: progressive-disclosure.md
       - Product purity register: product-purity-register.md
+      - Product purity checklist: product-purity-checklist.md
+      - Pairing connector scope: pairing-connector-scope.md
   - Use:
       - Projects: projects.md
       - Playbooks: workflows.md

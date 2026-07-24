@@ -234,12 +234,12 @@ export async function resolveDesktopResourceNavigationAction(
     }
     return createResourceOpenAction(createResourceLookupResult(identity, null, {
       available: false,
-      message: `Exact ${identity.capabilityKind} capability lookup is not available yet.`,
+      message: `Open Cowork cannot open ${identity.capabilityKind} capability “${identity.capabilityId || 'unknown'}” from this deep link. Use Tools & Skills instead.`,
     }))
   }
 
   return createResourceOpenAction(createResourceLookupResult(identity, null, {
     available: false,
-    message: `Exact ${identity.kind} navigation is not available yet.`,
+    message: `Open Cowork cannot open this ${identity.kind} deep link here. Use the sidebar to navigate.`,
   }))
 }
