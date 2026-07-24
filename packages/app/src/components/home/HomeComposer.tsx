@@ -15,6 +15,7 @@ import type { Attachment, InlinePickerState, MentionableAgent } from '../chat/ch
 import { Icon } from '@open-cowork/ui'
 import { constrainedPrimaryAgentMode, nextAllowedPrimaryAgentMode } from '../../helpers/primary-agent-mode'
 import type { HomePromptOptions } from './home-prompt-options'
+import { useVoicePtt } from '../../hooks/useVoicePtt'
 
 // Upper bound on the composer's auto-grow. Past ~220px the textarea
 // starts to dominate the landing page and push everything below the
@@ -117,6 +118,15 @@ export function HomeComposer({
     element.style.height = 'auto'
     element.style.height = Math.min(element.scrollHeight, MAX_COMPOSER_HEIGHT) + 'px'
   }
+
+  const voice = useVoicePtt({
+    openCodeSessionId: null,
+    onFinalText: (dictated) => {
+      setText((current) => (current.trim() ? `${current.trimEnd()} ${dictated}` : dictated))
+      requestAnimationFrame(() => autosize())
+    },
+    onError: (message) => addGlobalError(message),
+  })
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     if (!files || files.length === 0) return
@@ -487,6 +497,7 @@ export function HomeComposer({
           modelControlsReason={modelControlsReason}
           reasoningControlsManaged={modelControlsManaged}
           showAgentModeControl={false}
+          voice={voice}
           onToggleModelMenu={() => {
             if (modelControlsManaged) return
             setInlinePicker(null)

@@ -195,6 +195,7 @@ test('pnpm audit policy is explicit and wired through repository scripts', () =>
   assert.deepEqual(packageJson.pnpm?.auditConfig?.ignoreGhsas, [
     'GHSA-7G7R-GX96-252G',
     'GHSA-P2F4-R6V6-J797',
+    'GHSA-MH99-V99M-4GVG',
   ])
   assert.match(ciWorkflow, /run: pnpm audit:prod/)
   assert.match(ciWorkflow, /run: pnpm audit:full/)
