@@ -115,6 +115,9 @@ nav:
       - Product purity checklist: product-purity-checklist.md
       - Pairing connector scope: pairing-connector-scope.md
       - Product purity dogfood: runbooks/product-purity-dogfood.md
+      - Cloud sync dogfood: runbooks/cloud-sync-dogfood.md
+      - Enterprise readiness matrix: enterprise-readiness-matrix.md
+      - Maintainer product map: maintainer-product-map.md
   - Use:
       - Projects: projects.md
       - Playbooks: workflows.md

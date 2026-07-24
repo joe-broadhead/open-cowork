@@ -229,11 +229,11 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'Health Center' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Settings' }).parentElement).toHaveClass('flex-col')
-    expect(screen.queryByText('Recent work')).toBeNull()
+    expect(screen.queryByText('Recent chats')).toBeNull()
     expect(screen.queryByText('Tool Status')).toBeNull()
     expect(screen.queryByText('New Chat')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: /Search projects and chats/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Search chats/ }))
     expect(onExpandSidebar).toHaveBeenCalledTimes(1)
   })
 

@@ -92,3 +92,20 @@ test('product purity: release checklist includes purity claim gate', () => {
   assert.match(source, /Product purity claim gate/)
   assert.match(source, /product-purity-register/)
 })
+
+test('product purity: enterprise matrix and maintainer map exist', () => {
+  for (const rel of [
+    'docs/enterprise-readiness-matrix.md',
+    'docs/maintainer-product-map.md',
+    'docs/runbooks/cloud-sync-dogfood.md',
+  ]) {
+    const text = readFileSync(join(root, rel), 'utf8')
+    assert.ok(text.length > 100, `${rel} should be non-empty`)
+  }
+})
+
+test('product purity: Home hides empty launchpad motion section', () => {
+  const source = readFileSync(join(root, 'packages/app/src/components/HomePage.tsx'), 'utf8')
+  assert.match(source, /never reserve Home space for an empty motion grid/)
+  assert.match(source, /if \(!smartSuggestions\)/)
+})

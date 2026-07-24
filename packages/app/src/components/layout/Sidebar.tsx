@@ -249,10 +249,10 @@ export function Sidebar({
                 }
                 setShowSearch(!showSearch)
               }}
-              aria-label={t('sidebar.searchTitle', 'Search projects and chats (⌘K)')}
+              aria-label={t('sidebar.searchTitle', 'Search chats (⌘K)')}
               aria-expanded={showSearch}
               className={`w-9 h-9 flex items-center justify-center rounded-lg border border-border-subtle transition-colors cursor-pointer ${showSearch ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
-              title={t('sidebar.searchTitle', 'Search projects and chats (⌘K)')}
+              title={t('sidebar.searchTitle', 'Search chats (⌘K)')}
             >
               <Icon name="search" size={16} />
             </button>
@@ -266,8 +266,8 @@ export function Sidebar({
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Escape') { setShowSearch(false); setSearchQuery('') } }}
-                aria-label={t('sidebar.search', 'Search projects and chats...')}
-                placeholder={t('sidebar.search', 'Search projects and chats...')}
+                aria-label={t('sidebar.search', 'Search recent chats…')}
+                placeholder={t('sidebar.search', 'Search recent chats…')}
                 className="w-full px-3 py-1.5 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
               />
             </div>
@@ -332,8 +332,13 @@ export function Sidebar({
               aria-current={currentView === 'projects' ? 'page' : undefined}
               className={`sidebar-nav-item mb-1 rounded-md px-2 py-1 text-start text-2xs font-semibold uppercase tracking-widest transition-colors ${currentView === 'projects' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
             >
-              {t('sidebar.recentWork', 'Recent work')}
+              {t('sidebar.recentWork', 'Recent chats')}
             </button>
+            {!collapsed ? (
+              <p className="px-2 pb-1 text-2xs leading-snug text-text-muted">
+                {t('sidebar.recentWorkHint', 'Quick switch. Objectives and Kanban live under Projects.')}
+              </p>
+            ) : null}
             <ThreadList onSelect={() => onViewChange('chat')} searchQuery={searchQuery} />
           </div> : <div className="flex-1" />}
 
