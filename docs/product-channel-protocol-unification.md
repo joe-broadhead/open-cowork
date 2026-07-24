@@ -61,10 +61,14 @@ Until a phase below is explicitly scheduled:
 
 ### Phase 1 — Shared protocol contracts only
 
-- [ ] Extract **non-security** protocol types/capabilities that both stacks can
+- [x] Extract **non-security** protocol types/capabilities that both stacks can
   import without moving Durable onto monorepo packages
-- [ ] Conformance tests for capability declarations
-- [ ] No behavior change for operators
+  (`packages/shared/src/channel-protocol-contract.ts`; Durable
+  `CHANNEL_ADAPTER_CAPABILITY_KEYS` re-exports shared keys)
+- [x] Conformance tests for capability declarations
+  (`packages/gateway-channel/src/dual-stack-contract*.ts`,
+  `tests/channel-protocol-dual-stack-contract.test.ts`)
+- [x] No behavior change for operators (comparison/conformance only; freeze retained)
 
 ### Phase 2 — Compose one Durable channel onto monorepo provider
 

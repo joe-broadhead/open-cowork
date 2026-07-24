@@ -1,5 +1,6 @@
 export * from "./conformance.js";
 export * from "./crypto.js";
+export * from "./dual-stack-contract.js";
 export * from "./errors.js";
 export * from "./guards.js";
 export * from "./provider.js";

@@ -5,7 +5,11 @@
     "outDir": "dist",
     "rootDir": "src",
     "lib": ["ESNext"],
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@open-cowork/shared": ["../shared/dist/index.d.ts"],
+      "@open-cowork/shared/*": ["../shared/dist/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"]
