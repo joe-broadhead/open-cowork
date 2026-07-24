@@ -44,8 +44,8 @@ jobs:
       - name: Product boundaries
         run: pnpm boundaries:check
 
-      - name: Build shared workspace package
-        run: pnpm --filter @open-cowork/shared build
+      - name: Build workspace channel packages
+        run: pnpm --filter @open-cowork/gateway-provider-telegram build
 
       - name: Build
         run: pnpm --filter cowork-gateway build

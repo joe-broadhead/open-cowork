@@ -2,9 +2,10 @@
 /**
  * Build a standalone-installable cowork-gateway tarball from the monorepo.
  *
- * Workspace deps such as `@open-cowork/shared` are vendored under
- * `vendor/` and rewritten to `file:` dependencies so `npm install` of the
- * packed tarball works outside the pnpm workspace (JOE-914 smoke / release pack).
+ * Workspace deps such as `@open-cowork/shared` (and JOE-994 Telegram stack
+ * packages) are vendored under `vendor/` and rewritten to `file:` dependencies
+ * so `npm install` of the packed tarball works outside the pnpm workspace
+ * (JOE-914 smoke / release pack).
  *
  * Usage:
  *   node products/gateway/scripts/pack-standalone.mjs [pack-destination-dir]
@@ -19,8 +20,15 @@ import { fileURLToPath } from 'node:url'
 
 const productRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const monorepoRoot = path.resolve(productRoot, '../..')
-const sharedRoot = path.join(monorepoRoot, 'packages/shared')
+const packagesRoot = path.join(monorepoRoot, 'packages')
 const packDestination = path.resolve(process.argv[2] || path.join(productRoot, 'artifacts/pack'))
+
+/** Private workspace packages Durable Gateway may compose (JOE-994 Phase 2+). */
+const WORKSPACE_VENDOR_PACKAGES = [
+  { name: '@open-cowork/shared', dir: 'shared' },
+  { name: '@open-cowork/gateway-channel', dir: 'gateway-channel' },
+  { name: '@open-cowork/gateway-provider-telegram', dir: 'gateway-provider-telegram' },
+]
 
 function fail(message) {
   console.error(`[gateway-pack-standalone] ${message}`)
@@ -48,14 +56,16 @@ function copyDir(src, dest) {
 }
 
 const pkg = JSON.parse(fs.readFileSync(path.join(productRoot, 'package.json'), 'utf8'))
-const sharedPkg = JSON.parse(fs.readFileSync(path.join(sharedRoot, 'package.json'), 'utf8'))
 
-// Ensure shared + gateway dist exist.
-run('pnpm', ['--filter', '@open-cowork/shared', 'build'], { cwd: monorepoRoot })
+// Build monorepo channel stack then Durable Gateway dist.
+run('pnpm', ['--filter', '@open-cowork/gateway-provider-telegram', 'build'], { cwd: monorepoRoot })
 run('pnpm', ['--filter', 'cowork-gateway', 'build'], { cwd: monorepoRoot })
 
-if (!fs.existsSync(path.join(sharedRoot, 'dist/index.js'))) {
-  fail('packages/shared dist/index.js missing after build')
+for (const entry of WORKSPACE_VENDOR_PACKAGES) {
+  const distIndex = path.join(packagesRoot, entry.dir, 'dist/index.js')
+  if (!fs.existsSync(distIndex)) {
+    fail(`packages/${entry.dir} dist/index.js missing after build`)
+  }
 }
 if (!fs.existsSync(path.join(productRoot, 'dist/cli.js'))) {
   fail('products/gateway dist/cli.js missing after build')
@@ -84,26 +94,39 @@ try {
   // Vendor private workspace packages declared as workspace:*.
   const stagedPkg = JSON.parse(fs.readFileSync(path.join(stageRoot, 'package.json'), 'utf8'))
   const deps = { ...(stagedPkg.dependencies || {}) }
-  const vendorRel = 'vendor/@open-cowork/shared'
-  if (deps['@open-cowork/shared']) {
+
+  for (const entry of WORKSPACE_VENDOR_PACKAGES) {
+    if (!deps[entry.name]) continue
+    const packageRoot = path.join(packagesRoot, entry.dir)
+    const sourcePkg = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'))
+    const vendorRel = `vendor/${entry.name}`
     const vendorAbs = path.join(stageRoot, vendorRel)
     fs.mkdirSync(vendorAbs, { recursive: true })
-    copyDir(path.join(sharedRoot, 'dist'), path.join(vendorAbs, 'dist'))
-    // Minimal package manifest for the vendored shared package.
+    copyDir(path.join(packageRoot, 'dist'), path.join(vendorAbs, 'dist'))
+
+    // Nested workspace deps inside the vendored package also point at sibling vendors.
+    const nestedDeps = { ...(sourcePkg.dependencies || {}) }
+    for (const nested of WORKSPACE_VENDOR_PACKAGES) {
+      if (nestedDeps[nested.name]) {
+        nestedDeps[nested.name] = `file:../${nested.name}`
+      }
+    }
+
     const vendorManifest = {
-      name: sharedPkg.name,
-      version: sharedPkg.version,
+      name: sourcePkg.name,
+      version: sourcePkg.version,
       private: true,
-      type: sharedPkg.type || 'module',
-      main: sharedPkg.main,
-      types: sharedPkg.types,
-      exports: sharedPkg.exports,
+      type: sourcePkg.type || 'module',
+      main: sourcePkg.main,
+      types: sourcePkg.types,
+      exports: sourcePkg.exports,
       files: ['dist'],
-      license: sharedPkg.license || 'MIT',
-      sideEffects: false,
+      license: sourcePkg.license || 'MIT',
+      sideEffects: sourcePkg.sideEffects ?? false,
+      dependencies: nestedDeps,
     }
     fs.writeFileSync(path.join(vendorAbs, 'package.json'), `${JSON.stringify(vendorManifest, null, 2)}\n`)
-    deps['@open-cowork/shared'] = `file:./${vendorRel}`
+    deps[entry.name] = `file:./${vendorRel}`
   }
 
   // Drop monorepo-only scripts that would re-run tsc without workspace context.

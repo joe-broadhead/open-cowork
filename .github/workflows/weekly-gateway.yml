@@ -44,7 +44,7 @@ jobs:
 
       # products/gateway depends on @open-cowork/shared (dist-only package exports).
       - name: Build shared workspace package
-        run: pnpm --filter @open-cowork/shared build
+        run: pnpm --filter @open-cowork/gateway-provider-telegram build
 
       - name: Build Gateway
         run: pnpm --filter cowork-gateway build
@@ -82,7 +82,7 @@ jobs:
 
           Reproduce locally:
           \`\`\`
-          pnpm --filter @open-cowork/shared build
+          pnpm --filter @open-cowork/gateway-provider-telegram build
           pnpm test:gateway
           \`\`\`
           EOF
