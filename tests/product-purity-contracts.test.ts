@@ -186,12 +186,14 @@ test('product purity: feature enablement warnings for secondary flags (JOE-1063)
     approvals: true,
     knowledge: true,
     artifacts: true,
+    voice: true,
   })
-  assert.equal(warnings.length, 4)
+  assert.equal(warnings.length, 5)
   assert.ok(warnings.some((w) => /channels/i.test(w) && /Cloud/i.test(w)))
   assert.ok(warnings.some((w) => /approvals/i.test(w) && /Always-allow/i.test(w)))
   assert.ok(warnings.some((w) => /knowledge/i.test(w) && /Wiki/i.test(w)))
   assert.ok(warnings.some((w) => /artifacts/i.test(w) && /redaction/i.test(w)))
+  assert.ok(warnings.some((w) => /voice/i.test(w) && /Desktop Local/i.test(w)))
 })
 
 test('product purity: Admin billing omitted when adapter off; audit export honest', () => {

@@ -70,6 +70,7 @@ import {
   type WorkflowRun,
   type WorkspaceApiSupport,
   type WorkspaceInfo,
+  createDeferredVoiceHostStatus,
 } from '@open-cowork/shared'
 import { createBrowserAdminApi } from './cowork-api-admin'
 import { createBrowserCustomApi } from './cowork-api-custom'
@@ -345,6 +346,31 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
         })),
       restoreVersion: (pageId, versionId, input) =>
         request<{ page: KnowledgePageVersion }>(endpoint('knowledgePageRestore', { pageId }), { method: 'POST', body: { ...(input || {}), versionId } }),
+    },
+
+    // -- voice (Desktop Local only; Cloud Web never captures mic) ----------
+    voice: {
+      status: async () => ({
+        ...createDeferredVoiceHostStatus(
+          'Private realtime voice is Desktop Local only. Cloud Web does not capture microphone audio for Open Cowork Studio.',
+        ),
+        enabled: false,
+        phase: 'unavailable' as const,
+        captureMode: 'voice_host' as const,
+        stt: { engine: 'unavailable' as const, ready: false, detail: 'Cloud Web' },
+        tts: { engine: 'unavailable' as const, ready: false, detail: 'Cloud Web' },
+      }),
+      startSession: () => browserUnavailable('voice.startSession'),
+      stopSession: async () => ({
+        ...createDeferredVoiceHostStatus('Private realtime voice is Desktop Local only.'),
+        enabled: false,
+        phase: 'unavailable' as const,
+      }),
+      cancel: async () => ({
+        ...createDeferredVoiceHostStatus('Private realtime voice is Desktop Local only.'),
+        enabled: false,
+        phase: 'unavailable' as const,
+      }),
     },
 
     // -- permission --------------------------------------------------------
@@ -773,6 +799,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
       workflowUpdated: (callback) => hub.subscribe('workflowUpdated', callback),
       coordinationUpdated: (callback) => hub.subscribe('coordinationUpdated', callback),
       knowledgeUpdated: (callback) => hub.subscribe('knowledgeUpdated', callback),
+      voiceEvent: () => () => {},
     },
   }
 }

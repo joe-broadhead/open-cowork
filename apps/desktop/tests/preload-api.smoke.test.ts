@@ -28,6 +28,7 @@ test('preload exposes the expected coworkApi surface', async () => {
           workspaceActivate: typeof api.workspace?.activate,
           desktopPairingList: typeof api.desktopPairing?.list,
           projectSourceValidate: typeof api.projectSource?.validate,
+          voiceStatus: typeof api.voice?.status,
           onSessionPatch: typeof api.on?.sessionPatch,
         },
       }
@@ -50,6 +51,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       workspaceActivate: 'function',
       desktopPairingList: 'function',
       projectSourceValidate: 'function',
+      voiceStatus: 'function',
       onSessionPatch: 'function',
     })
     assert.deepEqual(surface.groups, [
@@ -86,6 +88,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       'threads',
       'tools',
       'updates',
+      'voice',
       'workflows',
       'workspace',
     ])

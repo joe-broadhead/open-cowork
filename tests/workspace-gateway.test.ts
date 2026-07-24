@@ -216,6 +216,11 @@ test('workspace gateway marks local desktop-only capabilities as local supported
   assert.equal(supportStatus(support, 'coordination.schedules').status, 'supported')
   assert.equal(supportStatus(support, 'coordination.watches').status, 'supported')
   assert.equal(supportStatus(support, 'coordination.delegation').status, 'supported')
+  assert.equal(supportStatus(support, 'voice.capture').status, 'supported')
+  assert.equal(supportStatus(support, 'voice.stt').status, 'supported')
+  assert.equal(supportStatus(support, 'voice.tts').status, 'supported')
+  assert.equal(supportStatus(support, 'voice.conversation').status, 'supported')
+  assert.equal(supportStatus(support, 'voice.capture').context?.authority, 'desktop_local')
 })
 
 test('workspace gateway registers cloud connections without enabling unauthenticated execution', async () => {
@@ -238,6 +243,10 @@ test('workspace gateway registers cloud connections without enabling unauthentic
   assert.equal(support.find((entry) => entry.api === 'localFiles')?.context?.pathExposure, 'not_exposed')
   assert.equal(support.find((entry) => entry.api === 'artifacts.reveal')?.status, 'not_supported')
   assert.equal(support.find((entry) => entry.api === 'artifacts.reveal')?.context?.artifacts.reveal, 'none')
+  assert.equal(support.find((entry) => entry.api === 'voice.capture')?.status, 'not_supported')
+  assert.equal(support.find((entry) => entry.api === 'voice.stt')?.status, 'not_supported')
+  assert.equal(support.find((entry) => entry.api === 'voice.tts')?.status, 'not_supported')
+  assert.equal(support.find((entry) => entry.api === 'voice.conversation')?.status, 'not_supported')
   await assert.rejects(() => gateway.sync(event(1), workspace.id), /Sign in|not available/)
 })
 
@@ -285,6 +294,8 @@ test('workspace gateway registers standalone Gateway workspaces without treating
   assert.equal(supportStatus(support, 'localFiles').context?.pathExposure, 'redacted_remote')
   assert.equal(supportStatus(support, 'artifacts.reveal').status, 'not_supported')
   assert.equal(supportStatus(support, 'artifacts.reveal').context?.artifacts.reveal, 'none')
+  assert.equal(supportStatus(support, 'voice.capture').status, 'not_supported')
+  assert.equal(supportStatus(support, 'voice.conversation').status, 'not_supported')
   await assert.rejects(() => workspaceGateway.listCloudSessions(event(1), workspace.id), /Cloud workspace/)
 
   const result = await workspaceGateway.sync(event(1), workspace.id)

@@ -42,6 +42,7 @@ import { registerAdminHandlers } from './ipc/admin-handlers.ts'
 import { registerE2EEvalHandlers } from './ipc/e2e-eval-handlers.ts'
 import { registerWorkspaceHandlers } from './ipc/workspace-handlers.ts'
 import { registerDesktopPairingHandlers } from './ipc/desktop-pairing-handlers.ts'
+import { registerVoiceHandlers } from './ipc/voice-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { objectArg, registerIpcInvoke } from './ipc/schema.ts'
 import { validateDestructiveConfirmationRequest } from './ipc/object-validators.ts'
@@ -406,6 +407,7 @@ export function setupIpcHandlers(
   registerArtifactHandlers(context)
   registerLaunchpadHandlers(context)
   registerKnowledgeHandlers(context)
+  registerVoiceHandlers(context)
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
   registerWorkflowHandlers(context)

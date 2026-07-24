@@ -106,6 +106,10 @@ export const WORKSPACE_SUPPORT_APIS = [
   'localFiles',
   'localStdioMcps',
   'machineRuntimeConfig',
+  'voice.capture',
+  'voice.stt',
+  'voice.tts',
+  'voice.conversation',
 ] as const
 
 export type WorkspaceSupportApi = typeof WORKSPACE_SUPPORT_APIS[number]

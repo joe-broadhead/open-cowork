@@ -396,6 +396,7 @@ export type DesktopFeatureKey =
   | 'channels'
   | 'tools'
   | 'artifacts'
+  | 'voice'
 
 /** Primary nav thesis: Chat/Team/Tools/Projects/Playbooks (+ Home/Settings). */
 export const DESKTOP_PRIMARY_FEATURE_KEYS = [
@@ -414,6 +415,7 @@ export const DESKTOP_SECONDARY_FEATURE_KEYS = [
   'approvals',
   'channels',
   'artifacts',
+  'voice',
 ] as const satisfies readonly DesktopFeatureKey[]
 
 const DESKTOP_SECONDARY_FEATURE_SET: ReadonlySet<DesktopFeatureKey> = new Set(
@@ -457,6 +459,11 @@ export function desktopFeatureEnablementWarnings(
   if (features.artifacts === true) {
     warnings.push(
       'features.artifacts is enabled: inspect/export stay redaction-safe; bodies are never auto-fetched.',
+    )
+  }
+  if (features.voice === true) {
+    warnings.push(
+      'features.voice is enabled: private realtime voice is Desktop Local only (Aurum STT + sibling TTS in the voice host); Cloud Web and remote authorities stay not_supported.',
     )
   }
   return warnings

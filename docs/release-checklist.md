@@ -25,7 +25,8 @@ Before publishing release notes or marketing copy, confirm against
 [Product purity register](product-purity-register.md):
 
 - [ ] No unqualified “gateway” (must say Channel / Standalone / durable Gateway)
-- [ ] No “Always allow” / voice / daily digest as shipping features unless implemented
+- [ ] No “Always allow” / daily digest as shipping features unless implemented
+- [ ] Private voice (`features.voice`) not claimed shipping unless host + Aurum STT + PTT UI evidence is green ([ADR](adr/private-realtime-voice.md)); default remains off
 - [ ] No Standalone/Paired “full workspace chat ready” while support matrix is deferred
 - [ ] Knowledge ≠ Wiki; no default Desktop Wiki/Gateway MCP claims
 - [ ] Projects described as coordination board (not history facets) unless UI changes

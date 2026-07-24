@@ -13,6 +13,11 @@ const BROWSER_LOCAL_ONLY_APIS = new Set<string>([
   'localFiles',
   'localStdioMcps',
   'machineRuntimeConfig',
+  // Private voice is Desktop Local / on-machine only (JOE-1096).
+  'voice.capture',
+  'voice.stt',
+  'voice.tts',
+  'voice.conversation',
 ])
 
 function cloudFeatureEnabled(features: CloudFeatureFlags, key: string) {
@@ -53,6 +58,13 @@ export function browserCloudWorkspaceSupport(features: CloudFeatureFlags): Works
   }
 
   return WORKSPACE_SUPPORT_APIS.map((api) => {
+    if (api.startsWith('voice.')) {
+      return supportContext(
+        'not_supported',
+        'Private realtime voice is Desktop Local only. Cloud Web does not capture microphone audio for Open Cowork Studio.',
+        api,
+      )
+    }
     if (BROWSER_LOCAL_ONLY_APIS.has(api) || api === 'artifacts.reveal') {
       return supportContext('not_supported', 'This browser workspace cannot access local desktop files or reveal files on this machine.', api)
     }

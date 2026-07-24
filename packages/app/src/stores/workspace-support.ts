@@ -163,6 +163,10 @@ export function deriveWorkspaceSupportFlags(support: WorkspaceApiSupport[] | und
     canRevealArtifact: mutation('artifacts.reveal') || mutation('localFiles'),
     canUseMachineRuntimeConfig: readable('machineRuntimeConfig') && !statusIsUnavailable(machineRuntimeConfig?.status),
     canUsePortableSettings: readable('settings.portable'),
+    canVoiceCapture: mutation('voice.capture'),
+    canVoiceStt: mutation('voice.stt'),
+    canVoiceTts: mutation('voice.tts'),
+    canVoiceConversation: mutation('voice.conversation'),
     reasons: {
       createSession: supportReason(support, 'sessions.create', 'Thread creation is disabled by this workspace policy.'),
       prompt: supportReason(support, 'sessions.prompt', 'Prompting is disabled by this workspace policy.'),
@@ -173,6 +177,10 @@ export function deriveWorkspaceSupportFlags(support: WorkspaceApiSupport[] | und
       revealArtifact: reveal?.verdict?.reason || localFiles?.verdict?.reason || 'Cloud artifacts cannot be revealed in the local filesystem.',
       machineRuntimeConfig: cloudProfileReason,
       settingsPortable: supportReason(support, 'settings.portable', 'Portable cloud settings are disabled by this workspace policy.'),
+      voiceCapture: supportReason(support, 'voice.capture', 'Microphone capture is only available in Desktop Local private voice.'),
+      voiceStt: supportReason(support, 'voice.stt', 'On-device speech-to-text is only available in Desktop Local private voice.'),
+      voiceTts: supportReason(support, 'voice.tts', 'Private text-to-speech is only available in Desktop Local private voice.'),
+      voiceConversation: supportReason(support, 'voice.conversation', 'Voice conversation is only available in Desktop Local private voice.'),
     },
   }
 }
@@ -262,6 +270,10 @@ export function useActiveWorkspaceSupport() {
       canRevealArtifact: false,
       canUseMachineRuntimeConfig: false,
       canUsePortableSettings: false,
+      canVoiceCapture: false,
+      canVoiceStt: false,
+      canVoiceTts: false,
+      canVoiceConversation: false,
       reasons: {
         ...next.reasons,
         createSession: checkingReason,
@@ -272,6 +284,10 @@ export function useActiveWorkspaceSupport() {
         revealArtifact: checkingReason,
         machineRuntimeConfig: checkingReason,
         settingsPortable: checkingReason,
+        voiceCapture: checkingReason,
+        voiceStt: checkingReason,
+        voiceTts: checkingReason,
+        voiceConversation: checkingReason,
       },
     }
   }, [activeWorkspaceId, loaded, support])

@@ -86,6 +86,7 @@ const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
   'session-status-reconciler.ts',
   'session-task-state-store.ts',
   'startup-splash.ts',
+  'voice-permission-policy.ts',
   'window-state.ts',
   'window-zoom.ts',
   'workspace-gateway-cloud-artifacts.ts',

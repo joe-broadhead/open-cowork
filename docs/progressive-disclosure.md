@@ -26,6 +26,7 @@ Configured under `features` in `open-cowork.config.json` (or overlays).
 | `approvals` | **off** | Multi-thread operators need a cross-chat queue |
 | `channels` | **off** | Cloud + Channel Gateway deployments |
 | `artifacts` | **off** | Heavy cross-session deliverable browse |
+| `voice` | **off** | Private realtime voice (Desktop Local; Aurum STT + sibling TTS) |
 
 Implementation: `DESKTOP_PRIMARY_FEATURE_KEYS` / `DESKTOP_SECONDARY_FEATURE_KEYS`
 and `isDesktopFeatureEnabled` in `packages/shared/src/app-config.ts`.
@@ -47,6 +48,7 @@ and `isDesktopFeatureEnabled` in `packages/shared/src/app-config.ts`.
 | `approvals` | Prefer Always-allow story complete for local; queue still useful for allow/deny/questions |
 | `knowledge` | Users understand Knowledge ≠ Wiki |
 | `artifacts` | Artifact index paths work for the authority in use |
+| `voice` | Desktop Local only; voice host + Aurum STT wired; Cloud Web / remote stay `not_supported`; see [Private realtime voice ADR](adr/private-realtime-voice.md) |
 
 Public `open-cowork.config.json` must **not** enable secondary keys by default
 and must **not** auto-register Wiki or durable Gateway MCP entries.
