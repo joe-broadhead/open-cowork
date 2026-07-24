@@ -7,6 +7,9 @@ on:
       - 'packages/shared/**'
       - 'packages/gateway-channel/**'
       - 'packages/gateway-provider-telegram/**'
+      - 'packages/gateway-provider-discord/**'
+      - 'packages/gateway-provider-whatsapp/**'
+      - 'packages/gateway-provider-webhook/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/ci-gateway.yml'
       - 'scripts/check-product-boundaries.mjs'
@@ -17,6 +20,9 @@ on:
       - 'packages/shared/**'
       - 'packages/gateway-channel/**'
       - 'packages/gateway-provider-telegram/**'
+      - 'packages/gateway-provider-discord/**'
+      - 'packages/gateway-provider-whatsapp/**'
+      - 'packages/gateway-provider-webhook/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/ci-gateway.yml'
 
@@ -46,9 +52,12 @@ jobs:
       - name: Product boundaries
         run: pnpm boundaries:check
 
-      # products/gateway depends on dist-only workspace packages (shared + Telegram stack).
+      # products/gateway depends on dist-only workspace channel packages (JOE-994).
       - name: Build workspace channel packages
-        run: pnpm --filter @open-cowork/gateway-provider-telegram build
+        run: |
+          pnpm --filter @open-cowork/gateway-provider-telegram build
+          pnpm --filter @open-cowork/gateway-provider-discord build
+          pnpm --filter @open-cowork/gateway-provider-whatsapp build
 
       - name: Build Gateway
         run: pnpm --filter cowork-gateway build

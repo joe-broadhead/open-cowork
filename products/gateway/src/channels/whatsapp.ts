@@ -4,12 +4,10 @@ import { planNativeActionDelivery, renderStructuredMessage, type MessageAction, 
 import { getConfig } from '../config.js'
 import { queueEvent } from '../wakeup.js'
 import { verifyMetaHubSignature256, verifyMetaHubVerifyToken } from '@open-cowork/shared/node'
-import { appendChannelInboundDenialAudit } from '../channel-audit.js'
 import { appendWorkEvent } from '../work-store.js'
-import { isTransientInboundError, isTrustedChannelTarget, redactedChannelTargetLabel, redactSensitiveText } from '../security.js'
-import { acceptChannelClaimFromMessage, acceptChannelDenialProbeFromMessage } from '../channel-claims.js'
-import { isPreTrustChannelCommandText } from '../channel-commands.js'
+import { isTransientInboundError, redactSensitiveText } from '../security.js'
 import { fetchWithTimeout } from '../deadlines.js'
+import { processDurableChannelInbound } from './channel-inbound-policy.js'
 
 const GRAPH_VERSION = 'v20.0'
 const WHATSAPP_TEXT_LIMIT = 4096
@@ -120,43 +118,21 @@ export const whatsappChannel: ChannelAdapter & {
 
   async handleWebhook(payload: any): Promise<number> {
     if (!handler) throw new Error('WhatsApp channel handler is not registered')
+    const inboundHandler = handler
     const messages = mapWhatsAppMessages(payload)
     let handled = 0
     for (const msg of messages) {
-      const denialProbe = acceptChannelDenialProbeFromMessage(msg)
-      if (denialProbe.status === 'accepted') {
-        queueEvent(`WhatsApp denial probe accepted: ${redactedChannelTargetLabel('whatsapp', msg.chatId, msg.threadId)}`)
+      let delivered = false
+      const result = await processDurableChannelInbound('whatsapp', msg, {
+        deliver: async (accepted) => {
+          delivered = await dispatchInbound(inboundHandler, accepted)
+        },
+      })
+      if (result.outcome === 'claim_accepted' || result.outcome === 'denial_probe_accepted') {
         handled++
         continue
       }
-      if (denialProbe.status === 'denied') continue
-      if (!isTrustedChannelTarget('whatsapp', msg.chatId, msg.threadId, getConfig())) {
-        const claim = acceptChannelClaimFromMessage(msg)
-        if (claim.status === 'accepted') {
-          queueEvent(`WhatsApp claim accepted: ${redactedChannelTargetLabel('whatsapp', msg.chatId, msg.threadId)}`)
-          handled++
-          continue
-        }
-        if (claim.status === 'denied') continue
-        if (isPreTrustChannelCommandText(msg.text)) {
-          if (await dispatchInbound(handler, msg)) handled++
-          continue
-        }
-        const target = redactedChannelTargetLabel('whatsapp', msg.chatId, msg.threadId)
-        queueEvent(`WhatsApp rejected untrusted inbound: ${target}`)
-        safeAuditInboundDenial('whatsapp', msg.chatId, msg.threadId)
-        continue
-      }
-      // A valid claim code from an already-trusted target heals allowlist rules
-      // created before per-sender actor policies existed (see addTrustedTarget).
-      const trustedClaim = acceptChannelClaimFromMessage(msg)
-      if (trustedClaim.status === 'accepted') {
-        queueEvent(`WhatsApp claim accepted: ${redactedChannelTargetLabel('whatsapp', msg.chatId, msg.threadId)}`)
-        handled++
-        continue
-      }
-      if (trustedClaim.status === 'denied') continue
-      if (await dispatchInbound(handler, msg)) handled++
+      if (result.outcome === 'delivered' && delivered) handled++
     }
     if (handled > 0) queueEvent(`WhatsApp inbound: ${handled} message(s)`)
     return handled
@@ -180,10 +156,6 @@ function whatsappRows(actions: Array<MessageAction & { description?: string }>, 
       ...(description ? { description } : {}),
     }
   })
-}
-
-function safeAuditInboundDenial(provider: string, chatId: string, threadId?: string): void {
-  try { appendChannelInboundDenialAudit({ provider, chatId, threadId }) } catch {}
 }
 
 /**

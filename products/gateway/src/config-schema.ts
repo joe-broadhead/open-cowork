@@ -227,13 +227,27 @@ const zChannels = z.object({
     /** JOE-994 Phase 2: durable (default) | monorepo provider façade. Env OPEN_COWORK_TELEGRAM_PROTOCOL_STACK overrides. */
     protocolStack: z.enum(['durable', 'monorepo']).optional(),
   }),
-  whatsapp: zStringRecord(z.unknown()),
+  whatsapp: z.object({
+    setupMode: z.enum(['cloudApiDirect']).optional(),
+    accessToken: zString.optional(),
+    phoneNumberId: zString.optional(),
+    verifyToken: zString.optional(),
+    appSecret: zString.optional(),
+    /** JOE-994 Phase 3: durable native Meta hub (default) | monorepo webhook bridge. */
+    protocolStack: z.enum(['durable', 'monorepo']).optional(),
+    bridgeDeliveryUrl: zString.optional(),
+    bridgeSharedSecret: zString.optional(),
+  }).catchall(z.unknown()),
   discord: z.object({
     enabled: zBoolean,
     botToken: zString.optional(),
     applicationId: zString.optional(),
     publicKey: zString.optional(),
     richMessages: z.object({ enabled: zBoolean }).optional(),
+    /** JOE-994 Phase 3: durable native Interactions (default) | monorepo webhook bridge. */
+    protocolStack: z.enum(['durable', 'monorepo']).optional(),
+    bridgeDeliveryUrl: zString.optional(),
+    bridgeSharedSecret: zString.optional(),
   }),
 })
 

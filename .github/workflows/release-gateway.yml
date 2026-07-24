@@ -45,7 +45,10 @@ jobs:
         run: pnpm boundaries:check
 
       - name: Build workspace channel packages
-        run: pnpm --filter @open-cowork/gateway-provider-telegram build
+        run: |
+          pnpm --filter @open-cowork/gateway-provider-telegram build
+          pnpm --filter @open-cowork/gateway-provider-discord build
+          pnpm --filter @open-cowork/gateway-provider-whatsapp build
 
       - name: Build
         run: pnpm --filter cowork-gateway build

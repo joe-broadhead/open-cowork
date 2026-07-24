@@ -27,7 +27,10 @@ const packDestination = path.resolve(process.argv[2] || path.join(productRoot, '
 const WORKSPACE_VENDOR_PACKAGES = [
   { name: '@open-cowork/shared', dir: 'shared' },
   { name: '@open-cowork/gateway-channel', dir: 'gateway-channel' },
+  { name: '@open-cowork/gateway-provider-webhook', dir: 'gateway-provider-webhook' },
   { name: '@open-cowork/gateway-provider-telegram', dir: 'gateway-provider-telegram' },
+  { name: '@open-cowork/gateway-provider-discord', dir: 'gateway-provider-discord' },
+  { name: '@open-cowork/gateway-provider-whatsapp', dir: 'gateway-provider-whatsapp' },
 ]
 
 function fail(message) {
@@ -59,6 +62,8 @@ const pkg = JSON.parse(fs.readFileSync(path.join(productRoot, 'package.json'), '
 
 // Build monorepo channel stack then Durable Gateway dist.
 run('pnpm', ['--filter', '@open-cowork/gateway-provider-telegram', 'build'], { cwd: monorepoRoot })
+run('pnpm', ['--filter', '@open-cowork/gateway-provider-discord', 'build'], { cwd: monorepoRoot })
+run('pnpm', ['--filter', '@open-cowork/gateway-provider-whatsapp', 'build'], { cwd: monorepoRoot })
 run('pnpm', ['--filter', 'cowork-gateway', 'build'], { cwd: monorepoRoot })
 
 for (const entry of WORKSPACE_VENDOR_PACKAGES) {

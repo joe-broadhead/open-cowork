@@ -9,8 +9,8 @@ import { trackWorker, loadWorkerState, reconcileWorkersFromOpenCode } from './wo
 import { renderDashboard } from './dashboard.js'
 import { subscribeToOpenCodeEvents, addLiveClient, closeAllLiveClients, removeLiveClient } from './live.js'
 import { getTelegramChannel } from './channels/telegram-protocol-stack.js'
-import { whatsappChannel } from './channels/whatsapp.js'
-import { discordChannel } from './channels/discord.js'
+import { getWhatsAppChannel, isWhatsAppMonorepoBridge } from './channels/whatsapp-protocol-stack.js'
+import { getDiscordChannel, isDiscordMonorepoBridge } from './channels/discord-protocol-stack.js'
 import { claimInboundWebhookRateLimit, inboundWebhookRateKey, noteInboundWebhookAuthFailure } from './channels/webhook-rate-limit.js'
 import { actionDeliveryForCapabilities } from './channels/capabilities.js'
 import { resolveAgent } from './routing.js'
@@ -112,8 +112,10 @@ export async function serve() {
   // Start heartbeat for Gateway session monitoring
   startHeartbeat()
 
-  // JOE-994 Phase 2: Telegram may be legacy Durable or monorepo-provider façade.
+  // JOE-994 Phase 2–3: Telegram/Discord/WhatsApp may be Durable native or monorepo façades.
   const telegramChannel = getTelegramChannel()
+  const whatsappChannel = getWhatsAppChannel()
+  const discordChannel = getDiscordChannel()
   const channelByName = new Map([
     [telegramChannel.name, telegramChannel],
     [whatsappChannel.name, whatsappChannel],
@@ -494,6 +496,9 @@ export function createDaemonHttpServer(input: DaemonHttpServerInput): http.Serve
   return http.createServer(async (req, res) => {
     const port = input.resolvePort()
     const url = new URL(req.url || '/', `http://localhost:${port}`)
+    // JOE-994: resolve from daemon channel map so monorepo façades wire correctly.
+    const whatsappChannel = input.channels.get('whatsapp') as ReturnType<typeof getWhatsAppChannel> | undefined
+    const discordChannel = input.channels.get('discord') as ReturnType<typeof getDiscordChannel> | undefined
     const security = getConfig().security
     // Exposed-mode-only abuse controls: sliding-window rate limit + auth-failure
     // lockout. Skipped entirely on the local-trusted default path so the
@@ -637,6 +642,10 @@ ev.onerror = () => {
       }
 
       if (req.method === 'GET' && url.pathname === '/webhooks/whatsapp') {
+        if (!whatsappChannel) {
+          res.writeHead(503)
+          return res.end(JSON.stringify({ error: 'whatsapp adapter not ready' }))
+        }
         const rateKey = inboundWebhookRateKey('whatsapp', req)
         const rate = claimInboundWebhookRateLimit(rateKey)
         if (!rate.ok) {
@@ -656,6 +665,10 @@ ev.onerror = () => {
       }
 
       if (req.method === 'POST' && url.pathname === '/webhooks/whatsapp') {
+        if (!whatsappChannel) {
+          res.writeHead(503)
+          return res.end(JSON.stringify({ error: 'whatsapp adapter not ready' }))
+        }
         if (!canCurrentDaemonWrite()) return sendStandbyWebhookResponse(res)
         const rateKey = inboundWebhookRateKey('whatsapp', req)
         const rate = claimInboundWebhookRateLimit(rateKey)
@@ -665,26 +678,45 @@ ev.onerror = () => {
           return res.end(JSON.stringify({ error: 'whatsapp webhook rate limited' }))
         }
         const body = await readBody(req)
-        if (!whatsappChannel.verifySignature(req.headers['x-hub-signature-256'], body)) {
-          noteInboundWebhookAuthFailure(rateKey)
-          res.writeHead(403)
-          return res.end(JSON.stringify({ error: 'invalid whatsapp signature' }))
-        }
         let count: number
         try {
-          count = await whatsappChannel.handleWebhook(parseJsonBody(body))
+          if (isWhatsAppMonorepoBridge(whatsappChannel)) {
+            // Bridge HMAC verified inside monorepo WebhookProvider.
+            count = await whatsappChannel.handleBridgeWebhook(body, {
+              'x-open-cowork-gateway-webhook-signature': req.headers['x-open-cowork-gateway-webhook-signature'],
+              'x-open-cowork-gateway-webhook-timestamp': req.headers['x-open-cowork-gateway-webhook-timestamp'],
+            })
+          } else {
+            if (!whatsappChannel.verifySignature(req.headers['x-hub-signature-256'], body)) {
+              noteInboundWebhookAuthFailure(rateKey)
+              res.writeHead(403)
+              return res.end(JSON.stringify({ error: 'invalid whatsapp signature' }))
+            }
+            count = await whatsappChannel.handleWebhook(parseJsonBody(body))
+          }
         } catch (err: any) {
-          if (!isTransientInboundError(err)) throw err
-          // Do not acknowledge a transiently failed inbound (e.g. OpenCode is
-          // restarting): a non-2xx status makes Meta retry the webhook delivery.
-          res.writeHead(503)
-          return res.end(JSON.stringify({ error: 'transient inbound failure; retry delivery' }))
+          if (isTransientInboundError(err)) {
+            // Do not acknowledge a transiently failed inbound (e.g. OpenCode is
+            // restarting): a non-2xx status makes Meta retry the webhook delivery.
+            res.writeHead(503)
+            return res.end(JSON.stringify({ error: 'transient inbound failure; retry delivery' }))
+          }
+          if (/auth|signature|secret/i.test(String(err?.message || err))) {
+            noteInboundWebhookAuthFailure(rateKey)
+            res.writeHead(403)
+            return res.end(JSON.stringify({ error: 'invalid whatsapp bridge signature' }))
+          }
+          throw err
         }
         res.writeHead(200)
         return res.end(JSON.stringify({ ok: true, messages: count }))
       }
 
       if (req.method === 'POST' && url.pathname === '/webhooks/discord') {
+        if (!discordChannel) {
+          res.writeHead(503)
+          return res.end(JSON.stringify({ error: 'discord adapter not ready' }))
+        }
         if (!canCurrentDaemonWrite()) return sendStandbyWebhookResponse(res)
         const rateKey = inboundWebhookRateKey('discord', req)
         const rate = claimInboundWebhookRateLimit(rateKey)
@@ -694,6 +726,23 @@ ev.onerror = () => {
           return res.end(JSON.stringify({ error: 'discord webhook rate limited' }))
         }
         const body = await readBody(req)
+        if (isDiscordMonorepoBridge(discordChannel)) {
+          try {
+            const count = await discordChannel.handleBridgeWebhook(body, {
+              'x-open-cowork-gateway-webhook-signature': req.headers['x-open-cowork-gateway-webhook-signature'],
+              'x-open-cowork-gateway-webhook-timestamp': req.headers['x-open-cowork-gateway-webhook-timestamp'],
+            })
+            res.writeHead(200)
+            return res.end(JSON.stringify({ ok: true, messages: count }))
+          } catch (err: any) {
+            if (/auth|signature|secret/i.test(String(err?.message || err))) {
+              noteInboundWebhookAuthFailure(rateKey)
+              res.writeHead(401)
+              return res.end(JSON.stringify({ error: 'invalid discord bridge signature' }))
+            }
+            throw err
+          }
+        }
         const response = await discordChannel.handleInteraction(body, {
           'x-signature-ed25519': req.headers['x-signature-ed25519'],
           'x-signature-timestamp': req.headers['x-signature-timestamp'],

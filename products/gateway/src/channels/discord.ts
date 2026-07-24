@@ -4,11 +4,9 @@ import { DISCORD_ALPHA_CAPABILITIES, discordAdapterCapabilities } from './capabi
 import { planNativeActionDelivery, renderStructuredMessage, type ChannelCapabilities, type MessageAction, type NativeActionDeliveryItem, type RichMessageBlock, type StructuredGatewayMessage } from './renderer.js'
 import { getConfig } from '../config.js'
 import { queueEvent } from '../wakeup.js'
-import { appendChannelInboundDenialAudit } from '../channel-audit.js'
-import { allowsAllChannelTargets, hasChannelAllowlist, isTrustedChannelTarget, redactSensitiveText, redactedChannelTargetLabel } from '../security.js'
-import { acceptChannelClaimFromMessage, acceptChannelDenialProbeFromMessage } from '../channel-claims.js'
-import { isPreTrustChannelCommandText } from '../channel-commands.js'
+import { allowsAllChannelTargets, hasChannelAllowlist, redactSensitiveText } from '../security.js'
 import { fetchWithTimeout } from '../deadlines.js'
+import { processDurableChannelInbound } from './channel-inbound-policy.js'
 
 const DISCORD_API = 'https://discord.com/api/v10'
 const DISCORD_CONTENT_LIMIT = 2000
@@ -306,43 +304,14 @@ async function acceptDiscordInbound(message: ChannelMessage | null, options: { w
   if (!message || !handler) return false
   if (!getDiscordConfig().enabled) return false
   if (!started) started = true
-  const denialProbe = acceptChannelDenialProbeFromMessage(message)
-  if (denialProbe.status === 'accepted') {
-    queueEvent(`Discord denial probe accepted: ${redactedChannelTargetLabel('discord', message.chatId, message.threadId)}`)
-    return true
-  }
-  if (denialProbe.status === 'denied') return false
-  if (!isTrustedChannelTarget('discord', message.chatId, message.threadId, getConfig())) {
-    const claim = acceptChannelClaimFromMessage(message)
-    if (claim.status === 'accepted') {
-      queueEvent(`Discord claim accepted: ${redactedChannelTargetLabel('discord', message.chatId, message.threadId)}`)
-      return true
-    }
-    if (claim.status === 'denied') return false
-    if (isPreTrustChannelCommandText(message.text)) {
-      if (options.waitForHandler === false) dispatchDiscordInbound(message)
-      else await handler(message)
-      return true
-    }
-    const target = redactedChannelTargetLabel('discord', message.chatId, message.threadId)
-    queueEvent(`Discord rejected untrusted inbound: ${target}`)
-    safeAuditInboundDenial('discord', message.chatId, message.threadId)
-    return false
-  }
-  // A valid claim code from an already-trusted target heals allowlist rules
-  // created before per-sender actor policies existed by merging the claimant
-  // into the rule's userIds (see addTrustedTarget in channel-claims). This is
-  // the only in-band recovery path for a legacy Discord DM rule, whose channel
-  // id never equals the author id and so cannot satisfy the DM actor fallback.
-  const trustedClaim = acceptChannelClaimFromMessage(message)
-  if (trustedClaim.status === 'accepted') {
-    queueEvent(`Discord claim accepted: ${redactedChannelTargetLabel('discord', message.chatId, message.threadId)}`)
-    return true
-  }
-  if (trustedClaim.status === 'denied') return false
-  if (options.waitForHandler === false) dispatchDiscordInbound(message)
-  else await handler(message)
-  return true
+  const inboundHandler = handler
+  const result = await processDurableChannelInbound('discord', message, {
+    deliver: async (accepted) => {
+      if (options.waitForHandler === false) dispatchDiscordInbound(accepted)
+      else await inboundHandler(accepted)
+    },
+  })
+  return result.outcome !== 'denied' && result.outcome !== 'rejected_untrusted'
 }
 
 function dispatchDiscordInbound(message: ChannelMessage): void {
@@ -546,8 +515,4 @@ async function safeJson(res: Response): Promise<unknown> {
 
 async function safeResponseText(res: Response): Promise<string> {
   try { return await res.text() } catch { return res.statusText || 'unknown error' }
-}
-
-function safeAuditInboundDenial(provider: string, chatId: string, threadId?: string): void {
-  try { appendChannelInboundDenialAudit({ provider, chatId, threadId }) } catch {}
 }

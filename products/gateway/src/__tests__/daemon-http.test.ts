@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net'
 import { createHmac } from 'node:crypto'
 import { createDaemonHttpServer } from '../daemon.js'
 import { whatsappChannel } from '../channels/whatsapp.js'
+import { discordChannel } from '../channels/discord.js'
 import { TransientInboundError, resetExposedHttpGuardsForTest } from '../security.js'
 import { createJsonRoutes } from '../daemon-routes/index.js'
 import { clearConfigCacheForTest, updateConfig } from '../config.js'
@@ -35,7 +36,10 @@ describe.sequential('daemon HTTP server integration', () => {
   beforeAll(async () => {
     server = createDaemonHttpServer({
       client: fakeOpenCodeClient,
-      channels: new Map(),
+      channels: new Map<string, any>([
+        [whatsappChannel.name, whatsappChannel],
+        [discordChannel.name, discordChannel],
+      ]),
       routes: createJsonRoutes(),
       resolvePort: () => port,
     })
