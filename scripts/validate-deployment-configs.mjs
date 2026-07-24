@@ -1744,7 +1744,9 @@ function validateSetupHealthCenter() {
     }
   }
 
-  assertIncludes(sidebarPath, 'Diagnostics')
+  // Product purity: nav label is Health Center (not Diagnostics).
+  assertIncludes(sidebarPath, 'healthCenter')
+  assertIncludes(sidebarPath, 'Health Center')
   assertIncludes(appTypesPath, "'health'")
 
   const standaloneSetup = read(standaloneSetupPath)

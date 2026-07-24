@@ -35,7 +35,7 @@ describe('ProductMcpLinkPanel', () => {
     })
 
     render(<ProductMcpLinkPanel />)
-    expect(await screen.findByText('Link local Gateway / Wiki')).toBeTruthy()
+    expect(await screen.findByText('Link local durable Gateway / Wiki CLIs')).toBeTruthy()
     expect(screen.getAllByText('Not found on PATH.').length).toBe(2)
     expect(screen.getByText(/Install Gateway standalone/)).toBeTruthy()
   })

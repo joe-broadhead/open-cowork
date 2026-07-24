@@ -8,7 +8,26 @@ import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
 import { RestrictedState } from '../RestrictedState'
 import {
-  Badge, Button, Card, Dialog, EmptyState, Icon, type IconName, Input, KnowledgeGraph, SegmentedControl, Select, Skeleton, StudioPageHeader, WikiPage, WikiProposeEditDialog, type WikiProposeEditSubmit, WikiSpaceRail, type WikiPageBlock, type WikiSpace } from '@open-cowork/ui'
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  Icon,
+  type IconName,
+  Input,
+  KnowledgeGraph,
+  KnowledgePage as KnowledgeDocumentPage,
+  KnowledgeProposeEditDialog,
+  type KnowledgeProposeEditSubmit,
+  KnowledgeSpaceRail,
+  type KnowledgePageBlock,
+  type KnowledgeSpace as KnowledgeSpaceChrome,
+  SegmentedControl,
+  Select,
+  Skeleton,
+  StudioPageHeader,
+} from '@open-cowork/ui'
 
 const EMPTY_SNAPSHOT: KnowledgeSnapshotPayload = {
   spaces: [],
@@ -36,7 +55,7 @@ function linkIcon(kind: KnowledgePageLink['kind']): IconName {
   return 'message-square'
 }
 
-function blockToWiki(block: KnowledgePageBlockRecord, index: number): WikiPageBlock {
+function blockToKnowledge(block: KnowledgePageBlockRecord, index: number): KnowledgePageBlock {
   const id = block.id || `block-${index + 1}`
   if (block.type === 'h') return { id, type: 'heading', text: block.text }
   if (block.type === 'p') return { id, type: 'paragraph', text: block.text }
@@ -44,7 +63,7 @@ function blockToWiki(block: KnowledgePageBlockRecord, index: number): WikiPageBl
   return { id, type: 'list', items: block.items }
 }
 
-function wikiSpaces(spaces: KnowledgeSpace[], pages: KnowledgePageRecord[]): WikiSpace[] {
+function knowledgeSpaces(spaces: KnowledgeSpace[], pages: KnowledgePageRecord[]): KnowledgeSpaceChrome[] {
   return spaces.map((space) => ({
     id: space.id,
     name: space.name,
@@ -456,7 +475,7 @@ export function KnowledgePage() {
     [snapshot, selectedPageId],
   )
   const selectedSpace = pageSpace(snapshot, selectedPage)
-  const spacesForRail = useMemo(() => wikiSpaces(snapshot.spaces, snapshot.pages), [snapshot])
+  const spacesForRail = useMemo(() => knowledgeSpaces(snapshot.spaces, snapshot.pages), [snapshot])
   const totalPages = snapshot.pages.length
   const filteredSpacesForRail = useMemo(() => {
     const query = pageQuery.trim().toLowerCase()
@@ -530,7 +549,7 @@ export function KnowledgePage() {
     }
   }, [activeWorkspaceId, loadSnapshot, loadHistory])
 
-  const submitProposal = useCallback(async ({ summary, body }: WikiProposeEditSubmit) => {
+  const submitProposal = useCallback(async ({ summary, body }: KnowledgeProposeEditSubmit) => {
     if (!selectedPage || !selectedSpace) return
     setProposeBusy(true)
     setProposeError(null)
@@ -651,7 +670,7 @@ export function KnowledgePage() {
                 onChange={(event) => setPageQuery(event.target.value)}
               />
             ) : null}
-            <WikiSpaceRail
+            <KnowledgeSpaceRail
             spaces={filteredSpacesForRail}
             activePageId={selectedPage?.id}
             viewToggle={(
@@ -691,7 +710,7 @@ export function KnowledgePage() {
                 onSelectPage={(id) => { setSelectedPageId(id); setView('pages') }}
               />
             ) : selectedPage ? (
-              <WikiPage
+              <KnowledgeDocumentPage
                 breadcrumbs={[selectedSpace?.name || t('knowledge.breadcrumbRoot', 'Knowledge'), visibilityLabel(selectedSpace || snapshot.spaces[0] || {
                   id: '',
                   name: '',
@@ -712,7 +731,7 @@ export function KnowledgePage() {
                     {selectedSpace ? <span>{selectedSpace.role}</span> : null}
                   </div>
                 )}
-                blocks={selectedPage.body.map(blockToWiki)}
+                blocks={selectedPage.body.map(blockToKnowledge)}
                 links={selectedPage.links.map((link, index) => ({
                   id: `${link.kind}:${link.targetId || link.label}:${index}`,
                   label: link.label,
@@ -754,7 +773,7 @@ export function KnowledgePage() {
         )}
       </div>
       {proposeOpen && selectedPage && selectedSpace ? (
-        <WikiProposeEditDialog
+        <KnowledgeProposeEditDialog
           pageTitle={selectedPage.title}
           spaceName={selectedSpace.name}
           blocks={selectedPage.body}

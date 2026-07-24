@@ -13,6 +13,12 @@ export { approvalsSurfaceCss, artifactsSurfaceCss, channelsSurfaceCss, controlsS
 export { KnowledgeGraph, type KnowledgeGraphProps } from './KnowledgeGraph.js'
 export { KNOWLEDGE_SPACE_HUES, knowledgeSpaceHue } from './knowledge-hues.js'
 export { WikiProposeEditDialog, type WikiProposeEditDialogProps, type WikiProposeEditSubmit } from './WikiProposeEditDialog.js'
+// Knowledge surface aliases (JOE-1034): same primitives; not the Wiki product.
+export {
+  WikiProposeEditDialog as KnowledgeProposeEditDialog,
+  type WikiProposeEditDialogProps as KnowledgeProposeEditDialogProps,
+  type WikiProposeEditSubmit as KnowledgeProposeEditSubmit,
+} from './WikiProposeEditDialog.js'
 export { Badge, type BadgeProps, type BadgeTone } from './Badge.js'
 export {
   Button,
@@ -102,6 +108,13 @@ export {
   type WikiPageProps,
   type WikiSpace,
   type WikiSpaceRailProps,
+  // Knowledge aliases (JOE-1034) — document chrome for in-app Knowledge, not products/wiki.
+  WikiPage as KnowledgePage,
+  WikiSpaceRail as KnowledgeSpaceRail,
+  type WikiPageBlock as KnowledgePageBlock,
+  type WikiPageProps as KnowledgePageProps,
+  type WikiSpace as KnowledgeSpace,
+  type WikiSpaceRailProps as KnowledgeSpaceRailProps,
   type WizardStep,
   type WizardStepPaneProps,
   type WizardStepsProps,

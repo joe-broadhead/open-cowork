@@ -98,12 +98,12 @@ export function ProductMcpLinkPanel({ onChanged }: { onChanged?: () => void }) {
     <Card className="p-4 border border-border-subtle space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-text">
-          {t('productMcp.title', 'Link local Gateway / Wiki')}
+          {t('productMcp.title', 'Link local durable Gateway / Wiki CLIs')}
         </h3>
         <p className="text-xs text-text-muted mt-1">
           {t(
             'productMcp.subtitle',
-            'Optional standalones. Desktop never enables these by default. Install the CLI, then link to add a machine-scope custom MCP.',
+            'Optional installables — not the in-app Knowledge store. Durable Gateway (cowork-gateway) and Wiki (cowork-wiki) stay off until you Link. Never confuses with Channel Gateway or Standalone Gateway appliances.',
           )}
         </p>
       </div>

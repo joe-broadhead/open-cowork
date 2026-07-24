@@ -254,7 +254,7 @@ test('search shortcut reveals the sidebar search when the sidebar is collapsed',
 
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-cowork:toggle-search')))
     await page.locator('aside[data-sidebar-collapsed="false"]').waitFor({ timeout: 10_000 })
-    await page.getByPlaceholder(/Search projects and chats/i).waitFor({ timeout: 10_000 })
+    await page.getByPlaceholder(/Search recent chats/i).waitFor({ timeout: 10_000 })
   } finally {
     await cleanup()
   }

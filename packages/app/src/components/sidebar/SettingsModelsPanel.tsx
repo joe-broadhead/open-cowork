@@ -252,20 +252,13 @@ export function ModelsPanel({
                   })}
                 </Card>
               ) : null}
-              <Card id="settings-model-test" className="flex flex-col gap-4 scroll-mt-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-semibold text-text">{t('settings.models.connectionCheck', 'Connection check')}</div>
-                    <div className="mt-1 text-2xs leading-relaxed text-text-muted">
-                      {t('settings.models.connectionCheckDescription', 'Saving applies these credentials and restarts the runtime, which surfaces any connection problems. A one-tap credential check is coming soon.')}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    disabledReason={t('settings.models.testConnectionPending', 'Coming soon — for now, Save Changes applies and exercises these credentials.')}
-                  >
-                    {t('settings.models.testConnectionComingSoon', 'Test connection (soon)')}
-                  </Button>
+              <Card id="settings-model-test" className="flex flex-col gap-3 scroll-mt-4">
+                <div className="text-xs font-semibold text-text">{t('settings.models.connectionCheck', 'Connection check')}</div>
+                <div className="text-2xs leading-relaxed text-text-muted">
+                  {t(
+                    'settings.models.connectionCheckDescription',
+                    'Saving applies these credentials and restarts the runtime. Connection problems surface as runtime status after Save — use Save Changes to exercise credentials.',
+                  )}
                 </div>
               </Card>
             </div>

@@ -108,9 +108,12 @@ export function SettingsPairingPanel() {
   return (
     <div className="flex flex-col gap-5">
       <Card>
-        <div className="text-xs font-semibold text-text">{t('settings.pairing.title', 'Outbound pairing')}</div>
+        <div className="text-xs font-semibold text-text">{t('settings.pairing.title', 'Outbound pairing (preview)')}</div>
         <div className="mt-1 text-2xs leading-relaxed text-text-muted">
-          {t('settings.pairing.description', 'Pairings let an approved gateway claim local desktop commands over a Desktop-initiated connection. Local paths, MCP details, and artifact bodies stay redacted by default.')}
+          {t(
+            'settings.pairing.description',
+            'Preview connector: create a revocable outbound pairing so an approved broker can claim local commands. This is not full remote Studio parity — session browse/prompt may stay deferred. Local paths, MCP details, and artifact bodies stay redacted by default.',
+          )}
         </div>
         <div className="mt-2 text-2xs leading-relaxed text-amber">
           {t(

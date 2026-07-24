@@ -184,7 +184,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Channels')).toBeTruthy()
     expect(screen.getByText('Tools & Skills')).toBeTruthy()
     expect(screen.getByText('Artifacts')).toBeTruthy()
-    expect(screen.getByText('Diagnostics')).toBeTruthy()
+    expect(screen.getByText('Health Center')).toBeTruthy()
     expect(screen.queryByText('Acme AI')).toBeNull()
   })
 
@@ -226,14 +226,14 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: 'Manage' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('button', { name: 'Team' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Diagnostics' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Health Center' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Settings' }).parentElement).toHaveClass('flex-col')
-    expect(screen.queryByText('Recent work')).toBeNull()
+    expect(screen.queryByText('Recent chats')).toBeNull()
     expect(screen.queryByText('Tool Status')).toBeNull()
     expect(screen.queryByText('New Chat')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: /Search projects and chats/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Search chats/ }))
     expect(onExpandSidebar).toHaveBeenCalledTimes(1)
   })
 
@@ -323,7 +323,7 @@ describe('Sidebar', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Health Center' }))
     expect(onViewChange).toHaveBeenCalledWith('health')
   })
 
@@ -967,11 +967,11 @@ describe('Sidebar', () => {
     )
 
     fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect Gateway workspace' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Standalone Gateway (health only)' }))
     fireEvent.change(screen.getByLabelText('Gateway URL'), { target: { value: 'https://gateway.example.test' } })
     fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'Private Gateway' } })
     fireEvent.change(screen.getByLabelText('Gateway token'), { target: { value: 'secret-token' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add Gateway' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect for health' }))
 
     await waitFor(() => {
       expect(addGateway).toHaveBeenCalledWith({

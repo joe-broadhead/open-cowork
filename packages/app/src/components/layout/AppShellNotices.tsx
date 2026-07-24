@@ -13,6 +13,8 @@ type AppShellNoticesProps = {
   metadata: AppMetadata | null
   showPreviewNotice: boolean
   onPreviewDismiss: () => void
+  showCloudWebCapabilityNotice?: boolean
+  onCloudWebCapabilityDismiss?: () => void
   runtimeWasReady: boolean
   runtimeError: string | null
   onRuntimeRestart: () => Promise<void>
@@ -20,6 +22,24 @@ type AppShellNoticesProps = {
   onRendererErrorDismiss: () => void
   resourceNavigationNotice: ResourceNavigationNotice | null
   onResourceNavigationDismiss: () => void
+}
+
+const CLOUD_WEB_CAPABILITY_DISMISSED_KEY = 'open-cowork.cloud-web.capability-banner.dismissed'
+
+export function isCloudWebCapabilityBannerDismissed(storage: Pick<Storage, 'getItem'> | null | undefined = typeof window !== 'undefined' ? window.localStorage : null) {
+  try {
+    return storage?.getItem(CLOUD_WEB_CAPABILITY_DISMISSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function dismissCloudWebCapabilityBanner(storage: Pick<Storage, 'setItem'> | null | undefined = typeof window !== 'undefined' ? window.localStorage : null) {
+  try {
+    storage?.setItem(CLOUD_WEB_CAPABILITY_DISMISSED_KEY, 'true')
+  } catch {
+    // ignore quota / private mode
+  }
 }
 
 const previewNoticeStyle = {
@@ -32,6 +52,8 @@ export function AppShellNotices({
   metadata,
   showPreviewNotice,
   onPreviewDismiss,
+  showCloudWebCapabilityNotice = false,
+  onCloudWebCapabilityDismiss,
   runtimeWasReady,
   runtimeError,
   onRuntimeRestart,
@@ -54,6 +76,32 @@ export function AppShellNotices({
             onClick={() => {
               dismissPreview(metadata.version)
               onPreviewDismiss()
+            }}
+          >
+            {t('common.dismiss', 'Dismiss')}
+          </Button>
+        </div>
+      ) : null}
+      {showCloudWebCapabilityNotice ? (
+        <div
+          className="flex items-center gap-3 border-b px-4 py-2 text-xs"
+          style={previewNoticeStyle}
+          data-testid="cloud-web-capability-banner"
+          role="status"
+        >
+          <span className="font-semibold">{t('cloudWeb.capabilityBanner.title', 'Cloud workspace')}</span>
+          <span className="min-w-0 flex-1 text-text-muted">
+            {t(
+              'cloudWeb.capabilityBanner.body',
+              'Browser Studio syncs Cloud sessions with Desktop Cloud and Channel Gateway. Local folders, local MCP processes, machine runtime config, and custom coworker authoring stay on Desktop.',
+            )}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              dismissCloudWebCapabilityBanner()
+              onCloudWebCapabilityDismiss?.()
             }}
           >
             {t('common.dismiss', 'Dismiss')}

@@ -8,8 +8,16 @@ belong in a private downstream repo or secret manager.
 It includes:
 
 - `open-cowork.config.json`: desktop and cloud product configuration for
-  Example Cowork, including the shared `gateway` section that the headless
-  gateway can load with `OPEN_COWORK_CONFIG_PATH`.
+  Example Cowork, including the shared `gateway` section that the **Channel
+  Gateway** headless process can load with `OPEN_COWORK_CONFIG_PATH`.
+
+### Progressive disclosure (product purity)
+
+Desktop secondary Studio surfaces (`knowledge`, `approvals`, `channels`,
+`artifacts`) default **off** when omitted. Only enable them when the deploy
+has the backing plane (e.g. `channels` needs Cloud + Channel Gateway). See
+`docs/progressive-disclosure.md`. Do not auto-register durable Gateway
+(`cowork-gateway`) or Wiki (`cowork-wiki`) MCP entries in public defaults.
 - `cloud-values.yaml`: Helm values for the example cloud control plane.
 - `gateway-values.yaml`: Helm values for the example headless gateway.
 

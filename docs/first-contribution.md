@@ -36,6 +36,11 @@ and opens the app. HMR picks up renderer changes immediately.
 Main-process changes need a full relaunch (kill `pnpm dev`, start
 again).
 
+## Where code lives
+
+For monorepo product boundaries (Desktop vs Channel Gateway vs durable Gateway
+vs Wiki vs Knowledge), see [Maintainer product map](maintainer-product-map.md).
+
 ## Find something to work on
 
 **Looking for a first issue:** the `good-first-issue` label on

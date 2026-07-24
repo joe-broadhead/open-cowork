@@ -75,5 +75,6 @@ test('desktop setup and health surfaces consume the shared setup contract', () =
   assert.match(healthCenter, /runtime\.status/)
   assert.match(healthCenter, /runtimeInputs/)
   assert.match(healthCenter, /desktopPairing\.list/)
-  assert.match(sidebar, /Diagnostics/)
+  assert.match(sidebar, /healthCenter/)
+  assert.match(sidebar, /Health Center/)
 })

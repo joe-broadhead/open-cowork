@@ -8,6 +8,7 @@ import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
 import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
+import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { Icon, type IconName } from '@open-cowork/ui'
 import { countDesktopApprovalQueueItems } from '../studio/approval-queue-model'
 import { SidebarBrandTop, SidebarLowerBranding } from './SidebarBranding'
@@ -107,9 +108,34 @@ function SidebarPresenceFooter({
   showSettings: boolean
 }) {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
-  const workspaceLabel = activeWorkspaceId === LOCAL_WORKSPACE_FALLBACK.id
+  const workspaceSupport = useActiveWorkspaceSupport()
+  const authority = workspaceSupport.flags.authority
+  const workspaceLabel = activeWorkspaceId === LOCAL_WORKSPACE_FALLBACK.id || authority === 'desktop_local'
     ? t('workspace.localShort', 'Local')
-    : t('workspace.cloudShort', 'Cloud')
+    : authority === 'gateway_standalone'
+      ? t('workspace.gatewayShort', 'Standalone')
+      : authority === 'desktop_paired'
+        ? t('workspace.pairedShort', 'Paired')
+        : t('workspace.cloudShort', 'Cloud')
+
+  // JOE-1038: never hardcode Online. Prefer workspace status from support
+  // context when present; fall back to runtime-ish authority labels only.
+  const pairingState = workspaceSupport.flags.pairingState
+  const statusLabel = (() => {
+    if (pairingState === 'pairing_required') return t('workspace.status.authRequired', 'Auth required')
+    if (pairingState === 'paired_offline') return t('workspace.status.offline', 'Offline cached')
+    if (!workspaceSupport.flags.canCreateSession && !workspaceSupport.flags.canPrompt && authority === 'gateway_standalone') {
+      return t('workspace.status.connectionOnly', 'Connection only')
+    }
+    if (!workspaceSupport.loaded && activeWorkspaceId !== LOCAL_WORKSPACE_FALLBACK.id) {
+      return t('workspace.status.checking', 'Checking…')
+    }
+    if (workspaceSupport.error) return t('workspace.status.error', 'Error')
+    if (workspaceSupport.flags.canPrompt || workspaceSupport.flags.canCreateSession || authority === 'desktop_local') {
+      return t('workspace.status.online', 'Online')
+    }
+    return t('workspace.status.limited', 'Limited')
+  })()
 
   return (
     <div className={`shrink-0 border-t border-border-subtle ${collapsed ? 'px-2 py-2' : 'px-3 py-2.5'}`}>
@@ -123,7 +149,7 @@ function SidebarPresenceFooter({
         {!collapsed ? (
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-medium text-text">{t('sidebar.presenceName', 'You')}</div>
-            <div className="truncate text-2xs text-text-muted">{workspaceLabel} · {t('workspace.status.online', 'Online')}</div>
+            <div className="truncate text-2xs text-text-muted">{workspaceLabel} · {statusLabel}</div>
           </div>
         ) : null}
         <button
@@ -223,10 +249,10 @@ export function Sidebar({
                 }
                 setShowSearch(!showSearch)
               }}
-              aria-label={t('sidebar.searchTitle', 'Search projects and chats (⌘K)')}
+              aria-label={t('sidebar.searchTitle', 'Search chats (⌘K)')}
               aria-expanded={showSearch}
               className={`w-9 h-9 flex items-center justify-center rounded-lg border border-border-subtle transition-colors cursor-pointer ${showSearch ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
-              title={t('sidebar.searchTitle', 'Search projects and chats (⌘K)')}
+              title={t('sidebar.searchTitle', 'Search chats (⌘K)')}
             >
               <Icon name="search" size={16} />
             </button>
@@ -240,8 +266,8 @@ export function Sidebar({
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Escape') { setShowSearch(false); setSearchQuery('') } }}
-                aria-label={t('sidebar.search', 'Search projects and chats...')}
-                placeholder={t('sidebar.search', 'Search projects and chats...')}
+                aria-label={t('sidebar.search', 'Search recent chats…')}
+                placeholder={t('sidebar.search', 'Search recent chats…')}
                 className="w-full px-3 py-1.5 rounded-lg text-xs bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
               />
             </div>
@@ -306,8 +332,13 @@ export function Sidebar({
               aria-current={currentView === 'projects' ? 'page' : undefined}
               className={`sidebar-nav-item mb-1 rounded-md px-2 py-1 text-start text-2xs font-semibold uppercase tracking-widest transition-colors ${currentView === 'projects' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
             >
-              {t('sidebar.recentWork', 'Recent work')}
+              {t('sidebar.recentWork', 'Recent chats')}
             </button>
+            {!collapsed ? (
+              <p className="px-2 pb-1 text-2xs leading-snug text-text-muted">
+                {t('sidebar.recentWorkHint', 'Quick switch. Objectives and Kanban live under Projects.')}
+              </p>
+            ) : null}
             <ThreadList onSelect={() => onViewChange('chat')} searchQuery={searchQuery} />
           </div> : <div className="flex-1" />}
 
@@ -316,10 +347,10 @@ export function Sidebar({
             <SidebarLowerBranding lower={branding?.lower} />
             <button onClick={() => onViewChange('health')}
               aria-current={currentView === 'health' ? 'page' : undefined}
-              title={t('sidebar.diagnostics', 'Diagnostics')}
+              title={t('sidebar.healthCenter', 'Health Center')}
               className={`sidebar-nav-item mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs transition-colors ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}>
               <Icon name="heart-pulse" size={16} />
-              {t('sidebar.diagnostics', 'Diagnostics')}
+              {t('sidebar.healthCenter', 'Health Center')}
             </button>
             <div className="px-2 pb-1 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.toolStatus', 'Tool Status')}</div>
             <McpStatus />
@@ -327,8 +358,8 @@ export function Sidebar({
             <div className="shrink-0 border-t border-border-subtle px-2 py-2">
               <button onClick={() => onViewChange('health')}
                 aria-current={currentView === 'health' ? 'page' : undefined}
-                aria-label={t('sidebar.diagnostics', 'Diagnostics')}
-                title={t('sidebar.diagnostics', 'Diagnostics')}
+                aria-label={t('sidebar.healthCenter', 'Health Center')}
+                title={t('sidebar.healthCenter', 'Health Center')}
                 className={`sidebar-nav-item sidebar-nav-primary justify-center px-0 ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}>
                 <Icon name="heart-pulse" size={16} />
               </button>

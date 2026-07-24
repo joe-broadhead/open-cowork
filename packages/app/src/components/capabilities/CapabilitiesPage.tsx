@@ -420,12 +420,6 @@ export function CapabilitiesPage({
             {addButtonLabel}
           </Button>
         </div>
-        {relationshipEnabled ? null : (
-          <p className="-mt-1 mb-4 text-2xs text-text-muted">
-            {t('capabilities.relationshipsDisabled', 'A relationship map of how coworkers use these tools and skills is coming soon.')}
-          </p>
-        )}
-
         {tab === 'tools' || tab === 'map' ? (
           <div className="mb-4">
             <ProductMcpLinkPanel onChanged={loadAll} />

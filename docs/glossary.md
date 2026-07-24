@@ -36,18 +36,40 @@ Composition
     and permissions, then handing the resulting config to OpenCode at
     startup. Composition is config-driven and downstream-overridable.
 
+## Product language matrix (user-facing SoT)
+
+Use these nouns in UI chrome, empty states, and user docs. Internal APIs may
+keep older names.
+
+| User-facing | Internal / code OK | Forbidden in user copy |
+| --- | --- | --- |
+| Chat | session, thread (IPC) | Leading with “session” in primary nav |
+| Coworker | agent | Bare “agent” as the only Team label |
+| Tools & Skills | capabilities, MCP | “Capabilities page” in product chrome |
+| Playbook | workflow | Mixing Playbook/Workflow in the same panel title |
+| Projects | coordination board | “Searchable history / facets” if UI is Kanban-only |
+| Knowledge | knowledge store | Wiki, OpenWiki as synonyms |
+| Wiki | products/wiki, openwiki | Knowledge as synonym |
+| Channel Gateway | apps/channel-gateway | Unqualified “gateway” |
+| Standalone Gateway | apps/standalone-gateway | Unqualified “gateway” |
+| Gateway (durable) | products/gateway, cowork-gateway | Unqualified “gateway”; OpenCode Gateway after import |
+| Health Center | view `health` | Mixing Diagnostics/Health without one label |
+
+Full claim boundary: [Product purity register](product-purity-register.md).
+
 ## Sessions, project chats & artifacts
 
 Session
 :   An OpenCode-owned conversation between the user and one or more agents.
     Sessions stream events (tool calls, text deltas, approvals) that the
-    desktop app projects into a renderer-safe view model.
+    desktop app projects into a renderer-safe view model. User-facing name:
+    **Chat**.
 
 Project chat (thread)
-:   The user-facing container around a session. The sidebar and **Projects**
-    page list project chats, not raw OpenCode sessions. Internally the code
-    and IPC still say *thread* (`threads:search`, `thread-index.sqlite`).
-    Project chats come in two flavors:
+:   The user-facing container around a session. The **sidebar** lists recent
+    chats for quick switch; the **Projects** page is the coordination board
+    (not a full history search). Internally the code and IPC may still say
+    *thread*. Project chats come in two flavors:
 
 Project-bound chat
 :   A project chat bound to a real directory on the user's filesystem. The
@@ -163,8 +185,15 @@ Wiki
 
 Knowledge
 :   In-app knowledge store and Studio surface: app-owned SQLite (desktop) or
-    Postgres (cloud), proposals via `mcps/knowledge`. Not the Wiki product.
-    See [Knowledge store ownership](knowledge-store-ownership.md).
+    Postgres (cloud), proposals via `mcps/knowledge`. Use for chat-adjacent
+    notes and proposal review. **Not** the Wiki product and **not** enabled
+    in default Desktop nav (`features.knowledge`). See
+    [Knowledge store ownership](knowledge-store-ownership.md) and
+    [Knowledge vs Wiki ADR](adr/knowledge-vs-wiki.md).
+
+Projects (product surface)
+:   Coordination board for objectives, tasks, and linked work chats. Distinct
+    from sidebar recent-chat search. See [Projects](projects.md).
 
 ## Configuration & distribution
 

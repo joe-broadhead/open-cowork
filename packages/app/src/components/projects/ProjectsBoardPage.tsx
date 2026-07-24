@@ -3,6 +3,8 @@ import { ProjectsKanbanSurface } from '@open-cowork/ui'
 import type { CoordinationBoardPayload, CoordinationProject, CoordinationTask } from '@open-cowork/shared'
 import { toast } from '../ui/Toaster'
 import { t } from '../../helpers/i18n'
+import { supportAllows, supportEntry, useActiveWorkspaceSupport } from '../../stores/workspace-support'
+import { RestrictedState } from '../RestrictedState'
 
 type ProjectsBoardPageProps = {
   onOpenThread: (sessionId: string) => void
@@ -15,6 +17,16 @@ function describeError(error: unknown) {
 }
 
 export function ProjectsBoardPage({ onOpenThread }: ProjectsBoardPageProps) {
+  const workspaceSupport = useActiveWorkspaceSupport()
+  // Board maps to coordination.projects (+ tasks). No synthetic board support key.
+  const coordinationEntry = supportEntry(workspaceSupport.support, 'coordination.projects')
+    || supportEntry(workspaceSupport.support, 'coordination.tasks')
+  const coordinationDeferred = Boolean(
+    coordinationEntry
+    && (coordinationEntry.status === 'deferred' || coordinationEntry.status === 'not_supported' || coordinationEntry.status === 'blocked_by_policy'),
+  )
+  const coordinationReason = coordinationEntry?.verdict?.reason
+    || t('projects.board.deferredReason', 'Project board operations are not available for this workspace yet.')
   const [board, setBoard] = useState<CoordinationBoardPayload | null>(null)
   const [agents, setAgents] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,6 +50,12 @@ export function ProjectsBoardPage({ onOpenThread }: ProjectsBoardPageProps) {
   }, [])
 
   const loadBoard = useCallback(async () => {
+    if (coordinationDeferred) {
+      setBoard(null)
+      setLoading(false)
+      setError(null)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -47,17 +65,18 @@ export function ProjectsBoardPage({ onOpenThread }: ProjectsBoardPageProps) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [coordinationDeferred])
 
   useEffect(() => {
     void loadBoard()
   }, [loadBoard])
 
   useEffect(() => {
+    if (coordinationDeferred) return
     return window.coworkApi.on.coordinationUpdated(() => {
       void loadBoard()
     })
-  }, [loadBoard])
+  }, [coordinationDeferred, loadBoard])
 
   // These run inside the kanban surface's act() wrapper, which reports success
   // unless the callback throws. So we toast on the app's standard channel and
@@ -97,13 +116,34 @@ export function ProjectsBoardPage({ onOpenThread }: ProjectsBoardPageProps) {
     }
   }, [])
 
+  if (coordinationDeferred) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6">
+        <RestrictedState
+          icon="kanban"
+          title={t('projects.board.deferredTitle', 'Projects board unavailable here')}
+          body={t(
+            'projects.board.deferredBody',
+            'This workspace’s coordination board is deferred or blocked. Switch to Local or a fully supported Cloud workspace to plan objectives and tasks.',
+          )}
+          reason={coordinationReason}
+        />
+      </div>
+    )
+  }
+
+  const mutationsAllowed = !coordinationEntry || supportAllows(coordinationEntry, { mutation: true })
+  const authority = workspaceSupport.flags.authority || 'desktop_local'
+
   return (
     <ProjectsKanbanSurface
       board={board}
       loading={loading}
       error={error}
       agents={agents}
-      platformLabel="Desktop"
+      platformLabel={`${workspaceSupport.workspaceId} · ${authority}`}
+      disabled={!mutationsAllowed}
+      disabledReason={mutationsAllowed ? undefined : coordinationReason}
       onReload={loadBoard}
       onCreateProject={(input) => window.coworkApi.coordination.createProject(input)}
       onPlanWithCleo={(projectId, input) => window.coworkApi.coordination.planWithCleo(projectId, input)}

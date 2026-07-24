@@ -391,6 +391,15 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
   }, [effectiveAllowedPrimaryModes, setAgentMode])
 
   useEffect(() => {
+    // JOE-1050: when Smart suggestions are off, do not poll the motion feed at all.
+    if (!smartSuggestions) {
+      setLaunchpadFeed(EMPTY_LAUNCHPAD_FEED)
+      setLaunchpadLoading(false)
+      setLaunchpadInitialized(true)
+      setLaunchpadError(null)
+      return
+    }
+
     let cancelled = false
     const timeout = window.setTimeout(() => {
       const requestId = launchpadRequestIdRef.current + 1
@@ -420,6 +429,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
       window.clearTimeout(timeout)
     }
   }, [
+    smartSuggestions,
     workspaceOptions,
     sessionFeedKey,
     currentView.lastEventAt,
@@ -551,23 +561,38 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread,
           <LaunchpadSuggestions allowedPrimaryModes={effectiveAllowedPrimaryModes} onPick={handlePickExample} />
         ) : null}
 
-        {smartSuggestions && launchpadInitialized ? (
-          <Suspense fallback={<div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status">{t('home.motion.loading', 'Loading')}</div>}>
-            <LaunchpadMotionGrid
-              feed={launchpadFeed}
-              loading={launchpadLoading}
-              error={launchpadError}
-              onNavigate={onNavigate}
-              onOpenThread={handleOpenThread}
-              onOpenArtifact={handleOpenArtifact}
-              onRefresh={() => setLaunchpadRefreshNonce((nonce) => nonce + 1)}
-            />
-          </Suspense>
-        ) : smartSuggestions ? (
-          <div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status" aria-live="polite">
-            {t('home.motion.loading', 'Loading')}
-          </div>
-        ) : null}
+        {(() => {
+          // JOE-1050: never reserve Home space for an empty motion grid. Show the
+          // section only while loading, on error, or when there is at least one item.
+          const motionCount = (launchpadFeed.totals?.inProgress || 0)
+            + (launchpadFeed.totals?.waitingOnYou || 0)
+            + (launchpadFeed.totals?.freshArtifacts || 0)
+          const showMotion = smartSuggestions && (launchpadLoading || motionCount > 0 || Boolean(launchpadError))
+          if (!showMotion) return null
+          if (!launchpadInitialized || (launchpadLoading && motionCount === 0 && !launchpadError)) {
+            // First paint: avoid a permanent "Loading" block when the feed is empty.
+            if (launchpadInitialized && !launchpadLoading && motionCount === 0) return null
+            if (!launchpadLoading) return null
+            return (
+              <div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status" aria-live="polite">
+                {t('home.motion.loading', 'Loading')}
+              </div>
+            )
+          }
+          return (
+            <Suspense fallback={<div className="home-motion w-full mt-10 text-center text-xs text-text-muted" role="status">{t('home.motion.loading', 'Loading')}</div>}>
+              <LaunchpadMotionGrid
+                feed={launchpadFeed}
+                loading={launchpadLoading}
+                error={launchpadError}
+                onNavigate={onNavigate}
+                onOpenThread={handleOpenThread}
+                onOpenArtifact={handleOpenArtifact}
+                onRefresh={() => setLaunchpadRefreshNonce((nonce) => nonce + 1)}
+              />
+            </Suspense>
+          )
+        })()}
 
         <TeamStrip
           agents={suggestedAgents}

@@ -25,8 +25,8 @@ Wiki, Channel Gateway):** [Product partitions ADR](adr/product-partitions.md).
 | Open Cowork Cloud | Supported for self-host beta and private hosted beta | cloud server code under `packages/cloud-server`; the browser UI is the unified renderer (`packages/app/src`) served by the cloud at `GET /` | `open-cowork-cloud` OCI image and Helm/Compose assets |
 | **Channel Gateway** | Supported as a cloud channel adapter | `apps/channel-gateway`; `packages/gateway-*` | preferred OCI `open-cowork-channel-gateway` (dual-tag `open-cowork-gateway`) |
 | **Standalone Gateway** | Supported as a Gateway-only execution appliance | `apps/standalone-gateway` | CLI `open-cowork-gateway-standalone`; OCI image after release gate |
-| **Gateway** (durable work coordinator) | Monorepo import in progress | external → `products/gateway` | bin **`cowork-gateway`** (optional) |
-| **Wiki** | Monorepo import in progress | external → `products/wiki` | bin **`cowork-wiki`** (optional) |
+| **Gateway** (durable work coordinator) | Monorepo SoT; local-operator claim-gated | `products/gateway` | bin **`cowork-gateway`** (optional; not default Desktop) |
+| **Wiki** | Monorepo SoT; optional installable | `products/wiki` | bin **`cowork-wiki`** (optional; not default Desktop) |
 | **Knowledge** | Supported in-app | runtime-host + `mcps/knowledge` | bundled with Desktop/Cloud; not a separate CLI |
 | Open Cowork Mobile | Reserved | none yet | no artifact |
 | Open Cowork Teams | Reserved product/edition name | team and org policy surfaces across Cloud/Gateway | no separate runtime |

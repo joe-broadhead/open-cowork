@@ -391,7 +391,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                   ? activeWorkspaceIsLocal
                     ? t('workflows.emptySetupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.')
                     : t('workflows.emptyCloudManaged', 'Cloud playbook creation is managed by the cloud workspace. Existing playbooks will appear here when available.')
-                  : t('workflows.emptyStartChat', 'Start with a setup chat. The Workflow Designer agent will clarify the task, tools, skills, coworker, schedule, and webhook trigger before saving anything.')}
+                  : t('workflows.emptyStartChat', 'Start a setup chat with Workflow Designer. It will clarify the task, tools, skills, coworker, schedule, and webhook trigger before saving a playbook.')}
             action={(
               <Button
                 variant="primary"

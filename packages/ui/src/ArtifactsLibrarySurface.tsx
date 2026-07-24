@@ -324,10 +324,10 @@ export function ArtifactsLibrarySurface({
   )
   const knownTotal = total ?? artifacts.length
   const filterOptions = [...KIND_FILTERS, ...STATUS_FILTERS]
-  const emptyTitle = truncated ? 'No loaded artifacts found' : 'No artifacts found'
+  const emptyTitle = truncated ? 'No loaded artifacts found' : 'No artifacts yet'
   const emptyBody = truncated
     ? 'Search and filters apply to the loaded page of artifact results. Clear filters or reload after narrowing the upstream index scope.'
-    : 'Generated documents, charts, decks, and spreadsheets will appear here after OpenCode sessions produce artifacts.'
+    : 'Charts, files, and deliverables from OpenCode chats show up here. Produce work in Chat, or open a session artifact from the thread inspector.'
 
   return (
     <section {...props} className={cn('studio-artifacts-library', loading && 'studio-artifacts-library--loading', className)} aria-label="Artifact library">

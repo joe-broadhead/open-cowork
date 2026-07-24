@@ -4,7 +4,8 @@ import { launchSmokeApp } from './smoke-helpers.ts'
 
 // Smoke: Home is the welcoming landing surface. It should stay aligned
 // with the Studio launchpad: greeting, composer, assign-to picker,
-// starter cards, in-motion feed, team strip, and runtime status.
+// starter cards, team strip, and runtime status. Empty motion feed is
+// intentionally hidden (product purity JOE-1050).
 
 test('home renders the Studio launchpad, composer, status strip, and no removed dashboard content', async () => {
   const { page, cleanup } = await launchSmokeApp()
@@ -29,11 +30,16 @@ test('home renders the Studio launchpad, composer, status strip, and no removed 
     await page.getByRole('button', { name: /Build.*default/i }).waitFor({ timeout: 10_000 })
 
     await page.getByText('Start with a handoff', { exact: true }).waitFor({ timeout: 10_000 })
-    await page.getByText('In motion', { exact: true }).waitFor({ timeout: 10_000 })
-    await page.getByText('In progress', { exact: true }).waitFor({ timeout: 10_000 })
-    await page.getByText('Waiting on you', { exact: true }).waitFor({ timeout: 10_000 })
-    await page.getByText('Fresh artifacts', { exact: true }).waitFor({ timeout: 10_000 })
     await page.getByText('Your team', { exact: true }).waitFor({ timeout: 10_000 })
+
+    // Empty workspaces hide the motion grid entirely — do not require
+    // "In motion" / column headers when there is nothing to show.
+    const motionHeading = await page.getByText('In motion', { exact: true }).count()
+    if (motionHeading > 0) {
+      await page.getByText('In progress', { exact: true }).waitFor({ timeout: 5_000 })
+      await page.getByText('Waiting on you', { exact: true }).waitFor({ timeout: 5_000 })
+      await page.getByText('Fresh artifacts', { exact: true }).waitFor({ timeout: 5_000 })
+    }
 
     // The status strip stays on Home and reports the managed runtime
     // connection state without reintroducing a separate dashboard route.

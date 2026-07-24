@@ -1,84 +1,42 @@
+---
+title: Projects
+description: Coordination board for objectives, tasks, and linked OpenCode work chats.
+---
+
 # Projects
 
-The Projects workspace is the full-history surface for finding and organizing
-past work. The compact sidebar list stays optimized for quick switching; the
-Projects page handles deeper search, metadata facets, tags, saved filters, and
-category suggestions.
+**Product decision (JOE-1052):** Projects is the **coordination board** surface —
+objectives, Kanban-style tasks, assignees, and linked OpenCode work chats —
+not a full-text chat history browser.
 
-Individual OpenCode conversations still appear as **project chats** (internally
-session/thread records). This page is the product surface named **Projects**,
-not a separate runtime.
+Quick session switching stays in the **sidebar recent-work list** and thread
+search. Do not document Projects as “facets/tags search history” unless that
+UI ships again under an explicit product decision.
 
-## Data model
+## What you can do
 
-`sessions.json` remains the authoritative Cowork-managed session registry. The
-Projects feature uses a rebuildable sidecar SQLite projection named
-`thread-index.sqlite` under the app data directory. If the sidecar is deleted,
-Open Cowork can rebuild index rows from the session registry and hydrated
-session history.
+- Browse coordination **projects** (objectives) and their **tasks**
+- Move tasks across board columns
+- Open a linked conversation when the project has a source session
+- Open task work targets when coordination has linked a work session
+- Assign work to coworkers from the roster when the authority supports it
 
-The index stores renderer-safe project-chat metadata:
+## Authorities
 
-- title, status, created/updated timestamps, and parent/workflow linkage
-- display-safe project labels
-- provider and model ids
-- usage totals, cost, token totals, and diff summary counts
-- evidence-backed actual agents and tools observed in the session view
-- user-owned tags
-- saved smart filters
-- suggestion records with bounded labels, reasons, and evidence metadata
+| Workspace | Board behavior |
+| --- | --- |
+| Desktop Local | Local coordination store |
+| Desktop Cloud / Cloud Web | Cloud coordination APIs (must not silently fall back to local host paths) |
+| Standalone Gateway (deferred sessions) | Connection-only; board/session ops follow support matrix |
 
-It does not index full transcript text, hidden OpenCode runtime directories, or
-provider credentials.
+## Empty and restricted states
 
-## Search And Facets
+- Empty board: create or seed a project via the board CTA
+- Deferred/blocked support: show `workspace.support()` reason — never opaque errors
+- Missing linked conversation: warn and keep the board usable
 
-The Projects page calls the `threads:search` IPC channel with bounded,
-cursor-based queries. Results default to 50 rows and are capped at 100 rows per
-request. Search covers project-chat titles and indexed metadata such as project
-label, provider/model, agents, tools, tags, and suggestions.
+## Related
 
-The facet rail exposes deterministic filters for:
-
-- date range
-- project/sandbox label
-- status
-- provider and model
-- actual agent usage
-- actual tool and MCP usage
-- user tags
-
-Every filter is applied in the main process before rows reach the renderer.
-
-## Tags
-
-Tags are explicit user state. Users can create, delete, apply, and remove tags
-from the Projects page. Dragging selected rows onto a tag is a convenience only;
-the same action is available through checkboxes plus Apply/Remove buttons for
-keyboard users.
-
-Tags never come from automatic categorization unless a user explicitly creates
-or applies them.
-
-## Smart Filters
-
-Smart filters are saved `ThreadSearchQuery` objects. Applying one repopulates
-the visible search and filter controls; it does not mutate project chats or tags.
-
-## Suggestions
-
-Suggestions are separate from tags and actual metadata. The first
-implementation uses local deterministic heuristics from evidence-backed fields
-such as title, project label, provider, actual agents, and actual tools.
-Suggestions never auto-tag, auto-move, hide, or delete project chats. Users can
-accept, edit, dismiss, or ignore them.
-
-## Privacy And Recovery
-
-The sidecar index is local-only and uses the same private file mode posture as
-other durable app data. The database, WAL, and SHM sidecars are chmodded to
-`0o600` on platforms that support POSIX modes.
-
-If the index is stale or corrupt, use the Projects page refresh path or the
-main-process `threads:reindex` diagnostics IPC to rebuild rows from the current
-session registry.
+- [Desktop app guide](desktop-app.md)
+- [Coordination model](coordination-model.md)
+- [Product purity register](product-purity-register.md)
