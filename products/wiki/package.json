@@ -78,7 +78,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
-    "@types/node": "^26.0.0",
+    "@types/node": "^22.20.1",
     "ajv": "^8.20.0",
     "esbuild": "0.28.1",
     "knip": "6.17.1",
