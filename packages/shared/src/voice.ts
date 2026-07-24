@@ -45,6 +45,18 @@ export type VoicePermissionState =
   | 'denied'
   | 'restricted'
 
+/** Host-side capture diagnostics only — never includes PCM samples. */
+export type VoiceCaptureStatus = {
+  backend: 'fake' | 'ffmpeg' | 'unavailable'
+  detail: string
+  sampleRate: number
+  channels: 1
+  /** Frames currently held in the host buffer (0 when idle / after stop). */
+  frames: number
+  durationSeconds: number
+  peak: number
+}
+
 export type VoiceHostStatus = {
   /** Feature + authority gate: false when features.voice off or non-local workspace. */
   enabled: boolean
@@ -67,6 +79,8 @@ export type VoiceHostStatus = {
   reason: string | null
   /** Active conversation session id when one is open. */
   sessionId: string | null
+  /** Optional capture diagnostics (no audio samples). */
+  capture?: VoiceCaptureStatus
 }
 
 export type VoiceSessionStartInput = {
@@ -133,20 +147,23 @@ export function createDeferredVoiceHostStatus(reason: string): VoiceHostStatus {
 export const VOICE_HOST_DEFERRED_REASON =
   'Private voice host is scaffolded; STT/TTS engines are not connected yet. Keep features.voice off until V1 engines land.'
 
+export const VOICE_STT_DEFERRED_REASON =
+  'Capture host ready; Aurum STT not wired yet (V1.2).'
+
 /**
- * Derive host status from feature flags alone (no engines). Used by IPC stubs
- * and unit tests before Aurum/sibling TTS are connected.
+ * Derive host status from feature flags alone (no live capture). Used by
+ * lightweight unit tests; Desktop main prefers VoiceHost.getStatus().
  */
 export function voiceHostStatusForFeatures(features: { voice?: boolean } | undefined): VoiceHostStatus {
   const enabled = features?.voice === true
   const status = createDeferredVoiceHostStatus(
     enabled
-      ? VOICE_HOST_DEFERRED_REASON
+      ? VOICE_STT_DEFERRED_REASON
       : 'features.voice is disabled (secondary Studio flag, default off).',
   )
   return {
     ...status,
     enabled,
-    phase: enabled ? 'deferred' : 'disabled',
+    phase: enabled ? 'ready' : 'disabled',
   }
 }

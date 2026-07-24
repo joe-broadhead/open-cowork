@@ -92,7 +92,7 @@ test('private voice: renderer media denied by default (voice host owns mic)', ()
   assert.ok(OS_VOICE_PERMISSION_MATRIX.every((row) => /not|n\/a|required/i.test(row.cloudWeb)))
 })
 
-test('private voice: host status scaffold stays deferred', () => {
+test('private voice: host status scaffold reflects flag + STT deferred', () => {
   const off = voiceHostStatusForFeatures(undefined)
   assert.equal(off.enabled, false)
   assert.equal(off.phase, 'disabled')
@@ -102,8 +102,8 @@ test('private voice: host status scaffold stays deferred', () => {
 
   const on = voiceHostStatusForFeatures({ voice: true })
   assert.equal(on.enabled, true)
-  assert.equal(on.phase, 'deferred')
-  assert.match(on.reason || '', /scaffolded|not connected/i)
+  assert.equal(on.phase, 'ready')
+  assert.match(on.reason || '', /Aurum STT|V1\.2/i)
 
   const deferred = createDeferredVoiceHostStatus(VOICE_HOST_DEFERRED_REASON)
   assert.equal(deferred.phase, 'deferred')
@@ -140,7 +140,8 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   const handlers = readFileSync(join(root, 'apps/desktop/src/main/ipc/voice-handlers.ts'), 'utf8')
   assert.match(handlers, /voice:status/)
   assert.match(handlers, /voice:session:start/)
-  assert.match(handlers, /VOICE_HOST_DEFERRED_REASON/)
+  assert.match(handlers, /getVoiceHost/)
+  assert.match(handlers, /never raw audio/i)
 
   const preload = readFileSync(join(root, 'apps/desktop/src/preload/index.ts'), 'utf8')
   assert.match(preload, /'voice:status'/)
@@ -149,4 +150,8 @@ test('private voice: IPC and preload channels are scaffolded', () => {
 
   const ipcHandlers = readFileSync(join(root, 'apps/desktop/src/main/ipc-handlers.ts'), 'utf8')
   assert.match(ipcHandlers, /registerVoiceHandlers/)
+
+  const host = readFileSync(join(root, 'apps/desktop/src/main/voice-host.ts'), 'utf8')
+  assert.match(host, /VoicePcmBuffer/)
+  assert.match(host, /getHostPcmSnapshot/)
 })

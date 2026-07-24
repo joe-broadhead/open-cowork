@@ -59,10 +59,11 @@ OpenCode session prompt / stream (existing session path)
 
 Rules:
 
-1. **No raw audio bytes on the renderer IPC path** by default. Prefer partial/final **text** and host-owned playback.
+1. **No raw audio bytes on the renderer IPC path** by default. Prefer partial/final **text** and host-owned playback. Status may include capture **frame counts** only.
 2. Chromium `getUserMedia` / Electron session `media` for the **Studio renderer stays denied** unless a future ADR chooses an explicit renderer capture mode.
 3. OS microphone permission is owned by the **voice host**, not by ad-hoc Settings toggles.
 4. Cloud Web must never request mic for Open Cowork Studio (support matrix + browser matrix).
+5. **Capture (JOE-1097):** host accumulates mono **16 kHz f32** PCM in main (`VoicePcmBuffer`). Default backend is **ffmpeg** when available; tests inject `FakeVoiceCapture`. PCM is cleared on stop/cancel and is never sent to the renderer.
 
 ### 4. Workspace support APIs
 
