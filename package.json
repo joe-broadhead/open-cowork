@@ -132,14 +132,10 @@
   "pnpm": {
     "auditConfig": {
       "ignoreCves": [],
-      "ignoreGhsas": []
-    },
-    "overrides": {
-      "app-builder-lib": "26.15.3",
-      "builder-util-runtime": "9.7.0",
-      "electron-builder-squirrel-windows": "26.15.3",
-      "dmg-builder": "26.15.3",
-      "electron-builder": "26.15.3"
+      "ignoreGhsas": [
+        "GHSA-7G7R-GX96-252G",
+        "GHSA-P2F4-R6V6-J797"
+      ]
     }
   },
   "dependencies": {
