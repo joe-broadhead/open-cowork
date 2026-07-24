@@ -1,4 +1,10 @@
-import { buildConfiguredDescriptorProviderRuntimeConfig } from '@open-cowork/runtime-host/runtime-config-builder'
+import {
+  buildConfiguredDescriptorProviderRuntimeConfig,
+  buildOpenRouterProviderRuntimeConfigFromApiKey,
+  OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID,
+  isOpenRouterAppProviderId,
+  toOpenCodeRuntimeProviderId,
+} from '@open-cowork/runtime-host/runtime-config-builder'
 import type { Config, ProviderConfig } from '@opencode-ai/sdk/v2'
 import type { CredentialField } from '@open-cowork/shared'
 import type { OpenCoworkConfig } from '@open-cowork/shared'
@@ -155,25 +161,50 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
       )
     }
 
+    // OpenCode V2 cannot load models.dev `openrouter` (UnsupportedApiError) and
+    // ignores openai-compatible re-registration under that reserved id. Register
+    // under OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID (`or`) with an explicit
+    // models pin so SessionRunnerModel.resolve finds the model in available().
+    if (isOpenRouterAppProviderId(providerId)) {
+      const featuredIds = (descriptor.models || []).map((model) => model.id)
+      const defaultModelId = stripProviderPrefix(providerId, appConfig.providers.defaultModel)
+        || stripProviderPrefix(providerId, descriptor.defaultModel)
+      const providerConfig = buildOpenRouterProviderRuntimeConfigFromApiKey(plaintext, {
+        name: descriptor.name,
+        modelIds: [defaultModelId, ...featuredIds],
+      })
+      providerEntries[OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID] = providerConfig
+      log(
+        'runtime',
+        `cloud-byok provider=${providerId}→${OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID} tenant=${context.tenantId} session=${context.sessionId} options {${redactOptionShape(providerConfig.options || {}).join(', ')}} models=${Object.keys(providerConfig.models || {}).length}`,
+      )
+      continue
+    }
+
     const providerConfig = buildConfiguredDescriptorProviderRuntimeConfig(descriptor, {
       [credential.key]: plaintext,
     })
     if (!providerConfig) continue
-    providerEntries[providerId] = providerConfig
+    providerEntries[toOpenCodeRuntimeProviderId(providerId)] = providerConfig
     log(
       'runtime',
       `cloud-byok provider=${providerId} tenant=${context.tenantId} session=${context.sessionId} options {${redactOptionShape(providerConfig.options || {}).join(', ')}}`,
     )
   }
 
-  const providerId = defaultProviderId || Object.keys(providerEntries)[0] || 'openrouter'
-  const modelId = stripProviderPrefix(providerId, appConfig.providers.defaultModel)
-  const model = modelId ? `${providerId}/${modelId}` : providerId
+  const appProviderId = defaultProviderId || 'openrouter'
+  const runtimeProviderId = Object.keys(providerEntries)[0]
+    || toOpenCodeRuntimeProviderId(appProviderId)
+  const modelId = stripProviderPrefix(appProviderId, appConfig.providers.defaultModel)
+  const model = modelId ? `${runtimeProviderId}/${modelId}` : runtimeProviderId
+  const enabledProviders = Object.keys(providerEntries)
   return {
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
     share: 'manual',
     model,
-    ...(Object.keys(providerEntries).length > 0 ? { provider: providerEntries } : {}),
+    small_model: model,
+    ...(enabledProviders.length > 0 ? { enabled_providers: enabledProviders } : {}),
+    ...(enabledProviders.length > 0 ? { provider: providerEntries } : {}),
   }
 }

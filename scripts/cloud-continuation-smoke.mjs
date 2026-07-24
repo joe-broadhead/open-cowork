@@ -575,16 +575,27 @@ async function continueFromWebSession({ webClient, desktop, gatewaySetup, timeou
   const before = projectionShape(await webClient.getSession(sessionId))
   const promptText = `${promptPrefix} web-created session continued by Desktop`
   await desktop.promptSession(sessionId, { text: promptText, agent })
+  // Gateway session streams only render assistant.message (and rich UI events), not the
+  // user prompt. Wait for the OpenCode turn to produce assistant content (or finish
+  // generating) before requiring a channel render.
   const raw = await waitForProjection(
     webClient,
     sessionId,
-    (view) => projectionShape(view).messages > before.messages,
-    'Desktop continuation visible to Web projection',
+    (view) => {
+      const shape = projectionShape(view)
+      if (shape.messages <= before.messages) return false
+      const state = projection(view)
+      const messages = Array.isArray(state?.messages) ? state.messages : []
+      const hasAssistant = messages.some((message) => message?.role === 'assistant' && String(message?.content || '').trim())
+      const settled = shape.status !== 'running' && state?.isGenerating !== true
+      return hasAssistant || settled
+    },
+    'Desktop continuation produced assistant output or settled on Web projection',
     timeoutMs,
   )
   await waitForGatewayRender(
     gatewaySetup,
-    (sent) => sent.some((entry) => typeof entry.text === 'string' && entry.text.includes(promptText)),
+    (sent) => sent.some((entry) => typeof entry.text === 'string' && entry.text.trim().length > 0),
     'Gateway render of Desktop continuation',
     timeoutMs,
   ).catch(() => waitForGatewayRender(
@@ -774,7 +785,8 @@ async function runReplayHydrationCheck({ webClient, desktopTransport, connection
 
 async function runSmoke() {
   const baseUrl = requireCloudUrl()
-  const timeoutMs = intArg('timeout-ms', 'OPEN_COWORK_CONTINUATION_SMOKE_TIMEOUT_MS', 45_000)
+  // Cold OpenCode start + first model response can exceed 45s on local compose labs.
+  const timeoutMs = intArg('timeout-ms', 'OPEN_COWORK_CONTINUATION_SMOKE_TIMEOUT_MS', 120_000)
   const runId = randomUUID().replace(/-/g, '').slice(0, 12)
   const promptPrefix = argOrEnv(
     'prompt-prefix',

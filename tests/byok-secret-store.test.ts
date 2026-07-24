@@ -155,6 +155,8 @@ test('BYOK secrets remain inactive without a provider validator until audited ov
   const store = seededStore()
   const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
     ids: { randomUUID: () => 'secret-unsupported' },
+    // Strict path: no default auto-activate for providers without validators.
+    activateUnvalidatedProviders: false,
   })
 
   const created = await byok.setSecret({
@@ -197,6 +199,7 @@ test('BYOK disable revokes non-active provider secrets', async () => {
   const store = seededStore()
   const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
     ids: { randomUUID: () => 'secret-disable-unsupported' },
+    activateUnvalidatedProviders: false,
   })
 
   await byok.setSecret({

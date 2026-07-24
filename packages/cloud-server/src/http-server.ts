@@ -43,6 +43,7 @@ import { handleSettingsApiRoute } from './http-routes/settings.ts'
 import { handleSessionArtifactsApiRoute } from './http-routes/session-artifacts.ts'
 import { handleThreadsApiRoute } from './http-routes/threads.ts'
 import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
+import { CloudByokRuntimeConfigError } from './byok-runtime-config.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService, type CloudSessionView } from './session-service.ts'
 import {
   firstHeader,
@@ -1903,6 +1904,16 @@ export class CloudHttpServer {
         writeError(res, error.status, error.publicMessage, requestOptions.corsOrigin, {
           policyCode: error.policyCode,
           retryAfterMs: error.retryAfterMs,
+        })
+        return
+      }
+      if (error instanceof CloudByokRuntimeConfigError) {
+        // Missing/blocked BYOK is an operator-fixable precondition, not an unexpected 500.
+        const status = error.code === 'missing_required_byok' ? 409
+          : error.code === 'kms_not_supported' ? 501
+            : 403
+        writeError(res, status, error.message, requestOptions.corsOrigin, {
+          policyCode: `byok.${error.code}`,
         })
         return
       }

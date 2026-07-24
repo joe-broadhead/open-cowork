@@ -305,27 +305,71 @@ export function isModelsDevAuthJsonBuiltin(providerId: string) {
 }
 
 /**
- * OpenCode V2 session runner cannot load models.dev's default
- * `@openrouter/ai-sdk-provider` package in managed `serve` (UnsupportedApiError),
- * even though `opencode run` with the same auth works. Force the bundled
- * openai-compatible AI SDK package and pass the API key + base URL so V2 can
- * resolve catalog models such as `deepseek/deepseek-v4-flash`.
+ * OpenCode V2 (1.18.1) provider id used for OpenRouter BYOK / managed serve.
  *
- * Do not pin a `models` map here — leave the models.dev/dynamic catalog intact.
+ * The models.dev id `openrouter` is unusable in V2 `model.available()`:
+ * - default package `@openrouter/ai-sdk-provider` → UnsupportedApiError
+ * - re-registering `openrouter` with `@ai-sdk/openai-compatible` is ignored
+ *   (provider never appears in provider.list / model.list)
+ *
+ * A non-reserved id with openai-compatible + baseURL + explicit models works.
+ * App-level Cowork still uses provider id `openrouter` for settings/BYOK.
  */
-export function buildOpenRouterProviderRuntimeConfig(
-  settings: CoworkSettings,
-): ProviderConfig | null {
-  const apiKey = getProviderCredentialValue(settings, 'openrouter', 'apiKey')
-  if (!apiKey) return null
+export const OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID = 'or'
+
+export function isOpenRouterAppProviderId(providerId: string | null | undefined) {
+  return providerId === 'openrouter'
+}
+
+/** Map Cowork app provider ids onto OpenCode runtime provider ids. */
+export function toOpenCodeRuntimeProviderId(appProviderId: string) {
+  return isOpenRouterAppProviderId(appProviderId)
+    ? OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID
+    : appProviderId
+}
+
+/**
+ * Compose the OpenCode provider entry for OpenRouter managed V2 serve.
+ * Pins `modelIds` into the provider models map — without a pin, V2 has no
+ * models.dev fallback under the runtime provider id.
+ */
+export function buildOpenRouterProviderRuntimeConfigFromApiKey(
+  apiKey: string,
+  options?: {
+    name?: string
+    modelIds?: readonly string[] | null
+  },
+): ProviderConfig {
+  const modelIds = Array.from(new Set(
+    (options?.modelIds || [])
+      .map((id) => id?.trim())
+      .filter((id): id is string => Boolean(id)),
+  ))
+  const models = modelIds.length > 0
+    ? Object.fromEntries(modelIds.map((id) => [id, {
+      name: id,
+      // OpenCode maps `tools: true` onto capabilities.tools for agent sessions.
+      tools: true,
+    }]))
+    : undefined
   return {
-    name: 'OpenRouter',
+    name: options?.name || 'OpenRouter',
     npm: '@ai-sdk/openai-compatible',
     options: {
       baseURL: 'https://openrouter.ai/api/v1',
       apiKey,
     },
+    ...(models ? { models } : {}),
   }
+}
+
+export function buildOpenRouterProviderRuntimeConfig(
+  settings: CoworkSettings,
+  modelIds?: readonly string[] | null,
+): ProviderConfig | null {
+  const apiKey = getProviderCredentialValue(settings, 'openrouter', 'apiKey')
+  if (!apiKey) return null
+  return buildOpenRouterProviderRuntimeConfigFromApiKey(apiKey, { modelIds })
 }
 
 function buildBuiltinProviderRuntimeConfig(
@@ -336,6 +380,7 @@ function buildBuiltinProviderRuntimeConfig(
   if (!descriptor) return null
 
   if (providerId === 'openrouter') {
+    // Caller re-keys this entry under OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID.
     return buildOpenRouterProviderRuntimeConfig(settings)
   }
 
@@ -446,13 +491,14 @@ function buildRuntimeConfigWithCustomMcpsResult(
     applyUserPermissionPolicy('allow', settings.externalDirectoryPermission), 'externalDirectory', managedPolicy)
   const mcpPolicy = clampManagedPolicyDimension(
     applyUserPermissionPolicy('allow', settings.mcpPermission), 'mcp', managedPolicy)
-  const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
+  const appProviderId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
+  const providerId = toOpenCodeRuntimeProviderId(appProviderId)
   const configModel = settings.effectiveModel
-    || (providerId === appConfig.providers.defaultProvider ? appConfig.providers.defaultModel || '' : '')
-  const modelId = stripProviderPrefix(providerId, configModel)
+    || (appProviderId === appConfig.providers.defaultProvider ? appConfig.providers.defaultModel || '' : '')
+  const modelId = stripProviderPrefix(appProviderId, configModel)
   const modelStr = modelId ? `${providerId}/${modelId}` : `${providerId}`
   const smallModelId = resolveRuntimeSmallModelId({
-    providerId,
+    providerId: appProviderId,
     selectedModelId: modelId,
     selectedSmallModelId: settings.effectiveSmallModel || settings.selectedSmallModelId,
     appConfig,
@@ -470,8 +516,13 @@ function buildRuntimeConfigWithCustomMcpsResult(
   // Scope the runtime provider allow-list to the org policy (drops denied ids and
   // intersects the policy allow-list). When the policy leaves no overlap we keep the
   // app-config list rather than silently unrestricting every provider.
+  // Map app openrouter → OpenCode runtime id (`or`) so V2 can load models.
   const configuredProviders = Array.from(new Set(appConfig.providers.available))
-  const policyScopedProviders = filterProvidersByManagedPolicy(configuredProviders, managedPolicy)
+    .map((id) => toOpenCodeRuntimeProviderId(id))
+  const policyScopedProviders = filterProvidersByManagedPolicy(
+    Array.from(new Set(appConfig.providers.available)),
+    managedPolicy,
+  ).map((id) => toOpenCodeRuntimeProviderId(id))
   const enabledProviders = policyScopedProviders.length > 0 ? policyScopedProviders : configuredProviders
   const config: Config = {
     $schema: 'https://opencode.ai/config.json',
@@ -505,11 +556,24 @@ function buildRuntimeConfigWithCustomMcpsResult(
       diagnostics.push(...result.diagnostics)
     }
   }
-  if (providerId && !providerConfigEntries[providerId]) {
-    const selectedProviderConfig = buildEffectiveProviderRuntimeConfigResult(providerId, settings, providerId)
-    diagnostics.push(...selectedProviderConfig.diagnostics)
-    if (selectedProviderConfig.config) {
-      providerConfigEntries[providerId] = selectedProviderConfig.config
+  if (appProviderId && !providerConfigEntries[providerId] && !providerConfigEntries[appProviderId]) {
+    if (isOpenRouterAppProviderId(appProviderId)) {
+      const featuredIds = (appConfig.providers.descriptors?.openrouter?.models || [])
+        .map((model) => model.id)
+      const openRouterConfig = buildOpenRouterProviderRuntimeConfig(settings, [
+        modelId,
+        smallModelId,
+        ...featuredIds,
+      ])
+      if (openRouterConfig) {
+        providerConfigEntries[OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID] = openRouterConfig
+      }
+    } else {
+      const selectedProviderConfig = buildEffectiveProviderRuntimeConfigResult(appProviderId, settings, appProviderId)
+      diagnostics.push(...selectedProviderConfig.diagnostics)
+      if (selectedProviderConfig.config) {
+        providerConfigEntries[providerId] = selectedProviderConfig.config
+      }
     }
   }
   if (Object.keys(providerConfigEntries).length > 0) {

@@ -341,11 +341,25 @@ OpenCode runtime is running, Open Cowork overlays the **native V2** catalog
 descriptor. That keeps OpenAI/Codex and downstream OpenCode-native provider
 model menus current without hardcoding every upstream model id in this repo.
 
-**OpenRouter** is special-cased for managed V2 serve: Cowork composes
-`provider.openrouter` with `npm: @ai-sdk/openai-compatible`, the public
-OpenRouter base URL, and the API key from Settings (plus `auth.json` for
-classic CLI compatibility). Do not rely on models.dev's default
-`@openrouter/ai-sdk-provider` package inside packaged `opencode serve`.
+**OpenRouter** is special-cased for managed OpenCode V2 serve (desktop and
+cloud BYOK):
+
+- App config and Settings still use the Cowork provider id `openrouter` and
+  OpenRouter model ids such as `deepseek/deepseek-v4-flash`.
+- The composed OpenCode config registers a **runtime** provider id `or`
+  (not the models.dev id `openrouter`) with `npm: @ai-sdk/openai-compatible`,
+  `baseURL: https://openrouter.ai/api/v1`, the API key, and an explicit
+  models pin for the selected / featured ids. Model refs become
+  `or/<openrouter-model-id>` (for example `or/deepseek/deepseek-v4-flash`).
+- `auth.json` is written under that same runtime id for classic CLI
+  compatibility.
+- Do **not** rely on models.dev's default `@openrouter/ai-sdk-provider`
+  package inside packaged `opencode serve`: V2 rejects it with
+  `UnsupportedApiError`. Re-registering under the reserved id `openrouter`
+  is also ignored by OpenCode 1.18.x, so Cowork uses `or` on purpose.
+- Cloud BYOK keeps the composed config on disk for the full managed-server
+  lifetime (XDG session config + `OPENCODE_CONFIG_DIR`) so session turns can
+  reload it; deleting the file after listen caused free-tier fallback models.
 
 Downstream builds can reuse the same path for any OpenCode-native provider. Add
 the provider id to `providers.available`, add a descriptor with `"runtime":
@@ -369,8 +383,9 @@ dynamic list is overlaid beneath them, deduplicated by id.
       "openrouter": {
         "name": "OpenRouter",
         "credentials": [ ... ],
-        "defaultModel": "qwen/qwen3-coder-flash",
+        "defaultModel": "deepseek/deepseek-v4-flash",
         "models": [
+          { "id": "deepseek/deepseek-v4-flash", "name": "DeepSeek V4 Flash" },
           { "id": "qwen/qwen3-coder-flash", "name": "Qwen3 Coder Flash" },
           { "id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4" }
         ],

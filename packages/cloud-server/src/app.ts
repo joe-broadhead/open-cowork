@@ -437,6 +437,9 @@ export function createDefaultCloudRuntimeFactory(
       // module owns the OpenCode `Config` typing (the helper stays SDK-free so it
       // sits outside the OpenCode SDK boundary), so re-narrow back to it here.
       config: runtimeConfig as CloudRoleRuntimeFactoryInput['runtimeConfig'],
+      // Dual delivery: OPENCODE_CONFIG_DIR + session XDG opencode.json (see
+      // createNodeOpencodeCloudRuntimeAdapter). V2 reloads config from XDG on
+      // session turns; the runtime provider id is `or` (not models.dev openrouter).
       configDelivery: 'ephemeral-file',
       cwd: input.paths.resolveWorkspacePath(input.execution.tenantId, input.execution.sessionId),
       // Crash recovery: forward the cache-eviction hook so a dead managed child is rebuilt.

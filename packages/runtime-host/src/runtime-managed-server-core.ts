@@ -107,8 +107,9 @@ function snapshotManagedNativeAgents(env: NodeJS.ProcessEnv, configDir: string) 
  * Optional AI-SDK provider packages to seed into OPENCODE_CONFIG_DIR/node_modules.
  *
  * OpenRouter no longer needs `@openrouter/ai-sdk-provider` here: managed V2 serve
- * forces `npm: @ai-sdk/openai-compatible` via composed config + settings apiKey
- * (see `buildOpenRouterProviderRuntimeConfig`). Keep this hook empty unless a
+ * registers runtime provider id `or` with `npm: @ai-sdk/openai-compatible` via
+ * composed config + settings apiKey (see `buildOpenRouterProviderRuntimeConfig`
+ * / `OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID`). Keep this hook empty unless a
  * future provider requires a non-bundled package that OpenCode cannot resolve.
  */
 const MANAGED_PROVIDER_NPM_PACKAGES: readonly string[] = []
@@ -268,7 +269,8 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
   const resolved = {
     hostname: '127.0.0.1',
     port: 4096,
-    timeout: 5000,
+    // Default matches desktop/cloud cold-start needs; callers can still override.
+    timeout: 30_000,
     ...options,
   }
   const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]

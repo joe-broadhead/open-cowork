@@ -10,9 +10,21 @@ const currentModulePath = typeof __filename === 'string' && __filename !== '[eva
 const currentModuleDir = dirname(currentModulePath)
 
 export function resolveNodeManagedOpencodeSupervisorPath() {
-  const jsPath = join(currentModuleDir, 'runtime-managed-server-supervisor.js')
-  if (existsSync(jsPath)) return jsPath
-  return join(currentModuleDir, 'runtime-managed-server-supervisor.ts')
+  // Prefer a real package dist path over import.meta/__filename. The cloud
+  // entrypoint bundles this module into apps/desktop/dist/cloud/*.mjs, so
+  // currentModuleDir becomes the cloud bundle directory and the co-located
+  // .ts fallback is wrong for production images.
+  const candidates = [
+    join(currentModuleDir, 'runtime-managed-server-supervisor.js'),
+    join(process.cwd(), 'packages/runtime-host/dist/runtime-managed-server-supervisor.js'),
+    join(process.cwd(), 'node_modules/@open-cowork/runtime-host/dist/runtime-managed-server-supervisor.js'),
+    join(currentModuleDir, 'runtime-managed-server-supervisor.ts'),
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  // Fallback for source-tree runs (noUncheckedIndexedAccess-safe).
+  return join(currentModuleDir, 'runtime-managed-server-supervisor.js')
 }
 
 export function forkNodeManagedOpencodeSupervisor(modulePath: string): ManagedOpencodeSupervisorProcess {
@@ -66,6 +78,6 @@ export async function createNodeManagedOpencodeServer(options: OpencodeServerOpt
   return createManagedOpencodeServerWithSupervisor({
     ...options,
     forkSupervisor: forkNodeManagedOpencodeSupervisor,
-    supervisorPath: options.supervisorPath || resolveNodeManagedOpencodeSupervisorPath(),
+    supervisorPath: options.supervisorPath ?? resolveNodeManagedOpencodeSupervisorPath(),
   })
 }

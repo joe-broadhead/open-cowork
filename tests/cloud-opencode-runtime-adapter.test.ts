@@ -1055,9 +1055,13 @@ while true; do sleep 1; done
     assert.equal(readFileSync(envFile, 'utf8').includes(secret), false)
     assert.equal(readFileSync(envFile, 'utf8').includes('OPENCODE_CONFIG_CONTENT'), false)
     assert.match(readFileSync(configCopyFile, 'utf8'), new RegExp(secret))
-    assert.equal(existsSync(configPath), false)
+    // Config must remain on disk while the managed server is alive so OpenCode
+    // V2 can reload it on later session/turn starts (not only at process boot).
+    assert.equal(existsSync(configPath), true)
+    assert.match(readFileSync(configPath, 'utf8'), new RegExp(secret))
   } finally {
     await adapter.close?.()
+    assert.equal(existsSync(configPath), false)
     rmSync(root, { recursive: true, force: true })
   }
 })

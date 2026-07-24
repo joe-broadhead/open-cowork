@@ -60,9 +60,13 @@ export function normalizeWorkflowDraft(draft: WorkflowDraft, ids: WorkflowIdFact
 }
 
 export function normalizeWorkflowTriggers(value: unknown, ids: WorkflowIdFactory, now: Date): WorkflowTrigger[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error('Workflow requires at least one trigger.')
+  // Empty/missing triggers are allowed here so normalizeWorkflowDraft can inject a
+  // default manual trigger. Non-array values remain invalid.
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) {
+    throw new Error('Workflow triggers must be an array.')
   }
+  if (value.length === 0) return []
   return value.slice(0, 8).map((entry) => {
     const trigger = asRecord(entry)
     const type = readString(trigger.type) as WorkflowTriggerType
