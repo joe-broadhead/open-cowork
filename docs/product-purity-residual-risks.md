@@ -5,8 +5,8 @@ description: Residual risk register after product purity waves 1–final.
 
 # Product purity residual risks
 
-**Epic:** JOE-1029  
-**Filled:** 2026-07-24  
+**Epic:** JOE-1029
+**Filled:** 2026-07-24
 **Rule:** No P0 open without Waive.
 
 | ID | Sev | Surface | Description | Claim impact | Mitigation |
@@ -23,6 +23,6 @@ description: Residual risk register after product purity waves 1–final.
 
 ## Close checklist
 
-See [product-purity-checklist.md](product-purity-checklist.md).  
-Final wave evidence: [product-purity-final-wave.md](product-purity-final-wave.md).  
+See [product-purity-checklist.md](product-purity-checklist.md).
+Final wave evidence: [product-purity-final-wave.md](product-purity-final-wave.md).
 Register: [product-purity-register.md](product-purity-register.md).

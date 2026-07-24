@@ -5,8 +5,8 @@ description: Closing evidence for JOE-1029 remaining children (honesty, contract
 
 # Product purity final wave evidence
 
-**Epic:** [JOE-1029](https://linear.app/joe-broadhead/issue/JOE-1029)  
-**PR:** purity waves on `feat/joe-1029-wave1-product-purity`  
+**Epic:** [JOE-1029](https://linear.app/joe-broadhead/issue/JOE-1029)
+**PR:** purity waves on `feat/joe-1029-wave1-product-purity`
 **Companion residual register:** [product-purity-residual-risks.md](product-purity-residual-risks.md)
 
 This page maps every late-wave purity child to shipped honesty, code, docs, or
