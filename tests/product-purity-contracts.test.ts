@@ -70,8 +70,25 @@ test('product purity: register and progressive disclosure docs exist', () => {
     'docs/progressive-disclosure.md',
     'docs/product-purity-checklist.md',
     'docs/pairing-connector-scope.md',
+    'docs/runbooks/product-purity-dogfood.md',
   ]) {
     const text = readFileSync(join(root, rel), 'utf8')
     assert.ok(text.length > 100, `${rel} should be non-empty`)
   }
+})
+
+test('product purity: sidebar labels Health Center not Diagnostics', () => {
+  const source = readFileSync(
+    join(root, 'packages/app/src/components/layout/Sidebar.tsx'),
+    'utf8',
+  )
+  assert.match(source, /sidebar\.healthCenter/)
+  assert.doesNotMatch(source, /sidebar\.diagnostics/)
+  assert.doesNotMatch(source, /'Diagnostics'/)
+})
+
+test('product purity: release checklist includes purity claim gate', () => {
+  const source = readFileSync(join(root, 'docs/release-checklist.md'), 'utf8')
+  assert.match(source, /Product purity claim gate/)
+  assert.match(source, /product-purity-register/)
 })

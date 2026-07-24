@@ -19,6 +19,18 @@ Reference workflows in the repository root:
 - [ ] `node products/wiki/scripts/standalone-smoke.mjs` green on the release candidate tarball
 - [ ] Desktop release notes do not claim Gateway/Wiki publish unless product workflows also ran
 
+## Product purity claim gate (JOE-1029)
+
+Before publishing release notes or marketing copy, confirm against
+[Product purity register](product-purity-register.md):
+
+- [ ] No unqualified “gateway” (must say Channel / Standalone / durable Gateway)
+- [ ] No “Always allow” / voice / daily digest as shipping features unless implemented
+- [ ] No Standalone/Paired “full workspace chat ready” while support matrix is deferred
+- [ ] Knowledge ≠ Wiki; no default Desktop Wiki/Gateway MCP claims
+- [ ] Projects described as coordination board (not history facets) unless UI changes
+- [ ] Claim level below matches evidence table (do not skip tiers)
+
 ## Release Claim Levels
 
 Do not use a stronger claim level in release notes, docs, marketing copy, or

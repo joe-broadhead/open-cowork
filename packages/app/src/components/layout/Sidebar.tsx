@@ -342,10 +342,10 @@ export function Sidebar({
             <SidebarLowerBranding lower={branding?.lower} />
             <button onClick={() => onViewChange('health')}
               aria-current={currentView === 'health' ? 'page' : undefined}
-              title={t('sidebar.diagnostics', 'Diagnostics')}
+              title={t('sidebar.healthCenter', 'Health Center')}
               className={`sidebar-nav-item mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs transition-colors ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}>
               <Icon name="heart-pulse" size={16} />
-              {t('sidebar.diagnostics', 'Diagnostics')}
+              {t('sidebar.healthCenter', 'Health Center')}
             </button>
             <div className="px-2 pb-1 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.toolStatus', 'Tool Status')}</div>
             <McpStatus />
@@ -353,8 +353,8 @@ export function Sidebar({
             <div className="shrink-0 border-t border-border-subtle px-2 py-2">
               <button onClick={() => onViewChange('health')}
                 aria-current={currentView === 'health' ? 'page' : undefined}
-                aria-label={t('sidebar.diagnostics', 'Diagnostics')}
-                title={t('sidebar.diagnostics', 'Diagnostics')}
+                aria-label={t('sidebar.healthCenter', 'Health Center')}
+                title={t('sidebar.healthCenter', 'Health Center')}
                 className={`sidebar-nav-item sidebar-nav-primary justify-center px-0 ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}>
                 <Icon name="heart-pulse" size={16} />
               </button>

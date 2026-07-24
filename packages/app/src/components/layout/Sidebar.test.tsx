@@ -184,7 +184,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Channels')).toBeTruthy()
     expect(screen.getByText('Tools & Skills')).toBeTruthy()
     expect(screen.getByText('Artifacts')).toBeTruthy()
-    expect(screen.getByText('Diagnostics')).toBeTruthy()
+    expect(screen.getByText('Health Center')).toBeTruthy()
     expect(screen.queryByText('Acme AI')).toBeNull()
   })
 
@@ -226,7 +226,7 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: 'Manage' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('button', { name: 'Team' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Diagnostics' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Health Center' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Settings' }).parentElement).toHaveClass('flex-col')
     expect(screen.queryByText('Recent work')).toBeNull()
@@ -323,7 +323,7 @@ describe('Sidebar', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Health Center' }))
     expect(onViewChange).toHaveBeenCalledWith('health')
   })
 

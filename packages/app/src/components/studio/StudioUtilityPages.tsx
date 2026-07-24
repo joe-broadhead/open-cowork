@@ -10,6 +10,7 @@ import { t } from '../../helpers/i18n'
 import {
   Badge, Button, Card, Dialog, Icon, StudioPageHeader } from '@open-cowork/ui'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { RestrictedState } from '../RestrictedState'
 import {
   approvalQueueActionKey,
   buildDesktopApprovalQueueItems,
@@ -259,33 +260,59 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
   }
   const activeConfirm = pendingConfirm ? confirmCopy[pendingConfirm.kind] : null
 
+  const authority = workspaceSupport.flags.authority || 'desktop_local'
+  const isLocalAuthority = authority === 'desktop_local'
+  // Empty Local Desktop should not imply channel connect works without Cloud Channel Gateway.
+  // If bindings already exist (tests / hybrid setups), keep the operational surface.
+  const showLocalRestricted = isLocalAuthority && !loading && snapshot.bindings.length === 0
+  const canManageChannels = !showLocalRestricted
+
   return (
     <StudioPageShell>
-      <ChannelsGatewaySurface
-        providers={snapshot.providers}
-        agents={snapshot.agents}
-        bindings={snapshot.bindings}
-        people={snapshot.people}
-        deliveries={snapshot.deliveries}
-        watches={snapshot.watches}
-        loading={loading}
-        error={error}
-        platformLabel={`${activeWorkspaceId} - ${workspaceSupport.flags.authority || 'desktop_local'}`}
-        canManage
-        onReload={loadChannels}
-        onConnectProvider={connectProvider}
-        onDisconnectBinding={(bindingId) => requestConfirm({ kind: 'disconnect', bindingId })}
-        onResolvePerson={(input) => window.coworkApi.channels.resolvePerson(input)}
-        onCreateWatch={createWatch}
-        onPauseWatch={(watchId) => window.coworkApi.channels.pauseWatch(watchId, { workspaceId: activeWorkspaceId })}
-        onResumeWatch={(watchId) => window.coworkApi.channels.resumeWatch(watchId, { workspaceId: activeWorkspaceId })}
-        onDeleteWatch={(watchId) => requestConfirm({ kind: 'deleteWatch', watchId })}
-      />
-      <div className="flex justify-end">
-        <Button variant="ghost" size="sm" leftIcon="settings-2" onClick={onOpenSettings}>
-          {t('studio.channels.settings', 'Open settings')}
-        </Button>
-      </div>
+      {showLocalRestricted ? (
+        <RestrictedState
+          icon="activity"
+          title={t('studio.channels.localTitle', 'Channels need Cloud + Channel Gateway')}
+          body={t(
+            'studio.channels.localBody',
+            'Connect Telegram, Slack, or email through a Cloud workspace and Channel Gateway. Local Desktop keeps chat private here and does not run channel delivery by itself.',
+          )}
+          reason={t('studio.channels.localReason', 'Switch to a Cloud workspace, or deploy Channel Gateway against Open Cowork Cloud.')}
+          action={(
+            <Button variant="secondary" size="sm" leftIcon="settings-2" onClick={onOpenSettings}>
+              {t('studio.channels.settings', 'Open settings')}
+            </Button>
+          )}
+        />
+      ) : (
+        <ChannelsGatewaySurface
+          providers={snapshot.providers}
+          agents={snapshot.agents}
+          bindings={snapshot.bindings}
+          people={snapshot.people}
+          deliveries={snapshot.deliveries}
+          watches={snapshot.watches}
+          loading={loading}
+          error={error}
+          platformLabel={`${activeWorkspaceId} · ${authority}`}
+          canManage={canManageChannels}
+          onReload={loadChannels}
+          onConnectProvider={connectProvider}
+          onDisconnectBinding={(bindingId) => requestConfirm({ kind: 'disconnect', bindingId })}
+          onResolvePerson={(input) => window.coworkApi.channels.resolvePerson(input)}
+          onCreateWatch={createWatch}
+          onPauseWatch={(watchId) => window.coworkApi.channels.pauseWatch(watchId, { workspaceId: activeWorkspaceId })}
+          onResumeWatch={(watchId) => window.coworkApi.channels.resumeWatch(watchId, { workspaceId: activeWorkspaceId })}
+          onDeleteWatch={(watchId) => requestConfirm({ kind: 'deleteWatch', watchId })}
+        />
+      )}
+      {!showLocalRestricted ? (
+        <div className="flex justify-end">
+          <Button variant="ghost" size="sm" leftIcon="settings-2" onClick={onOpenSettings}>
+            {t('studio.channels.settings', 'Open settings')}
+          </Button>
+        </div>
+      ) : null}
       <ConfirmDialog
         open={Boolean(activeConfirm)}
         title={activeConfirm?.title || ''}

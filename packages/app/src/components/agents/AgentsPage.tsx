@@ -9,6 +9,7 @@ import { toast } from '../ui/Toaster'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
+import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import {
   bundleToAgentConfig,
   decodeAgentBundle,
@@ -62,6 +63,10 @@ export function AgentsPage({
 
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
+  const workspaceSupport = useActiveWorkspaceSupport()
+  // Custom coworker authoring edits local machine/runtime config — Desktop local only.
+  const canAuthorCustomCoworkers = workspaceSupport.flags.canUseMachineRuntimeConfig
+    || workspaceSupport.flags.authority === 'desktop_local'
 
   const projectDirectory = useMemo(
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
@@ -304,6 +309,10 @@ export function AgentsPage({
             size="sm"
             leftIcon="arrow-down"
             onClick={onImportAgent}
+            disabled={!canAuthorCustomCoworkers}
+            disabledReason={canAuthorCustomCoworkers
+              ? undefined
+              : t('studioTeamPage.cloudAuthoringBlocked', 'Custom coworker import is Desktop local. Cloud shows policy-safe roster metadata and Start chat only.')}
             title={t('studioTeamPage.importTitle', 'Import a custom coworker from a .cowork-agent.json file')}
           >
             {t('agentsPage.import', 'Import')}
@@ -312,6 +321,10 @@ export function AgentsPage({
             variant="primary"
             size="sm"
             leftIcon="plus"
+            disabled={!canAuthorCustomCoworkers}
+            disabledReason={canAuthorCustomCoworkers
+              ? undefined
+              : t('studioTeamPage.cloudAuthoringBlocked', 'Custom coworker authoring is Desktop local. Cloud shows policy-safe roster metadata and Start chat only.')}
             onClick={() => {
               setSelected(null)
               setCreatingSeed(null)
@@ -322,6 +335,14 @@ export function AgentsPage({
             {t('studioTeamPage.newCoworker', 'New coworker')}
           </Button>
         </div>
+        {!canAuthorCustomCoworkers ? (
+          <p className="mb-4 text-2xs text-text-muted" role="note">
+            {t(
+              'studioTeamPage.cloudAuthoringNote',
+              'This Cloud workspace lists allowed coworkers. Hire/edit custom coworkers stays on Desktop local (machine runtime config).',
+            )}
+          </p>
+        ) : null}
 
         {loading && !catalog ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

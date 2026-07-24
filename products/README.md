@@ -5,8 +5,8 @@ Open Cowork is the flagship monorepo product. Sibling products live under
 
 | Path | Public name | Installable bin (target) | Status |
 | --- | --- | --- | --- |
-| `products/gateway` | **Gateway** (durable work coordinator) | `cowork-gateway` | Imported snapshot (JOE-907) |
-| `products/wiki` | **Wiki** | `cowork-wiki` | Imported snapshot (JOE-906); packages under `products/wiki/packages/*` |
+| `products/gateway` | **Gateway** (durable work coordinator) | `cowork-gateway` | Monorepo SoT (private remotes frozen); local-operator claim-gated; not default Desktop |
+| `products/wiki` | **Wiki** | `cowork-wiki` | Monorepo SoT (private remotes frozen); optional installable; packages under `products/wiki/packages/*` |
 
 Related apps (not under `products/`):
 

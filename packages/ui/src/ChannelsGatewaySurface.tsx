@@ -307,7 +307,7 @@ function ConnectedChannels({
       <EmptyState
         icon="radio"
         title="No connected channels"
-        body="Add WhatsApp, Telegram, Slack, Discord, Signal, Email, or Webhook channels to reach this workspace."
+        body="Connect a Tier-1 Channel Gateway provider (Telegram, Slack, or email) through Cloud. Discord, WhatsApp, and Signal remain experimental bridge adapters."
       />
     )
   }

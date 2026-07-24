@@ -114,6 +114,7 @@ nav:
       - Product purity register: product-purity-register.md
       - Product purity checklist: product-purity-checklist.md
       - Pairing connector scope: pairing-connector-scope.md
+      - Product purity dogfood: runbooks/product-purity-dogfood.md
   - Use:
       - Projects: projects.md
       - Playbooks: workflows.md

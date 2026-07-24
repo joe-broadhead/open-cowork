@@ -261,7 +261,10 @@ export function HealthCenterPage() {
           <div>
             <h1 className="font-display text-role-page-title font-bold text-text">{t('health.title', 'Health Center')}</h1>
             <p className="mt-1 max-w-3xl text-xs leading-relaxed text-text-muted">
-              {t('health.subtitle', 'Setup paths, execution authority, sync state, and operator recovery checks for Desktop, Cloud, and Gateway.')}
+              {t(
+                'health.subtitle',
+                'Setup paths, execution authority, sync state, and recovery checks for Desktop, Cloud, Channel Gateway, and Standalone Gateway. Standalone/Paired may show connection-only until session APIs ship.',
+              )}
             </p>
           </div>
           <Button
