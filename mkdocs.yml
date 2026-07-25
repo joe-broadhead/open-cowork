@@ -117,9 +117,13 @@ nav:
       - Product purity final wave: product-purity-final-wave.md
       - Pairing connector scope: pairing-connector-scope.md
       - Product purity dogfood: runbooks/product-purity-dogfood.md
+      - Product purity dogfood evidence: runbooks/product-purity-dogfood-evidence-joe-1092.md
+      - Pure release notes claim freeze: samples/pure-release-notes-claim-freeze.md
       - Private voice dogfood: runbooks/voice-private-dogfood.md
       - Private voice epic close-out: voice-private-epic-closeout.md
       - Cloud sync dogfood: runbooks/cloud-sync-dogfood.md
+      - Cloud sync dogfood residual: runbooks/cloud-sync-dogfood-residual-joe-1094.md
+      - Standalone session API residual: runbooks/standalone-session-api-residual-joe-1091.md
       - Enterprise readiness matrix: enterprise-readiness-matrix.md
       - Maintainer product map: maintainer-product-map.md
   - Use:
