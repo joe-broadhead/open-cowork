@@ -33,6 +33,8 @@ const strings: Record<string, string> = {
   'sidebar.searchTitle': '대화 검색 (⌘K)',
   'sidebar.noMatches': '일치하는 결과 없음',
   'sidebar.threadFallback': '대화 {{id}}',
+  'session.newChat': '새 대화',
+  'session.newChatAt': '새 대화 · {{when}}',
   'newThread.project': '프로젝트 열기',
   'sidebar.newChat': '새 채팅',
   'newChat.blankUnavailableReason': '이 작업 공간에서는 채팅을 만들 수 없습니다.',

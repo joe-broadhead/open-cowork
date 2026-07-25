@@ -56,6 +56,8 @@ const strings: Record<string, string> = {
   'sidebar.searchTitle': 'Rechercher une conversation (⌘K)',
   'sidebar.noMatches': 'Aucun résultat',
   'sidebar.threadFallback': 'Conversation {{id}}',
+  'session.newChat': 'Nouvelle conversation',
+  'session.newChatAt': 'Nouvelle conversation · {{when}}',
   'newThread.project': 'Ouvrir un projet',
   'sidebar.newChat': 'Nouveau chat',
   'newChat.blankUnavailableReason': 'La création de chat est indisponible dans cet espace de travail.',

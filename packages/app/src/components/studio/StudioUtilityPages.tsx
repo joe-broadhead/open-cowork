@@ -7,6 +7,7 @@ import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
+import { displaySessionTitle } from '../../helpers/session-title'
 import {
   Badge, Button, Card, Dialog, Icon, StudioPageHeader } from '@open-cowork/ui'
 import { ConfirmDialog } from '../ConfirmDialog'
@@ -470,7 +471,7 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
           kind,
           status: artifact.status || defaultArtifactStatusForKind(kind),
           sessionId: session.id,
-          sessionTitle: session.title,
+          sessionTitle: displaySessionTitle(session),
           workspaceId: activeWorkspaceId,
         }
       })

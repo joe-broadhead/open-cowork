@@ -33,6 +33,8 @@ const strings: Record<string, string> = {
   'sidebar.searchTitle': 'スレッドを検索 (⌘K)',
   'sidebar.noMatches': '一致するものがありません',
   'sidebar.threadFallback': 'スレッド {{id}}',
+  'session.newChat': '新しいチャット',
+  'session.newChatAt': '新しいチャット · {{when}}',
   'newThread.project': 'プロジェクトを開く',
   'sidebar.newChat': '新しいチャット',
   'newChat.blankUnavailableReason': 'このワークスペースではチャットを作成できません。',

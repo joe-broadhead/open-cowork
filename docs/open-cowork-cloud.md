@@ -620,6 +620,16 @@ storage, secret adapter/KMS references, public HTTPS origins, worker/scheduler
 scaling, gateway service tokens, provider webhook signing, quotas/rate limits,
 OTLP/logging, backups, and restore.
 
+**Session revocation boundary (known-accepted at the current claim tier).**
+Cloud web sessions use stateless signed cookies with expiry and CSRF tokens;
+there is no server-side revocation list, so logout and membership removal do
+not invalidate an already-issued cookie before it expires. The mitigation is
+that every request re-checks tenant membership, so a removed user loses data
+access immediately even with a live cookie. This is acceptable for
+`local-self-host-beta`. **Server-side session revocation is a precondition for
+any hosted or multi-tenant claim tier** and must land before those claims are
+made.
+
 Managed BYOK operators should also follow `runbooks/managed-byok-saas.md`.
 That runbook covers org signup mode, token TTLs, invite/domain controls,
 billing setup, BYOK validation, gateway operations, and incident response.

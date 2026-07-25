@@ -372,7 +372,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
         </ReviewPanel>
 
         <DiffView
-          title={t('sessionInspector.reviewTitle', 'Review')}
+          title={t('sessionInspector.outputsTitle', 'Outputs')}
           subtitle={reviewFiles.length
             ? t('sessionInspector.reviewSubtitle', '{{count}} artifacts ready for inspection', { count: reviewFiles.length })
             : t('sessionInspector.reviewEmptySubtitle', 'Artifacts, file changes, and task outputs appear here first.')}
