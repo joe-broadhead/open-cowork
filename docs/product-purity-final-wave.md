@@ -83,6 +83,17 @@ not fail schema validation — because progressive disclosure is intentional opt
 
 Public claims must still match [product-purity-register.md](product-purity-register.md).
 No enterprise-ready / Standalone chat / Knowledge=Wiki / unqualified gateway.
+Post-purity freeze sample: [pure-release-notes-claim-freeze.md](samples/pure-release-notes-claim-freeze.md).
+
+## Post-purity follow-on (JOE-1089)
+
+| Issue | Outcome | Evidence |
+| --- | --- | --- |
+| JOE-1092 Purity dogfood | Done (structural + contracts) | [dogfood evidence](runbooks/product-purity-dogfood-evidence-joe-1092.md) |
+| JOE-1090 Claim freeze sample | Done | [claim freeze sample](samples/pure-release-notes-claim-freeze.md) |
+| JOE-1093 Enterprise matrix | Done | [matrix](enterprise-readiness-matrix.md) owners + next evidence |
+| JOE-1094 Cloud sync dogfood | Residual (no live env) | [R-1094](runbooks/cloud-sync-dogfood-residual-joe-1094.md) |
+| JOE-1091 Standalone session API | Deferred honesty | [R-1042 residual](runbooks/standalone-session-api-residual-joe-1091.md) |
 
 ## Related
 
