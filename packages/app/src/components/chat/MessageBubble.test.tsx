@@ -204,6 +204,57 @@ describe('MessageBubble', () => {
     expect(screen.queryByRole('button', { name: 'View diff' })).not.toBeInTheDocument()
   })
 
+  it('offers private read-aloud for completed assistant messages when voice TTS is ready', async () => {
+    const user = userEvent.setup()
+    const speak = vi.fn(async () => ({ phase: 'ready' }))
+    const cancelSpeak = vi.fn(async () => ({ phase: 'ready' }))
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => ({
+          branding: {
+            appId: 'com.opencowork.desktop',
+            name: 'Open Cowork',
+            dataDirName: 'Open Cowork',
+            helpUrl: 'https://github.com/joe-broadhead/open-cowork',
+          },
+          permissions: { bash: 'allow', fileWrite: 'allow', task: 'allow', web: 'allow', webSearch: true },
+          providers: { defaultProvider: null, defaultModel: null, available: [] },
+          auth: { mode: 'none', enabled: false },
+          agentStarterTemplates: [],
+          features: { voice: true },
+        })),
+      },
+      voice: {
+        status: vi.fn(async () => ({
+          enabled: true,
+          phase: 'ready',
+          captureMode: 'voice_host',
+          stt: { engine: 'aurum_local', ready: true },
+          tts: { engine: 'system_os', ready: true, detail: 'ok' },
+          permissions: { microphone: 'granted' },
+          reason: null,
+          sessionId: null,
+        })),
+        speak,
+        cancelSpeak,
+      },
+      on: {
+        voiceEvent: () => () => {},
+      },
+    })
+
+    render(<MessageBubble message={{
+      id: 'assistant-read',
+      role: 'assistant',
+      content: 'Hello **from** the assistant',
+      order: 3,
+    }} />)
+
+    const button = await screen.findByTestId('message-read-aloud')
+    await user.click(button)
+    await waitFor(() => expect(speak).toHaveBeenCalledWith({ text: 'Hello from the assistant' }))
+  })
+
   it('hides message actions when the visible bubble is only part of an SDK message', () => {
     render(
       <MessageBubble
