@@ -1,8 +1,9 @@
 /**
- * Push-to-talk for private voice (JOE-1105).
+ * Push-to-talk for private voice (JOE-1105 / JOE-1102).
  *
  * Click-to-toggle ships as the primary control (keyboard/a11y friendly).
- * Host owns capture + STT; this hook only drives IPC and injects final text.
+ * Host owns capture + STT; this hook drives IPC and applies partial/final text
+ * against a composer baseline (partials replace the dictation segment).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -14,6 +15,8 @@ import {
 } from '@open-cowork/shared'
 import { isDesktopRuntime } from '../runtime-env'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
+import { registerVoicePttToggleHandler } from './voice-ptt-hotkey'
+import { stopReadAloud } from './voice-read-aloud'
 
 export type VoicePttUiPhase = 'idle' | 'listening' | 'transcribing' | 'error'
 
@@ -28,6 +31,15 @@ export type VoicePttController = {
   isActive: boolean
   toggle: () => Promise<void>
   cancel: () => Promise<void>
+}
+
+/** Join pre-dictation composer text with the current STT segment. */
+export function appendDictation(baseline: string, dictated: string): string {
+  const text = dictated.trim()
+  if (!text) return baseline
+  if (!baseline.trim()) return text
+  if (/\s$/.test(baseline)) return `${baseline}${text}`
+  return `${baseline.trimEnd()} ${text}`
 }
 
 function mapPhase(phase: VoiceHostPhase | undefined): VoicePttUiPhase {
@@ -46,8 +58,16 @@ function statusLabelFor(phase: VoicePttUiPhase, reason: string | null): string |
 
 export function useVoicePtt(options: {
   openCodeSessionId?: string | null
-  onFinalText: (text: string) => void
+  /**
+   * Read the live composer value (parent should back this with a ref so the
+   * hook does not capture a stale render).
+   */
+  getComposerText: () => string
+  /** Replace the full composer text (baseline + current dictation segment). */
+  setComposerText: (text: string) => void
   onError?: (message: string) => void
+  /** When false, do not claim the desktop PTT hotkey (conversation mode owns it). */
+  hotkeyEnabled?: boolean
 }): VoicePttController {
   const workspaceSupport = useActiveWorkspaceSupport()
   const [features, setFeatures] = useState<DesktopFeatureFlags | undefined>(undefined)
@@ -56,10 +76,30 @@ export function useVoicePtt(options: {
   const [errorReason, setErrorReason] = useState<string | null>(null)
   const sessionIdRef = useRef<string | null>(null)
   const busyRef = useRef(false)
-  const onFinalTextRef = useRef(options.onFinalText)
+  /** Composer text at the moment listening began; partials replace after this. */
+  const baselineRef = useRef<string | null>(null)
+  const getComposerTextRef = useRef(options.getComposerText)
+  const setComposerTextRef = useRef(options.setComposerText)
   const onErrorRef = useRef(options.onError)
-  onFinalTextRef.current = options.onFinalText
+  getComposerTextRef.current = options.getComposerText
+  setComposerTextRef.current = options.setComposerText
   onErrorRef.current = options.onError
+
+  const applyDictation = useCallback((segment: string) => {
+    const baseline = baselineRef.current
+    if (baseline === null) return
+    setComposerTextRef.current(appendDictation(baseline, segment))
+  }, [])
+
+  const restoreBaseline = useCallback(() => {
+    if (baselineRef.current === null) return
+    setComposerTextRef.current(baselineRef.current)
+    baselineRef.current = null
+  }, [])
+
+  const clearBaseline = useCallback(() => {
+    baselineRef.current = null
+  }, [])
 
   useEffect(() => {
     if (!isDesktopRuntime() || !window.coworkApi?.app?.config) return
@@ -89,15 +129,30 @@ export function useVoicePtt(options: {
           setUiPhase(mapPhase(event.status.phase))
         }
       }
-      if (event.type === 'final') {
+      if (event.type === 'partial') {
+        // Ignore events for a session we already finished/cancelled.
+        if (sessionIdRef.current && event.event.sessionId !== sessionIdRef.current) return
+        if (baselineRef.current === null) return
         const text = event.event.text?.trim() || ''
-        if (text) onFinalTextRef.current(text)
+        if (text) applyDictation(text)
+      }
+      if (event.type === 'final') {
+        if (sessionIdRef.current && event.event.sessionId !== sessionIdRef.current) return
+        const text = event.event.text?.trim() || ''
+        if (text) {
+          applyDictation(text)
+        } else if (baselineRef.current !== null) {
+          // Empty final: keep baseline (drop any partial preview).
+          setComposerTextRef.current(baselineRef.current)
+        }
+        clearBaseline()
         sessionIdRef.current = null
         setUiPhase('idle')
         setErrorReason(null)
       }
       if (event.type === 'error') {
         const message = event.message || 'Voice failed'
+        restoreBaseline()
         setErrorReason(message)
         setUiPhase('error')
         sessionIdRef.current = null
@@ -108,7 +163,7 @@ export function useVoicePtt(options: {
       cancelled = true
       unsub?.()
     }
-  }, [])
+  }, [applyDictation, clearBaseline, restoreBaseline])
 
   const featureOn = isDesktopFeatureEnabled(features, 'voice')
   const authorityOk = workspaceSupport.flags.canVoiceCapture && workspaceSupport.flags.canVoiceStt
@@ -144,6 +199,10 @@ export function useVoicePtt(options: {
     setErrorReason(null)
     setUiPhase('listening')
     try {
+      // Barge-in prep (JOE-1103): stop local TTS before opening the mic session.
+      await stopReadAloud()
+      // Snapshot before start so partials never include mid-start keystrokes only.
+      baselineRef.current = getComposerTextRef.current()
       const snapshot = await window.coworkApi.voice.startSession({
         mode: 'ptt',
         openCodeSessionId: options.openCodeSessionId || null,
@@ -153,6 +212,7 @@ export function useVoicePtt(options: {
       setUiPhase('listening')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      baselineRef.current = null
       sessionIdRef.current = null
       setUiPhase('error')
       setErrorReason(message)
@@ -174,10 +234,12 @@ export function useVoicePtt(options: {
     try {
       await window.coworkApi.voice.stopSession(sessionId)
       // Final text arrives via voiceEvent; clear session id after stop.
+      // Keep baseline until final/error so late partials still replace correctly.
       sessionIdRef.current = null
       if (uiPhase !== 'error') setUiPhase('idle')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      restoreBaseline()
       sessionIdRef.current = null
       setUiPhase('error')
       setErrorReason(message)
@@ -185,12 +247,13 @@ export function useVoicePtt(options: {
     } finally {
       busyRef.current = false
     }
-  }, [uiPhase])
+  }, [restoreBaseline, uiPhase])
 
   const cancel = useCallback(async () => {
     if (!window.coworkApi?.voice) return
     const sessionId = sessionIdRef.current
     sessionIdRef.current = null
+    restoreBaseline()
     setUiPhase('idle')
     setErrorReason(null)
     try {
@@ -198,7 +261,7 @@ export function useVoicePtt(options: {
     } catch {
       // Cancel is best-effort.
     }
-  }, [])
+  }, [restoreBaseline])
 
   const toggle = useCallback(async () => {
     if (uiPhase === 'listening') {
@@ -211,6 +274,15 @@ export function useVoicePtt(options: {
 
   const isActive = uiPhase === 'listening' || uiPhase === 'transcribing'
   const enabled = baseEnabled && uiPhase !== 'transcribing'
+
+  // Desktop menu / keyboard hotkey (JOE-1110): last-mounted visible controller wins.
+  useEffect(() => {
+    if (!visible || options.hotkeyEnabled === false) return
+    return registerVoicePttToggleHandler(() => {
+      if (!enabled && uiPhase !== 'listening') return
+      void toggle()
+    })
+  }, [visible, enabled, uiPhase, toggle, options.hotkeyEnabled])
 
   return {
     visible,

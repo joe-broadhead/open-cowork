@@ -48,7 +48,7 @@ and `isDesktopFeatureEnabled` in `packages/shared/src/app-config.ts`.
 | `approvals` | Prefer Always-allow story complete for local; queue still useful for allow/deny/questions |
 | `knowledge` | Users understand Knowledge ≠ Wiki |
 | `artifacts` | Artifact index paths work for the authority in use |
-| `voice` | Desktop Local only; voice host + Aurum STT wired; Cloud Web / remote stay `not_supported`; see [Private realtime voice ADR](adr/private-realtime-voice.md) |
+| `voice` | Desktop Local only; voice host + Aurum STT + local OS TTS + PTT/conversation; Cloud Web / remote stay `not_supported`; dogfood: [voice-private-dogfood.md](runbooks/voice-private-dogfood.md); [ADR](adr/private-realtime-voice.md) |
 
 Public `open-cowork.config.json` must **not** enable secondary keys by default
 and must **not** auto-register Wiki or durable Gateway MCP entries.
