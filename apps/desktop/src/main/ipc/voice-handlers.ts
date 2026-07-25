@@ -154,6 +154,23 @@ export function registerVoiceHandlers(context: IpcHandlerContext) {
     const voiceHost = syncHostFeatures()
     return voiceHost.listTtsVoices()
   })
+
+  registerIpcInvoke(context, 'voice:assets:status', noIpcArgs, async () => {
+    const voiceHost = syncHostFeatures()
+    const status = voiceHost.probeAssets()
+    broadcastVoiceEvent(context, { type: 'status', status: voiceHost.getStatus() })
+    return status
+  })
+
+  registerIpcInvoke(context, 'voice:assets:ensure', noIpcArgs, async () => {
+    const voiceHost = syncHostFeatures()
+    if (!isDesktopFeatureEnabled(getAppConfig().features, 'voice')) {
+      throw new Error('Private voice is disabled. Set features.voice to true in open-cowork.config.json to opt in.')
+    }
+    const result = voiceHost.ensureAssets()
+    broadcastVoiceEvent(context, { type: 'status', status: voiceHost.getStatus() })
+    return result
+  })
 }
 
 export type { VoiceHostStatus, VoiceSessionSnapshot, VoiceSessionStartInput }

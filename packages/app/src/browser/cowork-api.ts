@@ -378,6 +378,26 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
         phase: 'unavailable' as const,
       }),
       listVoices: async () => [],
+      assetsStatus: async () => ({
+        stt: {
+          model: 'tiny-q5_1',
+          modelFile: 'ggml-tiny-q5_1.bin',
+          ready: false,
+          cacheDir: '',
+          modelPath: null,
+          integrity: 'missing' as const,
+          allowDownload: false,
+          cliAvailable: false,
+          detail: 'Private voice assets are Desktop Local only.',
+        },
+        tts: {
+          ready: false,
+          backend: 'unavailable' as const,
+          detail: 'Cloud Web',
+        },
+        offlineReady: false,
+      }),
+      ensureAssets: () => browserUnavailable('voice.ensureAssets'),
     },
 
     // -- permission --------------------------------------------------------

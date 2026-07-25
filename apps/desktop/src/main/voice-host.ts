@@ -43,6 +43,12 @@ import {
   tickVad,
   type VoiceVadPolicy,
 } from './voice-vad.ts'
+import {
+  ensureVoiceSttAsset,
+  probeVoiceAssets,
+  type VoiceAssetEnsureResult,
+  type VoiceAssetStatus,
+} from './voice-assets.ts'
 import { log } from '@open-cowork/shared/node'
 
 export type VoiceHostOptions = {
@@ -202,7 +208,30 @@ export class VoiceHost {
         speechActive: this.speechActive,
         bargeInArmed: this.bargeInArmed,
       },
+      assets: this.probeAssets(),
     }
+  }
+
+  /** First-run STT/TTS asset readiness (JOE-1109). No file bytes. */
+  probeAssets(): VoiceAssetStatus {
+    return probeVoiceAssets()
+  }
+
+  /**
+   * Ensure STT model is present offline (copy from system cache when possible).
+   * Never silently downloads network models; allowDownload only unlocks the
+   * needs_download residual path.
+   */
+  ensureAssets(): VoiceAssetEnsureResult {
+    const result = ensureVoiceSttAsset()
+    log('voice', `assets.ensure ${JSON.stringify({
+      action: result.action,
+      sttReady: result.status.stt.ready,
+      integrity: result.status.stt.integrity,
+      offlineReady: result.status.offlineReady,
+    })}`)
+    this.emitStatus()
+    return result
   }
 
   async refreshPermissions(): Promise<VoicePermissionState> {

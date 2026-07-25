@@ -176,6 +176,8 @@ import type {
   KnowledgeSpaceInput,
 } from './knowledge.js'
 import type {
+  VoiceAssetEnsureResultSnapshot,
+  VoiceAssetStatusSnapshot,
   VoiceHostEvent,
   VoiceHostStatus,
   VoiceSessionSnapshot,
@@ -379,6 +381,10 @@ export interface CoworkAPI {
     speak: (input: VoiceTtsSpeakInput) => Promise<VoiceHostStatus>
     cancelSpeak: () => Promise<VoiceHostStatus>
     listVoices: () => Promise<VoiceTtsVoiceInfo[]>
+    /** STT/TTS asset readiness (JOE-1109). Paths/metadata only. */
+    assetsStatus: () => Promise<VoiceAssetStatusSnapshot>
+    /** Ensure STT model is local (copy from system cache or fail closed). */
+    ensureAssets: () => Promise<VoiceAssetEnsureResultSnapshot>
   }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>
