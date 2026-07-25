@@ -33,6 +33,8 @@ const strings: Record<string, string> = {
   'sidebar.searchTitle': 'Поиск по беседам (⌘K)',
   'sidebar.noMatches': 'Совпадений нет',
   'sidebar.threadFallback': 'Беседа {{id}}',
+  'session.newChat': 'Новая беседа',
+  'session.newChatAt': 'Новая беседа · {{when}}',
   'newThread.project': 'Открыть проект',
   'sidebar.newChat': 'Новый чат',
   'newChat.blankUnavailableReason': 'Создание чата недоступно для этой рабочей области.',

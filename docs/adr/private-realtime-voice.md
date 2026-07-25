@@ -135,6 +135,15 @@ Automated gates: `tests/voice-security.test.ts`, `tests/voice-packaging.test.ts`
 - Electron permission guards stay fail-closed for renderer media; docs state host ownership.
 - Residual purity risk for incomplete secondaries remains soft-warn only (same pattern as other Studio flags).
 
+## Value review (2026-10)
+
+Voice is the largest recent subsystem (~6k LOC plus STT/TTS asset packaging)
+whose value is asserted from dogfood rather than demonstrated by sustained
+usage. Review by **2026-10-25** (three months post-close-out): if dogfood /
+downstream usage has not stuck, the subsystem is the primary deletion
+candidate under the no-bloat policy; if it has, invest in conversation-mode
+polish next. Record the outcome here.
+
 ## Related
 
 - [Progressive disclosure](../progressive-disclosure.md)

@@ -198,6 +198,15 @@ nav:
       - "ADR: Knowledge vs Wiki": adr/knowledge-vs-wiki.md
       - "ADR: Standalone Desktop session API": adr/standalone-desktop-session-api.md
       - "ADR: Private realtime voice": adr/private-realtime-voice.md
+      - Decisions & History:
+          - Product channel ownership: product-channel-ownership.md
+          - Channel protocol unification: product-channel-protocol-unification.md
+          - OpenCode durable gateway classic burndown: opencode-durable-gateway-classic-burndown.md
+          - Standalone adapter decision: opencode-standalone-adapter-decision.md
+          - Archive plan: runbooks/archive-plan/README.md
+          - "Archive plan: gateway freeze banner": runbooks/archive-plan/freeze-banner-gateway.md
+          - "Archive plan: wiki freeze banner": runbooks/archive-plan/freeze-banner-wiki.md
+          - "Archive plan: npm deprecate notes": runbooks/archive-plan/npm-deprecate-notes.md
 
 extra:
   generator: false

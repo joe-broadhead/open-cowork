@@ -5,6 +5,7 @@ import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId, sessionWorkspaceKey } from '.
 import { switchToSession } from '../../helpers/switchToSession'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
+import { displaySessionTitle } from '../../helpers/session-title'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { ViewErrorBoundary } from '../layout/ViewErrorBoundary'
 import { cloudGitRepositoryLabel } from '@open-cowork/shared'
@@ -473,7 +474,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                         ⑂
                       </span>
                     )}
-                    {session.title || t('sidebar.threadFallback', 'Thread {{id}}', { id: session.id.slice(0, 6) })}
+                    {displaySessionTitle(session) || t('sidebar.threadFallback', 'Thread {{id}}', { id: session.id.slice(0, 6) })}
                   </span>
                   <span className="flex items-center gap-1.5 mt-px">
                     {session.directory && (

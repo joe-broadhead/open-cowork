@@ -21,6 +21,13 @@
 These stacks share product *concepts* (Telegram/WhatsApp/Discord) but **must not**
 be casually dual-fixed. Security and protocol bugs need an explicit owner.
 
+**Consolidation revisit trigger (2026-07-25 audit).** The freeze carries ~10k
+LOC of intentional duplication where every protocol change has two possible
+homes. Revisit consolidation when either signal appears: (a) real usage
+concentrates on one stack (Durable-native vs `protocolStack: monorepo`) for a
+full release cycle, or (b) a third dual-fix lands on the same protocol within
+one quarter. Until then the freeze rules above stand.
+
 ## Ownership matrix
 
 | Change type | Fix in | Do not |

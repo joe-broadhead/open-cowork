@@ -36,6 +36,8 @@ const strings: Record<string, string> = {
   'sidebar.searchTitle': '搜索会话 (⌘K)',
   'sidebar.noMatches': '无匹配结果',
   'sidebar.threadFallback': '会话 {{id}}',
+  'session.newChat': '新会话',
+  'session.newChatAt': '新会话 · {{when}}',
   'newThread.project': '打开项目',
   'sidebar.newChat': '新建聊天',
   'newChat.blankUnavailableReason': '此工作区无法创建聊天。',

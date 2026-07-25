@@ -1,6 +1,7 @@
 import type { ConversationTaskContext } from '@open-cowork/shared'
 import type { Session } from '../../stores/session'
 import { t } from '../../helpers/i18n'
+import { displaySessionTitle } from '../../helpers/session-title'
 import { ActionCluster, Badge, Button, Icon } from '@open-cowork/ui'
 
 type ChatThreadHeaderProps = {
@@ -38,7 +39,7 @@ export function ChatThreadHeader({
     <div className="shrink-0 border-b border-border-subtle px-4 py-2 flex items-center justify-between gap-4">
       <div className="min-w-0">
         <div data-testid="chat-thread-title" className="font-display text-sm font-medium text-text truncate">
-          {currentSession?.title || `Chat ${currentSessionId.slice(0, 8)}`}
+          {(currentSession && displaySessionTitle(currentSession)) || `Chat ${currentSessionId.slice(0, 8)}`}
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {currentSession?.directory && (

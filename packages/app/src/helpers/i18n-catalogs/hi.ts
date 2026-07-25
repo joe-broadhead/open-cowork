@@ -33,6 +33,8 @@ const strings: Record<string, string> = {
   'sidebar.searchTitle': 'बातचीत खोजें (⌘K)',
   'sidebar.noMatches': 'कोई मिलान नहीं',
   'sidebar.threadFallback': 'बातचीत {{id}}',
+  'session.newChat': 'नई बातचीत',
+  'session.newChatAt': 'नई बातचीत · {{when}}',
   'newThread.project': 'प्रोजेक्ट खोलें',
   'sidebar.newChat': 'नई चैट',
   'newChat.blankUnavailableReason': 'इस कार्यक्षेत्र में चैट बनाना उपलब्ध नहीं है.',

@@ -744,6 +744,7 @@
     "sessionInspector.noDeliverables",
     "sessionInspector.nothingShips",
     "sessionInspector.open",
+    "sessionInspector.outputsTitle",
     "sessionInspector.pendingCount",
     "sessionInspector.permissionApprovals",
     "sessionInspector.questions",

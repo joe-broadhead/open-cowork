@@ -37,6 +37,8 @@ const strings: Record<string, string> = {
   'sidebar.searchTitle': 'بحث عن محادثة (⌘K)',
   'sidebar.noMatches': 'لا توجد نتائج',
   'sidebar.threadFallback': 'محادثة {{id}}',
+  'session.newChat': 'محادثة جديدة',
+  'session.newChatAt': 'محادثة جديدة · {{when}}',
   'newThread.project': 'فتح مشروع',
   'sidebar.newChat': 'دردشة جديدة',
   'newChat.blankUnavailableReason': 'إنشاء الدردشة غير متاح لمساحة العمل هذه.',

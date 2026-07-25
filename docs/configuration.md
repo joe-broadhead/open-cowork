@@ -1018,6 +1018,16 @@ Downstream builds can ship a partial localization overlay:
 Unset strings fall back to the built-in English copy. `locale` controls
 `Intl.NumberFormat` and `Intl.DateTimeFormat` output.
 
+**Locale coverage policy (2026-07-25).** English is the source of truth;
+the 11 bundled non-English catalogs are intentionally partial, and the
+Settings picker reports each locale's real coverage percentage
+(generated `coverage-status.ts`, pinned by `pnpm i18n:check` in CI).
+New keys are hand-translated — never bulk machine-translated. All 11
+locales stay in the picker while coverage is honestly labeled; a locale
+is only removed if its coverage figure becomes misleading in practice,
+and deepening a locale's coverage is contributor-driven rather than a
+release gate.
+
 Upstream Open Cowork keeps telemetry local on disk. Downstream builds
 that need a remote collector can enable:
 
