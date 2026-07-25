@@ -132,7 +132,7 @@ export function findAurumModelPath(
  */
 export function verifyAurumModelFile(modelPath: string, model: string): VoiceAssetIntegrity {
   if (!existsSync(modelPath)) return 'missing'
-  let size = 0
+  let size: number
   try {
     size = statSync(modelPath).size
   } catch {

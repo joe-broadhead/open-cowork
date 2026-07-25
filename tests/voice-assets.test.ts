@@ -17,7 +17,7 @@ import { FakeVoiceCapture } from '../apps/desktop/src/main/voice-capture.ts'
 import { FakeVoiceStt } from '../apps/desktop/src/main/voice-stt.ts'
 import { FakeVoiceTts } from '../apps/desktop/src/main/voice-tts.ts'
 
-function writeModelFixture(dir: string, model = 'tiny-q5_1', opts: { withSha?: boolean; size?: number } = {}) {
+function writeModelFixture(dir: string, _model = 'tiny-q5_1', opts: { withSha?: boolean; size?: number } = {}) {
   const modelsDir = join(dir, 'models')
   mkdirSync(modelsDir, { recursive: true })
   const filename = 'ggml-tiny-q5_1.bin'
