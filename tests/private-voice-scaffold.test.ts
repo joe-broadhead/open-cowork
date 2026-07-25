@@ -175,4 +175,9 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   assert.match(tts, /SystemOsVoiceTts/)
   assert.match(tts, /local only/i)
   assert.doesNotMatch(tts, /openrouter|openai\.com|elevenlabs/i)
+
+  const readAloud = readFileSync(join(root, 'packages/app/src/hooks/voice-read-aloud.ts'), 'utf8')
+  assert.match(readAloud, /plainTextForTts/)
+  assert.match(readAloud, /complete/)
+  assert.match(readAloud, /JOE-1103/)
 })

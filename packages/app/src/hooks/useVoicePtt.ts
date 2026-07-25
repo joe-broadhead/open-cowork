@@ -16,6 +16,7 @@ import {
 import { isDesktopRuntime } from '../runtime-env'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
 import { registerVoicePttToggleHandler } from './voice-ptt-hotkey'
+import { stopReadAloud } from './voice-read-aloud'
 
 export type VoicePttUiPhase = 'idle' | 'listening' | 'transcribing' | 'error'
 
@@ -196,6 +197,8 @@ export function useVoicePtt(options: {
     setErrorReason(null)
     setUiPhase('listening')
     try {
+      // Barge-in prep (JOE-1103): stop local TTS before opening the mic session.
+      await stopReadAloud()
       // Snapshot before start so partials never include mid-start keystrokes only.
       baselineRef.current = getComposerTextRef.current()
       const snapshot = await window.coworkApi.voice.startSession({
