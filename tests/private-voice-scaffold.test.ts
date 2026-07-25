@@ -220,4 +220,21 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   const adrSecurity = readFileSync(join(root, 'docs/adr/private-realtime-voice.md'), 'utf8')
   assert.match(adrSecurity, /Security audit \(JOE-1111\)/)
   assert.match(adrSecurity, /R-VOICE-01/)
+  assert.match(adrSecurity, /Packaging \(JOE-1106\)/)
+  assert.match(adrSecurity, /Accessibility \(JOE-1112\)/)
+
+  const packaging = readFileSync(join(root, 'apps/desktop/src/main/voice-packaging.ts'), 'utf8')
+  assert.match(packaging, /VOICE_PACKAGING_MATRIX/)
+  assert.match(packaging, /resolvePackagedAwareAurumBin/)
+  assert.match(packaging, /JOE-1106/)
+
+  const dogfood = readFileSync(join(root, 'docs/runbooks/voice-private-dogfood.md'), 'utf8')
+  assert.match(dogfood, /JOE-1113/)
+  assert.match(dogfood, /Claim freeze/)
+  assert.match(dogfood, /Forbidden/)
+
+  const closeout = readFileSync(join(root, 'docs/voice-private-epic-closeout.md'), 'utf8')
+  assert.match(closeout, /JOE-1114/)
+  assert.match(closeout, /Residual risk register/)
+  assert.match(closeout, /P0 open children without Waive/)
 })
