@@ -15,7 +15,12 @@ import {
 } from '@open-cowork/runtime-host'
 import { shortSessionId } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
-import { normalizeSessionId, normalizeSessionTitle } from './session-handler-validation.ts'
+import {
+  normalizeMessageId,
+  normalizeOptionalMessageId,
+  normalizeSessionId,
+  normalizeSessionTitle,
+} from './session-handler-validation.ts'
 import { getBrandName } from '@open-cowork/runtime-host/config'
 import { removeParentSession } from '../events.ts'
 import { log } from '@open-cowork/shared/node'
@@ -105,17 +110,17 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:revert', async (_event, sessionIdInput: unknown, messageId?: string) => {
+  context.ipcMain.handle('session:revert', async (_event, sessionIdInput: unknown, messageIdInput: unknown) => {
     const sessionId = normalizeSessionId(sessionIdInput)
+    const messageId = normalizeMessageId(messageIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
-      if (!messageId) throw new Error('A message id is required to stage a session revert.')
       await client.v2.session.revert.stage({
         sessionID: sessionId,
         messageID: messageId,
         files: true,
       }, { throwOnError: true })
-      log('session', `Reverted ${shortSessionId(sessionId)}${messageId ? ' to message' : ''}`)
+      log('session', `Reverted ${shortSessionId(sessionId)} to message`)
       return true
     } catch (err) {
       context.logHandlerError(`session:revert ${shortSessionId(sessionId)}`, err)
@@ -148,23 +153,27 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:diff', async (_event, sessionIdInput: unknown, messageId?: string) => {
+  context.ipcMain.handle('session:diff', async (_event, sessionIdInput: unknown, messageIdInput?: unknown) => {
     const sessionId = normalizeSessionId(sessionIdInput)
+    const messageId = normalizeOptionalMessageId(messageIdInput)
     const { client } = await context.getSessionClient(sessionId)
     try {
       const result = await client.session.diff({
         sessionID: sessionId,
-        ...(messageId ? { messageID: messageId } : {}),
+        ...(messageId !== undefined ? { messageID: messageId } : {}),
       }, { throwOnError: true })
       const diffs = normalizeSessionFileDiffs(result.data || [])
-      if (messageId) return diffs
+      if (messageId !== undefined) return diffs
 
       const record = getSessionRecord(sessionId)
       const view = await getLocalSessionPort().getSessionView(sessionId)
       const rootDir = record?.opencodeDirectory || getRuntimeHomeDir()
       return mergeSessionDiffsWithSynthetic(diffs, view, rootDir)
     } catch (err) {
-      context.logHandlerError(`session:diff ${shortSessionId(sessionId)}${messageId ? ' message' : ''}`, err)
+      context.logHandlerError(
+        `session:diff ${shortSessionId(sessionId)}${messageId !== undefined ? ' message' : ''}`,
+        err,
+      )
       return []
     }
   })

@@ -30,8 +30,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
 const vendorRoot = join(repoRoot, 'third_party', 'time-keep')
 const platformsRoot = join(vendorRoot, 'platforms')
-const VERSION = readFileSync(join(vendorRoot, 'VERSION'), 'utf8').trim()
 const REPO = 'joe-broadhead/time-keep'
+
+/** Maintainer-controlled release tag pin (third_party/time-keep/VERSION), not remote input. */
+const RELEASE_TAG_RE = /^v\d+\.\d+\.\d+(?:[-.][A-Za-z0-9._-]+)?$/
+
+function readPinnedReleaseTag() {
+  const raw = readFileSync(join(vendorRoot, 'VERSION'), 'utf8').trim()
+  if (!RELEASE_TAG_RE.test(raw)) {
+    throw new Error(`Invalid time-keep VERSION pin (expected vMAJOR.MINOR.PATCH): ${raw}`)
+  }
+  return raw
+}
+
+const VERSION = readPinnedReleaseTag()
 
 /** @type {Record<string, { asset: string, binaryName: string }>} */
 const PLATFORM_ASSETS = {
@@ -56,13 +68,24 @@ function parseArgs(argv) {
   return { only }
 }
 
-async function download(url, dest) {
+/**
+ * Download a release asset from the fixed GitHub releases host.
+ * URL host/path shape is constrained; tag is a local pin validated by RELEASE_TAG_RE.
+ */
+async function downloadReleaseAsset(assetFile, dest) {
+  if (!/^[A-Za-z0-9._-]+$/.test(assetFile)) {
+    throw new Error(`Refusing unexpected asset filename: ${assetFile}`)
+  }
+  const url = new URL(
+    `https://github.com/${REPO}/releases/download/${VERSION}/${assetFile}`,
+  )
+  // codeql[js/file-access-to-http]: VERSION is a validated local pin; asset names are constants.
   const response = await fetch(url, {
     headers: { 'User-Agent': 'open-cowork-fetch-time-keep' },
     redirect: 'follow',
   })
   if (!response.ok || !response.body) {
-    throw new Error(`GET ${url} failed: HTTP ${response.status}`)
+    throw new Error(`GET ${url.href} failed: HTTP ${response.status}`)
   }
   await pipeline(response.body, createWriteStream(dest))
 }
@@ -110,13 +133,12 @@ async function fetchPlatform(key) {
 
   const tarName = `${spec.asset}.tar.gz`
   const shaName = `${spec.asset}.sha256`
-  const baseUrl = `https://github.com/${REPO}/releases/download/${VERSION}`
   const tarPath = join(tmpDir, tarName)
   const shaPath = join(tmpDir, shaName)
 
   process.stdout.write(`[time-keep] downloading ${tarName} (${VERSION})\n`)
-  await download(`${baseUrl}/${tarName}`, tarPath)
-  await download(`${baseUrl}/${shaName}`, shaPath)
+  await downloadReleaseAsset(tarName, tarPath)
+  await downloadReleaseAsset(shaName, shaPath)
 
   const expected = expectedShaFromFile(shaPath)
   const actual = sha256File(tarPath)

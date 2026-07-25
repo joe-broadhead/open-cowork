@@ -1,7 +1,8 @@
 # Direct documentation dependencies. Regenerate the hashed Python 3.12 lock with:
 # uv pip compile docs/requirements.in --python-version 3.12 --universal --generate-hashes --output-file docs/requirements.txt
 mkdocs==1.6.1
-mkdocs-material==9.5.39
+mkdocs-material==9.7.7
 mkdocs-minify-plugin==0.8.0
-pymdown-extensions==10.21.3
+# GHSA-9XWG-3R6F-JCX2: path traversal in b64 extension; fixed in 11.0.0+.
+pymdown-extensions==11.0.0
 Pygments==2.20.0
