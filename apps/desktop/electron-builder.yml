@@ -20,13 +20,18 @@
 # across every builder code path. See docs/downstream.md for the full recipe.
 appId: ${env.APP_ID}
 productName: ${env.APP_PRODUCT_NAME}
+# electron-builder ≥26.15 validates executableName for AppImage/desktop paths.
+# Keep this free of scoped package-name characters (`@`, `/`).
+executableName: ${env.APP_EXECUTABLE_NAME}
 directories:
   output: release
   buildResources: resources
-afterPack: ../../scripts/desktop-after-pack.mjs
+# Resolved to absolute monorepo paths by scripts/desktop-dist.mjs so electron-builder
+# ≥26.15 does not reject hooks that resolve outside apps/desktop (workspace root).
+afterPack: ${env.APP_AFTER_PACK_HOOK}
 # Codesign mutates the bundled OpenCode Mach-O; rewrite integrity hashes after
 # sign and re-sign only the outer .app (see scripts/desktop-after-sign.mjs).
-afterSign: ../../scripts/desktop-after-sign.mjs
+afterSign: ${env.APP_AFTER_SIGN_HOOK}
 files:
   - dist/**/*
   - package.json

@@ -24,6 +24,7 @@ const MAX_PROMPT_AGENT_BYTES = 128
 const MAX_PROMPT_VARIANT_BYTES = 128
 const MAX_COMPOSER_MODEL_ID_BYTES = 512
 const MAX_SESSION_ID_BYTES = 256
+const MAX_MESSAGE_ID_BYTES = 256
 const MAX_COMMAND_NAME_BYTES = 256
 const MAX_SESSION_TITLE_BYTES = 512
 export const MAX_FILE_SNIPPET_BYTES = 5 * 1024 * 1024
@@ -107,6 +108,18 @@ export function normalizeSessionId(value: unknown) {
   const sessionId = requireBoundedString(value, 'Session id', MAX_SESSION_ID_BYTES).trim()
   if (!sessionId) throw new Error('Session id is required')
   return sessionId
+}
+
+export function normalizeMessageId(value: unknown) {
+  const messageId = requireBoundedString(value, 'Message id', MAX_MESSAGE_ID_BYTES).trim()
+  if (!messageId) throw new Error('Message id is required')
+  return messageId
+}
+
+/** Optional message id for APIs that accept whole-session or message-scoped reads. */
+export function normalizeOptionalMessageId(value: unknown) {
+  if (value == null || value === '') return undefined
+  return normalizeMessageId(value)
 }
 
 export function normalizeCommandName(value: unknown) {

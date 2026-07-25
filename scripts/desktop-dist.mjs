@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const isWindows = process.platform === 'win32'
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 function resolveExecutable(command) {
   return isWindows ? `${command}.cmd` : command
@@ -10,6 +12,8 @@ function resolveExecutable(command) {
 
 const branding = {
   APP_PRODUCT_NAME: process.env.APP_PRODUCT_NAME || 'Open Cowork',
+  // AppImage/desktop path validation in electron-builder ≥26.15 rejects `@`/`/` from package names.
+  APP_EXECUTABLE_NAME: process.env.APP_EXECUTABLE_NAME || 'OpenCowork',
   APP_ID: process.env.APP_ID || 'com.opencowork.desktop',
   APP_ARTIFACT_PREFIX: process.env.APP_ARTIFACT_PREFIX || 'Open-Cowork',
   APP_MAINTAINER: process.env.APP_MAINTAINER || 'Open Cowork Maintainers <joe-broadhead@users.noreply.github.com>',
@@ -20,6 +24,9 @@ const branding = {
   // Windows NSIS icon. electron-builder accepts a >=256x256 PNG here and
   // converts it to an .ico at build time; the bundled icon.png is 256x256.
   APP_ICON_WIN: process.env.APP_ICON_WIN || 'resources/icon.png',
+  // Absolute hook paths: relative ../../scripts/* fails electron-builder ≥26.15 workspace root checks.
+  APP_AFTER_PACK_HOOK: process.env.APP_AFTER_PACK_HOOK || join(repoRoot, 'scripts', 'desktop-after-pack.mjs'),
+  APP_AFTER_SIGN_HOOK: process.env.APP_AFTER_SIGN_HOOK || join(repoRoot, 'scripts', 'desktop-after-sign.mjs'),
 }
 
 function cleanReleaseOutput() {

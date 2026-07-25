@@ -55,7 +55,7 @@
     "@types/node": "^22.20.1",
     "@vitejs/plugin-react": "^6.0.3",
     "electron": "^43.2.0",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^26.15.7",
     "playwright-core": "^1.61.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
