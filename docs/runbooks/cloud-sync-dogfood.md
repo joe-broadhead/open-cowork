@@ -32,3 +32,4 @@ description: Optional extension of product purity dogfood for the sync promise (
 
 - [Product purity dogfood](product-purity-dogfood.md)
 - [Product contract](../product-contract.md)
+- [Cloud sync residual JOE-1094](cloud-sync-dogfood-residual-joe-1094.md) (when live env unavailable)

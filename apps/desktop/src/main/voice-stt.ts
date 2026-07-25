@@ -12,6 +12,7 @@ import { tmpdir, homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { getAppPathHost } from '@open-cowork/shared/node'
 import { VOICE_PCM_SAMPLE_RATE } from './voice-pcm-buffer.ts'
+import { resolvePackagedAwareAurumBin } from './voice-packaging.ts'
 
 export const AURUM_DEFAULT_MODEL = 'tiny-q5_1'
 export const AURUM_DEFAULT_MODEL_FILE = 'ggml-tiny-q5_1.bin'
@@ -257,16 +258,8 @@ export function isAurumModelAvailable(model: string, cacheDir: string): boolean 
 }
 
 export function resolveAurumBinPath(): string | null {
-  const candidates = [
-    process.env.OPEN_COWORK_AURUM_BIN,
-    process.env.AURUM_BIN,
-    'aurum',
-  ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
-  for (const candidate of candidates) {
-    if (candidate === 'aurum') return 'aurum'
-    if (existsSync(candidate)) return candidate
-  }
-  return null
+  // JOE-1106: packaged resources/voice/aurum before bare PATH name.
+  return resolvePackagedAwareAurumBin()
 }
 
 export function createDefaultVoiceStt(): VoiceSttEngine {
@@ -346,7 +339,10 @@ export function hashTranscriptText(text: string) {
   return createHash('sha256').update(text).digest('hex')
 }
 
-/** Ensure no PCM-looking bulk payload is logged (length only). */
+/**
+ * Ensure no PCM-looking bulk payload or transcript body is logged (length only).
+ * JOE-1111: never include `text` — use textChars + hashTranscriptText for correlation.
+ */
 export function sttLogMeta(result: VoiceSttResult) {
   return {
     backend: result.backend,

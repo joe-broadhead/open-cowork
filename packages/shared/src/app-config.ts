@@ -523,6 +523,11 @@ export interface AppSettings {
   workflowDesktopNotifications: boolean
   workflowQuietHoursStart: string | null
   workflowQuietHoursEnd: string | null
+  /**
+   * Electron-style accelerator for push-to-talk toggle (Desktop Local).
+   * Empty / missing falls back to VOICE_PTT_SHORTCUT. App-focused only.
+   */
+  voicePttShortcut?: string | null
 }
 
 export interface EffectiveAppSettings extends AppSettings {
