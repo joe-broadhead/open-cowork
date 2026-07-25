@@ -66,6 +66,8 @@ export function useVoicePtt(options: {
   /** Replace the full composer text (baseline + current dictation segment). */
   setComposerText: (text: string) => void
   onError?: (message: string) => void
+  /** When false, do not claim the desktop PTT hotkey (conversation mode owns it). */
+  hotkeyEnabled?: boolean
 }): VoicePttController {
   const workspaceSupport = useActiveWorkspaceSupport()
   const [features, setFeatures] = useState<DesktopFeatureFlags | undefined>(undefined)
@@ -275,12 +277,12 @@ export function useVoicePtt(options: {
 
   // Desktop menu / keyboard hotkey (JOE-1110): last-mounted visible controller wins.
   useEffect(() => {
-    if (!visible) return
+    if (!visible || options.hotkeyEnabled === false) return
     return registerVoicePttToggleHandler(() => {
       if (!enabled && uiPhase !== 'listening') return
       void toggle()
     })
-  }, [visible, enabled, uiPhase, toggle])
+  }, [visible, enabled, uiPhase, toggle, options.hotkeyEnabled])
 
   return {
     visible,

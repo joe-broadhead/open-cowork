@@ -3,6 +3,7 @@ import { t } from '../../helpers/i18n'
 import { primaryAgentModeLabel } from '../../helpers/primary-agent-mode'
 import type { PrimaryAgentMode } from '../../stores/session'
 import type { VoicePttController } from '../../hooks/useVoicePtt'
+import type { VoiceConversationController } from '../../hooks/useVoiceConversation'
 import { Badge, Button, Icon, IconButton } from '@open-cowork/ui'
 import { VoicePttButton } from './VoicePttButton'
 
@@ -29,6 +30,7 @@ type ChatInputToolbarProps = {
   reasoningControlsManaged?: boolean
   showAgentModeControl?: boolean
   voice?: VoicePttController | null
+  voiceConversation?: VoiceConversationController | null
   onAddFiles: (files: FileList | File[]) => Promise<void> | void
   onToggleModelMenu: () => void
   onToggleReasoningMenu?: () => void
@@ -61,6 +63,7 @@ export function ChatInputToolbar({
   reasoningControlsManaged = false,
   showAgentModeControl = true,
   voice = null,
+  voiceConversation = null,
   onAddFiles,
   onToggleModelMenu,
   onToggleReasoningMenu,
@@ -147,7 +150,7 @@ export function ChatInputToolbar({
       </div>
 
       <div className="flex items-center gap-1.5">
-        {voice ? <VoicePttButton voice={voice} size="sm" /> : null}
+        {voice ? <VoicePttButton voice={voice} conversation={voiceConversation} size="sm" /> : null}
 
         {currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion ? (
           <IconButton

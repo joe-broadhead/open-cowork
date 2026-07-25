@@ -180,4 +180,10 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   assert.match(readAloud, /plainTextForTts/)
   assert.match(readAloud, /complete/)
   assert.match(readAloud, /JOE-1103/)
+
+  const conversation = readFileSync(join(root, 'packages/app/src/hooks/voice-conversation-machine.ts'), 'utf8')
+  assert.match(conversation, /reduceVoiceConversation/)
+  assert.match(conversation, /finalizing/)
+  assert.match(conversation, /BARGE_IN/)
+  assert.match(conversation, /JOE-1107/)
 })
