@@ -112,6 +112,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'voice:tts:speak',
   'voice:tts:cancel',
   'voice:tts:voices',
+  'voice:assets:status',
+  'voice:assets:ensure',
   'confirm:request-destructive',
   'clipboard:write-text',
   'tool:list',
@@ -426,6 +428,8 @@ const api: CoworkAPI = {
     speak: (input) => invoke('voice:tts:speak', input),
     cancelSpeak: () => invoke('voice:tts:cancel'),
     listVoices: () => invoke('voice:tts:voices'),
+    assetsStatus: () => invoke('voice:assets:status'),
+    ensureAssets: () => invoke('voice:assets:ensure'),
   },
   confirm: {
     requestDestructive: (request) => invoke('confirm:request-destructive', request),

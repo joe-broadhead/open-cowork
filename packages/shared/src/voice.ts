@@ -107,6 +107,35 @@ export type VoiceHostStatus = {
   capture?: VoiceCaptureStatus
   /** Optional VAD / continuous-listen diagnostics (JOE-1104). */
   vad?: VoiceVadStatus
+  /** First-run model/voice asset readiness (JOE-1109). Paths only — no file bytes. */
+  assets?: VoiceAssetStatusSnapshot
+}
+
+/** Host-reported STT/TTS asset readiness for Settings / Health (JOE-1109). */
+export type VoiceAssetStatusSnapshot = {
+  stt: {
+    model: string
+    modelFile: string
+    ready: boolean
+    cacheDir: string
+    modelPath: string | null
+    integrity: 'ok' | 'missing' | 'unverified' | 'mismatch' | 'too_small'
+    allowDownload: boolean
+    cliAvailable: boolean
+    detail: string | null
+  }
+  tts: {
+    ready: boolean
+    backend: 'system_os' | 'fake' | 'unavailable'
+    detail: string | null
+  }
+  offlineReady: boolean
+}
+
+export type VoiceAssetEnsureResultSnapshot = {
+  status: VoiceAssetStatusSnapshot
+  action: 'already_ready' | 'copied_from_system' | 'verified' | 'needs_download' | 'failed'
+  detail: string
 }
 
 export type VoiceSessionStartInput = {

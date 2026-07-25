@@ -23,6 +23,7 @@ import { ModelsPanel } from './SettingsModelsPanel'
 import { PermissionsPanel, RuntimeConfigPanel } from './SettingsPermissionsPanel'
 import { StoragePanel } from './SettingsStoragePanel'
 import { SettingsPairingPanel } from './SettingsPairingPanel'
+import { VoiceAssetsPanel } from './SettingsVoiceAssetsPanel'
 
 type SettingsTab = 'appearance' | 'model' | 'advanced' | 'permissions' | 'notifications' | 'privacy' | 'workflows' | 'storage' | 'pairing'
 type SettingsSearchEntry = {
@@ -282,6 +283,7 @@ function SettingsPrivacyPanel({
               )}
             </span>
           </label>
+          <VoiceAssetsPanel />
         </div>
       ) : null}
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-3">
