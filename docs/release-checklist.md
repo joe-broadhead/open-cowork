@@ -26,7 +26,7 @@ Before publishing release notes or marketing copy, confirm against
 
 - [ ] No unqualified “gateway” (must say Channel / Standalone / durable Gateway)
 - [ ] No “Always allow” / daily digest as shipping features unless implemented
-- [ ] Private voice (`features.voice`) not claimed shipping unless host + Aurum STT + PTT UI evidence is green ([ADR](adr/private-realtime-voice.md)); default remains off
+- [ ] Private voice (`features.voice`) claims follow [claim freeze](runbooks/voice-private-dogfood.md#claim-freeze-allowed-vs-forbidden): Local Desktop opt-in only; no Cloud Web mic, no always-on without consent, no “fully offline package” without aurum + model; evidence via [epic close-out](voice-private-epic-closeout.md) / dogfood runbook; default remains **off**
 - [ ] No Standalone/Paired “full workspace chat ready” while support matrix is deferred
 - [ ] Knowledge ≠ Wiki; no default Desktop Wiki/Gateway MCP claims
 - [ ] Projects described as coordination board (not history facets) unless UI changes

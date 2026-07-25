@@ -15,8 +15,9 @@ type VoiceChrome = {
 }
 
 /**
- * Click-to-toggle PTT control (JOE-1105 / JOE-1107).
+ * Click-to-toggle PTT control (JOE-1105 / JOE-1107 / JOE-1112 a11y).
  * Supports dictation inject (useVoicePtt) or conversation turns (useVoiceConversation).
+ * Keyboard: focused IconButton activates with Space/Enter (native button).
  */
 export function VoicePttButton({
   voice,
@@ -62,6 +63,7 @@ export function VoicePttButton({
   const listening = chrome.chromePhase === 'listening'
   const busy = chrome.chromePhase === 'transcribing' || chrome.chromePhase === 'thinking'
   const speaking = chrome.chromePhase === 'speaking'
+  const errored = chrome.chromePhase === 'error'
   const label = listening
     ? (usingConversation
       ? t('chat.voice.stopConversationListen', 'Stop and send')
@@ -79,9 +81,16 @@ export function VoicePttButton({
   const continuousOn = Boolean(conversation?.continuousVad)
   const privacyListening = Boolean(conversation?.privacyListening)
   const showPrivacyDot = usingConversation && continuousOn && (listening || privacyListening)
+  const showDisabledBanner = Boolean(
+    !chrome.enabled && !listening && !speaking && chrome.disabledReason,
+  )
 
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span
+      className="inline-flex items-center gap-1.5"
+      data-testid="voice-ptt-cluster"
+      data-voice-phase={chrome.chromePhase}
+    >
       {conversation?.visible ? (
         <IconButton
           icon="radio"
@@ -116,7 +125,7 @@ export function VoicePttButton({
           aria-live="polite"
         >
           <span
-            className="inline-block size-1.5 rounded-full bg-red"
+            className="inline-block size-1.5 rounded-full bg-red motion-reduce:animate-none"
             aria-hidden
           />
           <span className="sr-only">
@@ -124,16 +133,18 @@ export function VoicePttButton({
           </span>
         </span>
       ) : null}
-      {chrome.statusLabel ? (
-        <span
-          className="text-xs text-text-muted tabular-nums"
-          aria-live="polite"
-          role="status"
-          data-testid="voice-status-label"
-        >
-          {chrome.statusLabel}
-        </span>
-      ) : null}
+      {/* Single live region for phase chrome (JOE-1112) — avoids duplicate announcements. */}
+      <span
+        className="text-xs text-text-muted tabular-nums"
+        aria-live="polite"
+        aria-atomic="true"
+        role="status"
+        data-testid="voice-status-label"
+      >
+        {chrome.statusLabel
+          || (errored ? t('chat.voice.error', 'Voice error') : null)
+          || (showDisabledBanner ? null : '\u00a0')}
+      </span>
       <IconButton
         icon={speaking ? 'volume' : listening && continuousOn ? 'activity' : 'mic'}
         label={label}
@@ -141,11 +152,20 @@ export function VoicePttButton({
         disabled={!chrome.enabled && !listening && !speaking}
         disabledReason={!chrome.enabled && !listening && !speaking ? chrome.disabledReason : null}
         size={size}
-        variant={listening || speaking ? 'primary' : chrome.chromePhase === 'error' ? 'danger' : 'ghost'}
+        variant={listening || speaking ? 'primary' : errored ? 'danger' : 'ghost'}
         loading={busy}
         aria-pressed={listening || speaking}
         data-testid="voice-ptt-button"
       />
+      {showDisabledBanner ? (
+        <span
+          className="max-w-[14rem] text-2xs leading-snug text-text-muted"
+          role="status"
+          data-testid="voice-disabled-reason"
+        >
+          {chrome.disabledReason}
+        </span>
+      ) : null}
     </span>
   )
 }

@@ -73,6 +73,8 @@ Rules:
 12. **Conversation controller (JOE-1107):** Pure state machine `Idle → Listening → FinalizingSTT → Prompting → Streaming → Speaking → Idle` drives **PTT-gated** voice turns when the user enables conversation mode (default **off**). Release mic → STT final → `session.prompt` → wait for generation idle → local TTS of the latest assistant message. **Cancel / barge-in** stops TTS, cancels listen, and aborts generation.
 13. **Continuous VAD + barge-in (JOE-1104):** Opt-in **energy VAD** (RMS gate, not neural) on the voice host when conversation mode **and** continuous listen are both on (default **off** — never silent always-on). Host auto-finalizes on end-of-utterance silence or max-listen timeout; UI shows a privacy mic-armed indicator. After `SPEAK_DONE` with continuous on, the machine re-arms listening. During TTS, host monitors mic energy and emits `vad` `barge_in` (cancels local speak; renderer aborts gen + re-listens). Still text/status/vad IPC only — no raw audio to the renderer.
 14. **First-run assets (JOE-1109):** STT models are **local files** under OC `userData/voice/aurum` (or system Aurum cache). Default **local_only fail-closed** when missing — no silent network download. Integrity uses size floor + optional sibling `.sha256`. `OPEN_COWORK_AURUM_ALLOW_DOWNLOAD=1` is explicit operator opt-in for a **file** fetch residual (never audio/transcript upload). Settings → Privacy shows offline-ready status + **Ensure local model** (copy from system cache when present). TTS readiness remains OS speech probe.
+15. **Packaging (JOE-1106):** Optional sidecars under packaged `resources/voice/` (`aurum` / `ffmpeg`); resolution prefers env → packaged path → PATH. CI packages ship the folder + README **without** pre-bundled model weights or aurum-ffi dylibs (fail closed when missing). macOS **supported** when tools present; Windows/Linux **best-effort** with residual TTS backends. Codesign any drop-in binaries with the release pipeline.
+16. **Accessibility (JOE-1112):** Mic control exposes `aria-pressed` / `aria-busy`; phase chrome uses a single polite live region; disabled reasons render as a status region (permission denied / model missing / unsupported workspace), not a mute one-liner.
 
 ### 4. Workspace support APIs
 
@@ -122,8 +124,10 @@ Rules:
 | R-VOICE-03 | OS TTS may write temp AIFF/WAV for playback | Local host only; cancel best-effort cleanup |
 | R-VOICE-04 | Opt-in model download env | Default off; Settings copy; never audio |
 | R-VOICE-05 | `getLastTranscript()` host memory for tests | Not on preload/IPC |
+| R-VOICE-06 | Aurum/ffmpeg not pre-bundled in CI packages | Packaging README + fail-closed status; optional drop-in |
+| R-VOICE-07 | Windows/Linux OS TTS residual | Best-effort claim; unavailable status when tools missing |
 
-Automated gates: `tests/voice-security.test.ts` (plus existing STT/TTS/scaffold tests).
+Automated gates: `tests/voice-security.test.ts`, `tests/voice-packaging.test.ts` (plus existing STT/TTS/scaffold tests). Dogfood: [voice-private-dogfood.md](../runbooks/voice-private-dogfood.md). Close-out: [voice-private-epic-closeout.md](../voice-private-epic-closeout.md).
 
 ## Consequences
 

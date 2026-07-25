@@ -117,6 +117,8 @@ nav:
       - Product purity final wave: product-purity-final-wave.md
       - Pairing connector scope: pairing-connector-scope.md
       - Product purity dogfood: runbooks/product-purity-dogfood.md
+      - Private voice dogfood: runbooks/voice-private-dogfood.md
+      - Private voice epic close-out: voice-private-epic-closeout.md
       - Cloud sync dogfood: runbooks/cloud-sync-dogfood.md
       - Enterprise readiness matrix: enterprise-readiness-matrix.md
       - Maintainer product map: maintainer-product-map.md

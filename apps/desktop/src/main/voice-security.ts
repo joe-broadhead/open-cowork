@@ -127,4 +127,14 @@ export const VOICE_SECURITY_RESIDUAL_RISKS = [
     summary: 'getLastTranscript() exists for tests/host diagnostics; not exposed on renderer IPC.',
     mitigation: 'Preload surface has no lastTranscript channel; only status/session/tts/assets.',
   },
+  {
+    id: 'R-VOICE-06',
+    summary: 'Aurum CLI and ffmpeg are not pre-bundled in every CI package.',
+    mitigation: 'resources/voice drop-in + fail-closed status; packaging matrix documents macOS supported vs Win/Linux best-effort.',
+  },
+  {
+    id: 'R-VOICE-07',
+    summary: 'Windows/Linux OS TTS backends remain residual.',
+    mitigation: 'system_os reports unavailable when tools missing; no cloud TTS default.',
+  },
 ] as const

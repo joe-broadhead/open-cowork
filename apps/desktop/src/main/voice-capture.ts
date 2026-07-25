@@ -7,6 +7,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { platform } from 'node:os'
 import { VOICE_PCM_SAMPLE_RATE } from './voice-pcm-buffer.ts'
+import { resolvePackagedAwareFfmpegBin } from './voice-packaging.ts'
 
 export type VoiceCaptureBackendId = 'fake' | 'ffmpeg' | 'unavailable'
 
@@ -218,16 +219,8 @@ export function buildFfmpegCaptureArgs(platformId: NodeJS.Platform): string[] {
 }
 
 function resolveFfmpegPath(): string | null {
-  const candidates = [
-    process.env.OPEN_COWORK_FFMPEG_PATH,
-    process.env.FFMPEG_PATH,
-    'ffmpeg',
-  ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
-  for (const candidate of candidates) {
-    if (candidate === 'ffmpeg') return 'ffmpeg'
-    if (existsSync(candidate)) return candidate
-  }
-  return null
+  // JOE-1106: packaged resources/voice/ffmpeg before bare PATH name.
+  return resolvePackagedAwareFfmpegBin()
 }
 
 /** Production default: ffmpeg when resolvable, otherwise unavailable. */

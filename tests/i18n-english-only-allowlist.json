@@ -415,6 +415,7 @@
     "chat.voice.continuousVadOn",
     "chat.voice.conversationModeOff",
     "chat.voice.conversationModeOn",
+    "chat.voice.error",
     "chat.voice.privacyListening",
     "chat.voice.privacyListeningHint",
     "chat.voice.speakingTapToInterrupt",
