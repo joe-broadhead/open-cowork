@@ -144,12 +144,12 @@
     "@open-cowork/shared": "workspace:*"
   },
   "devDependencies": {
-    "@changesets/cli": "2.29.8",
+    "@changesets/cli": "2.31.1",
     "@electric-sql/pglite": "^0.5.4",
     "@eslint/js": "^10.0.1",
     "@open-cowork/cloud-server": "workspace:*",
-    "@typescript-eslint/eslint-plugin": "^8.63.0",
-    "@typescript-eslint/parser": "^8.63.0",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.6.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",

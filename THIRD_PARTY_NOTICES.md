@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `2ef20f0145f1406b78c88ce9a1d369afa4b0a7bedc83b6fa6602af2c2cffc806`
-- Production package entries: 403
-- Bundled license directories: 388 (15 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `4fdd6ccd8ad44913c486ceeebd7bb606862e64b38688b24e58f2ecfff0af0205`
+- Production package entries: 404
+- Bundled license directories: 389 (15 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -58,9 +58,9 @@ Each package remains licensed under its own license terms. The table below is pr
 | @esbuild/win32-arm64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-arm64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
 | @esbuild/win32-ia32 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-ia32@0.28.1/ | git+https://github.com/evanw/esbuild.git |
 | @esbuild/win32-x64 | 0.28.1 | MIT | THIRD_PARTY_LICENSES/@esbuild__win32-x64@0.28.1/ | git+https://github.com/evanw/esbuild.git |
-| @fontsource-variable/mona-sans | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__mona-sans@5.2.8/ | git+https://github.com/fontsource/font-files.git |
-| @fontsource-variable/schibsted-grotesk | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__schibsted-grotesk@5.2.8/ | git+https://github.com/fontsource/font-files.git |
-| @grammyjs/types | 3.28.0 | MIT | THIRD_PARTY_LICENSES/@grammyjs__types@3.28.0/ | git+https://github.com/grammyjs/types.git |
+| @fontsource-variable/mona-sans | 5.3.0 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__mona-sans@5.3.0/ | git+https://github.com/fontsource/font-files.git |
+| @fontsource-variable/schibsted-grotesk | 5.3.0 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__schibsted-grotesk@5.3.0/ | git+https://github.com/fontsource/font-files.git |
+| @grammyjs/types | 4.0.0 | MIT | THIRD_PARTY_LICENSES/@grammyjs__types@4.0.0/ | git+https://github.com/grammyjs/types.git |
 | @hono/node-server | 2.0.10 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@2.0.10/ | git+https://github.com/honojs/node-server.git |
 | @iconify/types | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@iconify__types@2.0.0/ | https://github.com/iconify/iconify.git |
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
@@ -230,7 +230,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | google-logging-utils | 1.1.3 | Apache-2.0 | THIRD_PARTY_LICENSES/google-logging-utils@1.1.3/ | https://github.com/googleapis/google-cloud-node-core.git |
 | gopd | 1.2.0 | MIT | THIRD_PARTY_LICENSES/gopd@1.2.0/ | git+https://github.com/ljharb/gopd.git |
 | graceful-fs | 4.2.11 | ISC | THIRD_PARTY_LICENSES/graceful-fs@4.2.11/ | https://github.com/isaacs/node-graceful-fs |
-| grammy | 1.44.0 | MIT | THIRD_PARTY_LICENSES/grammy@1.44.0/ | git+https://github.com/grammyjs/grammY.git |
+| grammy | 1.45.1 | MIT | THIRD_PARTY_LICENSES/grammy@1.45.1/ | git+https://github.com/grammyjs/grammY.git |
 | hachure-fill | 0.5.2 | MIT | THIRD_PARTY_LICENSES/hachure-fill@0.5.2/ | git+https://github.com/pshihn/hachure-fill.git |
 | has-symbols | 1.1.0 | MIT | THIRD_PARTY_LICENSES/has-symbols@1.1.0/ | git://github.com/inspect-js/has-symbols.git |
 | hasown | 2.0.3 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.3/ | git+https://github.com/inspect-js/hasOwn.git |
@@ -239,6 +239,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | https-proxy-agent | 7.0.6 | MIT | THIRD_PARTY_LICENSES/https-proxy-agent@7.0.6/ | https://github.com/TooTallNate/proxy-agents.git |
 | iconv-lite | 0.6.3 | MIT | THIRD_PARTY_LICENSES/iconv-lite@0.6.3/ | git://github.com/ashtuchkin/iconv-lite.git |
 | iconv-lite | 0.7.2 | MIT | THIRD_PARTY_LICENSES/iconv-lite@0.7.2/ | https://github.com/pillarjs/iconv-lite.git |
+| iconv-lite | 0.7.3 | MIT | THIRD_PARTY_LICENSES/iconv-lite@0.7.3/ | https://github.com/pillarjs/iconv-lite.git |
 | inherits | 2.0.4 | ISC | THIRD_PARTY_LICENSES/inherits@2.0.4/ | git://github.com/isaacs/inherits |
 | internmap | 1.0.1 | ISC | THIRD_PARTY_LICENSES/internmap@1.0.1/ | https://github.com/mbostock/internmap.git |
 | internmap | 2.0.3 | ISC | THIRD_PARTY_LICENSES/internmap@2.0.3/ | https://github.com/mbostock/internmap.git |
@@ -265,7 +266,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | lodash.isequal | 4.5.0 | MIT | THIRD_PARTY_LICENSES/lodash.isequal@4.5.0/ | lodash/lodash |
 | lucide-react | 1.23.0 | ISC | THIRD_PARTY_LICENSES/lucide-react@1.23.0/ | https://github.com/lucide-icons/lucide.git |
 | marked | 16.4.2 | MIT | THIRD_PARTY_LICENSES/marked@16.4.2/ | git://github.com/markedjs/marked.git |
-| marked | 18.0.5 | MIT | THIRD_PARTY_LICENSES/marked@18.0.5/ | git://github.com/markedjs/marked.git |
+| marked | 18.0.7 | MIT | THIRD_PARTY_LICENSES/marked@18.0.7/ | git+https://github.com/markedjs/marked.git |
 | math-intrinsics | 1.1.0 | MIT | THIRD_PARTY_LICENSES/math-intrinsics@1.1.0/ | git+https://github.com/es-shims/math-intrinsics.git |
 | media-typer | 1.1.0 | MIT | THIRD_PARTY_LICENSES/media-typer@1.1.0/ | jshttp/media-typer |
 | merge-descriptors | 2.0.0 | MIT | THIRD_PARTY_LICENSES/merge-descriptors@2.0.0/ | sindresorhus/merge-descriptors |
@@ -296,7 +297,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | opencode-windows-arm64 | 1.18.1 | MIT | THIRD_PARTY_LICENSES/opencode-windows-arm64@1.18.1/ | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.18.1.tgz |
 | opencode-windows-x64 | 1.18.1 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64@1.18.1/ | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.18.1.tgz |
 | opencode-windows-x64-baseline | 1.18.1 | MIT | THIRD_PARTY_LICENSES/opencode-windows-x64-baseline@1.18.1/ | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.18.1.tgz |
-| package-manager-detector | 1.6.0 | MIT | THIRD_PARTY_LICENSES/package-manager-detector@1.6.0/ | git+https://github.com/antfu-collective/package-manager-detector.git |
+| package-manager-detector | 1.8.0 | MIT | THIRD_PARTY_LICENSES/package-manager-detector@1.8.0/ | git+https://github.com/antfu-collective/package-manager-detector.git |
 | parseurl | 1.3.3 | MIT | THIRD_PARTY_LICENSES/parseurl@1.3.3/ | pillarjs/parseurl |
 | path-data-parser | 0.1.0 | MIT | THIRD_PARTY_LICENSES/path-data-parser@0.1.0/ | git+https://github.com/pshihn/path-data-parser.git |
 | path-key | 3.1.1 | MIT | THIRD_PARTY_LICENSES/path-key@3.1.1/ | sindresorhus/path-key |
@@ -323,8 +324,8 @@ Each package remains licensed under its own license terms. The table below is pr
 | qs | 6.15.2 | BSD-3-Clause | THIRD_PARTY_LICENSES/qs@6.15.2/ | https://github.com/ljharb/qs.git |
 | range-parser | 1.2.1 | MIT | THIRD_PARTY_LICENSES/range-parser@1.2.1/ | jshttp/range-parser |
 | raw-body | 3.0.2 | MIT | THIRD_PARTY_LICENSES/raw-body@3.0.2/ | stream-utils/raw-body |
-| react | 19.2.7 | MIT | THIRD_PARTY_LICENSES/react@19.2.7/ | https://github.com/facebook/react.git |
-| react-dom | 19.2.7 | MIT | THIRD_PARTY_LICENSES/react-dom@19.2.7/ | https://github.com/facebook/react.git |
+| react | 19.2.8 | MIT | THIRD_PARTY_LICENSES/react@19.2.8/ | https://github.com/react/react.git |
+| react-dom | 19.2.8 | MIT | THIRD_PARTY_LICENSES/react-dom@19.2.8/ | https://github.com/react/react.git |
 | remend | 1.3.0 | Apache-2.0 | THIRD_PARTY_LICENSES/remend@1.3.0/ | git+https://github.com/vercel/streamdown.git |
 | require-from-string | 2.0.2 | MIT | THIRD_PARTY_LICENSES/require-from-string@2.0.2/ | floatdrop/require-from-string |
 | robust-predicates | 3.0.3 | Unlicense | THIRD_PARTY_LICENSES/robust-predicates@3.0.3/ | https://github.com/mourner/robust-predicates.git |

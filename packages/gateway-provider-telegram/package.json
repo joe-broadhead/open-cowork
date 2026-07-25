@@ -27,10 +27,10 @@
   "dependencies": {
     "@open-cowork/gateway-channel": "workspace:*",
     "@open-cowork/shared": "workspace:*",
-    "grammy": "^1.44.0"
+    "grammy": "^1.45.1"
   },
   "devDependencies": {
-    "@types/node": "^22.20.0",
+    "@types/node": "^22.20.1",
     "typescript": "^6.0.3"
   }
 }
