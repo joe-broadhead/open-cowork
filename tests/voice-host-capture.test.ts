@@ -46,6 +46,8 @@ test('voice host captures PCM with fake backend without exposing samples on stat
     stt: new FakeVoiceStt({ text: 'capture test' }),
     probeMicrophone: async () => 'granted',
     onEvent: (e) => events.push(e),
+    // Existing capture tests focus on PCM ownership; partials covered in voice-partial-window.
+    partialsEnabled: false,
   })
 
   const idle = host.getStatus()
@@ -110,6 +112,7 @@ test('voice host cancel clears buffer mid-session', async () => {
     capture: fake,
     stt: new FakeVoiceStt(),
     probeMicrophone: async () => 'granted',
+    partialsEnabled: false,
   })
   const session = await host.startSession()
   await new Promise((r) => setTimeout(r, 30))

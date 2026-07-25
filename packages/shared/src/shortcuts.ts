@@ -4,3 +4,5 @@ export const AGENTS_SHORTCUT = 'CmdOrCtrl+Shift+A'
 export const SEARCH_THREADS_SHORTCUT = 'CmdOrCtrl+K'
 export const NEW_THREAD_SHORTCUT = 'CmdOrCtrl+N'
 export const SETTINGS_SHORTCUT = 'CmdOrCtrl+,'
+/** Desktop-focused PTT toggle (JOE-1110). Not a system-wide Accessibility hotkey. */
+export const VOICE_PTT_SHORTCUT = 'CmdOrCtrl+Shift+Space'

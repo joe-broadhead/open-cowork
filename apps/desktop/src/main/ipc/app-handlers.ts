@@ -97,6 +97,7 @@ const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'windowZoomFactor',
   'workflowLaunchAtLogin',
   'workflowRunInBackground',
+  'voicePttShortcut',
 ])
 
 function pickPortableCloudSettings(updates: Partial<CoworkSettings>) {

@@ -20,6 +20,8 @@ import {
 } from './chat-input-utils'
 import { useChatRuntimeSelection, useComposerExternalEvents, useMentionableAgents, useReasoningVariantSelection } from './useChatInputRuntime'
 import { usePromptHistory } from './usePromptHistory'
+import { useVoicePtt } from '../../hooks/useVoicePtt'
+import { useVoiceConversation } from '../../hooks/useVoiceConversation'
 
 function describeComposerError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -77,6 +79,8 @@ function readKeyboardHintsDismissed() {
 
 export function ChatInput() {
   const [input, setInput] = useState('')
+  const inputRef = useRef(input)
+  inputRef.current = input
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [submitInFlight, setSubmitInFlight] = useState(false)
@@ -192,6 +196,46 @@ export function ChatInput() {
     element.style.height = 'auto'
     element.style.height = `${Math.min(element.scrollHeight, getComposerTextareaMaxHeight(element))}px`
   }, [])
+
+  const voiceConversation = useVoiceConversation({
+    openCodeSessionId: currentSessionId,
+    onPrompt: async (text) => {
+      if (!currentSessionId) throw new Error('No active session for voice conversation.')
+      if (!workspaceSupport.flags.canPrompt) {
+        throw new Error(workspaceSupport.flags.reasons.prompt || 'Prompting is disabled.')
+      }
+      const promptAgent = sessionPrimaryAgent || agentMode
+      const promptOptions = runtimeControlsManaged
+        ? workspaceOptions
+        : { ...(reasoningSelection.promptOptions || {}), ...(workspaceOptions || {}) }
+      if (Object.keys(promptOptions || {}).length > 0) {
+        await window.coworkApi.session.prompt(currentSessionId, text, undefined, promptAgent, promptOptions)
+      } else {
+        await window.coworkApi.session.prompt(currentSessionId, text, undefined, promptAgent)
+      }
+    },
+    onAbort: async () => {
+      if (!currentSessionId) return
+      if (workspaceOptions) {
+        await window.coworkApi.session.abort(currentSessionId, workspaceOptions)
+      } else {
+        await window.coworkApi.session.abort(currentSessionId)
+      }
+    },
+    onError: (message) => addGlobalError(message),
+  })
+
+  const voice = useVoicePtt({
+    openCodeSessionId: currentSessionId,
+    getComposerText: () => inputRef.current,
+    setComposerText: (text) => {
+      setInput(text)
+      requestAnimationFrame(() => resizeComposerTextarea())
+    },
+    onError: (message) => addGlobalError(message),
+    // Conversation mode claims the desktop hotkey when enabled.
+    hotkeyEnabled: !voiceConversation.conversationMode,
+  })
 
   const addFiles = async (files: FileList | File[]) => {
     if (!workspaceSupport.flags.canAttachFiles) {
@@ -383,6 +427,12 @@ export function ChatInput() {
         setInlinePicker(null)
         return
       }
+    }
+
+    if (e.key === 'Escape' && voice.isActive) {
+      e.preventDefault()
+      void voice.cancel()
+      return
     }
 
     if (e.key === 'Escape' && isGenerating) {
@@ -593,6 +643,8 @@ export function ChatInput() {
             modelControlsManaged={runtimeControlsManaged}
             modelControlsReason={workspaceSupport.flags.reasons.machineRuntimeConfig}
             reasoningControlsManaged={runtimeControlsManaged}
+            voice={voice}
+            voiceConversation={voiceConversation}
             onAddFiles={addFiles}
             onToggleModelMenu={() => {
               if (runtimeControlsManaged) return

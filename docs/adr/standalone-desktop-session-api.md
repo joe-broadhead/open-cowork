@@ -9,7 +9,8 @@ description: Product purity freeze — connection-only Desktop UX until a Deskto
 | --- | --- |
 | Status | **Accepted (deferred implementation)** |
 | Date | 2026-07-24 |
-| Linear | JOE-1042, JOE-1044 |
+| Linear | JOE-1042, JOE-1044, JOE-1091 |
+| Post-purity residual | [standalone-session-api-residual-joe-1091.md](../runbooks/standalone-session-api-residual-joe-1091.md) (R-1042) |
 
 ## Context
 
@@ -30,8 +31,10 @@ workspace when those APIs do not exist.
 
 ## Implementation residual
 
-Full API work is **out of purity epic scope**. Tracked residual **R-1042**.
-Until implemented, UI must keep connection-only copy (JOE-1044).
+Full API work is **out of purity epic scope** and remains deferred after
+post-purity wave JOE-1091. Tracked residual **R-1042**.
+Until implemented, UI must keep connection-only copy (JOE-1044) and must not
+flip the support matrix to `supported` without contract tests on the real path.
 
 ## Consequences
 
