@@ -72,7 +72,7 @@ jobs:
         run: node products/gateway/scripts/standalone-smoke.mjs "$(ls artifacts/gateway/cowork-gateway-*.tgz | head -1)"
 
       - name: Upload pack artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cowork-gateway-pack
           path: artifacts/gateway/*.tgz
