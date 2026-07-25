@@ -99,6 +99,32 @@ Rules:
 - Renderer-owned continuous listening without PTT policy
 - Replacing chat text input as the only interaction mode
 
+## Security audit (JOE-1111)
+
+**Greppable claim:** private voice is **private-by-construction** on the default Desktop Local path.
+
+| Control | Rule | Evidence |
+| --- | --- | --- |
+| Logs | Lengths + engine metadata only (`sttLogMeta` / `ttsLogMeta`) — **never** transcript text or PCM | `apps/desktop/src/main/voice-stt.ts`, `voice-security.ts`, `tests/voice-security.test.ts` |
+| Network STT | Aurum `--provider local` only; OpenRouter key cleared on spawn; model missing → fail-closed when local_only | `voice-stt.ts`, security tests |
+| Network TTS | OS system speech sibling; no cloud TTS vendor on default path | `voice-tts.ts` |
+| IPC | Status / partial / final **text** / vad / assets — **no** raw samples | `voice-handlers.ts`, preload channel list |
+| Renderer mic | `getUserMedia` / session `media` denied when captureMode is `voice_host` | `voice-permission-policy.ts` |
+| Support matrix | Cloud Web / non-local: all `voice.*` APIs `not_supported` | `browserCloudWorkspaceSupport`, workspace support store |
+| Model download | Default off; `OPEN_COWORK_AURUM_ALLOW_DOWNLOAD=1` = **file weights only**, never audio upload | `voice-assets.ts` |
+
+### Residual risks (accepted)
+
+| ID | Risk | Mitigation |
+| --- | --- | --- |
+| R-VOICE-01 | Partial/final IPC carries transcript text (product UX) | No audio on IPC; do not ship adoption telemetry of free-text transcripts |
+| R-VOICE-02 | Short-lived temp WAV for Aurum CLI | OS temp dir; `rmSync` in `finally` after each transcribe |
+| R-VOICE-03 | OS TTS may write temp AIFF/WAV for playback | Local host only; cancel best-effort cleanup |
+| R-VOICE-04 | Opt-in model download env | Default off; Settings copy; never audio |
+| R-VOICE-05 | `getLastTranscript()` host memory for tests | Not on preload/IPC |
+
+Automated gates: `tests/voice-security.test.ts` (plus existing STT/TTS/scaffold tests).
+
 ## Consequences
 
 - Shared package grows `voice` IPC types and `voice.*` workspace support keys.
