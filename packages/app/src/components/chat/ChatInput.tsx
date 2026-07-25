@@ -21,6 +21,7 @@ import {
 import { useChatRuntimeSelection, useComposerExternalEvents, useMentionableAgents, useReasoningVariantSelection } from './useChatInputRuntime'
 import { usePromptHistory } from './usePromptHistory'
 import { useVoicePtt } from '../../hooks/useVoicePtt'
+import { useVoiceConversation } from '../../hooks/useVoiceConversation'
 
 function describeComposerError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -196,6 +197,34 @@ export function ChatInput() {
     element.style.height = `${Math.min(element.scrollHeight, getComposerTextareaMaxHeight(element))}px`
   }, [])
 
+  const voiceConversation = useVoiceConversation({
+    openCodeSessionId: currentSessionId,
+    onPrompt: async (text) => {
+      if (!currentSessionId) throw new Error('No active session for voice conversation.')
+      if (!workspaceSupport.flags.canPrompt) {
+        throw new Error(workspaceSupport.flags.reasons.prompt || 'Prompting is disabled.')
+      }
+      const promptAgent = sessionPrimaryAgent || agentMode
+      const promptOptions = runtimeControlsManaged
+        ? workspaceOptions
+        : { ...(reasoningSelection.promptOptions || {}), ...(workspaceOptions || {}) }
+      if (Object.keys(promptOptions || {}).length > 0) {
+        await window.coworkApi.session.prompt(currentSessionId, text, undefined, promptAgent, promptOptions)
+      } else {
+        await window.coworkApi.session.prompt(currentSessionId, text, undefined, promptAgent)
+      }
+    },
+    onAbort: async () => {
+      if (!currentSessionId) return
+      if (workspaceOptions) {
+        await window.coworkApi.session.abort(currentSessionId, workspaceOptions)
+      } else {
+        await window.coworkApi.session.abort(currentSessionId)
+      }
+    },
+    onError: (message) => addGlobalError(message),
+  })
+
   const voice = useVoicePtt({
     openCodeSessionId: currentSessionId,
     getComposerText: () => inputRef.current,
@@ -204,6 +233,8 @@ export function ChatInput() {
       requestAnimationFrame(() => resizeComposerTextarea())
     },
     onError: (message) => addGlobalError(message),
+    // Conversation mode claims the desktop hotkey when enabled.
+    hotkeyEnabled: !voiceConversation.conversationMode,
   })
 
   const addFiles = async (files: FileList | File[]) => {
@@ -613,6 +644,7 @@ export function ChatInput() {
             modelControlsReason={workspaceSupport.flags.reasons.machineRuntimeConfig}
             reasoningControlsManaged={runtimeControlsManaged}
             voice={voice}
+            voiceConversation={voiceConversation}
             onAddFiles={addFiles}
             onToggleModelMenu={() => {
               if (runtimeControlsManaged) return
