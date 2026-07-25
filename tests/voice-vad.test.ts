@@ -221,7 +221,7 @@ test('voice host barge-in during TTS cancels speak and emits vad barge_in', asyn
     async listVoices(): Promise<VoiceTtsVoice[]> {
       return [{ id: 'fake', name: 'Fake', language: 'en' }]
     }
-    async synthesize(text: string, _options?: VoiceTtsSpeakOptions): Promise<VoiceTtsSynthResult> {
+    async synthesize(_text: string, _options?: VoiceTtsSpeakOptions): Promise<VoiceTtsSynthResult> {
       return {
         path: '/tmp/unused-tts.marker',
         format: 'marker',

@@ -42,7 +42,6 @@ import {
   isBargeInSpeech,
   tickVad,
   type VoiceVadPolicy,
-  type VoiceVadState,
 } from './voice-vad.ts'
 import { log } from '@open-cowork/shared/node'
 
