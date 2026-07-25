@@ -116,4 +116,41 @@ describe('voice conversation machine', () => {
     expect(voiceConversationChromePhase('streaming')).toBe('thinking')
     expect(voiceConversationChromePhase('finalizing')).toBe('transcribing')
   })
+
+  it('continuous mode re-arms listening after SPEAK_DONE', () => {
+    let state = createInitialVoiceConversationState()
+    state = reduceVoiceConversation(state, { type: 'SET_CONTINUOUS', continuous: true }).state
+    expect(state.continuous).toBe(true)
+
+    state = reduceVoiceConversation(state, { type: 'START_LISTEN' }).state
+    state = reduceVoiceConversation(state, { type: 'STOP_LISTEN' }).state
+    state = reduceVoiceConversation(state, { type: 'STT_FINAL', text: 'hi' }).state
+    state = reduceVoiceConversation(state, { type: 'PROMPT_SENT' }).state
+    state = reduceVoiceConversation(state, { type: 'STREAM_DONE', text: 'reply' }).state
+    expect(state.phase).toBe('speaking')
+
+    const done = reduceVoiceConversation(state, { type: 'SPEAK_DONE' })
+    expect(done.state.phase).toBe('listening')
+    expect(done.effects).toEqual([{ type: 'start_listen' }])
+  })
+
+  it('HOST_AUTO_FINALIZE moves to finalizing without stop_listen', () => {
+    let state = createInitialVoiceConversationState()
+    state = reduceVoiceConversation(state, { type: 'START_LISTEN' }).state
+    const next = reduceVoiceConversation(state, { type: 'HOST_AUTO_FINALIZE' })
+    expect(next.state.phase).toBe('finalizing')
+    expect(next.effects).toEqual([])
+  })
+
+  it('non-continuous SPEAK_DONE returns idle without re-listen', () => {
+    let state = createInitialVoiceConversationState()
+    state = reduceVoiceConversation(state, { type: 'START_LISTEN' }).state
+    state = reduceVoiceConversation(state, { type: 'STOP_LISTEN' }).state
+    state = reduceVoiceConversation(state, { type: 'STT_FINAL', text: 'hi' }).state
+    state = reduceVoiceConversation(state, { type: 'PROMPT_SENT' }).state
+    state = reduceVoiceConversation(state, { type: 'STREAM_DONE', text: 'reply' }).state
+    const done = reduceVoiceConversation(state, { type: 'SPEAK_DONE' })
+    expect(done.state.phase).toBe('idle')
+    expect(done.effects).toEqual([])
+  })
 })

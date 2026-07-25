@@ -76,6 +76,10 @@ export function VoicePttButton({
           ? t('chat.voice.startConversation', 'Talk to agent (private voice)')
           : t('chat.voice.startListening', 'Dictate with private voice')
 
+  const continuousOn = Boolean(conversation?.continuousVad)
+  const privacyListening = Boolean(conversation?.privacyListening)
+  const showPrivacyDot = usingConversation && continuousOn && (listening || privacyListening)
+
   return (
     <span className="inline-flex items-center gap-1.5">
       {conversation?.visible ? (
@@ -91,6 +95,35 @@ export function VoicePttButton({
           data-testid="voice-conversation-mode"
         />
       ) : null}
+      {conversation?.visible && conversation.conversationMode ? (
+        <IconButton
+          icon="activity"
+          label={continuousOn
+            ? t('chat.voice.continuousVadOn', 'Continuous listen on — mic re-arms after replies (energy VAD)')
+            : t('chat.voice.continuousVadOff', 'Continuous listen off — push-to-talk turns only')}
+          onClick={() => conversation.setContinuousVad(!conversation.continuousVad)}
+          size={size}
+          variant={continuousOn ? 'secondary' : 'ghost'}
+          aria-pressed={continuousOn}
+          data-testid="voice-continuous-vad"
+        />
+      ) : null}
+      {showPrivacyDot ? (
+        <span
+          className="inline-flex items-center gap-1 text-xs text-text-muted"
+          title={t('chat.voice.privacyListeningHint', 'Microphone is armed for private voice (local only)')}
+          data-testid="voice-privacy-listening"
+          aria-live="polite"
+        >
+          <span
+            className="inline-block size-1.5 rounded-full bg-red"
+            aria-hidden
+          />
+          <span className="sr-only">
+            {t('chat.voice.privacyListening', 'Mic listening')}
+          </span>
+        </span>
+      ) : null}
       {chrome.statusLabel ? (
         <span
           className="text-xs text-text-muted tabular-nums"
@@ -102,7 +135,7 @@ export function VoicePttButton({
         </span>
       ) : null}
       <IconButton
-        icon={speaking ? 'volume' : 'mic'}
+        icon={speaking ? 'volume' : listening && continuousOn ? 'activity' : 'mic'}
         label={label}
         onClick={() => void chrome.toggle()}
         disabled={!chrome.enabled && !listening && !speaking}

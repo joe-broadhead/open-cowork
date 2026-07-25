@@ -36,6 +36,11 @@ export type VoiceConversationController = {
   isActive: boolean
   conversationMode: boolean
   setConversationMode: (on: boolean) => void
+  /** Opt-in continuous VAD (JOE-1104). Default false; never silent always-on. */
+  continuousVad: boolean
+  setContinuousVad: (on: boolean) => void
+  /** Host reports user speech / mic armed (privacy indicator). */
+  privacyListening: boolean
   toggle: () => Promise<void>
   cancel: () => Promise<void>
 }
@@ -52,10 +57,14 @@ export function useVoiceConversation(options: {
   const [features, setFeatures] = useState<DesktopFeatureFlags | undefined>(undefined)
   const [hostReady, setHostReady] = useState(false)
   const [hostDetail, setHostDetail] = useState<string | null>(null)
-  const [conversationMode, setConversationMode] = useState(false)
+  const [conversationMode, setConversationModeState] = useState(false)
+  const [continuousVad, setContinuousVadState] = useState(false)
+  const [privacyListening, setPrivacyListening] = useState(false)
   const [machine, setMachine] = useState<VoiceConversationState>(createInitialVoiceConversationState)
   const machineRef = useRef(machine)
   machineRef.current = machine
+  const continuousVadRef = useRef(false)
+  continuousVadRef.current = continuousVad
   const voiceSessionIdRef = useRef<string | null>(null)
   const busyRef = useRef(false)
   const awaitingFinalRef = useRef(false)
@@ -122,9 +131,14 @@ export function useVoiceConversation(options: {
               mode: 'conversation',
               openCodeSessionId: openCodeSessionIdRef.current || null,
               workspaceId: support.isLocal ? 'local' : support.workspaceId,
+              continuousVad: continuousVadRef.current === true,
             })
             voiceSessionIdRef.current = snapshot.id
-            awaitingFinalRef.current = false
+            awaitingFinalRef.current = continuousVadRef.current
+            // Manual PTT still sets awaitingFinal on stop_listen; continuous
+            // finalizes via host VAD so we arm awaitingFinal immediately.
+            if (continuousVadRef.current) awaitingFinalRef.current = true
+            setPrivacyListening(true)
             break
           }
           case 'stop_listen': {
@@ -133,6 +147,7 @@ export function useVoiceConversation(options: {
             if (window.coworkApi?.voice && id) {
               await window.coworkApi.voice.stopSession(id)
             }
+            setPrivacyListening(false)
             break
           }
           case 'cancel_listen': {
@@ -142,6 +157,7 @@ export function useVoiceConversation(options: {
             if (window.coworkApi?.voice) {
               await window.coworkApi.voice.cancel(id)
             }
+            setPrivacyListening(false)
             break
           }
           case 'prompt':
@@ -206,17 +222,48 @@ export function useVoiceConversation(options: {
         setHostDetail(event.status.reason || event.status.stt.detail || event.status.tts.detail || null)
       }
       if (event.type === 'final') {
-        if (!awaitingFinalRef.current) return
-        if (voiceSessionIdRef.current && event.event.sessionId !== voiceSessionIdRef.current) return
+        // Continuous VAD may auto-stop without an explicit stop_listen; accept finals
+        // while listening or finalizing when session matches.
+        const phase = machineRef.current.phase
+        const sessionMatch = !voiceSessionIdRef.current || event.event.sessionId === voiceSessionIdRef.current
+        if (!sessionMatch) return
+        if (!awaitingFinalRef.current && phase !== 'listening' && phase !== 'finalizing') return
         awaitingFinalRef.current = false
         voiceSessionIdRef.current = null
+        setPrivacyListening(false)
+        if (phase === 'listening') {
+          // Host auto-finalized: move through finalizing virtually via STT_FINAL.
+        }
         const text = event.event.text?.trim() || ''
         dispatchRef.current({ type: 'STT_FINAL', text })
+      }
+      if (event.type === 'vad') {
+        if (event.event.reason === 'armed' || event.event.speechActive) {
+          setPrivacyListening(true)
+        }
+        if (event.event.reason === 'disarmed') {
+          setPrivacyListening(false)
+        }
+        if (event.event.reason === 'barge_in') {
+          // Host cancelled TTS; treat as barge-in so we abort gen + re-listen.
+          if (machineRef.current.phase === 'speaking' || machineRef.current.phase === 'streaming' || machineRef.current.phase === 'prompting') {
+            dispatchRef.current({ type: 'BARGE_IN' })
+          }
+        }
+        if (event.event.reason === 'speech_end' || event.event.reason === 'timeout') {
+          // Host already owns stop/finalize for continuous VAD — chrome only.
+          if (machineRef.current.phase === 'listening') {
+            awaitingFinalRef.current = true
+            setPrivacyListening(false)
+            dispatchRef.current({ type: 'HOST_AUTO_FINALIZE' })
+          }
+        }
       }
       if (event.type === 'error') {
         if (machineRef.current.phase === 'listening' || machineRef.current.phase === 'finalizing') {
           awaitingFinalRef.current = false
           voiceSessionIdRef.current = null
+          setPrivacyListening(false)
           dispatchRef.current({ type: 'STT_ERROR', message: event.message || 'Voice failed' })
         }
       }
@@ -322,6 +369,22 @@ export function useVoiceConversation(options: {
     })
   }, [visible, conversationMode, toggle])
 
+  const setConversationMode = useCallback((on: boolean) => {
+    setConversationModeState(on)
+    if (!on) {
+      setContinuousVadState(false)
+      dispatch({ type: 'SET_CONTINUOUS', continuous: false })
+      if (machineRef.current.phase !== 'idle') dispatch({ type: 'CANCEL' })
+    }
+  }, [dispatch])
+
+  const setContinuousVad = useCallback((on: boolean) => {
+    // Continuous requires conversation mode; never silent always-on alone.
+    if (on && !conversationMode) setConversationModeState(true)
+    setContinuousVadState(on)
+    dispatch({ type: 'SET_CONTINUOUS', continuous: on })
+  }, [conversationMode, dispatch])
+
   return {
     visible,
     enabled: enabled || isActive,
@@ -332,10 +395,15 @@ export function useVoiceConversation(options: {
     chromePhase: voiceConversationChromePhase(phase),
     statusLabel: phase === 'error'
       ? (machine.lastError || 'Voice error')
-      : voiceConversationStatusLabel(phase),
+      : continuousVad && phase === 'listening'
+        ? (privacyListening ? 'Listening… (continuous)' : 'Listening…')
+        : voiceConversationStatusLabel(phase),
     isActive,
     conversationMode,
     setConversationMode,
+    continuousVad,
+    setContinuousVad,
+    privacyListening: privacyListening || phase === 'listening',
     toggle,
     cancel,
   }

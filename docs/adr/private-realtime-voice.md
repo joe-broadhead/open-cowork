@@ -9,7 +9,7 @@ description: On-machine STT/TTS for Open Cowork Desktop Local; Aurum STT, siblin
 | --- | --- |
 | Status | **Accepted** |
 | Date | 2026-07-24 |
-| Linear | [JOE-1096](https://linear.app/joe-broadhead/issue/JOE-1096) epic; V0 [JOE-1099](https://linear.app/joe-broadhead/issue/JOE-1099) |
+| Linear | [JOE-1096](https://linear.app/joe-broadhead/issue/JOE-1096) epic; continuous VAD [JOE-1104](https://linear.app/joe-broadhead/issue/JOE-1104) |
 | Milestone | Private Realtime Voice |
 
 ## Context
@@ -70,7 +70,8 @@ Rules:
 9. **PTT hotkey (JOE-1110):** Default accelerator `CmdOrCtrl+Shift+Space` (Edit menu “Toggle Voice Dictation”). Scope is **app-focused** only — not OS-wide Accessibility paste into other apps. Settings → Privacy shows a configurable Electron accelerator when `features.voice` is on; menu bar uses the default until process restart; in-app key matching uses the saved value after Save. Avoid colliding with the command palette (`CmdOrCtrl+Shift+P`).
 10. **Local TTS (JOE-1108):** Sibling of Aurum STT. **Decision:** MVP uses **OS system voices** (macOS `say` synthesize to temp AIFF + `afplay` playback). **Not** Aurum, **not** cloud TTS, **not** Chromium `speechSynthesis` in the renderer. Host owns synthesize + playback; IPC carries **text only** (`voice:tts:speak` / `cancel` / `voices`). Linux/Windows OS backends and Piper/neural packaging are explicit follow-ups (no download on default path). Claim boundary: “local OS speech when available” — not “neural private TTS GA”.
 11. **Read-aloud (JOE-1103):** Per-message **Read aloud** on completed assistant bubbles when `features.voice` + `voice.tts` authority + host TTS ready. **Default off** (no auto-read of streaming tokens). Streaming strategy: **wait for complete message** only (live placeholders have no actions). Stop cancels host playback immediately; optional skip drains the next queued item. Starting PTT calls `stopReadAloud` (barge-in prep). Markdown is stripped to plain text before speak.
-12. **Conversation controller (JOE-1107):** Pure state machine `Idle → Listening → FinalizingSTT → Prompting → Streaming → Speaking → Idle` drives **PTT-gated** voice turns when the user enables conversation mode (default **off**). Release mic → STT final → `session.prompt` → wait for generation idle → local TTS of the latest assistant message. **Cancel / barge-in** stops TTS, cancels listen, and aborts generation. VAD continuous listen is V4.2, not this slice.
+12. **Conversation controller (JOE-1107):** Pure state machine `Idle → Listening → FinalizingSTT → Prompting → Streaming → Speaking → Idle` drives **PTT-gated** voice turns when the user enables conversation mode (default **off**). Release mic → STT final → `session.prompt` → wait for generation idle → local TTS of the latest assistant message. **Cancel / barge-in** stops TTS, cancels listen, and aborts generation.
+13. **Continuous VAD + barge-in (JOE-1104):** Opt-in **energy VAD** (RMS gate, not neural) on the voice host when conversation mode **and** continuous listen are both on (default **off** — never silent always-on). Host auto-finalizes on end-of-utterance silence or max-listen timeout; UI shows a privacy mic-armed indicator. After `SPEAK_DONE` with continuous on, the machine re-arms listening. During TTS, host monitors mic energy and emits `vad` `barge_in` (cancels local speak; renderer aborts gen + re-listens). Still text/status/vad IPC only — no raw audio to the renderer.
 
 ### 4. Workspace support APIs
 
