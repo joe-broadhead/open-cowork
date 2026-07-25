@@ -6,6 +6,7 @@ import {
   NEW_THREAD_SHORTCUT,
   SEARCH_THREADS_SHORTCUT,
   SETTINGS_SHORTCUT,
+  VOICE_PTT_SHORTCUT,
 } from '@open-cowork/shared'
 
 function toGithubIssuesUrl(helpUrl: string): string | null {
@@ -74,6 +75,12 @@ export function createApplicationMenuTemplate(options: {
         { role: 'selectAll' },
         { type: 'separator' },
         { label: 'Search Threads', accelerator: SEARCH_THREADS_SHORTCUT, click: () => getMainWindow()?.webContents.send('action', 'search') },
+        { type: 'separator' },
+        {
+          label: 'Toggle Voice Dictation',
+          accelerator: VOICE_PTT_SHORTCUT,
+          click: () => getMainWindow()?.webContents.send('action', 'voice-ptt-toggle'),
+        },
       ],
     },
     {

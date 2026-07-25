@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   SMALL_MODEL_USE_MAIN,
+  VOICE_PTT_SHORTCUT,
   type AgentColor,
   type AppSettings,
   type EffectiveAppSettings,
@@ -150,7 +151,22 @@ function createDefaults(): AppSettings {
     workflowDesktopNotifications: true,
     workflowQuietHoursStart: '22:00',
     workflowQuietHoursEnd: '07:00',
+    voicePttShortcut: VOICE_PTT_SHORTCUT,
   }
+}
+
+function normalizeVoicePttShortcut(value: unknown): string | undefined {
+  if (value === null) return VOICE_PTT_SHORTCUT
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return VOICE_PTT_SHORTCUT
+  if (Buffer.byteLength(trimmed, 'utf8') > 64) return undefined
+  // Electron accelerator subset: Modifier(+Modifier)*+Key
+  if (!/^(?:(?:CmdOrCtrl|CommandOrControl|Command|Cmd|Control|Ctrl|Alt|Option|Shift|Super|Meta)\+)+[A-Za-z0-9]+$/.test(trimmed)
+    && !/^(?:(?:CmdOrCtrl|CommandOrControl|Command|Cmd|Control|Ctrl|Alt|Option|Shift|Super|Meta)\+)+Space$/.test(trimmed)) {
+    return undefined
+  }
+  return trimmed
 }
 
 function readSettingsSchemaVersion(raw: unknown) {
@@ -288,6 +304,8 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   const quietHoursEnd = normalizeQuietHours(settings.workflowQuietHoursEnd)
   if (quietHoursStart !== undefined) update.workflowQuietHoursStart = quietHoursStart
   if (quietHoursEnd !== undefined) update.workflowQuietHoursEnd = quietHoursEnd
+  const voicePttShortcut = normalizeVoicePttShortcut(settings.voicePttShortcut)
+  if (voicePttShortcut !== undefined) update.voicePttShortcut = voicePttShortcut
   return update
 }
 
@@ -345,6 +363,7 @@ function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
     workflowQuietHoursEnd: typeof raw?.workflowQuietHoursEnd === 'string' && raw.workflowQuietHoursEnd.trim()
       ? raw.workflowQuietHoursEnd.trim()
       : defaults.workflowQuietHoursEnd,
+    voicePttShortcut: normalizeVoicePttShortcut(raw?.voicePttShortcut) ?? defaults.voicePttShortcut,
   }
 
   return next

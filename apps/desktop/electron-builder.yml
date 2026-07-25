@@ -86,6 +86,12 @@ extraResources:
     filter:
       - "dist/**/*"
       - "package.json"
+  # Optional private voice sidecars (JOE-1106). README always ships; operators may
+  # drop `aurum` / `ffmpeg` binaries next to it. CI does not pre-bundle weights.
+  - from: resources/voice
+    to: voice
+    filter:
+      - "**/*"
 
 asar: true
 asarUnpack:

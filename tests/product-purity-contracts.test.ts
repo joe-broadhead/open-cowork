@@ -123,6 +123,68 @@ test('product purity: final-wave docs and residual register exist', () => {
   const residual = readFileSync(join(root, 'docs/product-purity-residual-risks.md'), 'utf8')
   assert.match(residual, /P0 residuals:\*\* none/)
   assert.match(residual, /R-1042/)
+  assert.match(residual, /R-1094/)
+})
+
+test('product purity: post-purity wave JOE-1089 evidence artifacts exist', () => {
+  for (const rel of [
+    'docs/runbooks/product-purity-dogfood-evidence-joe-1092.md',
+    'docs/samples/pure-release-notes-claim-freeze.md',
+    'docs/runbooks/cloud-sync-dogfood-residual-joe-1094.md',
+    'docs/runbooks/standalone-session-api-residual-joe-1091.md',
+  ]) {
+    const text = readFileSync(join(root, rel), 'utf8')
+    assert.ok(text.length > 200, `${rel} should be non-empty evidence`)
+  }
+
+  const dogfood = readFileSync(
+    join(root, 'docs/runbooks/product-purity-dogfood-evidence-joe-1092.md'),
+    'utf8',
+  )
+  assert.match(dogfood, /JOE-1092/)
+  assert.match(dogfood, /pass/i)
+  assert.match(dogfood, /blocked/i)
+
+  const claimFreeze = readFileSync(
+    join(root, 'docs/samples/pure-release-notes-claim-freeze.md'),
+    'utf8',
+  )
+  assert.match(claimFreeze, /Forbidden claims/i)
+  assert.match(claimFreeze, /enterprise-ready/i)
+  assert.match(claimFreeze, /Knowledge ≠ Wiki|Knowledge = Wiki/i)
+  assert.match(claimFreeze, /Standalone/)
+  assert.match(claimFreeze, /local-self-host-beta/)
+  assert.doesNotMatch(claimFreeze, /We are enterprise-ready/i)
+
+  const matrix = readFileSync(join(root, 'docs/enterprise-readiness-matrix.md'), 'utf8')
+  assert.match(matrix, /Owner/)
+  assert.match(matrix, /Next evidence artifact/)
+  assert.match(matrix, /Fail-closed claim wording/)
+  assert.match(matrix, /JOE-1093/)
+  // Required rows that are not fully proven must not be marked bare `proven` without qualifier caveats in the table body.
+  assert.match(matrix, /partial/)
+  assert.match(matrix, /R-1094|cloud-sync-dogfood-residual/)
+
+  const cloudResidual = readFileSync(
+    join(root, 'docs/runbooks/cloud-sync-dogfood-residual-joe-1094.md'),
+    'utf8',
+  )
+  assert.match(cloudResidual, /not proven/i)
+  assert.match(cloudResidual, /R-1094/)
+  assert.doesNotMatch(cloudResidual, /sync promise is proven/i)
+
+  const standaloneResidual = readFileSync(
+    join(root, 'docs/runbooks/standalone-session-api-residual-joe-1091.md'),
+    'utf8',
+  )
+  assert.match(standaloneResidual, /deferred/i)
+  assert.match(standaloneResidual, /R-1042/)
+  assert.match(standaloneResidual, /connection/i)
+  assert.doesNotMatch(standaloneResidual, /API shipped\?\s*\*\*Yes\*\*/i)
+
+  const releaseChecklist = readFileSync(join(root, 'docs/release-checklist.md'), 'utf8')
+  assert.match(releaseChecklist, /pure-release-notes-claim-freeze/)
+  assert.match(releaseChecklist, /enterprise-readiness-matrix/)
 })
 
 test('product purity: Knowledge UI exports Knowledge* aliases (JOE-1034)', () => {
