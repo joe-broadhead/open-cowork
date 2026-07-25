@@ -208,40 +208,32 @@ describe('MessageBubble', () => {
     const user = userEvent.setup()
     const speak = vi.fn(async () => ({ phase: 'ready' }))
     const cancelSpeak = vi.fn(async () => ({ phase: 'ready' }))
-    installRendererTestCoworkApi({
-      app: {
-        config: vi.fn(async () => ({
-          branding: {
-            appId: 'com.opencowork.desktop',
-            name: 'Open Cowork',
-            dataDirName: 'Open Cowork',
-            helpUrl: 'https://github.com/joe-broadhead/open-cowork',
-          },
-          permissions: { bash: 'allow', fileWrite: 'allow', task: 'allow', web: 'allow', webSearch: true },
-          providers: { defaultProvider: null, defaultModel: null, available: [] },
-          auth: { mode: 'none', enabled: false },
-          agentStarterTemplates: [],
-          features: { voice: true },
-        })),
-      },
-      voice: {
-        status: vi.fn(async () => ({
-          enabled: true,
-          phase: 'ready',
-          captureMode: 'voice_host',
-          stt: { engine: 'aurum_local', ready: true },
-          tts: { engine: 'system_os', ready: true, detail: 'ok' },
-          permissions: { microphone: 'granted' },
-          reason: null,
-          sessionId: null,
-        })),
-        speak,
-        cancelSpeak,
-      },
-      on: {
-        voiceEvent: () => () => {},
-      },
-    })
+    installMessageApi()
+    const baseConfig = window.coworkApi.app.config as () => Promise<Record<string, unknown>>
+    window.coworkApi.app.config = vi.fn(async () => ({
+      ...(await baseConfig()),
+      features: { voice: true },
+    }))
+    // @ts-expect-error extend test double
+    window.coworkApi.voice = {
+      status: vi.fn(async () => ({
+        enabled: true,
+        phase: 'ready',
+        captureMode: 'voice_host',
+        stt: { engine: 'aurum_local', ready: true },
+        tts: { engine: 'system_os', ready: true, detail: 'ok' },
+        permissions: { microphone: 'granted' },
+        reason: null,
+        sessionId: null,
+      })),
+      speak,
+      cancelSpeak,
+    }
+    // @ts-expect-error extend test double
+    window.coworkApi.on = {
+      ...(window.coworkApi.on || {}),
+      voiceEvent: () => () => {},
+    }
 
     render(<MessageBubble message={{
       id: 'assistant-read',
