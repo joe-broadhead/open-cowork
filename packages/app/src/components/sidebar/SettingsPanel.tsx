@@ -275,10 +275,10 @@ function SettingsPrivacyPanel({
               placeholder={VOICE_PTT_SHORTCUT}
               aria-label={t('settings.privacy.voicePttShortcut', 'Push-to-talk shortcut')}
             />
-            <span className="text-[11px] leading-relaxed text-text-muted">
+            <span className="text-2xs leading-relaxed text-text-muted">
               {t(
                 'settings.privacy.voicePttShortcutHint',
-                'Electron accelerator form, e.g. CmdOrCtrl+Shift+Space. Menu bar uses the default until restart; in-app key matching uses this value after Save.',
+                'Electron accelerator form, e.g. CmdOrCtrl+Shift+Space. Saved for Desktop settings and docs; the Edit menu and in-app matcher use the default CmdOrCtrl+Shift+Space in this release.',
               )}
             </span>
           </label>

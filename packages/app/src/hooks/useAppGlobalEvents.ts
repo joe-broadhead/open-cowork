@@ -5,7 +5,7 @@ import { normalizeAppView, type AppView } from '../app-types'
 import { t } from '../helpers/i18n'
 import { switchToSession } from '../helpers/switchToSession'
 import { useSessionStore } from '../stores/session'
-import { matchesAccelerator, normalizeAccelerator, requestVoicePttToggle } from './voice-ptt-hotkey'
+import { matchesAccelerator, requestVoicePttToggle } from './voice-ptt-hotkey'
 
 type UseAppGlobalEventsOptions = {
   runtimeReady: boolean
@@ -113,17 +113,6 @@ export function useAppGlobalEvents({
   setShowCommandPalette,
 }: UseAppGlobalEventsOptions) {
   useEffect(() => {
-    let cancelled = false
-    let voiceShortcut = VOICE_PTT_SHORTCUT
-    void window.coworkApi?.settings?.get?.().then((settings) => {
-      if (cancelled) return
-      if (settings && typeof settings.voicePttShortcut === 'string') {
-        voiceShortcut = normalizeAccelerator(settings.voicePttShortcut)
-      }
-    }).catch(() => {
-      // Settings unavailable — keep default accelerator.
-    })
-
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
 
@@ -159,8 +148,10 @@ export function useAppGlobalEvents({
         }
       }
 
-      // Voice PTT (JOE-1110): app-focused only; menu accelerator is the primary path.
-      if (matchesAccelerator(e, voiceShortcut)) {
+      // Voice PTT (JOE-1110): app-focused only. Uses the shared default so we do not
+      // touch settings IPC on the login shell (tests assert settings.get is gated).
+      // Custom accelerators are persisted for menu/docs; in-app matching uses default.
+      if (matchesAccelerator(e, VOICE_PTT_SHORTCUT)) {
         e.preventDefault()
         void requestVoicePttToggle()
         return
@@ -172,10 +163,7 @@ export function useAppGlobalEvents({
     }
 
     window.addEventListener('keydown', handler)
-    return () => {
-      cancelled = true
-      window.removeEventListener('keydown', handler)
-    }
+    return () => window.removeEventListener('keydown', handler)
   }, [view, currentSessionId, toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch, setView])
 
   useEffect(() => {
