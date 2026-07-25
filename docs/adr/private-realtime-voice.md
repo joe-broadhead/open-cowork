@@ -9,7 +9,7 @@ description: On-machine STT/TTS for Open Cowork Desktop Local; Aurum STT, siblin
 | --- | --- |
 | Status | **Accepted** |
 | Date | 2026-07-24 |
-| Linear | [JOE-1096](https://linear.app/joe-broadhead/issue/JOE-1096) epic; V0 [JOE-1099](https://linear.app/joe-broadhead/issue/JOE-1099) |
+| Linear | [JOE-1096](https://linear.app/joe-broadhead/issue/JOE-1096) epic; continuous VAD [JOE-1104](https://linear.app/joe-broadhead/issue/JOE-1104) |
 | Milestone | Private Realtime Voice |
 
 ## Context
@@ -40,19 +40,19 @@ Open Cowork already removed fake Settings “voice replies” teasers (product p
 | Role | Owner | Notes |
 | --- | --- | --- |
 | **STT** | **Aurum** (`local_only` / on-device) | PCM in → text out; no API key by default |
-| **TTS** | **Sibling / separate engine** | **Not Aurum**. Aurum is STT-first; do not stretch it into synthesis |
+| **TTS** | **Sibling / separate engine** | **Not Aurum**. MVP = **OS system speech** (`system_os`, macOS `say`+`afplay`); Piper/neural sidecar deferred |
 | Orchestration | Open Cowork **voice host** (Electron main / native side) | Outside Chromium renderer |
 
 ### 3. Architecture boundary
 
 ```text
 Renderer (UI only)
-  │  IPC: voice:status | voice:session:* | voice:partial | voice:final
+  │  IPC: voice:status | voice:session:* | voice:tts:* | voice:partial | voice:final
   ▼
 Voice host (main / native — never Node in renderer)
   │  mic capture (OS APIs)
   │  STT via Aurum local_only
-  │  TTS via sibling engine
+  │  TTS via sibling engine (OS system speech MVP)
   ▼
 OpenCode session prompt / stream (existing session path)
 ```
@@ -66,6 +66,15 @@ Rules:
 5. **Capture (JOE-1097):** host accumulates mono **16 kHz f32** PCM in main (`VoicePcmBuffer`). Default backend is **ffmpeg** when available; tests inject `FakeVoiceCapture`. PCM is cleared on stop/cancel and is never sent to the renderer.
 6. **STT (JOE-1101):** on release/stop, host runs **Aurum** with **local provider only** (`--provider local`, cleanup via rules). Default model `tiny-q5_1`. **local_only** fail-closed unless `OPEN_COWORK_AURUM_ALLOW_DOWNLOAD=1`. OpenRouter/cloud ASR is never on the default path. Final text is emitted as a `voice:event` final payload (text only).
 7. **PTT UI (JOE-1105):** Chat and Home composers show a mic control when `features.voice` is on **and** the workspace support matrix allows `voice.capture` + `voice.stt` (Desktop Local). **Click-to-toggle** is the shipped interaction (start → Listening → click again → Transcribing → inject text into the composer). Control is hidden on Cloud Web / unsupported authorities.
+8. **Partials during PTT (JOE-1102):** While listening, the host runs a **PartialClock** (min ~1s audio, ~15s rolling window, ~1.2s interval, RMS energy gate) and emits `voice:event` **partial** payloads (text only). This is **not** a continuous Whisper stream — the host decides when to call STT. The composer snapshots a **baseline** at PTT start; partials/finals replace the dictation segment after the baseline (cancel/error restores baseline).
+9. **PTT hotkey (JOE-1110):** Default accelerator `CmdOrCtrl+Shift+Space` (Edit menu “Toggle Voice Dictation”). Scope is **app-focused** only — not OS-wide Accessibility paste into other apps. Settings → Privacy shows a configurable Electron accelerator when `features.voice` is on; menu bar uses the default until process restart; in-app key matching uses the saved value after Save. Avoid colliding with the command palette (`CmdOrCtrl+Shift+P`).
+10. **Local TTS (JOE-1108):** Sibling of Aurum STT. **Decision:** MVP uses **OS system voices** (macOS `say` synthesize to temp AIFF + `afplay` playback). **Not** Aurum, **not** cloud TTS, **not** Chromium `speechSynthesis` in the renderer. Host owns synthesize + playback; IPC carries **text only** (`voice:tts:speak` / `cancel` / `voices`). Linux/Windows OS backends and Piper/neural packaging are explicit follow-ups (no download on default path). Claim boundary: “local OS speech when available” — not “neural private TTS GA”.
+11. **Read-aloud (JOE-1103):** Per-message **Read aloud** on completed assistant bubbles when `features.voice` + `voice.tts` authority + host TTS ready. **Default off** (no auto-read of streaming tokens). Streaming strategy: **wait for complete message** only (live placeholders have no actions). Stop cancels host playback immediately; optional skip drains the next queued item. Starting PTT calls `stopReadAloud` (barge-in prep). Markdown is stripped to plain text before speak.
+12. **Conversation controller (JOE-1107):** Pure state machine `Idle → Listening → FinalizingSTT → Prompting → Streaming → Speaking → Idle` drives **PTT-gated** voice turns when the user enables conversation mode (default **off**). Release mic → STT final → `session.prompt` → wait for generation idle → local TTS of the latest assistant message. **Cancel / barge-in** stops TTS, cancels listen, and aborts generation.
+13. **Continuous VAD + barge-in (JOE-1104):** Opt-in **energy VAD** (RMS gate, not neural) on the voice host when conversation mode **and** continuous listen are both on (default **off** — never silent always-on). Host auto-finalizes on end-of-utterance silence or max-listen timeout; UI shows a privacy mic-armed indicator. After `SPEAK_DONE` with continuous on, the machine re-arms listening. During TTS, host monitors mic energy and emits `vad` `barge_in` (cancels local speak; renderer aborts gen + re-listens). Still text/status/vad IPC only — no raw audio to the renderer.
+14. **First-run assets (JOE-1109):** STT models are **local files** under OC `userData/voice/aurum` (or system Aurum cache). Default **local_only fail-closed** when missing — no silent network download. Integrity uses size floor + optional sibling `.sha256`. `OPEN_COWORK_AURUM_ALLOW_DOWNLOAD=1` is explicit operator opt-in for a **file** fetch residual (never audio/transcript upload). Settings → Privacy shows offline-ready status + **Ensure local model** (copy from system cache when present). TTS readiness remains OS speech probe.
+15. **Packaging (JOE-1106):** Optional sidecars under packaged `resources/voice/` (`aurum` / `ffmpeg`); resolution prefers env → packaged path → PATH. CI packages ship the folder + README **without** pre-bundled model weights or aurum-ffi dylibs (fail closed when missing). macOS **supported** when tools present; Windows/Linux **best-effort** with residual TTS backends. Codesign any drop-in binaries with the release pipeline.
+16. **Accessibility (JOE-1112):** Mic control exposes `aria-pressed` / `aria-busy`; phase chrome uses a single polite live region; disabled reasons render as a status region (permission denied / model missing / unsupported workspace), not a mute one-liner.
 
 ### 4. Workspace support APIs
 
@@ -91,6 +100,34 @@ Rules:
 - Shipping ZephyrFlow inside Open Cowork
 - Renderer-owned continuous listening without PTT policy
 - Replacing chat text input as the only interaction mode
+
+## Security audit (JOE-1111)
+
+**Greppable claim:** private voice is **private-by-construction** on the default Desktop Local path.
+
+| Control | Rule | Evidence |
+| --- | --- | --- |
+| Logs | Lengths + engine metadata only (`sttLogMeta` / `ttsLogMeta`) — **never** transcript text or PCM | `apps/desktop/src/main/voice-stt.ts`, `voice-security.ts`, `tests/voice-security.test.ts` |
+| Network STT | Aurum `--provider local` only; OpenRouter key cleared on spawn; model missing → fail-closed when local_only | `voice-stt.ts`, security tests |
+| Network TTS | OS system speech sibling; no cloud TTS vendor on default path | `voice-tts.ts` |
+| IPC | Status / partial / final **text** / vad / assets — **no** raw samples | `voice-handlers.ts`, preload channel list |
+| Renderer mic | `getUserMedia` / session `media` denied when captureMode is `voice_host` | `voice-permission-policy.ts` |
+| Support matrix | Cloud Web / non-local: all `voice.*` APIs `not_supported` | `browserCloudWorkspaceSupport`, workspace support store |
+| Model download | Default off; `OPEN_COWORK_AURUM_ALLOW_DOWNLOAD=1` = **file weights only**, never audio upload | `voice-assets.ts` |
+
+### Residual risks (accepted)
+
+| ID | Risk | Mitigation |
+| --- | --- | --- |
+| R-VOICE-01 | Partial/final IPC carries transcript text (product UX) | No audio on IPC; do not ship adoption telemetry of free-text transcripts |
+| R-VOICE-02 | Short-lived temp WAV for Aurum CLI | OS temp dir; `rmSync` in `finally` after each transcribe |
+| R-VOICE-03 | OS TTS may write temp AIFF/WAV for playback | Local host only; cancel best-effort cleanup |
+| R-VOICE-04 | Opt-in model download env | Default off; Settings copy; never audio |
+| R-VOICE-05 | `getLastTranscript()` host memory for tests | Not on preload/IPC |
+| R-VOICE-06 | Aurum/ffmpeg not pre-bundled in CI packages | Packaging README + fail-closed status; optional drop-in |
+| R-VOICE-07 | Windows/Linux OS TTS residual | Best-effort claim; unavailable status when tools missing |
+
+Automated gates: `tests/voice-security.test.ts`, `tests/voice-packaging.test.ts` (plus existing STT/TTS/scaffold tests). Dogfood: [voice-private-dogfood.md](../runbooks/voice-private-dogfood.md). Close-out: [voice-private-epic-closeout.md](../voice-private-epic-closeout.md).
 
 ## Consequences
 

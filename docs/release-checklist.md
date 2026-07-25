@@ -19,17 +19,21 @@ Reference workflows in the repository root:
 - [ ] `node products/wiki/scripts/standalone-smoke.mjs` green on the release candidate tarball
 - [ ] Desktop release notes do not claim Gateway/Wiki publish unless product workflows also ran
 
-## Product purity claim gate (JOE-1029)
+## Product purity claim gate (JOE-1029 / JOE-1089)
 
 Before publishing release notes or marketing copy, confirm against
-[Product purity register](product-purity-register.md):
+[Product purity register](product-purity-register.md) and the freeze sample
+[Pure release notes claim freeze](samples/pure-release-notes-claim-freeze.md):
 
+- [ ] Draft matches the claim-freeze sample’s allowed language (or stricter)
 - [ ] No unqualified “gateway” (must say Channel / Standalone / durable Gateway)
 - [ ] No “Always allow” / daily digest as shipping features unless implemented
-- [ ] Private voice (`features.voice`) not claimed shipping unless host + Aurum STT + PTT UI evidence is green ([ADR](adr/private-realtime-voice.md)); default remains off
-- [ ] No Standalone/Paired “full workspace chat ready” while support matrix is deferred
+- [ ] Private voice (`features.voice`) claims follow [claim freeze](runbooks/voice-private-dogfood.md#claim-freeze-allowed-vs-forbidden): Local Desktop opt-in only; no Cloud Web mic, no always-on without consent, no “fully offline package” without aurum + model; evidence via [epic close-out](voice-private-epic-closeout.md) / dogfood runbook; default remains **off**
+- [ ] No Standalone/Paired “full workspace chat ready” while support matrix is deferred ([JOE-1091 residual](runbooks/standalone-session-api-residual-joe-1091.md))
 - [ ] Knowledge ≠ Wiki; no default Desktop Wiki/Gateway MCP claims
 - [ ] Projects described as coordination board (not history facets) unless UI changes
+- [ ] No `enterprise-ready` unless every required row in [enterprise readiness matrix](enterprise-readiness-matrix.md) is `proven` with evidence
+- [ ] Cloud sync not claimed “proven” without live dogfood notes ([R-1094](runbooks/cloud-sync-dogfood-residual-joe-1094.md) until then)
 - [ ] Claim level below matches evidence table (do not skip tiers)
 
 ## Release Claim Levels

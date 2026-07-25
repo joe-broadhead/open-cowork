@@ -6,6 +6,7 @@ import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { Button, Dialog, IconButton, Tooltip } from '@open-cowork/ui'
 import { DiffViewer } from './DiffViewer'
+import { useVoiceReadAloud } from '../../hooks/useVoiceReadAloud'
 
 // Live-placeholder messages have no server-side anchor yet; action
 // controls appear only once the committed message id arrives.
@@ -27,6 +28,7 @@ export function MessageActions({
   const [busy, setBusy] = useState<'copy' | 'fork' | 'revert' | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false)
+  const readAloud = useVoiceReadAloud()
 
   if (!currentSessionId) return null
   if (isLivePlaceholderId(message.id)) return null
@@ -79,6 +81,8 @@ export function MessageActions({
 
   const isAssistant = message.role === 'assistant'
   const justify = placement === 'right' ? 'justify-end' : 'justify-start'
+  const speakingThis = readAloud.isSpeakingMessage(message.id)
+  const canReadAloud = isAssistant && readAloud.visible && message.content.trim().length > 0
 
   // Only offer "View diff" when the session has known file changes — mirrors
   // ChatThreadHeader's diff-entry rule so clicking it never just opens a modal
@@ -101,6 +105,39 @@ export function MessageActions({
             disabledReason={!message.content.trim() ? t('messageActions.noTextToCopy', 'No text to copy yet.') : null}
             size="sm"
           />
+          {canReadAloud ? (
+            <Tooltip
+              content={speakingThis
+                ? t('messageActions.stopReadAloud', 'Stop reading')
+                : t('messageActions.readAloud', 'Read aloud (private voice)')}
+            >
+              <IconButton
+                icon={speakingThis ? 'volume-x' : 'volume'}
+                onClick={() => readAloud.toggleMessage(message.id, message.content)}
+                disabled={busy !== null || (!readAloud.enabled && !speakingThis)}
+                label={speakingThis
+                  ? t('messageActions.stopReadAloud', 'Stop reading')
+                  : t('messageActions.readAloud', 'Read aloud (private voice)')}
+                disabledReason={!readAloud.enabled && !speakingThis ? readAloud.disabledReason : null}
+                size="sm"
+                variant={speakingThis ? 'primary' : 'ghost'}
+                aria-pressed={speakingThis}
+                data-testid="message-read-aloud"
+              />
+            </Tooltip>
+          ) : null}
+          {speakingThis && readAloud.state.queueLength > 0 ? (
+            <Tooltip content={t('messageActions.skipReadAloud', 'Skip to next')}>
+              <IconButton
+                icon="chevron-right"
+                onClick={() => void readAloud.skip()}
+                disabled={busy !== null}
+                label={t('messageActions.skipReadAloud', 'Skip to next')}
+                size="sm"
+                data-testid="message-read-aloud-skip"
+              />
+            </Tooltip>
+          ) : null}
           <Tooltip content={t('messageActions.branchHere', 'Branch here')}>
             <IconButton
               icon="git-fork"

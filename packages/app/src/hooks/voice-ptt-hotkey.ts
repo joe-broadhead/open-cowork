@@ -1,0 +1,82 @@
+/**
+ * Active PTT controller registry + accelerator matching (JOE-1110).
+ *
+ * Menu / global-action paths call requestVoicePttToggle(); the topmost
+ * registered composer handler runs. Scope is app-focused only — not OS-wide.
+ */
+import { VOICE_PTT_SHORTCUT } from '@open-cowork/shared'
+
+export type VoicePttToggleHandler = () => void | Promise<void>
+
+const handlers: VoicePttToggleHandler[] = []
+
+export function registerVoicePttToggleHandler(handler: VoicePttToggleHandler): () => void {
+  handlers.push(handler)
+  return () => {
+    const index = handlers.indexOf(handler)
+    if (index >= 0) handlers.splice(index, 1)
+  }
+}
+
+export async function requestVoicePttToggle(): Promise<boolean> {
+  const handler = handlers[handlers.length - 1]
+  if (!handler) return false
+  await handler()
+  return true
+}
+
+/** Normalize an Electron-style accelerator for comparison. */
+export function normalizeAccelerator(value: string | null | undefined): string {
+  const trimmed = (value || '').trim()
+  return (trimmed || VOICE_PTT_SHORTCUT).replace(/\s+/g, '')
+}
+
+/**
+ * Match a KeyboardEvent against an Electron accelerator like CmdOrCtrl+Shift+Space.
+ * Supports letter keys, Space, and Digit0-9. Intentionally small — not a full parser.
+ */
+export function matchesAccelerator(
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
+  accelerator: string,
+): boolean {
+  const parts = normalizeAccelerator(accelerator).split('+').filter(Boolean)
+  if (parts.length === 0) return false
+
+  let wantMetaOrCtrl = false
+  let wantAlt = false
+  let wantShift = false
+  let keyToken: string | null = null
+
+  for (const part of parts) {
+    const token = part.toLowerCase()
+    if (token === 'cmdorctrl' || token === 'commandorcontrol' || token === 'cmd' || token === 'command' || token === 'ctrl' || token === 'control' || token === 'super' || token === 'meta') {
+      wantMetaOrCtrl = true
+      continue
+    }
+    if (token === 'alt' || token === 'option') {
+      wantAlt = true
+      continue
+    }
+    if (token === 'shift') {
+      wantShift = true
+      continue
+    }
+    keyToken = token
+  }
+
+  if (!keyToken) return false
+
+  const hasMetaOrCtrl = event.metaKey || event.ctrlKey
+  if (wantMetaOrCtrl !== hasMetaOrCtrl) return false
+  if (wantAlt !== event.altKey) return false
+  if (wantShift !== event.shiftKey) return false
+
+  const eventKey = event.key.length === 1 ? event.key.toLowerCase() : event.key.toLowerCase()
+  if (keyToken === 'space') {
+    return eventKey === ' ' || eventKey === 'space' || event.code === 'Space'
+  }
+  if (keyToken.length === 1) {
+    return eventKey === keyToken
+  }
+  return eventKey === keyToken
+}

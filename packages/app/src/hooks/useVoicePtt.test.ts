@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { useVoicePtt } from './useVoicePtt'
+import { appendDictation, useVoicePtt } from './useVoicePtt'
 
 const supportFlags = {
   canVoiceCapture: true,
@@ -25,12 +25,25 @@ vi.mock('../runtime-env', () => ({
   isDesktopRuntime: () => true,
 }))
 
+describe('appendDictation', () => {
+  it('joins baseline and segment with a single space', () => {
+    expect(appendDictation('hello', 'world')).toBe('hello world')
+    expect(appendDictation('hello ', 'world')).toBe('hello world')
+    expect(appendDictation('', 'world')).toBe('world')
+    expect(appendDictation('hello', '')).toBe('hello')
+  })
+})
+
 describe('useVoicePtt', () => {
+  let listeners: Array<(event: unknown) => void>
+  let composerText: string
+
   beforeEach(() => {
     supportFlags.canVoiceCapture = true
     supportFlags.canVoiceStt = true
     supportFlags.canPrompt = true
-    const listeners: Array<(event: unknown) => void> = []
+    listeners = []
+    composerText = 'Draft: '
     // @ts-expect-error test double
     window.coworkApi = {
       app: {
@@ -42,7 +55,7 @@ describe('useVoicePtt', () => {
           phase: 'ready',
           captureMode: 'voice_host',
           stt: { engine: 'aurum_local', ready: true, detail: 'ok' },
-          tts: { engine: 'sibling', ready: false, detail: null },
+          tts: { engine: 'system_os', ready: false, detail: null },
           permissions: { microphone: 'granted' },
           reason: null,
           sessionId: null,
@@ -81,7 +94,7 @@ describe('useVoicePtt', () => {
             phase: 'ready',
             captureMode: 'voice_host',
             stt: { engine: 'aurum_local', ready: true },
-            tts: { engine: 'sibling', ready: false },
+            tts: { engine: 'system_os', ready: false },
             permissions: { microphone: 'granted' },
             reason: null,
             sessionId: null,
@@ -92,7 +105,7 @@ describe('useVoicePtt', () => {
           phase: 'ready',
           captureMode: 'voice_host',
           stt: { engine: 'aurum_local', ready: true },
-          tts: { engine: 'sibling', ready: false },
+          tts: { engine: 'system_os', ready: false },
           permissions: { microphone: 'granted' },
           reason: null,
           sessionId: null,
@@ -110,12 +123,18 @@ describe('useVoicePtt', () => {
     }
   })
 
-  it('toggles listening and injects final text', async () => {
-    const onFinalText = vi.fn()
-    const { result } = renderHook(() => useVoicePtt({
+  function renderVoicePtt() {
+    return renderHook(() => useVoicePtt({
       openCodeSessionId: 'ses_1',
-      onFinalText,
+      getComposerText: () => composerText,
+      setComposerText: (text) => {
+        composerText = text
+      },
     }))
+  }
+
+  it('toggles listening and replaces baseline with final text', async () => {
+    const { result } = renderVoicePtt()
 
     await waitFor(() => expect(result.current.visible).toBe(true))
     await waitFor(() => expect(result.current.enabled).toBe(true))
@@ -130,14 +149,115 @@ describe('useVoicePtt', () => {
       await result.current.toggle()
     })
     expect(window.coworkApi.voice.stopSession).toHaveBeenCalled()
-    expect(onFinalText).toHaveBeenCalledWith('hello dictated')
+    expect(composerText).toBe('Draft: hello dictated')
+  })
+
+  it('applies partials against the baseline and final replaces the segment', async () => {
+    // Don't auto-emit final from stop — drive events manually.
+    // @ts-expect-error test double
+    window.coworkApi.voice.stopSession = vi.fn(async () => ({
+      enabled: true,
+      phase: 'ready',
+      captureMode: 'voice_host',
+      stt: { engine: 'aurum_local', ready: true },
+      tts: { engine: 'system_os', ready: false },
+      permissions: { microphone: 'granted' },
+      reason: null,
+      sessionId: null,
+    }))
+
+    const { result } = renderVoicePtt()
+    await waitFor(() => expect(result.current.enabled).toBe(true))
+
+    await act(async () => {
+      await result.current.toggle()
+    })
+
+    await act(async () => {
+      for (const listener of listeners) {
+        listener({
+          type: 'partial',
+          event: {
+            sessionId: 'voice-1',
+            text: 'hello',
+            isFinal: false,
+            at: new Date().toISOString(),
+          },
+        })
+      }
+    })
+    expect(composerText).toBe('Draft: hello')
+
+    await act(async () => {
+      for (const listener of listeners) {
+        listener({
+          type: 'partial',
+          event: {
+            sessionId: 'voice-1',
+            text: 'hello world',
+            isFinal: false,
+            at: new Date().toISOString(),
+          },
+        })
+      }
+    })
+    // Second partial replaces the dictation segment (no double append).
+    expect(composerText).toBe('Draft: hello world')
+
+    await act(async () => {
+      await result.current.toggle()
+      for (const listener of listeners) {
+        listener({
+          type: 'final',
+          event: {
+            sessionId: 'voice-1',
+            text: 'hello world final',
+            isFinal: true,
+            at: new Date().toISOString(),
+          },
+        })
+      }
+    })
+    expect(composerText).toBe('Draft: hello world final')
+  })
+
+  it('restores baseline on cancel after partials', async () => {
+    const { result } = renderVoicePtt()
+    await waitFor(() => expect(result.current.enabled).toBe(true))
+
+    await act(async () => {
+      await result.current.toggle()
+    })
+
+    await act(async () => {
+      for (const listener of listeners) {
+        listener({
+          type: 'partial',
+          event: {
+            sessionId: 'voice-1',
+            text: 'scratch this',
+            isFinal: false,
+            at: new Date().toISOString(),
+          },
+        })
+      }
+    })
+    expect(composerText).toBe('Draft: scratch this')
+
+    await act(async () => {
+      await result.current.cancel()
+    })
+    expect(window.coworkApi.voice.cancel).toHaveBeenCalled()
+    expect(composerText).toBe('Draft: ')
+    expect(result.current.phase).toBe('idle')
   })
 
   it('hides when features.voice is off', async () => {
     // @ts-expect-error test double
     window.coworkApi.app.config = vi.fn(async () => ({ features: {} }))
     const { result } = renderHook(() => useVoicePtt({
-      onFinalText: vi.fn(),
+      getComposerText: () => '',
+      setComposerText: vi.fn(),
     }))
     await waitFor(() => expect(result.current.visible).toBe(false))
   })
