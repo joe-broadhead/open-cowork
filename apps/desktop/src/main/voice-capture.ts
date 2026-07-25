@@ -4,7 +4,6 @@
  * Capture stays in main/native. Renderers never receive raw audio bytes.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { platform } from 'node:os'
 import { VOICE_PCM_SAMPLE_RATE } from './voice-pcm-buffer.ts'
 import { resolvePackagedAwareFfmpegBin } from './voice-packaging.ts'
