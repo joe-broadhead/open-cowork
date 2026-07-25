@@ -1,10 +1,11 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
-import type { SessionInfo } from '@open-cowork/shared'
+import { VOICE_PTT_SHORTCUT, type SessionInfo } from '@open-cowork/shared'
 
 import { normalizeAppView, type AppView } from '../app-types'
 import { t } from '../helpers/i18n'
 import { switchToSession } from '../helpers/switchToSession'
 import { useSessionStore } from '../stores/session'
+import { matchesAccelerator, requestVoicePttToggle } from './voice-ptt-hotkey'
 
 type UseAppGlobalEventsOptions = {
   runtimeReady: boolean
@@ -147,6 +148,15 @@ export function useAppGlobalEvents({
         }
       }
 
+      // Voice PTT (JOE-1110): app-focused only. Uses the shared default so we do not
+      // touch settings IPC on the login shell (tests assert settings.get is gated).
+      // Custom accelerators are persisted for menu/docs; in-app matching uses default.
+      if (matchesAccelerator(e, VOICE_PTT_SHORTCUT)) {
+        e.preventDefault()
+        void requestVoicePttToggle()
+        return
+      }
+
       if (e.key === 'Escape') {
         if (view !== 'home') setView(currentSessionId ? 'chat' : 'home')
       }
@@ -202,6 +212,8 @@ export function useAppGlobalEvents({
         if (sid) {
           void exportCurrentSession(sid)
         }
+      } else if (action === 'voice-ptt-toggle') {
+        void requestVoicePttToggle()
       } else if (action.startsWith('project-switch:')) {
         const index = Number.parseInt(action.slice('project-switch:'.length), 10)
         if (Number.isInteger(index)) void switchProjectByIndex(index, setView)

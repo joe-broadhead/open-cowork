@@ -67,6 +67,7 @@ const SETTINGS_UPDATE_KEYS = new Set([
   'workflowDesktopNotifications',
   'workflowQuietHoursStart',
   'workflowQuietHoursEnd',
+  'voicePttShortcut',
   'workspaceId',
 ])
 
@@ -422,6 +423,7 @@ export function validateSettingsUpdate(record: Record<string, unknown>): Partial
   update.workflowDesktopNotifications = optionalBoolean(record, 'workflowDesktopNotifications', 'Workflow desktop notifications')
   update.workflowQuietHoursStart = optionalNullableString(record, 'workflowQuietHoursStart', 'Workflow quiet hours start', MAX_IPC_ID_BYTES) as string | null | undefined
   update.workflowQuietHoursEnd = optionalNullableString(record, 'workflowQuietHoursEnd', 'Workflow quiet hours end', MAX_IPC_ID_BYTES) as string | null | undefined
+  update.voicePttShortcut = optionalNullableString(record, 'voicePttShortcut', 'Voice PTT shortcut', 64) as string | null | undefined
 
   return Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined)) as Partial<CoworkSettings>
 }

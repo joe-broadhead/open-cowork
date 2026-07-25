@@ -160,4 +160,12 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   const partialWindow = readFileSync(join(root, 'apps/desktop/src/main/voice-partial-window.ts'), 'utf8')
   assert.match(partialWindow, /dictationPartialPolicy/)
   assert.match(partialWindow, /takePartialSlice/)
+
+  const menu = readFileSync(join(root, 'apps/desktop/src/main/app-menu.ts'), 'utf8')
+  assert.match(menu, /VOICE_PTT_SHORTCUT/)
+  assert.match(menu, /voice-ptt-toggle/)
+
+  const shortcuts = readFileSync(join(root, 'packages/shared/src/shortcuts.ts'), 'utf8')
+  assert.match(shortcuts, /VOICE_PTT_SHORTCUT/)
+  assert.match(shortcuts, /CmdOrCtrl\+Shift\+Space/)
 })

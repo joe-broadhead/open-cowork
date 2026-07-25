@@ -15,6 +15,7 @@ import {
 } from '@open-cowork/shared'
 import { isDesktopRuntime } from '../runtime-env'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
+import { registerVoicePttToggleHandler } from './voice-ptt-hotkey'
 
 export type VoicePttUiPhase = 'idle' | 'listening' | 'transcribing' | 'error'
 
@@ -268,6 +269,15 @@ export function useVoicePtt(options: {
 
   const isActive = uiPhase === 'listening' || uiPhase === 'transcribing'
   const enabled = baseEnabled && uiPhase !== 'transcribing'
+
+  // Desktop menu / keyboard hotkey (JOE-1110): last-mounted visible controller wins.
+  useEffect(() => {
+    if (!visible) return
+    return registerVoicePttToggleHandler(() => {
+      if (!enabled && uiPhase !== 'listening') return
+      void toggle()
+    })
+  }, [visible, enabled, uiPhase, toggle])
 
   return {
     visible,
