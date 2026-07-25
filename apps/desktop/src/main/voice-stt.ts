@@ -346,7 +346,10 @@ export function hashTranscriptText(text: string) {
   return createHash('sha256').update(text).digest('hex')
 }
 
-/** Ensure no PCM-looking bulk payload is logged (length only). */
+/**
+ * Ensure no PCM-looking bulk payload or transcript body is logged (length only).
+ * JOE-1111: never include `text` — use textChars + hashTranscriptText for correlation.
+ */
 export function sttLogMeta(result: VoiceSttResult) {
   return {
     backend: result.backend,

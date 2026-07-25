@@ -49,6 +49,7 @@ import {
   type VoiceAssetEnsureResult,
   type VoiceAssetStatus,
 } from './voice-assets.ts'
+import { ttsLogMeta } from './voice-security.ts'
 import { log } from '@open-cowork/shared/node'
 
 export type VoiceHostOptions = {
@@ -490,7 +491,11 @@ export class VoiceHost {
         voiceId: input.voiceId,
         rate: input.rate,
       })
-      log('voice', `tts.speak ${JSON.stringify({ chars: text.length, backend: this.tts.backend, bargedIn })}`)
+      log('voice', `tts.speak ${JSON.stringify(ttsLogMeta({
+        text,
+        backend: this.tts.backend,
+        bargedIn,
+      }))}`)
       this.phase = bargedIn ? 'ready' : 'ready'
     } catch (error) {
       // Barge-in cancel surfaces as speak abort — not a hard error.

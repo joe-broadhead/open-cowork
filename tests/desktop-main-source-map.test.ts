@@ -92,6 +92,7 @@ const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
   'voice-partial-window.ts',
   'voice-pcm-buffer.ts',
   'voice-permission-policy.ts',
+  'voice-security.ts',
   'voice-stt.ts',
   'voice-tts.ts',
   'voice-vad.ts',

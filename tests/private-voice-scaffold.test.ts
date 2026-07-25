@@ -211,4 +211,13 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   assert.match(handlers, /voice:assets:ensure/)
   assert.match(preload, /'voice:assets:status'/)
   assert.match(preload, /assetsStatus/)
+
+  const security = readFileSync(join(root, 'apps/desktop/src/main/voice-security.ts'), 'utf8')
+  assert.match(security, /ttsLogMeta/)
+  assert.match(security, /VOICE_SECURITY_RESIDUAL_RISKS/)
+  assert.match(security, /JOE-1111/)
+  assert.match(host, /ttsLogMeta/)
+  const adrSecurity = readFileSync(join(root, 'docs/adr/private-realtime-voice.md'), 'utf8')
+  assert.match(adrSecurity, /Security audit \(JOE-1111\)/)
+  assert.match(adrSecurity, /R-VOICE-01/)
 })

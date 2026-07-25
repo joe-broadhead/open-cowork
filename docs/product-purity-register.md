@@ -53,7 +53,7 @@ Optional installable siblings (not Desktop default nav):
 | Durable Gateway (`cowork-gateway`) | Local operator / claim-gated beta | Multi-tenant production GA without evidence |
 | Tier-1 channels (Telegram/Slack/email) | Launch-tier adapters | — |
 | Tier-3 channels (Discord/WhatsApp/Signal) | Experimental / bridge-backed | Launch marketing without live smoke |
-| Private realtime voice | Desktop Local opt-in (`features.voice`); on-device STT (Aurum) + sibling TTS | Cloud Web mic, Aurum-as-TTS, shipping claim before V2 PTT + engines |
+| Private realtime voice | Desktop Local opt-in (`features.voice`); on-device STT (Aurum) + sibling TTS; security audit JOE-1111 (log redaction + local_only tests) | Cloud Web mic, Aurum-as-TTS, silent model download, shipping claim without dogfood evidence |
 
 ## Forbidden claims (fail closed)
 
