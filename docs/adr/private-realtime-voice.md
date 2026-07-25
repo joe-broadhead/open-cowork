@@ -40,19 +40,19 @@ Open Cowork already removed fake Settings “voice replies” teasers (product p
 | Role | Owner | Notes |
 | --- | --- | --- |
 | **STT** | **Aurum** (`local_only` / on-device) | PCM in → text out; no API key by default |
-| **TTS** | **Sibling / separate engine** | **Not Aurum**. Aurum is STT-first; do not stretch it into synthesis |
+| **TTS** | **Sibling / separate engine** | **Not Aurum**. MVP = **OS system speech** (`system_os`, macOS `say`+`afplay`); Piper/neural sidecar deferred |
 | Orchestration | Open Cowork **voice host** (Electron main / native side) | Outside Chromium renderer |
 
 ### 3. Architecture boundary
 
 ```text
 Renderer (UI only)
-  │  IPC: voice:status | voice:session:* | voice:partial | voice:final
+  │  IPC: voice:status | voice:session:* | voice:tts:* | voice:partial | voice:final
   ▼
 Voice host (main / native — never Node in renderer)
   │  mic capture (OS APIs)
   │  STT via Aurum local_only
-  │  TTS via sibling engine
+  │  TTS via sibling engine (OS system speech MVP)
   ▼
 OpenCode session prompt / stream (existing session path)
 ```
@@ -68,6 +68,7 @@ Rules:
 7. **PTT UI (JOE-1105):** Chat and Home composers show a mic control when `features.voice` is on **and** the workspace support matrix allows `voice.capture` + `voice.stt` (Desktop Local). **Click-to-toggle** is the shipped interaction (start → Listening → click again → Transcribing → inject text into the composer). Control is hidden on Cloud Web / unsupported authorities.
 8. **Partials during PTT (JOE-1102):** While listening, the host runs a **PartialClock** (min ~1s audio, ~15s rolling window, ~1.2s interval, RMS energy gate) and emits `voice:event` **partial** payloads (text only). This is **not** a continuous Whisper stream — the host decides when to call STT. The composer snapshots a **baseline** at PTT start; partials/finals replace the dictation segment after the baseline (cancel/error restores baseline).
 9. **PTT hotkey (JOE-1110):** Default accelerator `CmdOrCtrl+Shift+Space` (Edit menu “Toggle Voice Dictation”). Scope is **app-focused** only — not OS-wide Accessibility paste into other apps. Settings → Privacy shows a configurable Electron accelerator when `features.voice` is on; menu bar uses the default until process restart; in-app key matching uses the saved value after Save. Avoid colliding with the command palette (`CmdOrCtrl+Shift+P`).
+10. **Local TTS (JOE-1108):** Sibling of Aurum STT. **Decision:** MVP uses **OS system voices** (macOS `say` synthesize to temp AIFF + `afplay` playback). **Not** Aurum, **not** cloud TTS, **not** Chromium `speechSynthesis` in the renderer. Host owns synthesize + playback; IPC carries **text only** (`voice:tts:speak` / `cancel` / `voices`). Linux/Windows OS backends and Piper/neural packaging are explicit follow-ups (no download on default path). Claim boundary: “local OS speech when available” — not “neural private TTS GA”.
 
 ### 4. Workspace support APIs
 

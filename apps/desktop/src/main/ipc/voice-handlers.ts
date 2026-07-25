@@ -1,8 +1,8 @@
 /**
- * Private realtime voice IPC (JOE-1096 / JOE-1097).
+ * Private realtime voice IPC (JOE-1096 / JOE-1097 / JOE-1108).
  *
- * Capture + PCM live in VoiceHost (main). IPC returns status/session text only —
- * never raw audio. STT runs via Aurum local_only on stop (JOE-1101).
+ * Capture + PCM + STT + TTS live in VoiceHost (main). IPC returns status/text
+ * only — never raw audio. STT: Aurum local_only. TTS: OS system speech sibling.
  */
 import {
   isDesktopFeatureEnabled,
@@ -10,16 +10,19 @@ import {
   type VoiceHostStatus,
   type VoiceSessionSnapshot,
   type VoiceSessionStartInput,
+  type VoiceTtsSpeakInput,
 } from '@open-cowork/shared'
 import { getAppConfig } from '@open-cowork/runtime-host/config'
 import type { IpcHandlerContext } from './context.ts'
 import {
   noIpcArgs,
+  objectArg,
   optionalObjectArg,
   optionalStringArg,
   registerIpcInvoke,
 } from './schema.ts'
 import { getVoiceHost } from '../voice-host.ts'
+import { VOICE_TTS_MAX_TEXT_CHARS } from '../voice-tts.ts'
 
 function normalizeStartInput(value: Record<string, unknown> | undefined): VoiceSessionStartInput {
   if (!value) return {}
@@ -101,6 +104,54 @@ export function registerVoiceHandlers(context: IpcHandlerContext) {
       return status
     },
   )
+
+  registerIpcInvoke(
+    context,
+    'voice:tts:speak',
+    objectArg<VoiceTtsSpeakInput>('voice tts speak input', (record, channel) => {
+      const text = typeof record.text === 'string' ? record.text : ''
+      if (!text.trim()) throw new Error(`${channel} requires non-empty text.`)
+      if (Buffer.byteLength(text, 'utf8') > VOICE_TTS_MAX_TEXT_CHARS * 4) {
+        throw new Error(`${channel} text is too large.`)
+      }
+      if (text.length > VOICE_TTS_MAX_TEXT_CHARS) {
+        throw new Error(`${channel} text exceeds ${VOICE_TTS_MAX_TEXT_CHARS} characters.`)
+      }
+      const voiceId = typeof record.voiceId === 'string' && record.voiceId.trim()
+        ? record.voiceId.trim()
+        : null
+      const rate = typeof record.rate === 'number' && Number.isFinite(record.rate)
+        ? record.rate
+        : null
+      return { text, voiceId, rate }
+    }),
+    async (_event, input) => {
+      const voiceHost = syncHostFeatures()
+      if (!isDesktopFeatureEnabled(getAppConfig().features, 'voice')) {
+        throw new Error('Private voice is disabled. Set features.voice to true in open-cowork.config.json to opt in.')
+      }
+      try {
+        const status = await voiceHost.speak(input)
+        broadcastVoiceEvent(context, { type: 'status', status })
+        return status
+      } catch (error) {
+        broadcastVoiceEvent(context, { type: 'status', status: voiceHost.getStatus() })
+        throw error
+      }
+    },
+  )
+
+  registerIpcInvoke(context, 'voice:tts:cancel', noIpcArgs, async () => {
+    const voiceHost = syncHostFeatures()
+    const status = await voiceHost.cancelSpeak()
+    broadcastVoiceEvent(context, { type: 'status', status })
+    return status
+  })
+
+  registerIpcInvoke(context, 'voice:tts:voices', noIpcArgs, async () => {
+    const voiceHost = syncHostFeatures()
+    return voiceHost.listTtsVoices()
+  })
 }
 
 export type { VoiceHostStatus, VoiceSessionSnapshot, VoiceSessionStartInput }

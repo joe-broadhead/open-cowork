@@ -1,8 +1,8 @@
 /**
- * Desktop Local private voice host (JOE-1097 / JOE-1101 / JOE-1102).
+ * Desktop Local private voice host (JOE-1097 / JOE-1101 / JOE-1102 / JOE-1108).
  *
- * Owns mic capture + PCM + Aurum STT in main. Emits text/status events only —
- * never raw audio. Partials use a host-side rolling window (not continuous stream).
+ * Owns mic capture + PCM + Aurum STT + sibling TTS in main. Emits text/status
+ * events only — never raw audio. Partials use a host-side rolling window.
  */
 import { randomUUID } from 'node:crypto'
 import {
@@ -13,6 +13,8 @@ import {
   type VoicePermissionState,
   type VoiceSessionSnapshot,
   type VoiceSessionStartInput,
+  type VoiceTtsSpeakInput,
+  type VoiceTtsVoiceInfo,
 } from '@open-cowork/shared'
 import {
   createDefaultVoiceCapture,
@@ -26,6 +28,10 @@ import {
   type VoiceSttEngine,
 } from './voice-stt.ts'
 import {
+  createDefaultVoiceTts,
+  type VoiceTtsEngine,
+} from './voice-tts.ts'
+import {
   dictationPartialPolicy,
   VoicePartialClock,
   type VoicePartialWindowPolicy,
@@ -36,6 +42,7 @@ export type VoiceHostOptions = {
   features?: DesktopFeatureFlags
   capture?: VoiceCapture
   stt?: VoiceSttEngine
+  tts?: VoiceTtsEngine
   now?: () => Date
   /** Override OS mic permission probe (tests). */
   probeMicrophone?: () => Promise<VoicePermissionState>
@@ -53,6 +60,7 @@ export class VoiceHost {
   private features: DesktopFeatureFlags | undefined
   private capture: VoiceCapture
   private stt: VoiceSttEngine
+  private tts: VoiceTtsEngine
   private readonly now: () => Date
   private readonly probeMicrophone: () => Promise<VoicePermissionState>
   private readonly onEvent: (event: VoiceHostEvent) => void
@@ -67,11 +75,13 @@ export class VoiceHost {
   private partialTimer: NodeJS.Timeout | null = null
   private partialInFlight = false
   private lastPartialText: string | null = null
+  private speakInFlight = false
 
   constructor(options: VoiceHostOptions = {}) {
     this.features = options.features
     this.capture = options.capture || createDefaultVoiceCapture()
     this.stt = options.stt || createDefaultVoiceStt()
+    this.tts = options.tts || createDefaultVoiceTts()
     this.now = options.now || (() => new Date())
     this.probeMicrophone = options.probeMicrophone || defaultProbeMicrophone
     this.onEvent = options.onEvent || (() => {})
@@ -85,6 +95,7 @@ export class VoiceHost {
     this.features = features
     if (!isDesktopFeatureEnabled(features, 'voice')) {
       void this.cancel(null)
+      void this.cancelSpeak()
       this.phase = 'disabled'
     } else if (this.phase === 'disabled' || this.phase === 'deferred') {
       this.phase = 'ready'
@@ -100,16 +111,23 @@ export class VoiceHost {
     this.stt = stt
   }
 
+  setTts(tts: VoiceTtsEngine) {
+    this.tts = tts
+  }
+
   getStatus(): VoiceHostStatus {
     const enabled = isDesktopFeatureEnabled(this.features, 'voice')
     const captureBackend = this.capture.backend
     const captureReady = captureBackend !== 'unavailable'
     const sttReady = this.stt.isReady()
+    const ttsReady = this.tts.isReady()
     let phase = this.phase
     if (!enabled) phase = 'disabled'
     else if (this.session) {
       // keep current listening/transcribing
-    } else if (phase === 'listening' || phase === 'transcribing') {
+    } else if (this.speakInFlight) {
+      phase = 'speaking'
+    } else if (phase === 'listening' || phase === 'transcribing' || phase === 'speaking') {
       phase = 'ready'
     }
 
@@ -124,7 +142,7 @@ export class VoiceHost {
 
     if (this.lastError) {
       reason = this.lastError
-      if (phase !== 'listening' && phase !== 'transcribing') phase = 'error'
+      if (phase !== 'listening' && phase !== 'transcribing' && phase !== 'speaking') phase = 'error'
     }
 
     const stats = this.session?.buffer.stats()
@@ -138,9 +156,9 @@ export class VoiceHost {
         detail: this.stt.detail,
       },
       tts: {
-        engine: 'sibling',
-        ready: false,
-        detail: 'Sibling TTS not wired yet',
+        engine: this.tts.backend === 'unavailable' ? 'unavailable' : 'system_os',
+        ready: ttsReady,
+        detail: this.tts.detail,
       },
       permissions: {
         microphone: this.mic,
@@ -172,6 +190,8 @@ export class VoiceHost {
     if (this.session) {
       await this.cancel(this.session.id)
     }
+    // Stop TTS so mic capture and speech playback do not fight the audio device.
+    await this.cancelSpeak()
 
     this.lastError = null
     this.lastTranscript = null
@@ -332,6 +352,72 @@ export class VoiceHost {
 
   getSttBackend() {
     return this.stt.backend
+  }
+
+  getTtsBackend() {
+    return this.tts.backend
+  }
+
+  async listTtsVoices(): Promise<VoiceTtsVoiceInfo[]> {
+    if (!this.tts.isReady()) return []
+    return this.tts.listVoices()
+  }
+
+  /**
+   * Host-owned local TTS playback (JOE-1108). Never sends audio to the renderer.
+   * Text only crosses IPC; synthesis + playback stay in main.
+   */
+  async speak(input: VoiceTtsSpeakInput): Promise<VoiceHostStatus> {
+    if (!isDesktopFeatureEnabled(this.features, 'voice')) {
+      throw new Error('Private voice is disabled. Set features.voice to true in open-cowork.config.json to opt in.')
+    }
+    if (this.session) {
+      throw new Error('Cannot speak while a capture session is active.')
+    }
+    if (!this.tts.isReady()) {
+      throw new Error(this.tts.detail)
+    }
+    const text = input.text?.trim() || ''
+    if (!text) throw new Error('TTS text is empty.')
+
+    await this.cancelSpeak()
+    this.lastError = null
+    this.speakInFlight = true
+    this.phase = 'speaking'
+    this.emitStatus()
+    try {
+      await this.tts.speak(text, {
+        voiceId: input.voiceId,
+        rate: input.rate,
+      })
+      log('voice', `tts.speak ${JSON.stringify({ chars: text.length, backend: this.tts.backend })}`)
+      this.phase = 'ready'
+    } catch (error) {
+      this.phase = 'error'
+      this.lastError = error instanceof Error ? error.message : String(error)
+      this.emitError(null, this.lastError)
+      throw error
+    } finally {
+      this.speakInFlight = false
+      this.emitStatus()
+    }
+    return this.getStatus()
+  }
+
+  async cancelSpeak(): Promise<VoiceHostStatus> {
+    try {
+      await this.tts.cancel()
+    } catch {
+      // best-effort
+    }
+    if (this.speakInFlight || this.phase === 'speaking') {
+      this.speakInFlight = false
+      if (this.phase === 'speaking') {
+        this.phase = isDesktopFeatureEnabled(this.features, 'voice') ? 'ready' : 'disabled'
+      }
+      this.emitStatus()
+    }
+    return this.getStatus()
   }
 
   private startPartialLoop(sessionId: string) {
