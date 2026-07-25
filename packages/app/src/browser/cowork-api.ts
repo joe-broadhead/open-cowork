@@ -371,6 +371,13 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
         enabled: false,
         phase: 'unavailable' as const,
       }),
+      speak: () => browserUnavailable('voice.speak'),
+      cancelSpeak: async () => ({
+        ...createDeferredVoiceHostStatus('Private realtime voice is Desktop Local only.'),
+        enabled: false,
+        phase: 'unavailable' as const,
+      }),
+      listVoices: async () => [],
     },
 
     // -- permission --------------------------------------------------------

@@ -22,9 +22,23 @@ export type VoiceCaptureMode = 'voice_host' | 'renderer'
 export type VoiceSttEngine = 'aurum_local' | 'unavailable'
 
 /**
- * TTS is intentionally not Aurum (STT-first product). Sibling engine TBD.
+ * TTS is intentionally not Aurum (STT-first product). Sibling engine:
+ * system OS speech for MVP (JOE-1108); neural/Piper deferred.
  */
-export type VoiceTtsEngine = 'sibling' | 'unavailable'
+export type VoiceTtsEngine = 'system_os' | 'unavailable'
+
+export type VoiceTtsSpeakInput = {
+  text: string
+  voiceId?: string | null
+  /** Backend-specific rate (macOS say: words per minute). */
+  rate?: number | null
+}
+
+export type VoiceTtsVoiceInfo = {
+  id: string
+  name: string
+  language?: string | null
+}
 
 export type VoiceHostPhase =
   | 'disabled'
@@ -132,9 +146,9 @@ export function createDeferredVoiceHostStatus(reason: string): VoiceHostStatus {
       detail: 'Aurum STT not wired yet',
     },
     tts: {
-      engine: 'sibling',
+      engine: 'system_os',
       ready: false,
-      detail: 'Sibling TTS not wired yet',
+      detail: 'Local TTS not ready (OS speech or future neural sidecar).',
     },
     permissions: {
       microphone: 'unknown',
@@ -149,6 +163,9 @@ export const VOICE_HOST_DEFERRED_REASON =
 
 export const VOICE_STT_DEFERRED_REASON =
   'Aurum STT not ready: install aurum CLI and cache tiny-q5_1 (local_only), or set OPEN_COWORK_AURUM_BIN.'
+
+export const VOICE_TTS_DEFERRED_REASON =
+  'Local TTS not ready: OS speech tools unavailable (macOS say), or neural TTS not installed.'
 
 /**
  * Derive host status from feature flags alone (no live capture). Used by

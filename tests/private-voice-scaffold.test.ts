@@ -98,7 +98,7 @@ test('private voice: host status scaffold reflects flag + STT deferred', () => {
   assert.equal(off.phase, 'disabled')
   assert.equal(off.captureMode, 'voice_host')
   assert.equal(off.stt.engine, 'aurum_local')
-  assert.equal(off.tts.engine, 'sibling')
+  assert.equal(off.tts.engine, 'system_os')
 
   const on = voiceHostStatusForFeatures({ voice: true })
   assert.equal(on.enabled, true)
@@ -140,12 +140,14 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   const handlers = readFileSync(join(root, 'apps/desktop/src/main/ipc/voice-handlers.ts'), 'utf8')
   assert.match(handlers, /voice:status/)
   assert.match(handlers, /voice:session:start/)
+  assert.match(handlers, /voice:tts:speak/)
   assert.match(handlers, /getVoiceHost/)
   assert.match(handlers, /never raw audio/i)
 
   const preload = readFileSync(join(root, 'apps/desktop/src/preload/index.ts'), 'utf8')
   assert.match(preload, /'voice:status'/)
   assert.match(preload, /'voice:session:start'/)
+  assert.match(preload, /'voice:tts:speak'/)
   assert.match(preload, /voice: \{/)
 
   const ipcHandlers = readFileSync(join(root, 'apps/desktop/src/main/ipc-handlers.ts'), 'utf8')
@@ -168,4 +170,9 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   const shortcuts = readFileSync(join(root, 'packages/shared/src/shortcuts.ts'), 'utf8')
   assert.match(shortcuts, /VOICE_PTT_SHORTCUT/)
   assert.match(shortcuts, /CmdOrCtrl\+Shift\+Space/)
+
+  const tts = readFileSync(join(root, 'apps/desktop/src/main/voice-tts.ts'), 'utf8')
+  assert.match(tts, /SystemOsVoiceTts/)
+  assert.match(tts, /local only/i)
+  assert.doesNotMatch(tts, /openrouter|openai\.com|elevenlabs/i)
 })
