@@ -191,12 +191,8 @@ test('pnpm audit policy is explicit and wired through repository scripts', () =>
   assert.equal(requireScript('audit:prod'), 'node scripts/pnpm-audit.mjs --prod --audit-level moderate')
   assert.equal(requireScript('audit:full'), 'node scripts/pnpm-audit.mjs --audit-level high')
   assert.deepEqual(packageJson.pnpm?.auditConfig?.ignoreCves, [])
-  // Temporary electron-builder packaging GHSAs until a coordinated upgrade (monthly maintenance).
-  assert.deepEqual(packageJson.pnpm?.auditConfig?.ignoreGhsas, [
-    'GHSA-7G7R-GX96-252G',
-    'GHSA-P2F4-R6V6-J797',
-    'GHSA-MH99-V99M-4GVG',
-  ])
+  // Security pins live in pnpm-workspace.yaml overrides (no temporary GHSA ignores).
+  assert.deepEqual(packageJson.pnpm?.auditConfig?.ignoreGhsas, [])
   assert.match(ciWorkflow, /run: pnpm audit:prod/)
   assert.match(ciWorkflow, /run: pnpm audit:full/)
   assert.match(releaseWorkflow, /run: pnpm audit:prod/)

@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `4fdd6ccd8ad44913c486ceeebd7bb606862e64b38688b24e58f2ecfff0af0205`
-- Production package entries: 404
-- Bundled license directories: 389 (15 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `39b644b2c1b6da2623b664df23752434c59f412e137baba7359d2362f34d29ae`
+- Production package entries: 406
+- Bundled license directories: 391 (15 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -122,7 +122,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | argparse | 2.0.1 | Python-2.0 | THIRD_PARTY_LICENSES/argparse@2.0.1/ | nodeca/argparse |
 | base64-js | 1.5.1 | MIT | THIRD_PARTY_LICENSES/base64-js@1.5.1/ | git://github.com/beatgammit/base64-js.git |
 | bignumber.js | 9.3.1 | MIT |  | https://github.com/MikeMcl/bignumber.js.git |
-| body-parser | 2.2.2 | MIT | THIRD_PARTY_LICENSES/body-parser@2.2.2/ | expressjs/body-parser |
+| body-parser | 2.3.0 | MIT | THIRD_PARTY_LICENSES/body-parser@2.3.0/ | expressjs/body-parser |
 | bowser | 2.14.1 | MIT | THIRD_PARTY_LICENSES/bowser@2.14.1/ | git+https://github.com/bowser-js/bowser.git |
 | buffer-equal-constant-time | 1.0.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/buffer-equal-constant-time@1.0.1/ | git@github.com:goinstant/buffer-equal-constant-time.git |
 | builder-util-runtime | 9.7.0 | MIT | THIRD_PARTY_LICENSES/builder-util-runtime@9.7.0/ | git+https://github.com/electron-userland/electron-builder.git |
@@ -136,6 +136,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | confbox | 0.1.8 | MIT | THIRD_PARTY_LICENSES/confbox@0.1.8/ | unjs/confbox |
 | content-disposition | 1.1.0 | MIT | THIRD_PARTY_LICENSES/content-disposition@1.1.0/ | jshttp/content-disposition |
 | content-type | 1.0.5 | MIT | THIRD_PARTY_LICENSES/content-type@1.0.5/ | jshttp/content-type |
+| content-type | 2.0.0 | MIT | THIRD_PARTY_LICENSES/content-type@2.0.0/ | jshttp/content-type |
 | cookie | 0.7.2 | MIT | THIRD_PARTY_LICENSES/cookie@0.7.2/ | jshttp/cookie |
 | cookie-signature | 1.2.2 | MIT | THIRD_PARTY_LICENSES/cookie-signature@1.2.2/ | https://github.com/visionmedia/node-cookie-signature.git |
 | cors | 2.8.6 | MIT | THIRD_PARTY_LICENSES/cors@2.8.6/ | expressjs/cors |
@@ -361,6 +362,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | tslib | 2.8.1 | 0BSD | THIRD_PARTY_LICENSES/tslib@2.8.1/ | https://github.com/Microsoft/tslib.git |
 | tsx | 4.23.1 | MIT | THIRD_PARTY_LICENSES/tsx@4.23.1/ | privatenumber/tsx |
 | type-is | 2.0.1 | MIT | THIRD_PARTY_LICENSES/type-is@2.0.1/ | jshttp/type-is |
+| type-is | 2.1.0 | MIT | THIRD_PARTY_LICENSES/type-is@2.1.0/ | jshttp/type-is |
 | ufo | 1.6.4 | MIT | THIRD_PARTY_LICENSES/ufo@1.6.4/ | unjs/ufo |
 | universalify | 2.0.1 | MIT | THIRD_PARTY_LICENSES/universalify@2.0.1/ | git+https://github.com/RyanZim/universalify.git |
 | unpipe | 1.0.0 | MIT | THIRD_PARTY_LICENSES/unpipe@1.0.0/ | stream-utils/unpipe |
