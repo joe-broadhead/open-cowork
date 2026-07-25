@@ -5,13 +5,12 @@ description: Redacted pass/fail notes for pure master defaults on Desktop Local 
 
 # Product purity dogfood evidence (JOE-1092)
 
-**Linear:** [JOE-1092](https://linear.app/joe-broadhead/issue/JOE-1092) (parent [JOE-1089](https://linear.app/joe-broadhead/issue/JOE-1089))  
-**Script:** [product-purity-dogfood.md](product-purity-dogfood.md)  
-**Base commit:** `a930442c` (master at branch cut; post private-voice close-out)  
-**Date (UTC):** 2026-07-25  
-**Method:** Structural / contract-backed dogfood. Full interactive Desktop UI harness was not available in this environment; steps are graded **pass** when automated purity contracts + static config/code paths prove the honesty claim, **blocked** when only interactive UI can prove the step (with reason), and **fail** only if code/docs contradict the purity register.
-
-**Secrets:** none. No provider keys, tokens, or personal paths recorded.
+- **Linear:** [JOE-1092](https://linear.app/joe-broadhead/issue/JOE-1092) (parent [JOE-1089](https://linear.app/joe-broadhead/issue/JOE-1089))
+- **Script:** [product-purity-dogfood.md](product-purity-dogfood.md)
+- **Base commit:** `a930442c` (master at branch cut; post private-voice close-out)
+- **Date (UTC):** 2026-07-25
+- **Method:** Structural / contract-backed dogfood. Full interactive Desktop UI harness was not available in this environment; steps are graded **pass** when automated purity contracts + static config/code paths prove the honesty claim, **blocked** when only interactive UI can prove the step (with reason), and **fail** only if code/docs contradict the purity register.
+- **Secrets:** none. No provider keys, tokens, or personal paths recorded.
 
 ## Preconditions
 

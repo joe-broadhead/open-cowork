@@ -5,11 +5,11 @@ description: Honest residual when live Desktop ↔ Web ↔ Channel Tier-1 dogfoo
 
 # Cloud sync dogfood residual (JOE-1094)
 
-**Linear:** [JOE-1094](https://linear.app/joe-broadhead/issue/JOE-1094) (parent [JOE-1089](https://linear.app/joe-broadhead/issue/JOE-1089))  
-**Runbook:** [cloud-sync-dogfood.md](cloud-sync-dogfood.md)  
-**Date (UTC):** 2026-07-25  
-**Severity:** P2 (claim impact only — not a product P0 crash)  
-**Residual ID:** **R-1094**
+- **Linear:** [JOE-1094](https://linear.app/joe-broadhead/issue/JOE-1094) (parent [JOE-1089](https://linear.app/joe-broadhead/issue/JOE-1089))
+- **Runbook:** [cloud-sync-dogfood.md](cloud-sync-dogfood.md)
+- **Date (UTC):** 2026-07-25
+- **Severity:** P2 (claim impact only — not a product P0 crash)
+- **Residual ID:** **R-1094**
 
 ## Decision
 

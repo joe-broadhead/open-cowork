@@ -101,4 +101,3 @@ Post-purity freeze sample: [pure-release-notes-claim-freeze.md](samples/pure-rel
 - [Product purity residual risks](product-purity-residual-risks.md)
 - [Progressive disclosure](progressive-disclosure.md)
 - [ADR Standalone Desktop session API](adr/standalone-desktop-session-api.md)
-

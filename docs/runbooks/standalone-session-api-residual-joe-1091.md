@@ -5,10 +5,10 @@ description: Honest deferred residual for Desktop-safe Standalone session/projec
 
 # Standalone Desktop session API residual (JOE-1091)
 
-**Linear:** [JOE-1091](https://linear.app/joe-broadhead/issue/JOE-1091) (parent [JOE-1089](https://linear.app/joe-broadhead/issue/JOE-1089); original [JOE-1042](https://linear.app/joe-broadhead/issue/JOE-1042))  
-**ADR:** [standalone-desktop-session-api.md](../adr/standalone-desktop-session-api.md)  
-**Residual:** **R-1042** (P1)  
-**Date (UTC):** 2026-07-25
+- **Linear:** [JOE-1091](https://linear.app/joe-broadhead/issue/JOE-1091) (parent [JOE-1089](https://linear.app/joe-broadhead/issue/JOE-1089); original [JOE-1042](https://linear.app/joe-broadhead/issue/JOE-1042))
+- **ADR:** [standalone-desktop-session-api.md](../adr/standalone-desktop-session-api.md)
+- **Residual:** **R-1042** (P1)
+- **Date (UTC):** 2026-07-25
 
 ## Decision for this wave
 

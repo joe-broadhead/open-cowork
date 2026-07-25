@@ -5,11 +5,11 @@ description: Feature claims vs evidence status for enterprise-ready marketing (J
 
 # Enterprise readiness claim matrix
 
-**Linear:** JOE-1068, [JOE-1093](https://linear.app/joe-broadhead/issue/JOE-1093)  
-**Rule:** Do not market `enterprise-ready` until every **required** row is
-`proven` with linked evidence. Partial rows stay out of release notes.
-**Fail-closed wording:** If status ≠ `proven`, public copy must not imply the
-claim. Prefer “self-host beta”, “private design-partner beta”, or omit.
+- **Linear:** JOE-1068, [JOE-1093](https://linear.app/joe-broadhead/issue/JOE-1093)
+- **Rule:** Do not market `enterprise-ready` until every **required** row is
+  `proven` with linked evidence. Partial rows stay out of release notes.
+- **Fail-closed wording:** If status ≠ `proven`, public copy must not imply the
+  claim. Prefer “self-host beta”, “private design-partner beta”, or omit.
 
 | Claim | Surface | Required for enterprise-ready? | Status | Owner | Next evidence artifact | Fail-closed claim wording | Evidence / notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |

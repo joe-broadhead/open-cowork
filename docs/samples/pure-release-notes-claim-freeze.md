@@ -5,10 +5,10 @@ description: Allowed vs forbidden release-note language aligned with the product
 
 # Pure release notes / marketing claim freeze sample (JOE-1090)
 
-**Linear:** [JOE-1090](https://linear.app/joe-broadhead/issue/JOE-1090)  
-**Source of truth:** [Product purity register](../product-purity-register.md)  
-**Claim levels:** [Release checklist](../release-checklist.md)  
-**Enterprise gate:** [Enterprise readiness matrix](../enterprise-readiness-matrix.md)
+- **Linear:** [JOE-1090](https://linear.app/joe-broadhead/issue/JOE-1090)
+- **Source of truth:** [Product purity register](../product-purity-register.md)
+- **Claim levels:** [Release checklist](../release-checklist.md)
+- **Enterprise gate:** [Enterprise readiness matrix](../enterprise-readiness-matrix.md)
 
 Use this sample as a **freeze template** before publishing GitHub Release notes,
 blog posts, or partner one-pagers. Prefer under-claiming. Fail closed on any
