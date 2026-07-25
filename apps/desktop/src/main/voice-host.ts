@@ -1,8 +1,8 @@
 /**
- * Desktop Local private voice host (JOE-1097 / JOE-1101 / JOE-1102 / JOE-1108).
+ * Desktop Local private voice host (JOE-1097 / JOE-1101 / JOE-1102 / JOE-1108 / JOE-1104).
  *
- * Owns mic capture + PCM + Aurum STT + sibling TTS in main. Emits text/status
- * events only — never raw audio. Partials use a host-side rolling window.
+ * Owns mic capture + PCM + Aurum STT + sibling TTS + energy VAD in main.
+ * Emits text/status/vad events only — never raw audio.
  */
 import { randomUUID } from 'node:crypto'
 import {
@@ -36,6 +36,14 @@ import {
   VoicePartialClock,
   type VoicePartialWindowPolicy,
 } from './voice-partial-window.ts'
+import {
+  createVadState,
+  defaultConversationVadPolicy,
+  isBargeInSpeech,
+  tickVad,
+  type VoiceVadPolicy,
+  type VoiceVadState,
+} from './voice-vad.ts'
 import { log } from '@open-cowork/shared/node'
 
 export type VoiceHostOptions = {
@@ -50,10 +58,14 @@ export type VoiceHostOptions = {
   partialPolicy?: VoicePartialWindowPolicy
   /** Disable partial loop (tests that only exercise finalize). */
   partialsEnabled?: boolean
+  vadPolicy?: VoiceVadPolicy
+  /** Enable barge-in energy monitor during TTS (default true). */
+  bargeInEnabled?: boolean
 }
 
 type ActiveSession = VoiceSessionSnapshot & {
   buffer: VoicePcmBuffer
+  continuousVad: boolean
 }
 
 export class VoiceHost {
@@ -76,6 +88,16 @@ export class VoiceHost {
   private partialInFlight = false
   private lastPartialText: string | null = null
   private speakInFlight = false
+  private readonly vadPolicy: VoiceVadPolicy
+  private readonly bargeInEnabled: boolean
+  private vadState = createVadState()
+  private continuousVadActive = false
+  private speechActive = false
+  private bargeInArmed = false
+  private bargeInCapture = false
+  private autoFinalizeInFlight = false
+  /** Guards concurrent stopSession (UI stop + VAD auto-finalize). */
+  private stopInFlight = false
 
   constructor(options: VoiceHostOptions = {}) {
     this.features = options.features
@@ -88,6 +110,8 @@ export class VoiceHost {
     this.partialPolicy = options.partialPolicy || dictationPartialPolicy()
     this.partialsEnabled = options.partialsEnabled !== false
     this.partialClock = new VoicePartialClock(this.partialPolicy)
+    this.vadPolicy = options.vadPolicy || defaultConversationVadPolicy()
+    this.bargeInEnabled = options.bargeInEnabled !== false
     this.phase = isDesktopFeatureEnabled(this.features, 'voice') ? 'ready' : 'disabled'
   }
 
@@ -174,6 +198,11 @@ export class VoiceHost {
         durationSeconds: stats?.durationSeconds ?? 0,
         peak: stats?.peak ?? 0,
       },
+      vad: {
+        continuous: this.continuousVadActive || Boolean(this.session?.continuousVad),
+        speechActive: this.speechActive,
+        bargeInArmed: this.bargeInArmed,
+      },
     }
   }
 
@@ -197,6 +226,11 @@ export class VoiceHost {
     this.lastTranscript = null
     this.lastPartialText = null
     this.partialClock.reset()
+    this.vadState = createVadState()
+    this.speechActive = false
+    this.autoFinalizeInFlight = false
+    const continuousVad = input.continuousVad === true && input.mode === 'conversation'
+    this.continuousVadActive = continuousVad
     this.phase = 'starting'
     this.emitStatus()
 
@@ -227,6 +261,7 @@ export class VoiceHost {
       mode: input.mode === 'conversation' ? 'conversation' : 'ptt',
       phase: 'listening',
       startedAt,
+      continuousVad,
       buffer,
     }
 
@@ -234,9 +269,13 @@ export class VoiceHost {
       await this.capture.start((chunk) => {
         if (!this.session || this.session.id !== id) return
         this.session.buffer.push(chunk)
+        if (this.session.continuousVad) {
+          this.onVadChunk(id, chunk)
+        }
       })
     } catch (error) {
       this.session = null
+      this.continuousVadActive = false
       this.phase = 'error'
       this.lastError = error instanceof Error ? error.message : String(error)
       this.emitError(id, this.lastError)
@@ -246,6 +285,9 @@ export class VoiceHost {
 
     this.phase = 'listening'
     this.startPartialLoop(id)
+    if (continuousVad) {
+      this.emitVad(id, 'armed', false)
+    }
     this.emitStatus()
     return this.publicSession(this.session)
   }
@@ -259,62 +301,82 @@ export class VoiceHost {
     if (sessionId && active.id !== sessionId) {
       return this.getStatus()
     }
-
-    this.stopPartialLoop()
-    // Wait for in-flight partial to finish so we don't race finalize on shared CLI.
-    await this.waitForPartialIdle()
-
-    await this.capture.stop()
-    const pcm = active.buffer.snapshot()
-    const sessionIdFinal = active.id
-    active.buffer.clear()
-
-    this.phase = 'transcribing'
-    this.session = { ...active, phase: 'transcribing', buffer: new VoicePcmBuffer() }
-    this.emitStatus()
+    // Serialize finalize so VAD auto-stop and UI stop cannot double-transcribe.
+    if (this.stopInFlight) {
+      return this.getStatus()
+    }
+    this.stopInFlight = true
 
     try {
-      if (pcm.length > 0) {
-        if (!this.stt.isReady()) {
-          throw new Error(this.stt.detail)
-        }
-        const result = await this.stt.transcribePcm(pcm)
-        this.lastTranscript = result.text
-        log('voice', `stt.final ${JSON.stringify(sttLogMeta(result))}`)
-        this.onEvent({
-          type: 'final',
-          event: {
-            sessionId: sessionIdFinal,
-            text: result.text,
-            isFinal: true,
-            at: this.now().toISOString(),
-          },
-        })
-      } else {
-        this.lastTranscript = ''
-        this.onEvent({
-          type: 'final',
-          event: {
-            sessionId: sessionIdFinal,
-            text: '',
-            isFinal: true,
-            at: this.now().toISOString(),
-          },
-        })
-      }
-      this.lastError = null
-      this.lastPartialText = null
-      this.phase = 'ready'
-    } catch (error) {
-      this.phase = 'error'
-      this.lastError = error instanceof Error ? error.message : String(error)
-      this.emitError(sessionIdFinal, this.lastError)
-    } finally {
-      this.session = null
-      this.emitStatus()
-    }
+      this.stopPartialLoop()
+      // Wait for in-flight partial to finish so we don't race finalize on shared CLI.
+      await this.waitForPartialIdle()
 
-    return this.getStatus()
+      // Re-check: cancel may have cleared the session while we waited.
+      if (!this.session || this.session.id !== active.id) {
+        return this.getStatus()
+      }
+
+      await this.capture.stop()
+      const pcm = active.buffer.snapshot()
+      const sessionIdFinal = active.id
+      const wasContinuous = active.continuousVad
+      active.buffer.clear()
+      this.continuousVadActive = false
+      this.speechActive = false
+      if (wasContinuous) {
+        this.emitVad(sessionIdFinal, 'disarmed', false)
+      }
+
+      this.phase = 'transcribing'
+      this.session = { ...active, phase: 'transcribing', continuousVad: false, buffer: new VoicePcmBuffer() }
+      this.emitStatus()
+
+      try {
+        if (pcm.length > 0) {
+          if (!this.stt.isReady()) {
+            throw new Error(this.stt.detail)
+          }
+          const result = await this.stt.transcribePcm(pcm)
+          this.lastTranscript = result.text
+          log('voice', `stt.final ${JSON.stringify(sttLogMeta(result))}`)
+          this.onEvent({
+            type: 'final',
+            event: {
+              sessionId: sessionIdFinal,
+              text: result.text,
+              isFinal: true,
+              at: this.now().toISOString(),
+            },
+          })
+        } else {
+          this.lastTranscript = ''
+          this.onEvent({
+            type: 'final',
+            event: {
+              sessionId: sessionIdFinal,
+              text: '',
+              isFinal: true,
+              at: this.now().toISOString(),
+            },
+          })
+        }
+        this.lastError = null
+        this.lastPartialText = null
+        this.phase = 'ready'
+      } catch (error) {
+        this.phase = 'error'
+        this.lastError = error instanceof Error ? error.message : String(error)
+        this.emitError(sessionIdFinal, this.lastError)
+      } finally {
+        this.session = null
+        this.emitStatus()
+      }
+
+      return this.getStatus()
+    } finally {
+      this.stopInFlight = false
+    }
   }
 
   async cancel(sessionId?: string | null): Promise<VoiceHostStatus> {
@@ -324,8 +386,14 @@ export class VoiceHost {
       await this.waitForPartialIdle()
       await this.capture.stop()
       active.buffer.clear()
+      if (active.continuousVad) {
+        this.emitVad(active.id, 'disarmed', false)
+      }
       this.session = null
     }
+    this.continuousVadActive = false
+    this.speechActive = false
+    this.autoFinalizeInFlight = false
     this.lastPartialText = null
     this.phase = isDesktopFeatureEnabled(this.features, 'voice') ? 'ready' : 'disabled'
     this.lastError = null
@@ -385,19 +453,30 @@ export class VoiceHost {
     this.speakInFlight = true
     this.phase = 'speaking'
     this.emitStatus()
+    let bargedIn = false
     try {
+      await this.startBargeInMonitor(() => {
+        bargedIn = true
+      })
       await this.tts.speak(text, {
         voiceId: input.voiceId,
         rate: input.rate,
       })
-      log('voice', `tts.speak ${JSON.stringify({ chars: text.length, backend: this.tts.backend })}`)
-      this.phase = 'ready'
+      log('voice', `tts.speak ${JSON.stringify({ chars: text.length, backend: this.tts.backend, bargedIn })}`)
+      this.phase = bargedIn ? 'ready' : 'ready'
     } catch (error) {
-      this.phase = 'error'
-      this.lastError = error instanceof Error ? error.message : String(error)
-      this.emitError(null, this.lastError)
-      throw error
+      // Barge-in cancel surfaces as speak abort — not a hard error.
+      if (bargedIn) {
+        this.phase = 'ready'
+        this.lastError = null
+      } else {
+        this.phase = 'error'
+        this.lastError = error instanceof Error ? error.message : String(error)
+        this.emitError(null, this.lastError)
+        throw error
+      }
     } finally {
+      await this.stopBargeInMonitor()
       this.speakInFlight = false
       this.emitStatus()
     }
@@ -410,6 +489,7 @@ export class VoiceHost {
     } catch {
       // best-effort
     }
+    await this.stopBargeInMonitor()
     if (this.speakInFlight || this.phase === 'speaking') {
       this.speakInFlight = false
       if (this.phase === 'speaking') {
@@ -418,6 +498,15 @@ export class VoiceHost {
       this.emitStatus()
     }
     return this.getStatus()
+  }
+
+  /** Test helper: last VAD speech-active flag. */
+  getVadSpeechActive(): boolean {
+    return this.speechActive
+  }
+
+  getBargeInArmed(): boolean {
+    return this.bargeInArmed
   }
 
   private startPartialLoop(sessionId: string) {
@@ -483,6 +572,83 @@ export class VoiceHost {
     }
   }
 
+  private onVadChunk(sessionId: string, chunk: Float32Array) {
+    if (this.autoFinalizeInFlight) return
+    const previous = this.vadState
+    const { state, shouldFinalize, reason } = tickVad(previous, chunk, this.vadPolicy)
+    this.vadState = state
+    if (state.speechActive !== this.speechActive) {
+      this.speechActive = state.speechActive
+      this.emitVad(sessionId, state.speechActive ? 'speech_start' : 'speech_end', state.speechActive)
+      this.emitStatus()
+    }
+    if (shouldFinalize) {
+      this.autoFinalizeInFlight = true
+      this.emitVad(sessionId, reason === 'timeout' ? 'timeout' : 'speech_end', false)
+      void this.stopSession(sessionId).finally(() => {
+        this.autoFinalizeInFlight = false
+      })
+    }
+  }
+
+  private async startBargeInMonitor(onBargeIn: () => void) {
+    if (!this.bargeInEnabled) return
+    if (this.capture.backend === 'unavailable') return
+    if (this.session || this.bargeInCapture) return
+    this.bargeInArmed = true
+    this.bargeInCapture = true
+    this.emitVad(null, 'armed', false)
+    this.emitStatus()
+    try {
+      await this.capture.start((chunk) => {
+        if (!this.speakInFlight || !this.bargeInArmed) return
+        if (!isBargeInSpeech(chunk, this.vadPolicy)) return
+        this.bargeInArmed = false
+        this.emitVad(null, 'barge_in', true)
+        onBargeIn()
+        void this.tts.cancel()
+      })
+    } catch {
+      this.bargeInArmed = false
+      this.bargeInCapture = false
+    }
+  }
+
+  private async stopBargeInMonitor() {
+    const wasArmed = this.bargeInArmed || this.bargeInCapture
+    this.bargeInArmed = false
+    if (this.bargeInCapture) {
+      this.bargeInCapture = false
+      // Only stop capture if no active listen session owns it.
+      if (!this.session) {
+        try {
+          await this.capture.stop()
+        } catch {
+          // best-effort
+        }
+      }
+    }
+    if (wasArmed) {
+      this.emitVad(null, 'disarmed', false)
+    }
+  }
+
+  private emitVad(
+    sessionId: string | null,
+    reason: 'speech_start' | 'speech_end' | 'timeout' | 'barge_in' | 'armed' | 'disarmed',
+    speechActive: boolean,
+  ) {
+    this.onEvent({
+      type: 'vad',
+      event: {
+        sessionId,
+        speechActive,
+        reason,
+        at: this.now().toISOString(),
+      },
+    })
+  }
+
   private publicSession(session: ActiveSession): VoiceSessionSnapshot {
     return {
       id: session.id,
@@ -491,6 +657,7 @@ export class VoiceHost {
       mode: session.mode,
       phase: session.phase,
       startedAt: session.startedAt,
+      continuousVad: session.continuousVad,
     }
   }
 

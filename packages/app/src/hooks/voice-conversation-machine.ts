@@ -19,6 +19,8 @@ export type VoiceConversationPhase =
 export type VoiceConversationEvent =
   | { type: 'START_LISTEN' }
   | { type: 'STOP_LISTEN' }
+  /** Host energy-VAD already stopped capture; chrome only moves to finalizing. */
+  | { type: 'HOST_AUTO_FINALIZE' }
   | { type: 'CANCEL' }
   | { type: 'BARGE_IN' }
   | { type: 'STT_FINAL'; text: string }
@@ -28,6 +30,7 @@ export type VoiceConversationEvent =
   | { type: 'STREAM_DONE'; text: string }
   | { type: 'SPEAK_DONE' }
   | { type: 'SPEAK_ERROR'; message: string }
+  | { type: 'SET_CONTINUOUS'; continuous: boolean }
   | { type: 'RESET' }
 
 export type VoiceConversationEffect =
@@ -47,6 +50,11 @@ export type VoiceConversationState = {
   lastUserText: string | null
   /** Last assistant reply text spoken or ready to speak. */
   lastAssistantText: string | null
+  /**
+   * When true, after SPEAK_DONE the machine re-arms listening (continuous
+   * conversation, JOE-1104). Still requires explicit user enable at the UI.
+   */
+  continuous: boolean
 }
 
 export type VoiceConversationTransition = {
@@ -60,6 +68,7 @@ export function createInitialVoiceConversationState(): VoiceConversationState {
     lastError: null,
     lastUserText: null,
     lastAssistantText: null,
+    continuous: false,
   }
 }
 
@@ -80,7 +89,16 @@ export function reduceVoiceConversation(
 ): VoiceConversationTransition {
   switch (event.type) {
     case 'RESET':
-      return { state: createInitialVoiceConversationState(), effects: [{ type: 'cancel_speak' }, { type: 'cancel_listen' }] }
+      return {
+        state: createInitialVoiceConversationState(),
+        effects: [{ type: 'cancel_speak' }, { type: 'cancel_listen' }],
+      }
+
+    case 'SET_CONTINUOUS':
+      return {
+        state: { ...state, continuous: event.continuous },
+        effects: [],
+      }
 
     case 'START_LISTEN': {
       if (state.phase === 'listening') {
@@ -112,6 +130,15 @@ export function reduceVoiceConversation(
       return {
         state: withPhase(state, 'finalizing'),
         effects: [{ type: 'stop_listen' }],
+      }
+    }
+
+    case 'HOST_AUTO_FINALIZE': {
+      // Continuous VAD (JOE-1104): host already called stopSession; do not stop again.
+      if (state.phase !== 'listening') return { state, effects: [] }
+      return {
+        state: withPhase(state, 'finalizing'),
+        effects: [],
       }
     }
 
@@ -177,6 +204,13 @@ export function reduceVoiceConversation(
 
     case 'SPEAK_DONE': {
       if (state.phase !== 'speaking') return { state, effects: [] }
+      // Continuous mode (JOE-1104): re-arm listening after the assistant finishes.
+      if (state.continuous) {
+        return {
+          state: withPhase(state, 'listening', { lastError: null }),
+          effects: [{ type: 'start_listen' }],
+        }
+      }
       return {
         state: withPhase(state, 'idle'),
         effects: [],

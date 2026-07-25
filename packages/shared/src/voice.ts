@@ -71,6 +71,16 @@ export type VoiceCaptureStatus = {
   peak: number
 }
 
+/** Energy VAD privacy/status (JOE-1104) — no audio samples. */
+export type VoiceVadStatus = {
+  /** Continuous VAD listen is armed for this session. */
+  continuous: boolean
+  /** VAD believes the user is currently speaking. */
+  speechActive: boolean
+  /** Host is monitoring mic energy during TTS for barge-in. */
+  bargeInArmed: boolean
+}
+
 export type VoiceHostStatus = {
   /** Feature + authority gate: false when features.voice off or non-local workspace. */
   enabled: boolean
@@ -95,6 +105,8 @@ export type VoiceHostStatus = {
   sessionId: string | null
   /** Optional capture diagnostics (no audio samples). */
   capture?: VoiceCaptureStatus
+  /** Optional VAD / continuous-listen diagnostics (JOE-1104). */
+  vad?: VoiceVadStatus
 }
 
 export type VoiceSessionStartInput = {
@@ -103,6 +115,11 @@ export type VoiceSessionStartInput = {
   workspaceId?: string | null
   /** Push-to-talk vs continuous; V2 UI uses ptt. */
   mode?: 'ptt' | 'conversation'
+  /**
+   * When true (conversation mode only), host runs energy VAD and auto-finalizes
+   * on end-of-utterance / max-listen. Default false — never silent always-on.
+   */
+  continuousVad?: boolean
 }
 
 export type VoiceSessionSnapshot = {
@@ -112,6 +129,14 @@ export type VoiceSessionSnapshot = {
   mode: 'ptt' | 'conversation'
   phase: VoiceHostPhase
   startedAt: string
+  continuousVad?: boolean
+}
+
+export type VoiceVadEvent = {
+  sessionId: string | null
+  speechActive: boolean
+  reason: 'speech_start' | 'speech_end' | 'timeout' | 'barge_in' | 'armed' | 'disarmed'
+  at: string
 }
 
 export type VoicePartialEvent = {
@@ -132,6 +157,7 @@ export type VoiceHostEvent =
   | { type: 'status'; status: VoiceHostStatus }
   | { type: 'partial'; event: VoicePartialEvent }
   | { type: 'final'; event: VoiceFinalEvent }
+  | { type: 'vad'; event: VoiceVadEvent }
   | { type: 'error'; sessionId: string | null; message: string; at: string }
 
 /** Default host status before the voice host process is wired (V0/V1 scaffold). */

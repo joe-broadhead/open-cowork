@@ -33,10 +33,12 @@ function normalizeStartInput(value: Record<string, unknown> | undefined): VoiceS
     ? value.workspaceId.trim()
     : null
   const mode = value.mode === 'conversation' || value.mode === 'ptt' ? value.mode : undefined
+  const continuousVad = value.continuousVad === true
   return {
     ...(openCodeSessionId ? { openCodeSessionId } : {}),
     ...(workspaceId ? { workspaceId } : {}),
     ...(mode ? { mode } : {}),
+    ...(continuousVad ? { continuousVad: true } : {}),
   }
 }
 
