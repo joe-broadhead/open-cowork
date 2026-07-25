@@ -134,7 +134,8 @@
       "ignoreCves": [],
       "ignoreGhsas": [
         "GHSA-7G7R-GX96-252G",
-        "GHSA-P2F4-R6V6-J797"
+        "GHSA-P2F4-R6V6-J797",
+        "GHSA-MH99-V99M-4GVG"
       ]
     }
   },

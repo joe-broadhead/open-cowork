@@ -35,6 +35,7 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     workflowDesktopNotifications: true,
     workflowQuietHoursStart: null,
     workflowQuietHoursEnd: null,
+    voicePttShortcut: 'CmdOrCtrl+Shift+Space',
     effectiveProviderId: null,
     effectiveModel: null,
     ...overrides,

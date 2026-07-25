@@ -176,10 +176,14 @@ import type {
   KnowledgeSpaceInput,
 } from './knowledge.js'
 import type {
+  VoiceAssetEnsureResultSnapshot,
+  VoiceAssetStatusSnapshot,
   VoiceHostEvent,
   VoiceHostStatus,
   VoiceSessionSnapshot,
   VoiceSessionStartInput,
+  VoiceTtsSpeakInput,
+  VoiceTtsVoiceInfo,
 } from './voice.js'
 import type {
   AdminAccess,
@@ -365,14 +369,22 @@ export interface CoworkAPI {
     restoreVersion: (pageId: string, versionId: string, input?: KnowledgeReviewInput) => Promise<{ page: KnowledgePageVersion }>
   }
   /**
-   * Private realtime voice (Desktop Local). Scaffold: status/session IPC;
-   * engines land in V1+. Prefer text events over raw audio on this surface.
+   * Private realtime voice (Desktop Local). Status/session + local TTS speak.
+   * Prefer text events over raw audio on this surface.
    */
   voice: {
     status: () => Promise<VoiceHostStatus>
     startSession: (input?: VoiceSessionStartInput) => Promise<VoiceSessionSnapshot>
     stopSession: (sessionId?: string | null) => Promise<VoiceHostStatus>
     cancel: (sessionId?: string | null) => Promise<VoiceHostStatus>
+    /** Host-owned local TTS (OS speech). Never streams audio to the renderer. */
+    speak: (input: VoiceTtsSpeakInput) => Promise<VoiceHostStatus>
+    cancelSpeak: () => Promise<VoiceHostStatus>
+    listVoices: () => Promise<VoiceTtsVoiceInfo[]>
+    /** STT/TTS asset readiness (JOE-1109). Paths/metadata only. */
+    assetsStatus: () => Promise<VoiceAssetStatusSnapshot>
+    /** Ensure STT model is local (copy from system cache or fail closed). */
+    ensureAssets: () => Promise<VoiceAssetEnsureResultSnapshot>
   }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>

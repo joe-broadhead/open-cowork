@@ -42,3 +42,5 @@ Desktop Cloud + Cloud Web: same cloud thread continues; Cloud Web shows capabili
 
 - [Product purity register](../product-purity-register.md)
 - [Product purity checklist](../product-purity-checklist.md)
+- [Dogfood evidence JOE-1092](product-purity-dogfood-evidence-joe-1092.md)
+- [Cloud sync residual JOE-1094](cloud-sync-dogfood-residual-joe-1094.md)

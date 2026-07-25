@@ -22,9 +22,23 @@ export type VoiceCaptureMode = 'voice_host' | 'renderer'
 export type VoiceSttEngine = 'aurum_local' | 'unavailable'
 
 /**
- * TTS is intentionally not Aurum (STT-first product). Sibling engine TBD.
+ * TTS is intentionally not Aurum (STT-first product). Sibling engine:
+ * system OS speech for MVP (JOE-1108); neural/Piper deferred.
  */
-export type VoiceTtsEngine = 'sibling' | 'unavailable'
+export type VoiceTtsEngine = 'system_os' | 'unavailable'
+
+export type VoiceTtsSpeakInput = {
+  text: string
+  voiceId?: string | null
+  /** Backend-specific rate (macOS say: words per minute). */
+  rate?: number | null
+}
+
+export type VoiceTtsVoiceInfo = {
+  id: string
+  name: string
+  language?: string | null
+}
 
 export type VoiceHostPhase =
   | 'disabled'
@@ -57,6 +71,16 @@ export type VoiceCaptureStatus = {
   peak: number
 }
 
+/** Energy VAD privacy/status (JOE-1104) — no audio samples. */
+export type VoiceVadStatus = {
+  /** Continuous VAD listen is armed for this session. */
+  continuous: boolean
+  /** VAD believes the user is currently speaking. */
+  speechActive: boolean
+  /** Host is monitoring mic energy during TTS for barge-in. */
+  bargeInArmed: boolean
+}
+
 export type VoiceHostStatus = {
   /** Feature + authority gate: false when features.voice off or non-local workspace. */
   enabled: boolean
@@ -81,6 +105,37 @@ export type VoiceHostStatus = {
   sessionId: string | null
   /** Optional capture diagnostics (no audio samples). */
   capture?: VoiceCaptureStatus
+  /** Optional VAD / continuous-listen diagnostics (JOE-1104). */
+  vad?: VoiceVadStatus
+  /** First-run model/voice asset readiness (JOE-1109). Paths only — no file bytes. */
+  assets?: VoiceAssetStatusSnapshot
+}
+
+/** Host-reported STT/TTS asset readiness for Settings / Health (JOE-1109). */
+export type VoiceAssetStatusSnapshot = {
+  stt: {
+    model: string
+    modelFile: string
+    ready: boolean
+    cacheDir: string
+    modelPath: string | null
+    integrity: 'ok' | 'missing' | 'unverified' | 'mismatch' | 'too_small'
+    allowDownload: boolean
+    cliAvailable: boolean
+    detail: string | null
+  }
+  tts: {
+    ready: boolean
+    backend: 'system_os' | 'fake' | 'unavailable'
+    detail: string | null
+  }
+  offlineReady: boolean
+}
+
+export type VoiceAssetEnsureResultSnapshot = {
+  status: VoiceAssetStatusSnapshot
+  action: 'already_ready' | 'copied_from_system' | 'verified' | 'needs_download' | 'failed'
+  detail: string
 }
 
 export type VoiceSessionStartInput = {
@@ -89,6 +144,11 @@ export type VoiceSessionStartInput = {
   workspaceId?: string | null
   /** Push-to-talk vs continuous; V2 UI uses ptt. */
   mode?: 'ptt' | 'conversation'
+  /**
+   * When true (conversation mode only), host runs energy VAD and auto-finalizes
+   * on end-of-utterance / max-listen. Default false — never silent always-on.
+   */
+  continuousVad?: boolean
 }
 
 export type VoiceSessionSnapshot = {
@@ -98,6 +158,14 @@ export type VoiceSessionSnapshot = {
   mode: 'ptt' | 'conversation'
   phase: VoiceHostPhase
   startedAt: string
+  continuousVad?: boolean
+}
+
+export type VoiceVadEvent = {
+  sessionId: string | null
+  speechActive: boolean
+  reason: 'speech_start' | 'speech_end' | 'timeout' | 'barge_in' | 'armed' | 'disarmed'
+  at: string
 }
 
 export type VoicePartialEvent = {
@@ -118,6 +186,7 @@ export type VoiceHostEvent =
   | { type: 'status'; status: VoiceHostStatus }
   | { type: 'partial'; event: VoicePartialEvent }
   | { type: 'final'; event: VoiceFinalEvent }
+  | { type: 'vad'; event: VoiceVadEvent }
   | { type: 'error'; sessionId: string | null; message: string; at: string }
 
 /** Default host status before the voice host process is wired (V0/V1 scaffold). */
@@ -132,9 +201,9 @@ export function createDeferredVoiceHostStatus(reason: string): VoiceHostStatus {
       detail: 'Aurum STT not wired yet',
     },
     tts: {
-      engine: 'sibling',
+      engine: 'system_os',
       ready: false,
-      detail: 'Sibling TTS not wired yet',
+      detail: 'Local TTS not ready (OS speech or future neural sidecar).',
     },
     permissions: {
       microphone: 'unknown',
@@ -149,6 +218,9 @@ export const VOICE_HOST_DEFERRED_REASON =
 
 export const VOICE_STT_DEFERRED_REASON =
   'Aurum STT not ready: install aurum CLI and cache tiny-q5_1 (local_only), or set OPEN_COWORK_AURUM_BIN.'
+
+export const VOICE_TTS_DEFERRED_REASON =
+  'Local TTS not ready: OS speech tools unavailable (macOS say), or neural TTS not installed.'
 
 /**
  * Derive host status from feature flags alone (no live capture). Used by

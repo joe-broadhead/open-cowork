@@ -204,6 +204,49 @@ describe('MessageBubble', () => {
     expect(screen.queryByRole('button', { name: 'View diff' })).not.toBeInTheDocument()
   })
 
+  it('offers private read-aloud for completed assistant messages when voice TTS is ready', async () => {
+    const user = userEvent.setup()
+    const speak = vi.fn(async () => ({ phase: 'ready' }))
+    const cancelSpeak = vi.fn(async () => ({ phase: 'ready' }))
+    installMessageApi()
+    const baseConfig = window.coworkApi.app.config as () => Promise<Record<string, unknown>>
+    window.coworkApi.app.config = vi.fn(async () => ({
+      ...(await baseConfig()),
+      features: { voice: true },
+    }))
+    // @ts-expect-error extend test double
+    window.coworkApi.voice = {
+      status: vi.fn(async () => ({
+        enabled: true,
+        phase: 'ready',
+        captureMode: 'voice_host',
+        stt: { engine: 'aurum_local', ready: true },
+        tts: { engine: 'system_os', ready: true, detail: 'ok' },
+        permissions: { microphone: 'granted' },
+        reason: null,
+        sessionId: null,
+      })),
+      speak,
+      cancelSpeak,
+    }
+    // @ts-expect-error extend test double
+    window.coworkApi.on = {
+      ...(window.coworkApi.on || {}),
+      voiceEvent: () => () => {},
+    }
+
+    render(<MessageBubble message={{
+      id: 'assistant-read',
+      role: 'assistant',
+      content: 'Hello **from** the assistant',
+      order: 3,
+    }} />)
+
+    const button = await screen.findByTestId('message-read-aloud')
+    await user.click(button)
+    await waitFor(() => expect(speak).toHaveBeenCalledWith({ text: 'Hello from the assistant' }))
+  })
+
   it('hides message actions when the visible bubble is only part of an SDK message', () => {
     render(
       <MessageBubble

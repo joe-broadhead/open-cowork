@@ -64,6 +64,41 @@ describe('ChatInputToolbar', () => {
     expect(props.onSubmit).toHaveBeenCalledTimes(1)
   })
 
+  it('renders private voice PTT control when voice is visible', () => {
+    const toggle = vi.fn()
+    renderToolbar({
+      voice: {
+        visible: true,
+        enabled: true,
+        disabledReason: null,
+        phase: 'idle',
+        statusLabel: null,
+        isActive: false,
+        toggle,
+        cancel: vi.fn(),
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Dictate with private voice/i }))
+    expect(toggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides private voice control when not visible', () => {
+    renderToolbar({
+      voice: {
+        visible: false,
+        enabled: false,
+        disabledReason: 'off',
+        phase: 'idle',
+        statusLabel: null,
+        isActive: false,
+        toggle: vi.fn(),
+        cancel: vi.fn(),
+      },
+    })
+    expect(screen.queryByRole('button', { name: /Dictate with private voice/i })).toBeNull()
+  })
+
   it('opens the reasoning selector when a model exposes variants', () => {
     const reasoningButtonRef = createRef<HTMLButtonElement>()
     const onToggleReasoningMenu = vi.fn()
