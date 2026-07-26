@@ -1522,6 +1522,61 @@ test('sandbox capability binds mutable image tags to the declared and inspected 
   assert.equal(capability.reasonCode, 'sandbox_runtime_image_unverified')
 })
 
+test('sandbox capability accepts an exact matching repository digest', async () => {
+  const policy = sandboxPolicy()
+  const provider = createSandboxCloudExecutionIsolationProvider({
+    policy,
+    workerId: 'sandbox-repository-digest-test-worker',
+    runtimeRootPath: tmpdir(),
+    runner: {
+      async run(_command, args) {
+        if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
+        if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
+        if (args[0] === 'image') {
+          return {
+            exitCode: 0,
+            stdout: fakeImageInspection(
+              `sha256:${'b'.repeat(64)}`,
+              [`open-cowork/opencode@${IMAGE_DIGEST}`],
+            ),
+          }
+        }
+        return { exitCode: 1 }
+      },
+    },
+  })
+
+  const capability = await provider.capability()
+  assert.equal(capability.available, true)
+  assert.equal(capability.verified, true)
+})
+
+test('sandbox capability fails closed on malformed image inspection', async () => {
+  for (const [caseIndex, stdout] of [
+    'not-json',
+    JSON.stringify({ Id: 'sha256:invalid', RepoDigests: [] }),
+  ].entries()) {
+    const provider = createSandboxCloudExecutionIsolationProvider({
+      policy: sandboxPolicy(),
+      workerId: `sandbox-malformed-image-test-worker-${caseIndex}`,
+      runtimeRootPath: tmpdir(),
+      runner: {
+        async run(_command, args) {
+          if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
+          if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
+          if (args[0] === 'image') return { exitCode: 0, stdout }
+          return { exitCode: 1 }
+        },
+      },
+    })
+
+    const capability = await provider.capability()
+    assert.equal(capability.available, false)
+    assert.equal(capability.reasonCode, 'sandbox_runtime_image_unverified')
+    await provider.close?.()
+  }
+})
+
 test('sandbox capability accepts an immutable local Docker image id without RepoDigests', async () => {
   const imageId = `sha256:${'d'.repeat(64)}`
   const policy = sandboxPolicy({
