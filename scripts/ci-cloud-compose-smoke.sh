@@ -23,14 +23,22 @@ run_split_role_isolation_proof() {
   if [ "${compose_file}" != "docker-compose.cloud.split.yml" ]; then
     return 0
   fi
-  # Prove the exact image Compose just built and started. A separately built
-  # BuildKit OCI-index tag can inspect to the index digest rather than the
-  # loaded platform image id, which is not valid per-boundary evidence.
-  local image_ref="${OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local}"
+  # Prove the exact platform image Compose started for the execution worker.
+  # A tag can inspect to an OCI-index digest when the containerd image store is
+  # enabled, which is not the image id Docker records on a running boundary.
+  local worker_container_id
   local image_id
-  image_id="$(docker image inspect --format '{{.Id}}' "${image_ref}")"
+  worker_container_id="$(
+    docker compose -p "${project_name}" -f "${compose_file}" \
+      ps -q open-cowork-cloud-worker
+  )"
+  if [[ ! "${worker_container_id}" =~ ^[a-f0-9]{12,64}$ ]]; then
+    echo "cloud isolation proof could not resolve the started worker container" >&2
+    return 1
+  fi
+  image_id="$(docker inspect --format '{{.Image}}' "${worker_container_id}")"
   if [[ ! "${image_id}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-    echo "cloud isolation proof could not resolve an immutable local image id" >&2
+    echo "cloud isolation proof could not resolve the worker platform image id" >&2
     return 1
   fi
   OPEN_COWORK_CLOUD_ISOLATION_IMAGE="${image_id}" \
