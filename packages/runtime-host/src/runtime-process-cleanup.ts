@@ -102,9 +102,12 @@ export function buildPsSnapshotArgs(
   includeEnvironment = false,
 ) {
   if (platform === 'win32') return null
-  const commandColumn = platform === 'linux' ? 'args=' : 'command='
-  const args = ['-axo', `pid=,ppid=,${commandColumn}`]
-  return includeEnvironment ? [platform === 'linux' ? '-eww' : 'eww', ...args] : args
+  if (platform === 'linux') {
+    const columns = 'pid=,ppid=,args='
+    return includeEnvironment ? ['-A', 'eww', '-o', columns] : ['-A', '-o', columns]
+  }
+  const args = ['-axo', 'pid=,ppid=,command=']
+  return includeEnvironment ? ['eww', ...args] : args
 }
 
 function loadProcessSnapshot(includeEnvironment = false) {
