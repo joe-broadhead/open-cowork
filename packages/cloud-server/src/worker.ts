@@ -6,7 +6,11 @@ import type { CloudSessionService } from './session-service.ts'
 import type { CloudAbuseConfig } from '@open-cowork/shared'
 
 export type CloudWorkerCheckpointHooks = {
-  restoreBeforeCommands?: (lease: WorkerLeaseRecord) => Promise<void>
+  /**
+   * Development/shared-runtime compatibility only. Isolated runtimes restore
+   * through their per-generation prepareProvision hook instead.
+   */
+  restoreBeforeCommand?: (lease: WorkerLeaseRecord) => Promise<void>
   saveAfterCommand?: (lease: WorkerLeaseRecord) => Promise<void>
 }
 
@@ -66,12 +70,6 @@ export class CloudWorker {
   // server-side lease is then reclaimed by the expiry reaper.
   private readonly leases = new Map<string, WorkerLeaseRecord>()
   private readonly maxLeases: number
-  // Sessions whose checkpoint has already been restored on this worker, keyed on the stable
-  // tenant\0session key (not the per-claim lease token, which changed every claim → unbounded
-  // growth, and re-ran the expensive restore for an already-warm session on a new token). Bounded
-  // with oldest-eviction (P2, same class as the fixed P3-13 leak).
-  private readonly restoredSessions = new Set<string>()
-  private readonly maxRestoredSessions = 4096
   private readonly activeCommands = new Map<string, ActiveWorkerCommand>()
   private readonly store: ControlPlaneStore
   private readonly service: CloudSessionService
@@ -107,10 +105,10 @@ export class CloudWorker {
 
   async processSessionCommands(tenantId: string, sessionId: string): Promise<number> {
     if (this.shutdownStarted) return 0
-    let lease = await this.getOrClaimLease(tenantId, sessionId)
-    if (!lease) return 0
+    const claimedLease = await this.getOrClaimLease(tenantId, sessionId)
+    if (!claimedLease) return 0
+    let lease: WorkerLeaseRecord = claimedLease
     let processed = 0
-    await this.restoreCheckpointOnce(lease)
     await this.store.recordWorkerHeartbeat({
       workerId: this.workerId,
       role: 'worker',
@@ -140,17 +138,23 @@ export class CloudWorker {
         eventType: 'worker.execution_started',
       })
       try {
-        const commandLease = lease
+        const commandLease: WorkerLeaseRecord = lease
         const controller = new AbortController()
         const activeCommand = this.trackActiveCommand(commandLease, command, controller)
         try {
-          lease = await this.executeWithLeaseRenewal(
+          lease = await this.service.withRuntimeExecutionScope(
             commandLease,
-            controller,
-            activeCommand,
-            (signal) => this.service.executeCommand(commandLease, command, { signal, deferAck: true }),
+            async (): Promise<WorkerLeaseRecord> => {
+              await this.checkpointHooks.restoreBeforeCommand?.(commandLease)
+              const executedLease: WorkerLeaseRecord = await this.executeWithLeaseRenewal(
+                commandLease,
+                controller,
+                activeCommand,
+                (signal) => this.service.executeCommand(commandLease, command, { signal, deferAck: true }),
+              )
+              return this.checkpointAndAckCommand(executedLease, command.commandId)
+            },
           )
-          lease = await this.checkpointAndAckCommand(lease, command.commandId)
         } finally {
           this.activeCommands.delete(activeCommand.key)
         }
@@ -538,17 +542,6 @@ export class CloudWorker {
         workerId: this.workerId,
         status: 'failed',
       })
-    }
-  }
-
-  private async restoreCheckpointOnce(lease: WorkerLeaseRecord) {
-    const key = this.leaseKey(lease.tenantId, lease.sessionId)
-    if (!this.checkpointHooks.restoreBeforeCommands || this.restoredSessions.has(key)) return
-    await this.checkpointHooks.restoreBeforeCommands(lease)
-    this.restoredSessions.add(key)
-    if (this.restoredSessions.size > this.maxRestoredSessions) {
-      const oldest = this.restoredSessions.values().next().value
-      if (oldest !== undefined) this.restoredSessions.delete(oldest)
     }
   }
 

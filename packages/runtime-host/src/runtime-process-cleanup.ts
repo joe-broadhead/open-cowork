@@ -102,8 +102,11 @@ export function buildPsSnapshotArgs(
   includeEnvironment = false,
 ) {
   if (platform === 'win32') return null
-  const commandColumn = platform === 'linux' ? 'args=' : 'command='
-  const args = ['-axo', `pid=,ppid=,${commandColumn}`]
+  if (platform === 'linux') {
+    const columns = 'pid=,ppid=,args='
+    return includeEnvironment ? ['-A', 'eww', '-o', columns] : ['-A', '-o', columns]
+  }
+  const args = ['-axo', 'pid=,ppid=,command=']
   return includeEnvironment ? ['eww', ...args] : args
 }
 
@@ -209,14 +212,17 @@ export function resolveListeningPid(port: number) {
   }
 }
 
-export async function cleanupOrphanedManagedOpencodeProcesses() {
+export async function cleanupOrphanedManagedOpencodeProcesses(options: {
+  usePidLedger?: boolean
+} = {}) {
+  const usePidLedger = options.usePidLedger !== false
   const plainSnapshot = loadProcessSnapshot(false)
-  const trackedRootPids = readTrackedManagedRuntimePids()
+  const trackedRootPids = usePidLedger ? readTrackedManagedRuntimePids() : []
   const trackedRoots = plainSnapshot
     .filter((process) => trackedRootPids.includes(process.pid))
     .filter((process) => process.command.includes('opencode serve --hostname=127.0.0.1 --port=0'))
     .map((process) => process.pid)
-  if (trackedRootPids.length > 0 && trackedRoots.length === 0) {
+  if (usePidLedger && trackedRootPids.length > 0 && trackedRoots.length === 0) {
     writeTrackedManagedRuntimePids([])
   }
   const trackedTree = collectProcessTreeFromRootPids(plainSnapshot, trackedRoots)
@@ -246,7 +252,7 @@ export async function cleanupOrphanedManagedOpencodeProcesses() {
     }
   }
 
-  writeTrackedManagedRuntimePids([])
+  if (usePidLedger) writeTrackedManagedRuntimePids([])
 
   log('runtime', `Cleaned ${initial.length} orphaned Cowork runtime process(es) before startup`)
 }

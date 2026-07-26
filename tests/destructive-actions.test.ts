@@ -32,6 +32,18 @@ test('destructive confirmation tokens do not authorize a different target', () =
   )
 })
 
+test('Gateway credential reset confirmation cannot authorize an app reset', () => {
+  const manager = createDestructiveConfirmationManager(() => 1_000)
+  const grant = manager.issue({ action: 'gateway.credentials.reset' })
+
+  assert.equal(manager.consume({ action: 'app.reset' }, grant.token), false)
+  assert.equal(
+    manager.consume({ action: 'gateway.credentials.reset' }, grant.token),
+    false,
+    'failed cross-action consumption still consumes the single-use token',
+  )
+})
+
 test('destructive confirmation tokens expire', () => {
   let now = 1_000
   const manager = createDestructiveConfirmationManager(() => now)

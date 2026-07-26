@@ -3,6 +3,10 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { SMALL_MODEL_USE_MAIN } from '../packages/shared/src/app-config.ts'
+import {
+  createDisabledRuntimeToolingBridgeConsent,
+  RUNTIME_TOOLING_BRIDGE_CONSENT_VERSION,
+} from '../packages/shared/src/runtime-tooling-bridge.ts'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 
 // Persisted fixtures intentionally declare the current clean-baseline ledger.
@@ -171,6 +175,91 @@ test('default public config initializes native permission toggles enabled', asyn
     assert.equal(settings.privacyKeepConversationHistory, true)
     assert.equal(settings.privacyShareAnonymizedUsage, false)
     assert.equal(settings.runtimeConfigSource, 'app')
+    assert.deepEqual(
+      Object.values(settings.runtimeToolingBridge.categories),
+      Object.values(settings.runtimeToolingBridge.categories).map(() => false),
+    )
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('legacy monolithic tooling bridge values migrate to granular default-off consent', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-tooling-bridge-legacy-')
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+
+  try {
+    const fixtures: Array<[string, unknown, boolean]> = [
+      ['missing', undefined, false],
+      ['true', true, true],
+      ['false', false, true],
+      ['malformed', 'yes', true],
+    ]
+    for (const [label, legacyValue, includeLegacyKey] of fixtures) {
+      const userDataDir = join(tempRoot, label)
+      mkdirSync(userDataDir, { recursive: true })
+      process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+      writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+        _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+        selectedProviderId: 'openrouter',
+        selectedModelId: 'openrouter/auto',
+        ...(includeLegacyKey ? { runtimeToolingBridgeEnabled: legacyValue } : {}),
+      }))
+      clearConfigCaches()
+
+      const { loadSettings } = await importFreshSettingsModule(`legacy-tooling-bridge-${label}`)
+      const settings = loadSettings()
+      assert.equal(settings.runtimeToolingBridge.version, RUNTIME_TOOLING_BRIDGE_CONSENT_VERSION)
+      assert.equal(Object.values(settings.runtimeToolingBridge.categories).some(Boolean), false)
+    }
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('versioned granular tooling bridge consent preserves only declared boolean categories', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-tooling-bridge-versioned-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const runtimeToolingBridge = createDisabledRuntimeToolingBridgeConsent()
+  runtimeToolingBridge.categories.sourceControl = true
+
+  writeEmptyConfig(configDir)
+  mkdirSync(userDataDir, { recursive: true })
+  writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+    selectedProviderId: 'openrouter',
+    selectedModelId: 'openrouter/auto',
+    runtimeToolingBridge,
+    runtimeToolingBridgeEnabled: true,
+  }))
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings } = await importFreshSettingsModule('versioned-tooling-bridge')
+    const settings = loadSettings()
+    assert.equal(settings.runtimeToolingBridge.categories.sourceControl, true)
+    assert.equal(settings.runtimeToolingBridge.categories.ssh, false)
+    assert.equal('runtimeToolingBridgeEnabled' in settings, false)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

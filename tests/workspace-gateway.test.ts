@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { FileCloudWorkspaceRegistry } from '../apps/desktop/src/main/cloud-workspace-registry.ts'
@@ -282,7 +282,9 @@ test('workspace gateway registers standalone Gateway workspaces without treating
   assert.equal(workspace.status, 'online')
   assert.equal(workspace.baseUrl, 'https://gateway.example.test/admin')
   assert.equal(Object.values(workspace as Record<string, unknown>).includes('gateway-token'), false)
-  assert.equal(credentials.getToken(workspace.id), 'gateway-token')
+  const credential = credentials.getToken(workspace.id)
+  assert.equal(credential.status, 'available')
+  if (credential.status === 'available') assert.equal(credential.token, 'gateway-token')
   assert.equal(registry.list()[0]?.label, 'Private Gateway')
 
   const support = await workspaceGateway.supportMatrix(event(1), workspace.id)
@@ -304,6 +306,190 @@ test('workspace gateway registers standalone Gateway workspaces without treating
   assert.equal(syncCalls, 1)
   assert.equal(registry.list()[0]?.lastSyncedAt, result.syncedAt)
   assert.equal(workspaceGateway.list(event(1)).find((entry) => entry.id === workspace.id)?.lastSyncedAt, result.syncedAt)
+})
+
+test('workspace gateway invalidates a cached adapter after same-id token replacement', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-workspace-token-replacement-'))
+  const registry = new FileGatewayWorkspaceRegistry(join(root, 'gateway-workspaces.json'))
+  const credentials = new FileGatewayWorkspaceCredentialStore({
+    path: join(root, 'gateway-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
+  const observedTokens: Array<string | null | undefined> = []
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: null,
+    gatewayRegistry: registry,
+    gatewayCredentialStore: credentials,
+    gatewayAdapterFactory: (_connection, token) => {
+      observedTokens.push(token)
+      return {
+        health: async () => ({ ok: true, productMode: 'standalone' }),
+        ready: async () => ({ ok: true }),
+        sync: async () => {},
+      }
+    },
+  })
+  const input = {
+    baseUrl: 'https://gateway.example.test/admin',
+    label: 'Private Gateway',
+  }
+  const workspace = gateway.addGateway(event(1), { ...input, token: 'old-token' })
+  await gateway.sync(event(1), workspace.id)
+  gateway.addGateway(event(1), { ...input, token: 'new-token' })
+  await gateway.sync(event(1), workspace.id)
+
+  assert.deepEqual(observedTokens, ['old-token', 'new-token'])
+})
+
+test('workspace gateway surfaces transient credential unavailability and recovers without re-pairing', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-workspace-credential-recovery-'))
+  const registry = new FileGatewayWorkspaceRegistry(join(root, 'gateway-workspaces.json'))
+  let decryptAvailable = true
+  const credentials = new FileGatewayWorkspaceCredentialStore({
+    path: join(root, 'gateway-workspace-credentials.json'),
+    secretStorage: {
+      mode: 'encrypted',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf8'),
+      decryptString: (encrypted) => {
+        if (!decryptAvailable) throw new Error('simulated keychain denial')
+        return encrypted.toString('utf8')
+      },
+    },
+  })
+  const connection = registry.upsert({
+    baseUrl: 'https://gateway.example.test/admin',
+    label: 'Private Gateway',
+  })
+  credentials.save({ workspaceId: connection.id, token: 'preserved-token' })
+  const ciphertext = readFileSync(join(root, 'gateway-workspace-credentials.json'))
+  decryptAvailable = false
+  let receivedToken: string | null | undefined
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: null,
+    gatewayRegistry: registry,
+    gatewayCredentialStore: credentials,
+    gatewayAdapterFactory: (_connection, token) => ({
+      health: async () => ({ ok: true, productMode: 'standalone' }),
+      ready: async () => ({ ok: true }),
+      sync: async () => {
+        receivedToken = token
+      },
+    }),
+  })
+
+  const unavailable = gateway.list(event(1)).find(({ id }) => id === connection.id)
+  assert.equal(unavailable?.status, 'offline')
+  assert.equal(unavailable?.gatewayCredentialStatus, 'unavailable')
+  assert.match(unavailable?.error || '', /temporarily unavailable/)
+  await assert.rejects(() => gateway.sync(event(1), connection.id), /temporarily unavailable/)
+  const stillUnavailable = gateway.list(event(1)).find(({ id }) => id === connection.id)
+  assert.equal(stillUnavailable?.status, 'offline')
+  assert.equal(stillUnavailable?.gatewayCredentialStatus, 'unavailable')
+  assert.match(stillUnavailable?.error || '', /temporarily unavailable/)
+  assert.doesNotMatch(stillUnavailable?.error || '', /Add a Gateway workspace token/)
+  assert.deepEqual(readFileSync(join(root, 'gateway-workspace-credentials.json')), ciphertext)
+
+  decryptAvailable = true
+  const recovered = await gateway.sync(event(1), connection.id)
+  assert.equal(recovered.ok, true)
+  assert.equal(receivedToken, 'preserved-token')
+  assert.throws(
+    () => gateway.resetUnreadableGatewayCredentials(),
+    /readable/,
+  )
+})
+
+test('workspace gateway explicitly quarantines an unavailable credential store after key loss', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-workspace-key-loss-reset-'))
+  const registry = new FileGatewayWorkspaceRegistry(join(root, 'gateway-workspaces.json'))
+  const credentialPath = join(root, 'gateway-workspace-credentials.json')
+  let keyAvailable = true
+  const credentials = new FileGatewayWorkspaceCredentialStore({
+    path: credentialPath,
+    secretStorage: {
+      mode: 'encrypted',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf8'),
+      decryptString: (encrypted) => {
+        if (!keyAvailable) throw new Error('simulated permanent key loss')
+        return encrypted.toString('utf8')
+      },
+    },
+  })
+  const connection = registry.upsert({
+    baseUrl: 'https://gateway.example.test/admin',
+    label: 'Private Gateway',
+  })
+  credentials.save({ workspaceId: connection.id, token: 'preserved-token' })
+  const ciphertext = readFileSync(credentialPath)
+  keyAvailable = false
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: null,
+    gatewayRegistry: registry,
+    gatewayCredentialStore: credentials,
+  })
+
+  assert.equal(
+    gateway.list(event(1)).find(({ id }) => id === connection.id)?.gatewayCredentialStatus,
+    'unavailable',
+  )
+  assert.equal(gateway.resetUnreadableGatewayCredentials(), true)
+  assert.equal(existsSync(credentialPath), false)
+  const quarantined = readdirSync(root)
+    .filter((entry) => entry.startsWith('gateway-workspace-credentials.json.corrupt-'))
+  assert.equal(quarantined.length, 1)
+  assert.deepEqual(readFileSync(join(root, quarantined[0]!)), ciphertext)
+  const reset = gateway.list(event(1)).find(({ id }) => id === connection.id)
+  assert.equal(reset?.gatewayCredentialStatus, 'missing')
+  assert.equal(reset?.status, 'auth_required')
+})
+
+test('workspace gateway preserves corrupt credential recovery state after failed sync', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-workspace-credential-corrupt-'))
+  const registry = new FileGatewayWorkspaceRegistry(join(root, 'gateway-workspaces.json'))
+  const credentialPath = join(root, 'gateway-workspace-credentials.json')
+  const connection = registry.upsert({
+    baseUrl: 'https://gateway.example.test/admin',
+    label: 'Private Gateway',
+  })
+  const corruptCiphertext = Buffer.from('decrypted-but-invalid-json')
+  writeFileSync(credentialPath, corruptCiphertext)
+  const credentials = new FileGatewayWorkspaceCredentialStore({
+    path: credentialPath,
+    secretStorage: encryptedStorage(),
+  })
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: null,
+    gatewayRegistry: registry,
+    gatewayCredentialStore: credentials,
+  })
+
+  const corrupt = gateway.list(event(1)).find(({ id }) => id === connection.id)
+  assert.equal(corrupt?.status, 'error')
+  assert.equal(corrupt?.gatewayCredentialStatus, 'corrupt')
+  assert.match(corrupt?.error || '', /needs recovery/)
+
+  await assert.rejects(() => gateway.sync(event(1), connection.id), /needs recovery/)
+  const stillCorrupt = gateway.list(event(1)).find(({ id }) => id === connection.id)
+  assert.equal(stillCorrupt?.status, 'error')
+  assert.equal(stillCorrupt?.gatewayCredentialStatus, 'corrupt')
+  assert.match(stillCorrupt?.error || '', /needs recovery/)
+  assert.doesNotMatch(stillCorrupt?.error || '', /Add a Gateway workspace token/)
+  assert.deepEqual(readFileSync(credentialPath), corruptCiphertext)
+
+  assert.equal(gateway.resetUnreadableGatewayCredentials(), true)
+  assert.equal(existsSync(credentialPath), false)
+  const quarantined = readdirSync(root)
+    .filter((entry) => entry.startsWith('gateway-workspace-credentials.json.corrupt-'))
+  assert.equal(quarantined.length, 1)
+  assert.deepEqual(readFileSync(join(root, quarantined[0]!)), corruptCiphertext)
+  const resetWorkspace = gateway.list(event(1)).find(({ id }) => id === connection.id)
+  assert.equal(resetWorkspace?.status, 'auth_required')
+  assert.equal(resetWorkspace?.gatewayCredentialStatus, 'missing')
+  assert.match(resetWorkspace?.error || '', /Add a new token/)
 })
 
 test('gateway workspace registry rejects legacy secret-bearing records and enforces safe metadata-only URLs', () => {
@@ -629,6 +815,10 @@ test('workspace gateway routes online cloud session calls through the cloud adap
       calls.push(`workflows:archive:${workflowId}`)
       return null
     },
+    rotateWorkflowWebhookSecret: async (workflowId) => {
+      calls.push(`workflows:rotate:${workflowId}`)
+      return null
+    },
     searchThreads: async () => {
       calls.push('threads:search')
       return { threads: [], nextCursor: null, totalEstimate: 0 }
@@ -823,6 +1013,7 @@ test('workspace gateway routes online cloud session calls through the cloud adap
   await gateway.pauseCloudWorkflow(event(1), 'workflow-1', 'cloud:test')
   await gateway.resumeCloudWorkflow(event(1), 'workflow-1', 'cloud:test')
   await gateway.archiveCloudWorkflow(event(1), 'workflow-1', 'cloud:test')
+  await gateway.rotateCloudWorkflowWebhookSecret(event(1), 'workflow-1', 'cloud:test')
   await gateway.searchCloudThreads(event(1), {}, 'cloud:test')
   await gateway.cloudThreadFacets(event(1), {}, 'cloud:test')
   await gateway.listCloudThreadTags(event(1), 'cloud:test')
@@ -865,6 +1056,7 @@ test('workspace gateway routes online cloud session calls through the cloud adap
     'workflows:pause:workflow-1',
     'workflows:resume:workflow-1',
     'workflows:archive:workflow-1',
+    'workflows:rotate:workflow-1',
     'threads:search',
     'threads:facets',
     'threads:tags:list',

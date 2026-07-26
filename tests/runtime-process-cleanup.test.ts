@@ -1,6 +1,7 @@
 import { buildPsSnapshotArgs, collectOrphanedManagedProcessTree, collectProcessTreeFromRootPids, isManagedOpencodeServeCommand, OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE, parsePsOutput, readTrackedManagedRuntimePids, registerTrackedManagedRuntimePid, unregisterTrackedManagedRuntimePid } from '@open-cowork/runtime-host/runtime-process-cleanup'
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -72,9 +73,32 @@ test('parsePsOutput skips headers and malformed rows while preserving ppid zero'
 test('buildPsSnapshotArgs chooses platform-specific command columns', () => {
   assert.deepEqual(buildPsSnapshotArgs('darwin', false), ['-axo', 'pid=,ppid=,command='])
   assert.deepEqual(buildPsSnapshotArgs('darwin', true), ['eww', '-axo', 'pid=,ppid=,command='])
-  assert.deepEqual(buildPsSnapshotArgs('linux', false), ['-axo', 'pid=,ppid=,args='])
-  assert.deepEqual(buildPsSnapshotArgs('linux', true), ['eww', '-axo', 'pid=,ppid=,args='])
+  assert.deepEqual(buildPsSnapshotArgs('linux', false), ['-A', '-o', 'pid=,ppid=,args='])
+  assert.deepEqual(buildPsSnapshotArgs('linux', true), ['-A', 'eww', '-o', 'pid=,ppid=,args='])
   assert.equal(buildPsSnapshotArgs('win32', false), null)
+})
+
+test('Linux ps snapshots include process environments for managed-runtime discovery', (t) => {
+  if (process.platform !== 'linux') {
+    t.skip('procps integration only runs on Linux')
+    return
+  }
+  const args = buildPsSnapshotArgs('linux', true)
+  assert.ok(args)
+  const output = execFileSync('ps', args, {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      [OPEN_COWORK_MANAGED_RUNTIME_ENV]: OPEN_COWORK_MANAGED_RUNTIME_VALUE,
+    },
+  })
+  assert.ok(
+    parsePsOutput(output).some((entry) => (
+      entry.command.includes(
+        `${OPEN_COWORK_MANAGED_RUNTIME_ENV}=${OPEN_COWORK_MANAGED_RUNTIME_VALUE}`,
+      )
+    )),
+  )
 })
 
 test('collectOrphanedManagedProcessTree returns orphaned Cowork runtime roots and descendants', () => {

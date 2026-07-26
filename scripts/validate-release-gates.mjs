@@ -13,6 +13,7 @@ const privateGoNoGoSummaryPath = 'deploy/private-beta/private-beta-go-no-go.publ
 const launchEvidenceTemplatePath = 'deploy/private-beta/launch-evidence-record.template.json'
 const launchEvidenceMatrixPath = 'deploy/load/launch-evidence-matrix.json'
 const packagePath = 'package.json'
+const cloudComposeSmokePath = 'scripts/ci-cloud-compose-smoke.sh'
 
 const recursivePrivateValueScanDirs = [
   'deploy',
@@ -349,6 +350,9 @@ function assertPackageScripts() {
   if (packageJson.scripts?.['proof:sandbox:opencode-session'] !== 'node --no-warnings --experimental-strip-types scripts/sandbox-opencode-session-smoke.ts') {
     throw new Error('package.json must expose proof:sandbox:opencode-session')
   }
+  if (packageJson.scripts?.['proof:cloud:tenant-isolation'] !== 'node --no-warnings --experimental-strip-types scripts/cloud-tenant-isolation-proof.ts --matrix') {
+    throw new Error('package.json must expose the matrix Cloud tenant-isolation proof')
+  }
   if (packageJson.scripts?.['deploy:standalone-gateway:validate'] !== 'node scripts/validate-standalone-gateway.mjs') {
     throw new Error('package.json must expose deploy:standalone-gateway:validate')
   }
@@ -410,6 +414,9 @@ function assertCiContract() {
   assertIncludes(ciWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}')
   assertIncludes(ciWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.linux-packaged-executable.outputs.path }}')
   assertIncludes(ciWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.windows-packaged-executable.outputs.path }}')
+  assertIncludes(cloudComposeSmokePath, 'pnpm proof:cloud:tenant-isolation -- --json')
+  assertIncludes(cloudComposeSmokePath, 'OPEN_COWORK_CLOUD_ISOLATION_IMAGE="${image_id}"')
+  assertIncludes(cloudComposeSmokePath, 'OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256="${image_id}"')
 }
 
 function assertReleaseWorkflowContract() {
@@ -598,6 +605,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     launchEvidenceTemplatePath,
     launchEvidenceMatrixPath,
     packagePath,
+    cloudComposeSmokePath,
   ]) {
     assertFile(path)
   }

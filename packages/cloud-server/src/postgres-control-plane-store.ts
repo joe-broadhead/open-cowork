@@ -65,6 +65,7 @@ import type {
   DisableByokSecretInput,
   EnqueueCommandInput,
   FailWorkflowRunInput,
+  MigrateLegacyWorkflowWebhookSecretInput,
   FindChannelInteractionInput,
   GrantApiTokenChannelBindingInput,
   IssuedApiTokenRecord,
@@ -100,6 +101,7 @@ import type {
   ReapedWorkflowClaimRecord,
   ReleaseArtifactUploadReservationInput,
   RevokeApiTokenInput,
+  RotateWorkflowWebhookSecretInput,
   RevokeManagedWorkerCredentialInput,
   ResolvedManagedWorkerCredentialRecord,
   ResolveChannelInteractionInput,
@@ -1594,13 +1596,13 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.workflows.getWorkflow(tenantId, userId, workflowId)
   }
 
-  async getWorkflowForTenant(tenantId: string, workflowId: string) {
-    return this.workflows.getWorkflowForTenant(tenantId, workflowId)
-  }
-
-  async updateWorkflowStatus(input: UpdateWorkflowStatusInput) {
-    return this.workflows.updateWorkflowStatus(input)
-  }
+  async getWorkflowForTenant(tenantId: string, workflowId: string) { return this.workflows.getWorkflowForTenant(tenantId, workflowId) }
+  async updateWorkflowStatus(input: UpdateWorkflowStatusInput) { return this.workflows.updateWorkflowStatus(input) }
+  async getWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId?: string) { return this.workflows.getWorkflowWebhookSecret(tenantId, workflowId, triggerId) }
+  async rotateWorkflowWebhookSecret(input: RotateWorkflowWebhookSecretInput) { return this.workflows.rotateWorkflowWebhookSecret(input) }
+  async listLegacyWorkflowWebhookSecrets(limit = 100) { return this.workflows.listLegacyWorkflowWebhookSecrets(limit) }
+  async getLegacyWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId: string) { return this.workflows.getLegacyWorkflowWebhookSecret(tenantId, workflowId, triggerId) }
+  async migrateLegacyWorkflowWebhookSecret(input: MigrateLegacyWorkflowWebhookSecretInput) { return this.workflows.migrateLegacyWorkflowWebhookSecret(input) }
 
   async listWorkflowRuns(tenantId: string, workflowId: string, limit = 25) {
     return this.workflows.listWorkflowRuns(tenantId, workflowId, limit)

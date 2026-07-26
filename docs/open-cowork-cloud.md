@@ -29,7 +29,8 @@ The cloud entrypoint is one OCI image with role-based behavior:
 
 Production deployments should prefer split roles. Cloud Run-style all-in-one
 deployments are useful for demos, but long-running OpenCode workers should run
-on infrastructure with predictable CPU and process lifetime.
+on dedicated Docker-capable hosts or reviewed provider integrations with
+predictable CPU/process lifetime and verified per-execution isolation.
 
 Keep worker replicas conservative unless runtime/workspace checkpointing is
 enabled for your deployment. Multiple workers can claim fenced sessions, and
@@ -190,10 +191,13 @@ binds OpenCode runtime sessions and executes them.
 
 All Compose references are local/demo manifests. They use local builds,
 loopback HTTP URLs, local Postgres/MinIO credentials, and explicit insecure
-auth overrides. For production, move to Helm or a downstream private Compose
-overlay that pins `OPEN_COWORK_CLOUD_IMAGE` and `OPEN_COWORK_GATEWAY_IMAGE` to
-release tags or digests, replaces every demo secret, uses HTTPS origins, and
-backs checkpoints with provider object storage.
+auth overrides. They are not production isolation topologies. A production
+execution worker currently requires a dedicated Docker-capable host running
+the built-in provider, or a downstream composition that injects an external
+provider satisfying the same isolation contract. Pin the Cloud, Gateway, and
+per-execution runtime images to reviewed digests, replace every demo secret,
+use HTTPS origins, back checkpoints with provider object storage, and pass the
+required two-tenant proof before admitting traffic.
 
 The cloud web role serves the browser web app at `/`. It uses the same
 HTTP/SSE contract as API clients: sessions are loaded from durable projections,
@@ -299,6 +303,61 @@ Continuation is intentionally symmetric: a thread created by desktop sync or a
 gateway channel is just a cloud session and can be opened in the browser; a
 thread created in the browser appears to desktop and gateway clients through the
 same session list, projection, and SSE contracts.
+
+### Workflow webhook secret storage and rollout
+
+Workflow webhook secrets are credentials, not workflow metadata. Cloud stores
+them in `cloud_workflow_webhook_secrets` as envelope-encrypted ciphertext;
+workflow definitions, list/detail responses, run events, logs, diagnostics, and
+desktop cache records do not contain the plaintext. Creating a webhook-enabled
+workflow returns its secret once in `webhookSecretReveal`. Rotating through
+`POST /api/workflows/:id/rotate-webhook-secret` revokes the old value
+atomically and returns the replacement once. If the envelope key provider is
+unavailable, create, rotate, migration, and webhook authentication fail closed;
+there is no plaintext fallback.
+
+The public endpoint is
+`<OPEN_COWORK_CLOUD_PUBLIC_URL>/webhooks/workflows/<workflow-id>`. Its origin is
+read from trusted deployment configuration, not a request `Host` or forwarded
+header. Public ingress accepts timestamped HMAC authorization only and rejects
+raw bearer/shared-secret headers. The Playbooks UI copies a one-time signed curl
+command without rendering or retaining the secret. Archiving revokes the
+credential. **Create replacement** copies a new command and restores the
+playbook as one action; a clipboard failure leaves it archived and requires
+another rotation.
+
+Use this sequence when upgrading a deployment that may contain legacy plaintext
+secrets inside workflow trigger JSON:
+
+1. Apply the Cloud schema migrations, including
+   `003_cloud_workflow_webhook_secrets`, before admitting the new application
+   build.
+2. Stop or drain old workflow writers and webhook readers. Old builds can put
+   plaintext back into trigger JSON and cannot authenticate secrets created in
+   the separate encrypted table, so mixed-version workflow traffic is not a
+   supported steady state.
+3. Start the new build with a healthy envelope secret adapter. Startup migrates
+   legacy values in bounded, resumable batches: ciphertext is written before
+   the matching plaintext is removed in the same transaction. When both legacy
+   plaintext and an older ciphertext exist, migration encrypts the plaintext
+   with the current adapter and atomically replaces only the exact expected
+   tenant/workflow/trigger envelope. It never decrypts or trusts the older
+   envelope. If current protection or the compare-and-swap fails, both the
+   original ciphertext and last usable plaintext remain unchanged. Decryption
+   is reserved for signed webhook validation. A rolling-deploy compatibility
+   read on the public webhook route can migrate only that exact trigger; it
+   cannot start a database-wide batch.
+4. Verify migration reports zero remaining candidates and exercise create,
+   rotate, old-secret rejection, and active-secret acceptance before restoring
+   normal traffic. Verification output must use counts and record identifiers,
+   never plaintext credentials.
+
+The schema addition is safe to leave in place during rollback. Do not roll back
+to an old workflow writer or reader while workflow traffic is live. Drain that
+traffic and forward-fix the new build, or restore a database snapshot taken
+before any new encrypted-only workflow secrets were created. Key-provider
+outages are retried after recovery; the migration deliberately leaves the
+legacy value intact when encryption cannot complete.
 
 ### Cloud Web Workbench readiness gates
 
@@ -496,23 +555,24 @@ unless `gateway.experimentalDistributedOwnership=true` is set explicitly for an
 experimental deployment; that flag is a lab escape hatch, not a production
 distributed-ownership implementation.
 
-For Kubernetes, use the provider-neutral Helm chart as the scalable starting
-point:
+The provider-neutral Helm chart remains useful for web, scheduler, Gateway,
+backing-service, and policy composition, but it is not currently a complete
+public-production execution topology. The stock Cloud image and chart do not
+provide a Docker daemon/CLI or inject a Kubernetes execution provider, and the
+pod security profile intentionally prevents a nested Docker boundary. A stock
+Helm worker therefore fails isolation readiness and must not receive execution
+traffic. Run workers on dedicated Docker-capable hosts that pass
+`proof:cloud:tenant-isolation`, or provide a reviewed downstream external
+provider before treating a Kubernetes deployment as production-capable.
+
+Even a web/scheduler-only Helm release must pin the reviewed Cloud image while
+leaving the non-ready stock worker disabled:
 
 ```bash
 helm upgrade --install open-cowork-cloud helm/open-cowork-cloud \
   --set image.repository=ghcr.io/joe-broadhead/open-cowork-cloud \
   --set image.digest=sha256:REPLACE_WITH_CLOUD_DIGEST \
-  --set cloud.deploymentTier=public_production \
-  --set cloud.profile=full \
-  --set cloud.auth.mode=oidc \
-  --set cloud.auth.oidcIssuerUrl='https://issuer.example.com' \
-  --set cloud.auth.oidcClientId='open-cowork-cloud' \
-  --set cloud.existingSecret=open-cowork-cloud-secrets \
-  --set cloud.objectStore.kind=s3 \
-  --set cloud.objectStore.bucket='open-cowork' \
-  --set roles.worker.enabled=true \
-  --set roles.scheduler.enabled=true
+  --set roles.worker.enabled=false
 ```
 
 Use `cloud.existingSecret` in production so database URLs, object-store
@@ -596,12 +656,14 @@ approved dependency, with explicit `to` peers and `ports`, when the cluster
 needs outbound access to Cloud, object-store, identity, provider API, or
 telemetry endpoints.
 
-The Helm chart uses an ephemeral worker runtime root by default. That is the
-scalable path: workers externalize durable session state through Postgres and
-object-store checkpoints. A single-worker PVC can be enabled for controlled
-pilots, but the chart rejects `roles.worker.persistence.enabled=true` with more
-than one worker replica because a shared ReadWriteOnce runtime volume is not a
-horizontal scaling model.
+The Helm chart still models an ephemeral worker runtime root and checkpoint
+storage for downstream provider integrations. Those storage settings do not
+establish process, user, mount, or network isolation by themselves. Do not use
+the stock Helm worker for execution until a downstream provider is injected
+and its boundary, restore, eviction, crash, and teardown behavior passes the
+same release proof. A single-worker PVC can be enabled for controlled
+non-execution pilots, but it is not an isolation boundary or a horizontal
+scaling model.
 
 For workers that write runtime/workspace checkpoints, provide
 `OPEN_COWORK_CLOUD_SECRET_KEY_REF` from a provider secret manager in hosted
@@ -767,7 +829,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies (minimum **32 bytes**, same floor as envelope secret keys). Falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos only — public production requires a distinct cookie secret. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
-| `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |
+| `OPEN_COWORK_CLOUD_PUBLIC_URL` | Canonical public origin used for OIDC callback redirects and workflow webhook URLs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |
 | `OPEN_COWORK_CLOUD_PUBLISHED_ADDR` | Docker compose host-side bind address for local/demo references. Defaults to `127.0.0.1`; when `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH=true`, non-loopback values fail startup. |
 | `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` | JSON object matching `cloud.publicBranding`; Helm renders this from `cloud.branding`. |
 | `OPEN_COWORK_CLOUD_BRAND_NAME` / `OPEN_COWORK_CLOUD_BRAND_SHORT_NAME` | Simple env overrides for the dashboard product name and short mark. |
@@ -1038,6 +1100,14 @@ Role-specific knobs:
 | `OPEN_COWORK_CLOUD_WORKER_POLL_MS` | `worker`, `all-in-one` | Durable command polling interval. |
 | `OPEN_COWORK_CLOUD_WORKER_SESSION_CONCURRENCY` | `worker`, `all-in-one` | How many distinct sessions one worker tick processes concurrently (default `4`, clamped `1`–`32`). Sessions are independent, so this stops one long-running command from head-of-line-blocking other tenants on the worker; set to `1` for the previous strictly-serial behaviour. Each concurrent session can run its own runtime, so size it against the worker's CPU/memory and the per-org worker entitlement. |
 | `OPEN_COWORK_CLOUD_WORKER_MAX_COMMANDS_PER_SESSION_PER_TICK` | `worker`, `all-in-one` | How many commands a single session drains before yielding its lane back to the pool (default `50`, clamped `1`–`10000`). Bounds a session with a large backlog from monopolising a lane; the session is re-surveyed on the next pass while it still has pending commands. |
+| `OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE` | `worker`, `all-in-one` | `sandbox`, `external-provider`, or `development-process`. An omitted value always defaults to the fail-closed sandbox, including for local deployments. Unsafe shared-process execution therefore requires the explicit `development-process` value and is still rejected outside the local tier. `external-provider` requires an explicitly injected provider and does not impose Docker image settings, but its live capability and per-boundary attestations must satisfy the same verified process/user/mount/runtime-home/network/cleanup contract. A missing provider fails closed. |
+| `OPEN_COWORK_CLOUD_ISOLATION_ENGINE` | `worker`, `all-in-one` | Sandbox engine. The built-in long-lived Cloud provider currently supports `docker`; unknown engines and `apple-container` fail closed for Cloud admission. A host may inject a separately attested provider through the server API. |
+| `OPEN_COWORK_CLOUD_ISOLATION_IMAGE` | `worker`, `all-in-one` | Immutable OpenCode runtime image reference used for one execution boundary. Required outside local development. |
+| `OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256` / `OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SIGNATURE` | `worker`, `all-in-one` | The SHA-256 digest is required: the provider rewrites mutable tags to a digest-qualified reference and verifies the local image ID/RepoDigest before reporting capability. A signature is optional supplementary provenance and never substitutes for the inspected digest. Unpinned or mismatched production boundaries are rejected. |
+| `OPEN_COWORK_CLOUD_ISOLATION_OPENCODE_BIN` | `worker`, `all-in-one` | Absolute in-image path to the OpenCode executable. Defaults to the path in the standard `open-cowork-cloud` image (`/app/node_modules/.pnpm/node_modules/.bin/opencode`). Relative and parent-traversing paths fail closed. |
+| `OPEN_COWORK_CLOUD_ISOLATION_NETWORK_POLICY` | `worker`, `all-in-one` | `deny-all` (default) or `restricted`. This is the runtime boundary's egress policy, separate from pod/service ingress policy. |
+| `OPEN_COWORK_CLOUD_ISOLATION_NETWORK_NAME` | `worker`, `all-in-one` | Existing Docker **internal** network used when the policy is `restricted`. The provider does not create or mutate networks. Allowed upstreams must be attached to this network directly or exposed through a policy-enforcing proxy attached to it. |
+| `OPEN_COWORK_CLOUD_ISOLATION_EGRESS_POLICY_ID` | `worker`, `all-in-one` | Expected immutable egress-policy identifier. A restricted Docker network must have `Internal=true` and carry `open-cowork.isolation=true` plus `open-cowork.egress_policy=<this value>` labels or readiness fails. Labels identify operator intent; they do not replace the enforceable internal-network check. |
 | `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` | `worker`, `scheduler`, `all-in-one` | Grace window used during process shutdown to let an active worker/scheduler loop finish after a drain or termination signal. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_ID` | `scheduler`, `all-in-one` | Stable scheduler identity for heartbeats. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS` | `scheduler`, `all-in-one` | Workflow scheduler polling interval. |
@@ -1067,6 +1137,33 @@ Postgres safety timeouts per deployment.
 | `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` | Postgres `LISTEN`/`NOTIFY` accelerator for SSE delivery (default `false`, Postgres control plane only). **Production multi-web-pod topologies should set this to `true`.** When enabled, the worker write path emits a best-effort `NOTIFY` (identifiers only, no event bodies) after each session/workspace event commit, and each web pod opens one dedicated `LISTEN` connection that wakes the matching SSE topic for an immediate read instead of waiting for the next poll. The poll loop always keeps running as the guaranteed backstop, so a missed or duplicate notification is harmless and a listener failure degrades to pure polling. Leave unset (the default) only for single-process demos that want byte-for-byte poll-only delivery. |
 | `OPEN_COWORK_CLOUD_SSE_NOTIFY_BACKSTOP_POLL_MS` | Backstop read-poll cadence (default `15000`, 15 seconds) applied **only** to NOTIFY-addressable SSE topics when `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` is enabled. With the accelerator on, `LISTEN`/`NOTIFY` drives low-latency delivery, so the per-topic poll relaxes to this longer backstop cadence (bounded by `max(OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS, this)`), cutting steady-state control-plane queries. Has no effect when the accelerator is off — poll cadence stays at `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS`. |
 | `OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS` | Hard ceiling on a single SSE stream's lifetime (default `1800000`, 30 minutes). A wedged/half-open stream cannot pin a slot indefinitely; `EventSource` clients reconnect transparently. |
+
+The sandbox provider sets `OPENCODE_DISABLE_PROJECT_CONFIG=1` and masks tenant
+workspace `opencode.json`, `opencode.jsonc`, and `.opencode` paths with
+boundary-owned read-only empty artifacts. The mask is required because pinned
+OpenCode 1.18.1's native V2 API does not apply the classic project-config flag
+while discovering its location config. Both API generations therefore see the
+same managed policy, and tenant plugins or agent definitions cannot widen it.
+When the workspace contains a regular `AGENTS.md` file, the provider preserves
+those intended project instructions by adding the explicit container path
+`/workspace/AGENTS.md` to the managed OpenCode `instructions` list. These
+sandbox controls do not change Desktop project behavior.
+
+Sandbox environments are built from a deterministic in-image baseline
+(`PATH`, `C.UTF-8`, and `UTC`), managed runtime-home/auth values, and the two
+per-boundary Knowledge values when enabled. Worker proxy variables, proxy
+credentials, host user/PATH values, and host certificate paths never cross the
+execution boundary; restricted egress is enforced by the declared network
+policy instead.
+
+Knowledge is registered inside an isolated runtime only when the feature, tool,
+and MCP policies all allow it and the declared network is `restricted`.
+`deny-all` boundaries receive no Knowledge script mount, token, or MCP
+registration. Before admitting an enabled boundary, the provider sends a
+non-mutating invalid proposal to the exact token-auth route and requires its
+expected `400` validation response; DNS, TLS, routing, token, feature, or route
+failures therefore keep the session out of service. Shared-process local
+development alone may use the co-located loopback origin.
 
 ### Multi-pod SSE load guidance
 
@@ -1140,7 +1237,10 @@ uses `cacheEncryptionFallback` to degrade to `metadata-only`, `disabled`, or
 fail startup. OAuth access and refresh tokens are stored in OS secure storage,
 not in the cloud cache. The cache is keyed by cloud connection, tenant, user,
 profile, and workspace identity so two orgs cannot share cached projections or
-event cursors.
+event cursors. Upgrading the cache from the unversioned v1 format to v2 preserves
+session metadata, settings, and artifact metadata, but purges all opaque
+transcript views and workflow projections because historic values cannot be
+safely field-scrubbed for credentials.
 
 Cloud workspace logout is an authentication boundary, not a data wipe. It
 removes the workspace access and refresh tokens, closes active cloud
@@ -1166,11 +1266,11 @@ roles, Postgres control plane, object-store adapter, and secret adapter.
 
 | Provider | Web | Worker/Scheduler | Gateway | Control plane | Object store | Secret store |
 | --- | --- | --- | --- | --- | --- | --- |
-| Kubernetes | Deployment + Service/Ingress | Deployments or jobs with HPA/KEDA as needed | Separate Deployment + Service/Ingress for webhook channels | Managed or in-cluster Postgres | S3-compatible, GCS, Azure Blob, or MinIO | External Secrets or sealed secrets |
-| GCP | Cloud Run or GKE | GKE for production workers; Cloud Run all-in-one demo only | Cloud Run or GKE Deployment | Cloud SQL for PostgreSQL | Cloud Storage | Secret Manager |
-| AWS | ECS/Fargate or EKS | ECS services or EKS deployments | ECS service or EKS Deployment | RDS PostgreSQL | S3 | Secrets Manager |
-| Azure | Container Apps or AKS | Container Apps jobs/services or AKS | Container Apps service or AKS Deployment | Azure Database for PostgreSQL | Azure Blob Storage | Key Vault |
-| DigitalOcean | App Platform for demos; DOKS for scale | DOKS deployments | App Platform component or DOKS Deployment | Managed PostgreSQL | Spaces | App Platform/DOKS secrets |
+| Kubernetes | Deployment + Service/Ingress | Downstream isolated provider required; stock Helm worker is not execution-ready | Separate Deployment + Service/Ingress for webhook channels | Managed or in-cluster Postgres | S3-compatible, GCS, Azure Blob, or MinIO | External Secrets or sealed secrets |
+| GCP | Cloud Run or GKE | Dedicated Docker-capable worker host or reviewed GKE provider integration | Cloud Run or GKE Deployment | Cloud SQL for PostgreSQL | Cloud Storage | Secret Manager |
+| AWS | ECS/Fargate or EKS | Dedicated Docker-capable worker host or reviewed ECS/EKS provider integration | ECS service or EKS Deployment | RDS PostgreSQL | S3 | Secrets Manager |
+| Azure | Container Apps or AKS | Dedicated Docker-capable worker host or reviewed Container Apps/AKS provider integration | Container Apps service or AKS Deployment | Azure Database for PostgreSQL | Azure Blob Storage | Key Vault |
+| DigitalOcean | App Platform for demos; DOKS for web/scheduler | Dedicated Docker-capable worker host or reviewed DOKS provider integration | App Platform component or DOKS Deployment | Managed PostgreSQL | Spaces | App Platform/DOKS secrets |
 
 The app core should not contain provider-specific branches. Provider behavior
 belongs in config, adapters, and deployment recipes.
@@ -1204,7 +1304,14 @@ app, such as a data-analyst agent. The deployer should configure:
 - OIDC or reverse-proxy authentication before exposing the service publicly.
 
 The web API enforces profile allowlists directly, so hiding a feature in the
-browser is not the only protection.
+browser is not the only protection. The worker also compiles the selected
+profile into the final OpenCode permission and MCP configuration for every new
+runtime. An omitted `tools` or `mcps` field inherits the complete configured
+catalog; an explicit empty array denies that capability class. Unknown
+identifiers fail runtime provisioning instead of being ignored. MCP-backed
+tools require both their tool id and MCP namespace to be allowed, and the
+Knowledge MCP is injected only when its feature, tool id, and MCP namespace are
+all enabled.
 
 ## Operational Checks
 

@@ -22,7 +22,6 @@ export interface WorkflowTrigger {
   type: WorkflowTriggerType
   enabled: boolean
   schedule?: WorkflowSchedule | null
-  webhookSecret?: string | null
 }
 
 export interface WorkflowStep {
@@ -42,6 +41,11 @@ export interface WorkflowDraft {
   draftSessionId?: string | null
   triggers: WorkflowTrigger[]
 }
+
+type Assert<T extends true> = T
+type _WorkflowDraftTriggerIsCredentialFree = Assert<
+  'webhookSecret' extends keyof WorkflowDraft['triggers'][number] ? false : true
+>
 
 export type WorkflowValidationGapSeverity = 'required' | 'optional'
 
@@ -121,9 +125,29 @@ export interface WorkflowToolCreateRequest {
   previewToken: string
 }
 
+export interface WorkflowCreateResult {
+  workflow: WorkflowDetail
+  webhookSecretReveal: WorkflowWebhookSecretReveal | null
+}
+
 export interface WorkflowToolCreateResult {
   ok: true
   workflow: WorkflowDetail
+}
+
+/**
+ * Ephemeral response returned only by create/rotate operations. This shape must
+ * never be embedded in workflow summaries, events, or offline caches.
+ */
+export interface WorkflowWebhookSecretReveal {
+  workflowId: string
+  triggerId: string
+  secret: string
+}
+
+export interface WorkflowWebhookSecretMutationResult {
+  workflow: WorkflowDetail
+  webhookSecretReveal: WorkflowWebhookSecretReveal
 }
 
 const VALID_SCHEDULE_TYPES = new Set<WorkflowScheduleType>(['one_time', 'daily', 'weekly', 'monthly'])

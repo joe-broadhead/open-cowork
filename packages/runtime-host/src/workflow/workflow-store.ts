@@ -13,8 +13,8 @@ import type {
   WorkflowRunStatus,
   WorkflowStatus,
   WorkflowSummary,
-  WorkflowTrigger,
   WorkflowTriggerType,
+  WorkflowWebhookSecretMutationResult,
 } from '@open-cowork/shared'
 import {
   createCloudProjectionCheckpoint,
@@ -41,8 +41,15 @@ import {
   serializeWorkflowTriggersForStorageWithAdapter,
   type WorkflowSecretStorageAdapter,
 } from './workflow-secret-storage.js'
+import {
+  activeWebhookSecret,
+  toPublicWorkflowTriggers,
+  webhookSecretReveal,
+  type InternalWorkflowTrigger,
+} from './workflow-secret-contract.js'
 
-const WORKFLOW_DB_SCHEMA_VERSION = 1
+const WORKFLOW_DB_SCHEMA_VERSION = 2
+const WORKFLOW_DB_ARCHIVED_SECRET_MIGRATION_VERSION = 1
 const WORKFLOW_SCHEMA_VERSION_KEY = 'schema_version'
 const WORKFLOW_PROJECTION_VERSION_KEY = 'workflow_projection_version'
 const LOCAL_WORKFLOW_PROJECTION_TENANT_ID = 'desktop-local'
@@ -155,7 +162,7 @@ let transactionCounter = 0
 let workflowSecretStorageForTests: WorkflowSecretStorageAdapter | null = null
 
 type DbRow = Record<string, unknown>
-type WorkflowWriteOptions = WorkflowDraftNormalizationOptions
+type WorkflowWriteOptions = Omit<WorkflowDraftNormalizationOptions, 'generateWebhookSecrets' | 'secretGenerator'>
 type WorkflowDraftOptions = WorkflowDraftNormalizationOptions
 export type { WorkflowCapabilityValidationContext } from './workflow-normalization.js'
 
@@ -198,7 +205,7 @@ function getWorkflowSecretStorage(): WorkflowSecretStorageAdapter {
   }
 }
 
-export function serializeWorkflowTriggersForStorage(triggers: WorkflowTrigger[]) {
+export function serializeWorkflowTriggersForStorage(triggers: InternalWorkflowTrigger[]) {
   return serializeWorkflowTriggersForStorageWithAdapter(triggers, getWorkflowSecretStorage())
 }
 
@@ -245,10 +252,10 @@ function workflowDraftOptions(options?: WorkflowDraftOptions): WorkflowDraftNorm
   }
 }
 
-function initDb(db: DatabaseSync) {
-  initializeLocalSqliteSchema(db, {
+function workflowSchemaDefinition(currentVersion: number) {
+  return {
     storeName: 'local workflow store',
-    currentVersion: WORKFLOW_DB_SCHEMA_VERSION,
+    currentVersion,
     metaTable: 'workflow_meta',
     versionKey: WORKFLOW_SCHEMA_VERSION_KEY,
     baselineSql: WORKFLOW_BASELINE_SQL,
@@ -266,7 +273,105 @@ function initDb(db: DatabaseSync) {
       'idx_workflow_webhook_signatures_seen_at',
     ],
     recovery: 'Back up or export saved workflows and run history, then reset only workflows.sqlite before recreating or importing them.',
-  })
+  }
+}
+
+function migrateLegacyArchivedWorkflowSecrets(db: DatabaseSync) {
+  const hasMetaTable = db.prepare(`
+    select 1
+    from sqlite_schema
+    where type = 'table' and name = ?
+  `).get('workflow_meta')
+  if (!hasMetaTable) return
+
+  let declaredVersion: unknown
+  try {
+    declaredVersion = (
+      db.prepare('select value from workflow_meta where key = ?')
+        .get(WORKFLOW_SCHEMA_VERSION_KEY) as { value?: unknown } | undefined
+    )?.value
+  } catch {
+    return
+  }
+  if (declaredVersion !== String(WORKFLOW_DB_ARCHIVED_SECRET_MIGRATION_VERSION)) return
+
+  // Version 1 and 2 intentionally share one physical schema. Prove the entire
+  // v1 catalog before touching data so a forged or partially corrupt database
+  // retains the validator's read-only failure semantics.
+  initializeLocalSqliteSchema(
+    db,
+    workflowSchemaDefinition(WORKFLOW_DB_ARCHIVED_SECRET_MIGRATION_VERSION),
+  )
+
+  db.exec('begin immediate')
+  try {
+    const currentVersion = (
+      db.prepare('select value from workflow_meta where key = ?')
+        .get(WORKFLOW_SCHEMA_VERSION_KEY) as { value?: unknown } | undefined
+    )?.value
+    if (currentVersion !== String(WORKFLOW_DB_ARCHIVED_SECRET_MIGRATION_VERSION)) {
+      db.exec('commit')
+      return
+    }
+
+    const rows = db.prepare(`
+      select id, triggers_json
+      from workflows
+      where status = 'archived'
+    `).all() as Array<{ id: string; triggers_json: string }>
+    const update = db.prepare('update workflows set triggers_json = ? where id = ?')
+    for (const row of rows) {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(row.triggers_json)
+      } catch {
+        throw new Error('An archived workflow contains invalid trigger data.')
+      }
+      if (!Array.isArray(parsed)) {
+        throw new Error('An archived workflow contains invalid trigger data.')
+      }
+      let changed = false
+      const triggers = parsed.map((value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+        const trigger = value as Record<string, unknown>
+        if (trigger.type !== 'webhook' || !Object.hasOwn(trigger, 'webhookSecret')) return trigger
+        changed = true
+        const { webhookSecret: _webhookSecret, ...publicTrigger } = trigger
+        return publicTrigger
+      })
+      if (changed) update.run(JSON.stringify(triggers), row.id)
+    }
+
+    const versionUpdate = db.prepare(`
+      update workflow_meta
+      set value = ?
+      where key = ? and value = ?
+    `).run(
+      String(WORKFLOW_DB_SCHEMA_VERSION),
+      WORKFLOW_SCHEMA_VERSION_KEY,
+      String(WORKFLOW_DB_ARCHIVED_SECRET_MIGRATION_VERSION),
+    )
+    if (Number(versionUpdate.changes) !== 1) {
+      throw new Error('The workflow schema version changed during migration.')
+    }
+    db.exec('commit')
+  } catch (error) {
+    try {
+      db.exec('rollback')
+    } catch {
+      // Preserve the migration failure. The database is never accepted until
+      // the version ledger and every archived workflow are migrated together.
+    }
+    throw new Error(
+      'Open Cowork could not securely migrate archived workflow credentials. The existing workflow database was left unchanged.',
+      { cause: error },
+    )
+  }
+}
+
+function initDb(db: DatabaseSync) {
+  migrateLegacyArchivedWorkflowSecrets(db)
+  initializeLocalSqliteSchema(db, workflowSchemaDefinition(WORKFLOW_DB_SCHEMA_VERSION))
 }
 
 export function getWorkflowDb() {
@@ -523,8 +628,6 @@ function webhookUrlForWorkflow(workflow: WorkflowSummary, webhookBaseUrl?: strin
   const webhook = workflow.triggers.find((trigger) => (
     trigger.enabled
     && trigger.type === 'webhook'
-    && typeof trigger.webhookSecret === 'string'
-    && trigger.webhookSecret.length > 0
   ))
   return webhook ? `${webhookBaseUrl}/workflows/${encodeURIComponent(workflow.id)}` : null
 }
@@ -554,7 +657,7 @@ function rowToWorkflow(row: DbRow, webhookBaseUrl?: string | null): WorkflowSumm
     status,
     projectDirectory: typeof row.project_directory === 'string' ? row.project_directory : null,
     draftSessionId: typeof row.draft_session_id === 'string' ? row.draft_session_id : null,
-    triggers: parseWorkflowTriggersFromStorage(row.triggers_json),
+    triggers: toPublicWorkflowTriggers(parseWorkflowTriggersFromStorage(row.triggers_json)),
     createdAt: String(row.created_at || ''),
     updatedAt: String(row.updated_at || ''),
     nextRunAt: typeof row.next_run_at === 'string' ? row.next_run_at : null,
@@ -618,9 +721,24 @@ export function getWorkflow(workflowId: string, webhookBaseUrl?: string | null):
   }
 }
 
-export function createWorkflow(draft: WorkflowDraft, webhookBaseUrl?: string | null, options?: WorkflowWriteOptions): WorkflowDetail {
+export function getWorkflowWebhookSecret(workflowId: string) {
+  const row = getWorkflowDb().prepare('select triggers_json from workflows where id = ?').get(workflowId) as DbRow | undefined
+  return row ? activeWebhookSecret(parseWorkflowTriggersFromStorage(row.triggers_json)) : null
+}
+
+export function createWorkflow(
+  draft: WorkflowDraft,
+  webhookBaseUrl?: string | null,
+  options?: WorkflowWriteOptions,
+): WorkflowDetail {
   const nowDate = writeNow(options)
-  const normalized = normalizeWorkflowDraft(draft, workflowDraftOptions({ ...options, now: nowDate }))
+  // Creation returns public workflow metadata only, so it must never mint an
+  // undeliverable credential. Explicit rotation is the sole local issuance
+  // seam and returns the one-time reveal alongside the public workflow.
+  const normalized = normalizeWorkflowDraft(draft, {
+    ...workflowDraftOptions({ ...options, now: nowDate }),
+    generateWebhookSecrets: false,
+  })
   assertWorkflowCapabilities(normalized, workflowDraftOptions(options))
   const now = nowDate.toISOString()
   const id = crypto.randomUUID()
@@ -661,27 +779,47 @@ export function updateWorkflowStatus(workflowId: string, status: WorkflowStatus,
   withTransaction((db) => {
     const row = db.prepare('select triggers_json from workflows where id = ?').get(workflowId) as DbRow | undefined
     const triggers = parseWorkflowTriggersFromStorage(row?.triggers_json)
+    if (
+      status === 'active'
+      && triggers.some((trigger) => trigger.type === 'webhook' && trigger.enabled)
+      && !activeWebhookSecret(triggers)
+    ) {
+      throw new Error('Regenerate the workflow webhook secret before restoring this playbook.')
+    }
+    const storedTriggers = status === 'archived'
+      ? triggers.map((trigger) => trigger.type === 'webhook'
+          ? { ...trigger, webhookSecret: null }
+          : trigger)
+      : triggers
     const nextRunAt = status === 'active' ? computeNextWorkflowRunAt(triggers, nowDate) : null
-    db.prepare('update workflows set status = ?, updated_at = ?, next_run_at = ? where id = ?')
-      .run(status, now, nextRunAt, workflowId)
+    db.prepare('update workflows set status = ?, updated_at = ?, next_run_at = ?, triggers_json = ? where id = ?')
+      .run(status, now, nextRunAt, serializeWorkflowTriggersForStorage(storedTriggers), workflowId)
     bumpWorkflowProjectionVersion(db)
   })
   return getWorkflow(workflowId, webhookBaseUrl)
 }
 
-export function regenerateWorkflowWebhookSecret(workflowId: string, webhookBaseUrl?: string | null) {
-  const detail = getWorkflow(workflowId, webhookBaseUrl)
-  if (!detail) return null
-  const triggers = detail.triggers.map((trigger) => trigger.type === 'webhook'
+export function regenerateWorkflowWebhookSecret(
+  workflowId: string,
+  webhookBaseUrl?: string | null,
+): WorkflowWebhookSecretMutationResult | null {
+  const row = getWorkflowDb().prepare('select triggers_json from workflows where id = ?').get(workflowId) as DbRow | undefined
+  if (!row) return null
+  const triggers = parseWorkflowTriggersFromStorage(row.triggers_json).map((trigger) => trigger.type === 'webhook'
     ? { ...trigger, webhookSecret: randomWebhookSecret() }
     : trigger)
+  const reveal = webhookSecretReveal(workflowId, activeWebhookSecret(triggers))
+  if (!reveal) return null
   const now = new Date().toISOString()
   withTransaction((db) => {
     db.prepare('update workflows set triggers_json = ?, updated_at = ? where id = ?')
       .run(serializeWorkflowTriggersForStorage(triggers), now, workflowId)
     bumpWorkflowProjectionVersion(db)
   })
-  return getWorkflow(workflowId, webhookBaseUrl)
+  return {
+    workflow: getWorkflow(workflowId, webhookBaseUrl)!,
+    webhookSecretReveal: reveal,
+  }
 }
 
 export function listDueWorkflows(now = new Date(), webhookBaseUrl?: string | null) {

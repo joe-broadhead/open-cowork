@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
+import { DEFAULT_CONFIG } from '@open-cowork/shared'
+import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import {
+  prepareDefaultCloudRuntimeFactoryInput,
+  type CloudRoleRuntimeFactoryInput,
+} from '../packages/cloud-server/src/cloud-runtime-composition.ts'
 import {
   KNOWLEDGE_AGENT_TOKEN_TTL_MS,
   signKnowledgeAgentToken,
@@ -11,9 +17,14 @@ import {
   applyKnowledgeAgentRuntimeAugmentation,
   buildKnowledgeAgentRuntimeAugmentation,
 } from '@open-cowork/cloud-server/knowledge-agent-runtime'
+import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider'
 
 const SIGNING_KEY = 'knowledge-agent-signing-secret-key'
 const EXP = 2_000_000_000_000
+const ALLOW_KNOWLEDGE_POLICY = {
+  allowedTools: null,
+  allowedMcps: null,
+}
 
 test('knowledge agent token round-trips a tenant+session-bound payload before expiry', () => {
   const token = signKnowledgeAgentToken(SIGNING_KEY, {
@@ -66,6 +77,7 @@ test('knowledge agent runtime augmentation mints a per-session token + mcp entry
   const now = () => 1_000
   const augmentation = buildKnowledgeAgentRuntimeAugmentation({
     knowledgeEnabled: true,
+    policy: ALLOW_KNOWLEDGE_POLICY,
     secret: SIGNING_KEY,
     publicUrl: 'https://cloud.example.com/',
     mcpScriptPath: '/dist/cloud/mcp-knowledge.mjs',
@@ -101,6 +113,7 @@ test('knowledge agent runtime augmentation mints a per-session token + mcp entry
 test('knowledge agent runtime augmentation fails closed on any missing prerequisite', () => {
   const base = {
     knowledgeEnabled: true,
+    policy: ALLOW_KNOWLEDGE_POLICY,
     secret: SIGNING_KEY,
     publicUrl: 'https://cloud.example.com',
     mcpScriptPath: '/dist/cloud/mcp-knowledge.mjs',
@@ -115,6 +128,14 @@ test('knowledge agent runtime augmentation fails closed on any missing prerequis
   assert.equal(buildKnowledgeAgentRuntimeAugmentation({ ...base, mcpScriptPath: null }), null)
   assert.equal(buildKnowledgeAgentRuntimeAugmentation({ ...base, execution: { tenantId: '', sessionId: 'session-7' } }), null)
   assert.equal(buildKnowledgeAgentRuntimeAugmentation({ ...base, execution: { tenantId: 'tenant-7', sessionId: '' } }), null)
+  assert.equal(buildKnowledgeAgentRuntimeAugmentation({
+    ...base,
+    policy: { allowedTools: [], allowedMcps: ['knowledge'] },
+  }), null)
+  assert.equal(buildKnowledgeAgentRuntimeAugmentation({
+    ...base,
+    policy: { allowedTools: ['knowledge'], allowedMcps: [] },
+  }), null)
 })
 
 test('applyKnowledgeAgentRuntimeAugmentation merges env + mcp without mutating inputs, and is a no-op when null', () => {
@@ -122,6 +143,7 @@ test('applyKnowledgeAgentRuntimeAugmentation merges env + mcp without mutating i
   const baseConfig = { mcp: { other: { type: 'local' as const, command: ['node', 'other.mjs'] } } }
   const augmentation = buildKnowledgeAgentRuntimeAugmentation({
     knowledgeEnabled: true,
+    policy: ALLOW_KNOWLEDGE_POLICY,
     secret: SIGNING_KEY,
     publicUrl: 'https://cloud.example.com',
     mcpScriptPath: '/dist/cloud/mcp-knowledge.mjs',
@@ -151,4 +173,94 @@ test('applyKnowledgeAgentRuntimeAugmentation merges env + mcp without mutating i
   })
   assert.equal(passthrough.env, baseEnv)
   assert.equal(passthrough.runtimeConfig, undefined)
+})
+
+test('Knowledge allow and deny policy survives resumed, delegated, and workflow runtime composition', () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_ROLE: 'worker',
+    OPEN_COWORK_CLOUD_PROFILE: 'full',
+  })
+  const paths = createCloudPathProvider('/synthetic/cloud-root')
+  const runtimeConfig = {
+    agent: {
+      build: { mode: 'primary' as const },
+      general: { mode: 'subagent' as const },
+    },
+  }
+  const knowledgeAgent = {
+    knowledgeEnabled: true,
+    secret: SIGNING_KEY,
+    publicUrl: 'https://cloud.example.com',
+    mcpScriptPath: '/dist/cloud/mcp-knowledge.mjs',
+  }
+  const createInput = (
+    execution: CloudRoleRuntimeFactoryInput['execution'],
+    allowed: boolean,
+  ): CloudRoleRuntimeFactoryInput => ({
+    paths,
+    policy: {
+      ...basePolicy,
+      allowedTools: allowed ? ['knowledge'] : [],
+      allowedMcps: allowed ? ['knowledge'] : [],
+    },
+    env: {},
+    config: DEFAULT_CONFIG,
+    execution,
+    runtimeConfig,
+  })
+  const resumedExecution = {
+    tenantId: 'tenant-resume',
+    sessionId: 'session-resume',
+  }
+  const firstTurn = prepareDefaultCloudRuntimeFactoryInput(
+    createInput(resumedExecution, true),
+    knowledgeAgent,
+  )
+  const resumedTurn = prepareDefaultCloudRuntimeFactoryInput(
+    createInput(resumedExecution, true),
+    knowledgeAgent,
+  )
+  const workflowTurn = prepareDefaultCloudRuntimeFactoryInput(
+    createInput({
+      tenantId: 'tenant-resume',
+      sessionId: 'workflow-run-session',
+    }, true),
+    knowledgeAgent,
+  )
+
+  for (const prepared of [firstTurn, resumedTurn, workflowTurn]) {
+    assert.ok(prepared.runtimeConfig?.mcp?.knowledge)
+    // Knowledge is registered on the shared session runtime, so both the root
+    // build agent and delegated general agent execute behind the same policy.
+    assert.equal(prepared.runtimeConfig?.agent?.build?.mode, 'primary')
+    assert.equal(prepared.runtimeConfig?.agent?.general?.mode, 'subagent')
+  }
+  for (const resumed of [firstTurn, resumedTurn]) {
+    const claims = verifyKnowledgeAgentToken(
+      SIGNING_KEY,
+      String(resumed.env.OPEN_COWORK_KNOWLEDGE_TOOL_TOKEN),
+    )
+    assert.equal(claims?.tenantId, resumedExecution.tenantId)
+    assert.equal(claims?.sessionId, resumedExecution.sessionId)
+    assert.equal(typeof claims?.exp, 'number')
+  }
+  const workflowClaims = verifyKnowledgeAgentToken(
+    SIGNING_KEY,
+    String(workflowTurn.env.OPEN_COWORK_KNOWLEDGE_TOOL_TOKEN),
+  )
+  assert.equal(workflowClaims?.tenantId, 'tenant-resume')
+  assert.equal(workflowClaims?.sessionId, 'workflow-run-session')
+
+  for (const execution of [
+    resumedExecution,
+    { tenantId: 'tenant-resume', sessionId: 'delegated-session' },
+    { tenantId: 'tenant-resume', sessionId: 'workflow-run-session' },
+  ]) {
+    const denied = prepareDefaultCloudRuntimeFactoryInput(
+      createInput(execution, false),
+      knowledgeAgent,
+    )
+    assert.equal(denied.env.OPEN_COWORK_KNOWLEDGE_TOOL_TOKEN, undefined)
+    assert.equal(denied.runtimeConfig?.mcp?.knowledge, undefined)
+  }
 })

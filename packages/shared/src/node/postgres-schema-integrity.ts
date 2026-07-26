@@ -188,6 +188,12 @@ function normalizeExpression(value: string | null | undefined) {
     .toLowerCase()
     .replaceAll('"', '')
     .replace(/::(?:text|character varying)\b/g, '')
+    // pg_get_expr prints the internal pattern-matching operators rather than
+    // the equivalent SQL keywords used by baseline DDL.
+    .replace(/!~~\*/g, ' not ilike ')
+    .replace(/!~~/g, ' not like ')
+    .replace(/~~\*/g, ' ilike ')
+    .replace(/~~/g, ' like ')
   result = result.replace(
     /\(?([a-z_][a-z0-9_.]*)\s*=\s*any\s*\(array\[(.*?)\]\)\)?/g,
     (_match, column: string, values: string) => `${column} in (${values})`,

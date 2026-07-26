@@ -1,14 +1,23 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  SETUP_INTENTS, type ProviderDescriptor, type RuntimeLoadingPhase, type RuntimeLoadingStatus, type RuntimeStatus, type SetupIntentId, } from '@open-cowork/shared'
+  createDisabledRuntimeToolingBridgeConsent,
+  normalizeRuntimeToolingBridgeConsent,
+  SETUP_INTENTS,
+  type ProviderDescriptor,
+  type RuntimeLoadingPhase,
+  type RuntimeLoadingStatus,
+  type RuntimeStatus,
+  type SetupIntentId,
+} from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { getDocsBaseUrl } from '../helpers/brand'
 import { credentialFieldIsSecret, isCredentialMask, mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
-import { Badge, Button, Input, Switch } from '@open-cowork/ui'
+import { Badge, Button, Input } from '@open-cowork/ui'
 import { BrandMark } from './BrandMark'
 import { ConfirmDialog } from './ConfirmDialog'
+import { RuntimeToolingBridgeConsentPanel } from './RuntimeToolingBridgeConsent'
 
 const ProviderAuthControls = lazy(() => import('./provider/ProviderAuthControls').then((module) => ({
   default: module.ProviderAuthControls,
@@ -78,7 +87,6 @@ function buildConnectionSignature(input: {
   providerId: string | null
   modelId: string
   credentials: Record<string, string>
-  runtimeToolingBridgeEnabled: boolean
 }) {
   const credentials = Object.fromEntries(
     Object.entries(input.credentials).sort(([left], [right]) => left.localeCompare(right)),
@@ -87,7 +95,6 @@ function buildConnectionSignature(input: {
     providerId: input.providerId,
     modelId: input.modelId.trim(),
     credentials,
-    runtimeToolingBridgeEnabled: input.runtimeToolingBridgeEnabled,
   })
 }
 
@@ -135,7 +142,9 @@ export function SetupScreen({
   const [providerId, setProviderId] = useState<string | null>(defaultProviderId)
   const [modelId, setModelId] = useState(defaultModelId || '')
   const [providerCredentials, setProviderCredentials] = useState<Record<string, Record<string, string>>>({})
-  const [runtimeToolingBridgeEnabled, setRuntimeToolingBridgeEnabled] = useState(true)
+  const [runtimeToolingBridge, setRuntimeToolingBridge] = useState(
+    createDisabledRuntimeToolingBridgeConsent,
+  )
   const [selectedIntentId, setSelectedIntentId] = useState<SetupIntentId>('desktop-local')
   const [loadedCredentialProviders, setLoadedCredentialProviders] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
@@ -201,7 +210,7 @@ export function SetupScreen({
         setProviderId(initialProviderId)
         setModelId(initialModelId)
       }
-      setRuntimeToolingBridgeEnabled(settings.runtimeToolingBridgeEnabled !== false)
+      setRuntimeToolingBridge(normalizeRuntimeToolingBridgeConsent(settings.runtimeToolingBridge))
       if (initialProviderId) {
         mergeLoadedProviderCredentials(initialProviderId, initialCredentials)
         setLoadedCredentialProviders((current) => new Set(current).add(initialProviderId))
@@ -264,8 +273,7 @@ export function SetupScreen({
     providerId,
     modelId,
     credentials: selectedCredentials,
-    runtimeToolingBridgeEnabled,
-  }), [modelId, providerId, runtimeToolingBridgeEnabled, selectedCredentials])
+  }), [modelId, providerId, selectedCredentials])
   const connectionIsCurrent = connectionTest.status === 'success'
     && connectionTest.signature === currentConnectionSignature
   const connectionNeedsRetest = connectionTest.status === 'success' && !connectionIsCurrent
@@ -323,7 +331,7 @@ export function SetupScreen({
     await window.coworkApi.settings.set({
       selectedProviderId: providerId,
       selectedModelId: nextModelId,
-      runtimeToolingBridgeEnabled,
+      runtimeToolingBridge,
       providerCredentials: {
         [providerId]: selectedCredentials,
       },
@@ -626,6 +634,12 @@ export function SetupScreen({
           </section>
         ) : null}
 
+        <RuntimeToolingBridgeConsentPanel
+          id="setup-runtime-tooling-bridge"
+          consent={runtimeToolingBridge}
+          onChange={setRuntimeToolingBridge}
+        />
+
         <section className="rounded-2xl border border-border-subtle bg-elevated p-4">
           <Button
             type="button"
@@ -683,24 +697,6 @@ export function SetupScreen({
                 </div>
               ) : null}
 
-              <div className="flex items-start justify-between gap-3 rounded-xl border border-border-subtle bg-base px-3.5 py-3">
-                <div className="flex min-w-0 flex-col gap-1">
-                  <span id="setup-runtime-tooling-bridge-title" className="text-sm font-semibold text-text">
-                    {t('setup.toolingBridgeTitle', 'Reuse developer tools from this Mac')}
-                  </span>
-                  <span className="text-xs leading-relaxed text-text-muted">
-                    {t(
-                      'setup.toolingBridgeDescription',
-                      'Allow coworkers to see standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config from your home directory. Turn this off for stricter isolation; you can change it later in Settings.',
-                    )}
-                  </span>
-                </div>
-                <Switch
-                  checked={runtimeToolingBridgeEnabled}
-                  onCheckedChange={(checked) => setRuntimeToolingBridgeEnabled(checked)}
-                  aria-labelledby="setup-runtime-tooling-bridge-title"
-                />
-              </div>
             </div>
           ) : null}
         </section>

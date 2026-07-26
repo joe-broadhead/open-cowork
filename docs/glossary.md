@@ -145,8 +145,9 @@ Setup thread
     explicit user confirmation.
 
 Webhook trigger
-:   A local HTTP URL with a per-workflow secret. Posting a JSON object to the
-    URL starts a workflow run and passes the payload into the run prompt.
+:   A Desktop loopback or Cloud public HTTP endpoint with a per-workflow secret.
+    Posting an authenticated JSON object to the URL starts a workflow run and
+    passes the payload into the run prompt.
 
 Run
 :   A single execution attempt for a workflow, linked back to the

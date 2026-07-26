@@ -1,5 +1,5 @@
 import { createWorkflowFromTool, previewWorkflowFromTool } from '@open-cowork/runtime-host/workflow/workflow-tool-actions'
-import { attachWorkflowRunSession, claimDueWorkflowRun, clearWorkflowStoreCache, createWorkflow, createWorkflowRun, getWorkflow, getWorkflowRun, getWorkflowRunProjectionCheckpoint, listDueWorkflows, listWorkflows, markWorkflowRunCompleted, markWorkflowRunFailed, previewWorkflowDraft, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, parseWorkflowTriggersFromStorage, serializeWorkflowTriggersForStorage, setWorkflowDatabaseForTests, setWorkflowSecretStorageForTests, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { attachWorkflowRunSession, claimDueWorkflowRun, clearWorkflowStoreCache, createWorkflow, createWorkflowRun, getWorkflow, getWorkflowDb, getWorkflowRun, getWorkflowRunProjectionCheckpoint, getWorkflowWebhookSecret, listDueWorkflows, listWorkflows, markWorkflowRunCompleted, markWorkflowRunFailed, previewWorkflowDraft, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, parseWorkflowTriggersFromStorage, serializeWorkflowTriggersForStorage, setWorkflowDatabaseForTests, setWorkflowSecretStorageForTests, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
 import { normalizeWorkflowDraft, previewWorkflowDraft as previewWorkflowDraftCalculation } from '@open-cowork/runtime-host/workflow/workflow-normalization'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -8,6 +8,7 @@ import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
+import type { WorkflowDraft } from '@open-cowork/shared'
 import { cloudProjectionFenceObserved } from '../packages/shared/src/cloud-session-contract.ts'
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-workflow-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -84,6 +85,7 @@ test('workflow store saves thread-created workflows and exposes webhook URLs', (
     'Review and summarize output',
   ])
   assert.equal(workflow.webhookUrl, `http://127.0.0.1:47839/workflows/${workflow.id}`)
+  assert.equal(getWorkflowWebhookSecret(workflow.id), null)
 
   const listed = listWorkflows('http://127.0.0.1:47839')
   assert.equal(listed.workflows.length, 1)
@@ -96,7 +98,7 @@ test('workflow store saves thread-created workflows and exposes webhook URLs', (
   }
 }))
 
-test('workflow store encrypts webhook secrets at the SQLite boundary when secure storage is available', () => withWorkflowStore('secret-storage', (userDataDir) => {
+test('workflow store persists only rotation-issued webhook secrets as encrypted ciphertext', () => withWorkflowStore('secret-storage', (userDataDir) => {
   setWorkflowSecretStorageForTests({
     mode: 'encrypted',
     encryptString: (value) => Buffer.from(`sealed:${value}`, 'utf8'),
@@ -104,8 +106,15 @@ test('workflow store encrypts webhook secrets at the SQLite boundary when secure
   })
 
   const workflow = createWorkflow(draft)
-  const webhookSecret = workflow.triggers.find((trigger) => trigger.type === 'webhook')?.webhookSecret
+  assert.equal(getWorkflowWebhookSecret(workflow.id), null)
+  const issued = regenerateWorkflowWebhookSecret(workflow.id)
+  const webhookSecret = issued?.webhookSecretReveal.secret
   assert.equal(typeof webhookSecret, 'string')
+  assert.equal(getWorkflowWebhookSecret(workflow.id)?.secret, webhookSecret)
+  assert.equal(JSON.stringify(issued?.workflow).includes(webhookSecret!), false)
+  assert.equal(JSON.stringify(listWorkflows()).includes(webhookSecret!), false)
+  assert.equal(JSON.stringify(workflow).includes('webhookSecret'), false)
+  assert.equal(JSON.stringify(listWorkflows()).includes('webhookSecret'), false)
 
   const db = new DatabaseSync(join(userDataDir, 'workflows.sqlite'))
   try {
@@ -170,6 +179,7 @@ test('workflow normalization uses explicit calculation adapters', () => {
     now: new Date('2026-05-15T08:00:00.000Z'),
     idGenerator: () => 'generated-id',
     secretGenerator: () => 'generated-secret',
+    generateWebhookSecrets: true,
   })
 
   assert.equal(normalized.projectDirectory, '/tmp/project')
@@ -422,6 +432,37 @@ test('workflow preview blocks unavailable project directories', () => {
   assert.deepEqual(preview.missing, [`Workflow project directory "${projectDirectory}" is not available.`])
 })
 
+test('workflow normalization rejects more than one webhook trigger locally', () => withWorkflowStore('multiple-webhooks', () => {
+  const multipleWebhooks = {
+    ...draft,
+    skillNames: [],
+    toolIds: [],
+    triggers: [
+      { id: 'webhook-primary', type: 'webhook' as const, enabled: true },
+      { id: 'webhook-secondary', type: 'webhook' as const, enabled: false },
+    ],
+  }
+
+  const preview = previewWorkflowDraft(multipleWebhooks)
+  assert.equal(preview.ok, false)
+  assert.deepEqual(preview.missing, ['A workflow can have at most one webhook trigger.'])
+  let generatedSecrets = 0
+  assert.throws(
+    () => normalizeWorkflowDraft(multipleWebhooks, {
+      secretGenerator: () => {
+        generatedSecrets += 1
+        return 'must-not-be-generated'
+      },
+    }),
+    /A workflow can have at most one webhook trigger/,
+  )
+  assert.equal(generatedSecrets, 0)
+  assert.throws(
+    () => createWorkflow(multipleWebhooks),
+    /A workflow can have at most one webhook trigger/,
+  )
+}))
+
 test('workflow tool create requires and consumes a confirmed preview token', async () => {
   await withWorkflowStoreAsync('tool-preview-token', async () => {
     await assert.rejects(
@@ -441,10 +482,53 @@ test('workflow tool create requires and consumes a confirmed preview token', asy
     const result = await createWorkflowFromTool({ previewToken: preview.previewToken! })
     assert.equal(result.ok, true)
     assert.equal(result.workflow.title, 'Inbox summary')
+    assert.equal('webhookSecretReveal' in result, false)
 
     await assert.rejects(
       () => createWorkflowFromTool({ previewToken: preview.previewToken! }),
       /valid confirmed preview token/,
+    )
+  })
+})
+
+test('workflow tool preview and create results never serialize webhook credentials', async () => {
+  await withWorkflowStoreAsync('tool-secret-redaction', async () => {
+    setWorkflowSecretStorageForTests({
+      mode: 'encrypted',
+      encryptString: (value) => Buffer.from(`sealed:${value}`, 'utf8'),
+      decryptString: (value) => value.toString('utf8').replace(/^sealed:/, ''),
+    })
+    const suppliedSentinel = 'workflow-tool-supplied-secret-sentinel-1234567890'
+    const preview = await previewWorkflowFromTool({
+      ...draft,
+      skillNames: [],
+      toolIds: [],
+      triggers: [{
+        id: 'webhook',
+        type: 'webhook',
+        enabled: true,
+        webhookSecret: suppliedSentinel,
+      }],
+    } as unknown as WorkflowDraft)
+    assert.equal(preview.ok, true)
+    assert.equal(JSON.stringify(preview).includes(suppliedSentinel), false)
+    assert.equal(JSON.stringify(preview).includes('webhookSecret'), false)
+
+    const result = await createWorkflowFromTool({ previewToken: preview.previewToken! })
+    const serialized = JSON.stringify(result)
+    assert.equal(serialized.includes(suppliedSentinel), false)
+    assert.equal(serialized.includes('webhookSecret'), false)
+    assert.equal(
+      result.workflow.triggers.some((trigger) => 'webhookSecret' in trigger),
+      false,
+    )
+    assert.equal(getWorkflowWebhookSecret(result.workflow.id), null)
+
+    const provisioned = regenerateWorkflowWebhookSecret(result.workflow.id)
+    assert.equal(typeof provisioned?.webhookSecretReveal.secret, 'string')
+    assert.equal(
+      JSON.stringify(provisioned?.workflow).includes(provisioned?.webhookSecretReveal.secret || ''),
+      false,
     )
   })
 })
@@ -462,6 +546,9 @@ test('workflow store pauses, resumes, archives, regenerates webhook secrets, and
     }, { id: 'webhook', type: 'webhook', enabled: true }],
   }, 'http://127.0.0.1:47839', { now: createdAt })
   assert.equal(listDueWorkflows(dueAt).length, 1)
+  assert.equal(getWorkflowWebhookSecret(workflow.id), null)
+  const provisioned = regenerateWorkflowWebhookSecret(workflow.id)
+  assert.equal(typeof provisioned?.webhookSecretReveal.secret, 'string')
 
   const paused = updateWorkflowStatus(workflow.id, 'paused')
   assert.equal(paused?.status, 'paused')
@@ -472,12 +559,79 @@ test('workflow store pauses, resumes, archives, regenerates webhook secrets, and
 
   const first = getWorkflow(workflow.id, 'http://127.0.0.1:47839')
   const firstUrl = first?.webhookUrl
-  const firstSecret = first?.triggers.find((trigger) => trigger.type === 'webhook')?.webhookSecret
   const regenerated = regenerateWorkflowWebhookSecret(workflow.id, 'http://127.0.0.1:47839')
-  const regeneratedSecret = regenerated?.triggers.find((trigger) => trigger.type === 'webhook')?.webhookSecret
-  assert.equal(regenerated?.webhookUrl, firstUrl)
-  assert.notEqual(regeneratedSecret, firstSecret)
+  assert.equal(regenerated?.workflow.webhookUrl, firstUrl)
+  assert.equal(typeof regenerated?.webhookSecretReveal.secret, 'string')
+  assert.notEqual(regenerated?.webhookSecretReveal.secret, provisioned?.webhookSecretReveal.secret)
+  assert.equal(JSON.stringify(regenerated?.workflow).includes(regenerated?.webhookSecretReveal.secret || ''), false)
 
   const archived = updateWorkflowStatus(workflow.id, 'archived')
   assert.equal(archived?.status, 'archived')
+  assert.equal(getWorkflowWebhookSecret(workflow.id), null)
+
+  assert.throws(
+    () => updateWorkflowStatus(workflow.id, 'active'),
+    /Regenerate the workflow webhook secret before restoring this playbook/,
+  )
+  assert.equal(getWorkflow(workflow.id)?.status, 'archived')
+  assert.equal(getWorkflowWebhookSecret(workflow.id), null)
+
+  const replacement = regenerateWorkflowWebhookSecret(workflow.id)
+  assert.notEqual(replacement?.webhookSecretReveal.secret, regenerated?.webhookSecretReveal.secret)
+  const reactivated = updateWorkflowStatus(workflow.id, 'active')
+  assert.equal(reactivated?.status, 'active')
+  assert.equal(getWorkflowWebhookSecret(workflow.id)?.secret, replacement?.webhookSecretReveal.secret)
+}))
+
+test('workflow store migrates archived v1 webhook plaintext once without clearing later replacement credentials', () => withWorkflowStore('archived-secret-migration', () => {
+  const legacySecret = 'legacy-archived-local-webhook-secret-sentinel'
+  const workflow = createWorkflow({
+    ...draft,
+    triggers: [{ id: 'webhook', type: 'webhook', enabled: true }],
+  })
+  const db = getWorkflowDb()
+  db.prepare(`
+    update workflows
+    set status = 'archived', triggers_json = ?
+    where id = ?
+  `).run(JSON.stringify([{
+    id: 'webhook',
+    type: 'webhook',
+    enabled: true,
+    webhookSecret: legacySecret,
+  }]), workflow.id)
+  db.prepare(`
+    update workflow_meta
+    set value = '1'
+    where key = 'schema_version'
+  `).run()
+
+  clearWorkflowStoreCache()
+
+  assert.equal(getWorkflow(workflow.id)?.status, 'archived')
+  assert.equal(getWorkflowWebhookSecret(workflow.id), null)
+  const migratedDb = getWorkflowDb()
+  const migratedRow = migratedDb.prepare(
+    'select triggers_json from workflows where id = ?',
+  ).get(workflow.id) as { triggers_json: string }
+  assert.equal(migratedRow.triggers_json.includes(legacySecret), false)
+  assert.equal(migratedRow.triggers_json.includes('webhookSecret'), false)
+  assert.equal((
+    migratedDb.prepare(
+      "select value from workflow_meta where key = 'schema_version'",
+    ).get() as { value: string }
+  ).value, '2')
+  assert.throws(
+    () => updateWorkflowStatus(workflow.id, 'active'),
+    /Regenerate the workflow webhook secret before restoring this playbook/,
+  )
+
+  const replacement = regenerateWorkflowWebhookSecret(workflow.id)
+  const replacementSecret = replacement?.webhookSecretReveal.secret
+  assert.equal(typeof replacementSecret, 'string')
+  clearWorkflowStoreCache()
+
+  assert.equal(getWorkflow(workflow.id)?.status, 'archived')
+  assert.equal(getWorkflowWebhookSecret(workflow.id)?.secret, replacementSecret)
+  assert.equal(updateWorkflowStatus(workflow.id, 'active')?.status, 'active')
 }))

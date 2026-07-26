@@ -4,7 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { ensureRuntimeAfterAuthLogin, hasRuntimeSensitiveSettingsUpdate, mergeRuntimeProviderModels } from '../apps/desktop/src/main/ipc/app-handlers.ts'
+import { validateSettingsUpdate } from '../apps/desktop/src/main/ipc/object-validators.ts'
 import { clearConfigCaches, getPublicAppConfig } from '@open-cowork/runtime-host/config'
+import { createDisabledRuntimeToolingBridgeConsent } from '@open-cowork/shared'
 
 test('ensureRuntimeAfterAuthLogin reboots an active runtime after successful sign-in', async () => {
   const calls: string[] = []
@@ -80,10 +82,47 @@ test('small model changes are runtime-sensitive settings updates', () => {
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ taskPermission: 'ask' }), true)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ externalDirectoryPermission: 'ask' }), true)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ mcpPermission: 'deny' }), true)
+  assert.equal(hasRuntimeSensitiveSettingsUpdate({
+    runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
+  }), true)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ requireApprovalBeforeSending: false }), false)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ notificationVoiceReplies: false }), false)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ privacyKeepConversationHistory: false }), false)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ workflowDesktopNotifications: false }), false)
+})
+
+test('tooling bridge IPC accepts only the complete current granular consent contract', () => {
+  const runtimeToolingBridge = createDisabledRuntimeToolingBridgeConsent()
+  runtimeToolingBridge.categories.sourceControl = true
+  assert.deepEqual(
+    validateSettingsUpdate({ runtimeToolingBridge }).runtimeToolingBridge,
+    runtimeToolingBridge,
+  )
+  assert.throws(
+    () => validateSettingsUpdate({ runtimeToolingBridgeEnabled: true }),
+    /Unknown settings key/,
+  )
+  assert.throws(
+    () => validateSettingsUpdate({
+      runtimeToolingBridge: {
+        ...runtimeToolingBridge,
+        version: 0,
+      },
+    }),
+    /consent version/,
+  )
+  const missingCategory = Object.fromEntries(
+    Object.entries(runtimeToolingBridge.categories).filter(([id]) => id !== 'ssh'),
+  )
+  assert.throws(
+    () => validateSettingsUpdate({
+      runtimeToolingBridge: {
+        ...runtimeToolingBridge,
+        categories: missingCategory,
+      },
+    }),
+    /category "ssh" must be a boolean/,
+  )
 })
 
 test('mergeRuntimeProviderModels drops provider defaults absent from the live runtime catalog', () => {

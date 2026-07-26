@@ -166,6 +166,35 @@ describe('browser shim runtime health', () => {
   })
 })
 
+describe('browser shim workflow credential rotation', () => {
+  it('posts to the Cloud rotation endpoint and returns the one-time reveal', async () => {
+    const mutation = {
+      workflow: {
+        id: 'workflow/one',
+        webhookUrl: 'https://cowork.example.test/webhooks/workflows/workflow%2Fone',
+      },
+      webhookSecretReveal: {
+        workflowId: 'workflow/one',
+        triggerId: 'webhook',
+        secret: 'one-time-secret',
+      },
+    }
+    const calls = installFetch((url) => (
+      url.endsWith('/auth/me')
+        ? jsonResponse({ csrfToken: null })
+        : jsonResponse(mutation)
+    ))
+
+    const result = await createBrowserCoworkApi({}).workflows.regenerateWebhookSecret('workflow/one')
+
+    expect(result).toEqual(mutation)
+    expect(calls.some((call) => (
+      call.url === '/api/workflows/workflow%2Fone/rotate-webhook-secret'
+      && call.method === 'POST'
+    ))).toBe(true)
+  })
+})
+
 // F4 presigned artifact UPLOAD: the shim must take the direct-to-store fast path when the cloud
 // advertises it (begin -> direct PUT -> finalize), and fall back to the buffered upload only when
 // the server explicitly reports unsupported or the direct PUT fails. Begin API failures propagate.

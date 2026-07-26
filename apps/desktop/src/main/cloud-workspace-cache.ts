@@ -12,6 +12,18 @@ import type {
 import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
 import type { CloudTransportSettingMetadata } from '@open-cowork/cloud-server/transport-adapter'
 import { getAppDataDir } from '@open-cowork/runtime-host/config'
+import {
+  decodeCacheDocument,
+  decodeCacheFile,
+  decodeLegacyPlaintextCache,
+  encodeCacheFile,
+} from './workspace/cloud-workspace-cache-format.ts'
+import { containsSensitiveCacheContent } from './workspace/cloud-workspace-cache-migration.ts'
+import {
+  createCloudWorkspaceCacheReporter,
+  type CloudWorkspaceCacheReporter,
+} from './workspace/cloud-workspace-cache-telemetry.ts'
+import { redactWorkflowListForCache } from './workspace/cloud-workspace-cache-workflows.ts'
 type SecretStorageAdapter = {
   mode: SecretStorageMode
   encryptString: (plaintext: string) => Buffer
@@ -144,20 +156,12 @@ function normalizeProjectSourceSummary(value: unknown): CloudProjectSourceSummar
   return null
 }
 
-function normalizeWorkflowList(value: unknown): WorkflowListPayload | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const record = value as Partial<WorkflowListPayload>
-  return {
-    workflows: Array.isArray(record.workflows) ? record.workflows as WorkflowListPayload['workflows'] : [],
-    runs: Array.isArray(record.runs) ? record.runs as WorkflowListPayload['runs'] : [],
-  }
-}
-
 function normalizeSetting(value: unknown): CloudTransportSettingMetadata | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const record = value as Partial<CloudTransportSettingMetadata>
   if (typeof record.key !== 'string' || !record.key.trim()) return null
   if (!record.value || typeof record.value !== 'object' || Array.isArray(record.value)) return null
+  if (containsSensitiveCacheContent({ [record.key]: record.value })) return null
   return {
     tenantId: typeof record.tenantId === 'string' ? record.tenantId : undefined,
     userId: typeof record.userId === 'string' ? record.userId : record.userId === null ? null : undefined,
@@ -173,7 +177,7 @@ function normalizeSettings(value: unknown): CloudTransportSettingMetadata[] {
     : []
 }
 
-function normalizeArtifact(value: unknown): SessionArtifact | null {
+function normalizeArtifact(value: unknown, includeChart: boolean): SessionArtifact | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const record = value as Partial<SessionArtifact>
   if (typeof record.id !== 'string' || !record.id.trim()) return null
@@ -199,23 +203,31 @@ function normalizeArtifact(value: unknown): SessionArtifact | null {
     taskId: typeof record.taskId === 'string' ? record.taskId : record.taskId === null ? null : undefined,
     statusUpdatedBy: typeof record.statusUpdatedBy === 'string' ? record.statusUpdatedBy : record.statusUpdatedBy === null ? null : undefined,
     statusUpdatedAt: typeof record.statusUpdatedAt === 'string' ? record.statusUpdatedAt : record.statusUpdatedAt === null ? null : undefined,
-    chart: record.chart ?? undefined,
+    chart: includeChart && !containsSensitiveCacheContent(record.chart)
+      ? record.chart ?? undefined
+      : undefined,
   }
 }
 
-function normalizeArtifactsBySession(value: unknown): Record<string, SessionArtifact[]> {
+function normalizeArtifactsBySession(
+  value: unknown,
+  includeChart: boolean,
+): Record<string, SessionArtifact[]> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const artifactsBySession: Record<string, SessionArtifact[]> = {}
   for (const [sessionId, artifacts] of Object.entries(value as Record<string, unknown>)) {
     if (!sessionId || Buffer.byteLength(sessionId, 'utf8') > 512 || !Array.isArray(artifacts)) continue
     artifactsBySession[sessionId] = artifacts
-      .map(normalizeArtifact)
+      .map((artifact) => normalizeArtifact(artifact, includeChart))
       .filter((artifact): artifact is SessionArtifact => Boolean(artifact))
   }
   return artifactsBySession
 }
 
-function normalizeRecord(value: unknown): CloudWorkspaceCacheRecord | null {
+function normalizeRecord(
+  value: unknown,
+  includeArtifactCharts = false,
+): CloudWorkspaceCacheRecord | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const raw = value as Partial<CloudWorkspaceCacheRecord>
   const workspaceId = normalizeWorkspaceId(raw.workspaceId)
@@ -230,9 +242,12 @@ function normalizeRecord(value: unknown): CloudWorkspaceCacheRecord | null {
     workspaceId,
     sessions,
     views,
-    workflows: normalizeWorkflowList(raw.workflows),
+    workflows: redactWorkflowListForCache(raw.workflows),
     settings: normalizeSettings(raw.settings),
-    artifactsBySession: normalizeArtifactsBySession(raw.artifactsBySession),
+    artifactsBySession: normalizeArtifactsBySession(
+      raw.artifactsBySession,
+      includeArtifactCharts,
+    ),
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : new Date(0).toISOString(),
   }
 }
@@ -250,6 +265,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   readonly mode: CloudWorkspaceCacheMode
   private readonly path: string
   private readonly secretStorage: SecretStorageAdapter | null
+  private readonly reportCacheEvent: CloudWorkspaceCacheReporter
   // Event cursors live in a tiny, plain (sequence numbers aren't secret) sibling file,
   // written debounced — decoupled from the big encrypted views blob. setEventCursor is
   // called per streamed cloud event; persisting it previously re-read, re-decrypted,
@@ -258,6 +274,9 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   // debounced write — and losing the last few hundred ms on an abrupt quit — is safe.
   private readonly cursorsPath: string
   private cursorState: Map<string, Map<string, number>> | null = null
+  // A failed encrypted read is not an empty cache. Keep that state distinct so
+  // a later mutation cannot replace recoverable ciphertext with a new document.
+  private secureReadUnavailable = false
   // Non-null while a sync batch is open: upserts mutate this buffer instead of re-reading +
   // re-writing the whole cache per call (P1-E). Persisted once on endCacheBatch.
   private batchBuffer: CloudWorkspaceCacheRecord[] | null = null
@@ -268,9 +287,11 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
     mode?: CloudWorkspaceCacheMode
     encryptionFallback?: CloudWorkspaceCacheEncryptionFallback
     secretStorage?: SecretStorageAdapter | null
+    reporter?: CloudWorkspaceCacheReporter
   } = {}) {
     this.path = options.path || defaultCachePath()
     this.cursorsPath = `${this.path}.cursors.json`
+    this.reportCacheEvent = createCloudWorkspaceCacheReporter(options.reporter)
     const requestedMode = options.mode || 'full'
     this.secretStorage = options.secretStorage === undefined ? null : options.secretStorage
     if (requestedMode === 'full' && this.storageMode() === 'unavailable') {
@@ -377,7 +398,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   upsertWorkflowList(workspaceId: string, workflows: WorkflowListPayload, now = new Date()): void {
     if (this.mode === 'disabled') return
     const id = normalizeWorkspaceId(workspaceId)
-    const normalized = normalizeWorkflowList(workflows)
+    const normalized = redactWorkflowListForCache(workflows)
     if (!id || !normalized) return
     const records = this.readRecords()
     const existing = records.find((record) => record.workspaceId === id) || this.emptyRecord(id, now)
@@ -441,7 +462,9 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
       ...existing,
       artifactsBySession: {
         ...existing.artifactsBySession,
-        [sessionId]: artifacts.map(normalizeArtifact).filter((artifact): artifact is SessionArtifact => Boolean(artifact)),
+        [sessionId]: artifacts
+          .map((artifact) => normalizeArtifact(artifact, this.mode === 'full'))
+          .filter((artifact): artifact is SessionArtifact => Boolean(artifact)),
       },
       updatedAt: now.toISOString(),
     })
@@ -532,34 +555,156 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
 
   private readRecords(): CloudWorkspaceCacheRecord[] {
     if (this.batchBuffer !== null) return this.batchBuffer
-    if (this.mode === 'disabled' || !existsSync(this.path)) return []
+    if (this.mode === 'disabled' || !existsSync(this.path)) {
+      this.secureReadUnavailable = false
+      return []
+    }
     const storageMode = this.storageMode()
-    if (storageMode === 'unavailable' && this.mode === 'full') return []
-    const encrypted = this.mode === 'full' && storageMode === 'encrypted'
+    const normalizeForMode = (value: unknown) => normalizeRecord(
+      value,
+      this.mode === 'full',
+    )
+    if (storageMode === 'unavailable' && this.mode === 'full') {
+      this.secureReadUnavailable = true
+      this.reportCacheEvent({
+        operation: 'read',
+        outcome: 'blocked',
+        reason: 'secure_storage_unavailable',
+        encoding: 'unknown',
+      })
+      return []
+    }
     let raw: Buffer
     try {
       raw = readFileSync(this.path)
     } catch {
+      this.secureReadUnavailable = true
+      this.reportCacheEvent({
+        operation: 'read',
+        outcome: 'failed',
+        reason: 'io_error',
+        encoding: 'unknown',
+      })
       return []
     }
-    let json: string
-    try {
-      json = encrypted ? this.storage().decryptString(raw) : raw.toString('utf-8')
-    } catch {
-      // Transient decrypt failure (keychain locked): the encrypted transcript cache is intact
-      // (audit P2-12) — do NOT delete, just skip it for this read so it isn't lost on a hiccup.
+    const file = decodeCacheFile(raw)
+    let decoded: ReturnType<typeof decodeCacheDocument<CloudWorkspaceCacheRecord>>
+    let sourceEncoding: 'encrypted' | 'plaintext'
+    if (file.encoding === 'plaintext') {
+      sourceEncoding = 'plaintext'
+      decoded = decodeCacheDocument(file.payload.toString('utf-8'), normalizeForMode)
+    } else if (file.encoding === 'encrypted') {
+      sourceEncoding = 'encrypted'
+      if (storageMode !== 'encrypted') {
+        this.secureReadUnavailable = true
+        this.reportCacheEvent({
+          operation: 'decrypt',
+          outcome: 'blocked',
+          reason: 'secure_storage_unavailable',
+          encoding: 'encrypted',
+        })
+        return []
+      }
+      try {
+        decoded = decodeCacheDocument(this.storage().decryptString(file.payload), normalizeForMode)
+      } catch {
+        // Transient decrypt failure (keychain locked): the encrypted transcript cache is intact
+        // (audit P2-12) — do NOT delete, just skip it for this read so it isn't lost on a hiccup.
+        this.secureReadUnavailable = true
+        this.reportCacheEvent({
+          operation: 'decrypt',
+          outcome: 'failed',
+          reason: 'decrypt_error',
+          encoding: 'encrypted',
+        })
+        return []
+      }
+    } else {
+      // An unversioned file is ambiguous: some safeStorage backends can emit
+      // bytes that also happen to parse as JSON (including `[]`). When secure
+      // storage is unavailable there is no safe discriminator, so preserve the
+      // original bytes and block writes until the backend recovers.
+      if (storageMode === 'unavailable') {
+        this.secureReadUnavailable = true
+        this.reportCacheEvent({
+          operation: 'decrypt',
+          outcome: 'blocked',
+          reason: 'ambiguous_legacy_format',
+          encoding: 'legacy',
+        })
+        return []
+      }
+      if (storageMode === 'encrypted') {
+        try {
+          decoded = decodeCacheDocument(this.storage().decryptString(file.payload), normalizeForMode)
+          sourceEncoding = 'encrypted'
+        } catch {
+          const plaintext = decodeLegacyPlaintextCache(file.payload, normalizeForMode)
+          if (!plaintext) {
+            this.secureReadUnavailable = true
+            this.reportCacheEvent({
+              operation: 'decrypt',
+              outcome: 'failed',
+              reason: 'decrypt_error',
+              encoding: 'legacy',
+            })
+            return []
+          }
+          sourceEncoding = 'plaintext'
+          decoded = plaintext
+        }
+      } else {
+        sourceEncoding = 'plaintext'
+        decoded = decodeLegacyPlaintextCache(file.payload, normalizeForMode)
+      }
+    }
+    if (!decoded) {
+      // A successfully decoded file envelope with an invalid document is
+      // genuinely corrupt. Quarantine for diagnosis, never silently overwrite.
+      const quarantined = quarantineCorruptFile(this.path)
+      this.secureReadUnavailable = !quarantined
+      this.reportCacheEvent({
+        operation: 'quarantine',
+        outcome: quarantined ? 'completed' : 'failed',
+        reason: quarantined ? 'invalid_document' : 'quarantine_failed',
+        encoding: file.encoding,
+      })
       return []
     }
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(json) as unknown
-    } catch {
-      // Decrypted but not valid JSON → genuinely corrupt. Quarantine for diagnosis, never destroy.
-      if (encrypted) quarantineCorruptFile(this.path)
-      return []
+    this.secureReadUnavailable = false
+    const targetEncoding = this.mode === 'full' && storageMode === 'encrypted'
+      ? 'encrypted'
+      : 'plaintext'
+    if (
+      decoded.migratedLegacySensitivePartitions
+      || file.encoding === 'legacy'
+      || sourceEncoding !== targetEncoding
+    ) {
+      try {
+        this.writeRecords(decoded.records)
+        if (decoded.migratedLegacySensitivePartitions) {
+          this.reportCacheEvent({
+            operation: 'migrate_v1',
+            outcome: 'completed',
+            reason: decoded.removedSensitiveViews
+              ? 'sensitive_views_removed'
+              : 'workflow_partitions_removed',
+            encoding: sourceEncoding,
+          })
+        }
+      } catch (error) {
+        if (decoded.migratedLegacySensitivePartitions) {
+          this.reportCacheEvent({
+            operation: 'migrate_v1',
+            outcome: 'failed',
+            reason: 'write_error',
+            encoding: sourceEncoding,
+          })
+        }
+        throw error
+      }
     }
-    if (!Array.isArray(parsed)) return []
-    return parsed.map(normalizeRecord).filter((record): record is CloudWorkspaceCacheRecord => Boolean(record))
+    return decoded.records
   }
 
   private writeRecord(records: CloudWorkspaceCacheRecord[], nextRecord: CloudWorkspaceCacheRecord) {
@@ -570,12 +715,12 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   }
 
   private writeRecords(records: CloudWorkspaceCacheRecord[]) {
-    if (this.mode === 'disabled') return
+    if (this.mode === 'disabled' || this.secureReadUnavailable) return
     const safeRecords = records
       .map((record) => normalizeRecord({
         ...record,
         views: this.mode === 'full' ? record.views : {},
-      }))
+      }, this.mode === 'full'))
       .filter((record): record is CloudWorkspaceCacheRecord => Boolean(record))
       .sort((a, b) => a.workspaceId.localeCompare(b.workspaceId))
     // During a sync batch, accumulate in memory and persist once at endCacheBatch (P1-E). The
@@ -589,16 +734,37 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   }
 
   private persistRecords(safeRecords: CloudWorkspaceCacheRecord[]) {
-    const json = JSON.stringify(safeRecords, null, 2)
     const storageMode = this.storageMode()
-    if (this.mode === 'full' && storageMode === 'encrypted') {
-      writeFileAtomic(this.path, this.storage().encryptString(json), { mode: 0o600 })
-      return
+    const encoding = this.mode === 'full' && storageMode === 'encrypted'
+      ? 'encrypted'
+      : 'plaintext'
+    try {
+      if (this.mode === 'full' && storageMode === 'encrypted') {
+        writeFileAtomic(
+          this.path,
+          encodeCacheFile(safeRecords, 'encrypted', (plaintext) => this.storage().encryptString(plaintext)),
+          { mode: 0o600 },
+        )
+        return
+      }
+      if (this.mode === 'full' && storageMode === 'unavailable') {
+        throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist full cloud workspace cache in production without OS-backed secret storage.')
+      }
+      writeFileAtomic(
+        this.path,
+        encodeCacheFile(safeRecords, 'plaintext'),
+        { mode: 0o600 },
+      )
+    } catch (error) {
+      const storageBlocked = this.mode === 'full' && storageMode === 'unavailable'
+      this.reportCacheEvent({
+        operation: 'write',
+        outcome: storageBlocked ? 'blocked' : 'failed',
+        reason: storageBlocked ? 'secure_storage_unavailable' : 'write_error',
+        encoding,
+      })
+      throw error
     }
-    if (this.mode === 'full' && storageMode === 'unavailable') {
-      throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist full cloud workspace cache in production without OS-backed secret storage.')
-    }
-    writeFileAtomic(this.path, json, { mode: 0o600 })
   }
 
   // Coalesce the durable writes of a sync pass: read the cache once, let every upsert mutate the
@@ -611,7 +777,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   endCacheBatch(): void {
     const buffered = this.batchBuffer
     this.batchBuffer = null
-    if (buffered) this.persistRecords(buffered)
+    if (buffered && !this.secureReadUnavailable) this.persistRecords(buffered)
   }
 }
 

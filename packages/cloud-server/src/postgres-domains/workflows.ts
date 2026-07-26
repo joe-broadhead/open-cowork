@@ -5,12 +5,19 @@ import type {
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 import { normalizeWorkflowSteps } from '@open-cowork/shared'
-import type { CloudWorkflowRecord, CloudWorkflowRunRecord } from '../control-plane-store.ts'
+import type { CloudWorkflowRecord, CloudWorkflowRunRecord, CloudWorkflowWebhookSecretRecord } from '../control-plane-store.ts'
 import { iso, isoOrNull, jsonRecord, jsonStringArray, stringOrNull, type QueryRow } from './shared.ts'
 
 function workflowTriggers(value: unknown): WorkflowTrigger[] {
   return Array.isArray(value)
-    ? value.filter((entry): entry is WorkflowTrigger => Boolean(entry && typeof entry === 'object' && !Array.isArray(entry)))
+    ? value.flatMap((entry): WorkflowTrigger[] => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
+        const {
+          webhookSecret: _webhookSecret,
+          ...trigger
+        } = entry as WorkflowTrigger & { webhookSecret?: unknown }
+        return [trigger]
+      })
     : []
 }
 
@@ -74,5 +81,18 @@ export function workflowRunFromRow(row: QueryRow): CloudWorkflowRunRecord {
     checkpointVersion: row.checkpoint_version === undefined ? 0 : Number(row.checkpoint_version),
     lastErrorCode: stringOrNull(row.last_error_code),
     lastErrorSummary: stringOrNull(row.last_error_summary),
+  }
+}
+
+export function workflowWebhookSecretFromRow(row: QueryRow): CloudWorkflowWebhookSecretRecord {
+  return {
+    tenantId: String(row.tenant_id),
+    workflowId: String(row.workflow_id),
+    triggerId: String(row.trigger_id),
+    ciphertext: String(row.ciphertext),
+    envelopeVersion: Number(row.envelope_version),
+    status: String(row.status) === 'revoked' ? 'revoked' : 'active',
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   }
 }

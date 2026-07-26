@@ -5,6 +5,7 @@ import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { useEscape } from '../../hooks/useEscape'
+import { confirmGatewayCredentialReset } from '../../helpers/destructive-actions'
 import { ModalBackdrop } from './ModalBackdrop'
 
 export const LOCAL_WORKSPACE_FALLBACK: WorkspaceInfo = {
@@ -129,6 +130,13 @@ export function WorkspaceSwitcher() {
   const menuRef = useRef<HTMLDivElement>(null)
 
   const activeWorkspace = workspaces.find((workspace) => workspace.active) || workspaces[0] || LOCAL_WORKSPACE_FALLBACK
+  const unreadableGateway = workspaces.find((workspace) => (
+    workspace.kind === 'gateway'
+    && (
+      workspace.gatewayCredentialStatus === 'corrupt'
+      || workspace.gatewayCredentialStatus === 'unavailable'
+    )
+  ))
 
   const refreshSupport = useCallback(async (listedWorkspaces: WorkspaceInfo[], cancelled: () => boolean) => {
     const entries = await Promise.all(listedWorkspaces.map(async (workspace) => ({
@@ -251,6 +259,23 @@ export function WorkspaceSwitcher() {
     }
   }
 
+  const resetUnreadableGatewayCredentials = async () => {
+    if (!unreadableGateway) return
+    const confirmation = await confirmGatewayCredentialReset()
+    if (!confirmation) return
+    try {
+      await window.coworkApi.workspace.resetGatewayCredentials(confirmation.token)
+      const nextWorkspaces = await window.coworkApi.workspace.list()
+      setWorkspaces(nextWorkspaces.length > 0 ? nextWorkspaces : [LOCAL_WORKSPACE_FALLBACK])
+      setGatewayUrl(unreadableGateway.baseUrl || '')
+      setGatewayLabel(unreadableGateway.label)
+      setGatewayToken('')
+      setShowGatewayForm(true)
+    } catch (error) {
+      addGlobalError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   // Close the switcher and return focus to its trigger so keyboard users
   // don't lose their place. Mirrors the ThreadList action menu's
   // close-then-restore-focus behaviour.
@@ -363,6 +388,31 @@ export function WorkspaceSwitcher() {
             </button>
           ))}
           <div className="-mx-1 mt-1 border-t border-border-subtle p-2">
+            {unreadableGateway ? (
+              <div
+                className="mb-2 rounded-lg border border-danger/30 bg-danger/5 p-2"
+                role="alert"
+              >
+                <div className="text-xs font-medium text-text">
+                  {t('workspace.gatewayCredentialsRecoveryTitle', 'Gateway credentials need recovery')}
+                </div>
+                <div className="mt-1 text-2xs leading-relaxed text-text-muted">
+                  {t(
+                    'workspace.gatewayCredentialsRecoveryDescription',
+                    'The unreadable credential file is still preserved. Reset quarantines it, signs out every Standalone Gateway, and requires new tokens.',
+                  )}
+                </div>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  fullWidth
+                  className="mt-2"
+                  onClick={() => void resetUnreadableGatewayCredentials()}
+                >
+                  {t('workspace.gatewayCredentialsRecoveryAction', 'Reset stored Gateway credentials')}
+                </Button>
+              </div>
+            ) : null}
             {showGatewayForm ? (
               <div className="space-y-2">
                 <Input

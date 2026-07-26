@@ -1055,7 +1055,7 @@ export function buildNodeOpencodeCloudRuntimeClientConfig(
   return buildAuthenticatedOpencodeV2ClientConfig(baseUrl, auth)
 }
 
-function ensureNodeRuntimeDirs(paths: PathProvider) {
+export function ensureOpencodeCloudRuntimeDirs(paths: PathProvider) {
   const roots = paths.getRuntimeXdgRoots()
   for (const path of [
     paths.getAppDataDir(),
@@ -1121,67 +1121,41 @@ function writeEphemeralOpencodeAuth(
   }
 }
 
-export async function createNodeOpencodeCloudRuntimeAdapter(
-  options: NodeOpencodeCloudRuntimeOptions,
-): Promise<NodeOpencodeCloudRuntimeAdapter> {
-  ensureNodeRuntimeDirs(options.paths)
-  const auth = createManagedOpencodeServerAuth()
-  const runtimePaths = options.paths.getRuntimeXdgRoots()
-  // Keep ephemeral credential-class files for the full managed-server lifetime.
-  // OpenCode V2 reloads XDG config on session/turn (not only at process boot).
-  // Deleting after listen() left empty defaults and caused free-tier fallback
-  // models like hy3-free to win over the BYOK model/provider injection.
-  let cleanupEphemeralConfig: (() => void) | null = null
-  let cleanupEphemeralAuth: (() => void) | null = null
-  // Always feed composed BYOK config through OPENCODE_CONFIG_DIR (desktop path)
-  // AND the session XDG opencode.json. OpenCode V2 session turns reload from the
-  // XDG config home; OPENCODE_CONFIG_DIR alone is not enough for model.available().
-  const serverConfig = options.config
-  if (options.config !== undefined) {
-    cleanupEphemeralConfig = writeEphemeralOpencodeConfig(options.paths, options.config)
-    cleanupEphemeralAuth = writeEphemeralOpencodeAuth(options.paths, options.config)
+export function prepareOpencodeCloudRuntimeFiles(
+  paths: PathProvider,
+  config: OpencodeServerOptions['config'] | undefined,
+) {
+  ensureOpencodeCloudRuntimeDirs(paths)
+  let cleanupConfig: (() => void) | null = null
+  let cleanupAuth: (() => void) | null = null
+  if (config !== undefined) {
+    cleanupConfig = writeEphemeralOpencodeConfig(paths, config)
+    cleanupAuth = writeEphemeralOpencodeAuth(paths, config)
   }
-  const env = buildManagedRuntimeEnvironment({
-    currentEnv: options.env || process.env,
-    runtimePaths: {
-      home: runtimePaths.home,
-      configHome: runtimePaths.configHome,
-      dataHome: runtimePaths.dataHome,
-      stateHome: runtimePaths.stateHome,
-      cacheHome: runtimePaths.cacheHome,
+  let cleaned = false
+  return {
+    cleanup() {
+      if (cleaned) return
+      cleaned = true
+      cleanupConfig?.()
+      cleanupAuth?.()
+      cleanupConfig = null
+      cleanupAuth = null
     },
-    enableNativeWebSearch: options.enableNativeWebSearch,
-    serverAuth: auth,
-  })
-  let server: Awaited<ReturnType<typeof createNodeManagedOpencodeServer>>
-  try {
-    server = await createNodeManagedOpencodeServer({
-      hostname: options.hostname || '127.0.0.1',
-      port: options.port ?? 0,
-      // Match desktop managed-server allowance: cold OpenCode + MCP/fs scans
-      // commonly take 8–15s; 5s leaves zombies and flaky cloud prompts.
-      timeout: options.timeout ?? 30_000,
-      config: serverConfig,
-      env,
-      cwd: options.cwd || options.paths.getRuntimeHomeDir(),
-      logLevel: options.logLevel,
-      opencodeBinPath: options.opencodeBinPath,
-      onUnexpectedExit: options.onUnexpectedExit,
-    })
-  } catch (error) {
-    cleanupEphemeralConfig?.()
-    cleanupEphemeralConfig = null
-    cleanupEphemeralAuth?.()
-    cleanupEphemeralAuth = null
-    throw error
   }
-  const client = createOpencodeV2Client(buildNodeOpencodeCloudRuntimeClientConfig(server.url, auth))
-  // Force the composed BYOK/default model onto create/prompt. Config `model`
-  // alone is not enough: OpenCode V2 still defaults free-tier sessions to
-  // opencode/hy3-free when the session is created without an explicit ModelRef.
+}
+
+export function createConnectedOpencodeCloudRuntimeAdapter(options: {
+  url: string
+  auth: ManagedOpencodeServerAuth
+  directory: string
+  config?: OpencodeServerOptions['config']
+  closeServer: () => Promise<void> | void
+}): NodeOpencodeCloudRuntimeAdapter {
+  const client = createOpencodeV2Client(buildNodeOpencodeCloudRuntimeClientConfig(options.url, options.auth))
   const defaultModel = typeof options.config?.model === 'string' ? options.config.model : null
   const adapter = createSdkCloudRuntimeAdapter(client, {
-    directory: options.cwd || options.paths.getRuntimeHomeDir(),
+    directory: options.directory,
   }, { defaultModel })
   const knownRootSessions = new Set<string>()
   const eventSubscriptions = new Set<OpencodeCloudRuntimeEventSubscription>()
@@ -1202,10 +1176,12 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
     }
   }
 
+  let closed = false
+  let closePromise: Promise<void> | null = null
   return {
     ...adapter,
-    url: server.url,
-    auth,
+    url: options.url,
+    auth: options.auth,
     async createSession(input) {
       const session = await adapter.createSession(input)
       trackRootSession(session.id)
@@ -1214,9 +1190,6 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
     async promptSession(input) {
       trackRootSession(input.sessionId)
       const result = await adapter.promptSession(input)
-      // V2 prompt is admission-only. Keep the process/runtime lifecycle tied to
-      // the authoritative native drain rather than treating HTTP admission as
-      // execution completion.
       markRootSessionAdmitted(
         input.sessionId,
         input.messageId || result?.admissionId,
@@ -1233,14 +1206,84 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
         subscription()
       }
     },
-    close() {
-      for (const subscription of eventSubscriptions) subscription()
-      eventSubscriptions.clear()
-      server.close()
-      cleanupEphemeralConfig?.()
-      cleanupEphemeralConfig = null
-      cleanupEphemeralAuth?.()
-      cleanupEphemeralAuth = null
+    async close() {
+      if (closed) return
+      if (!closePromise) {
+        closePromise = (async () => {
+          for (const subscription of eventSubscriptions) subscription()
+          eventSubscriptions.clear()
+          await options.closeServer()
+          closed = true
+        })()
+      }
+      try {
+        await closePromise
+      } catch (error) {
+        // Teardown is retryable: a transient provider/daemon failure must not
+        // turn the adapter into a falsely closed object while its process lives.
+        closePromise = null
+        throw error
+      }
     },
   }
+}
+
+export async function createNodeOpencodeCloudRuntimeAdapter(
+  options: NodeOpencodeCloudRuntimeOptions,
+): Promise<NodeOpencodeCloudRuntimeAdapter> {
+  const runtimeFiles = prepareOpencodeCloudRuntimeFiles(options.paths, options.config)
+  const auth = createManagedOpencodeServerAuth()
+  const runtimePaths = options.paths.getRuntimeXdgRoots()
+  // Keep ephemeral credential-class files for the full managed-server lifetime.
+  // OpenCode V2 reloads XDG config on session/turn (not only at process boot).
+  // Deleting after listen() left empty defaults and caused free-tier fallback
+  // models like hy3-free to win over the BYOK model/provider injection.
+  const serverConfig = options.config
+  const env = buildManagedRuntimeEnvironment({
+    currentEnv: options.env || process.env,
+    runtimePaths: {
+      home: runtimePaths.home,
+      configHome: runtimePaths.configHome,
+      dataHome: runtimePaths.dataHome,
+      stateHome: runtimePaths.stateHome,
+      cacheHome: runtimePaths.cacheHome,
+    },
+    enableNativeWebSearch: options.enableNativeWebSearch,
+    serverAuth: auth,
+  })
+  // Cloud workspaces are untrusted tenant input. OpenCode project config can
+  // define agents/plugins whose agent-level permissions override the global
+  // deployer policy, so never auto-load opencode.json/.opencode from the
+  // workspace. The isolated provider projects intended AGENTS.md instructions
+  // explicitly; Desktop keeps its existing project-config behavior.
+  env.OPENCODE_DISABLE_PROJECT_CONFIG = '1'
+  let server: Awaited<ReturnType<typeof createNodeManagedOpencodeServer>>
+  try {
+    server = await createNodeManagedOpencodeServer({
+      hostname: options.hostname || '127.0.0.1',
+      port: options.port ?? 0,
+      // Match desktop managed-server allowance: cold OpenCode + MCP/fs scans
+      // commonly take 8–15s; 5s leaves zombies and flaky cloud prompts.
+      timeout: options.timeout ?? 30_000,
+      config: serverConfig,
+      env,
+      cwd: options.cwd || options.paths.getRuntimeHomeDir(),
+      logLevel: options.logLevel,
+      opencodeBinPath: options.opencodeBinPath,
+      onUnexpectedExit: options.onUnexpectedExit,
+    })
+  } catch (error) {
+    runtimeFiles.cleanup()
+    throw error
+  }
+  return createConnectedOpencodeCloudRuntimeAdapter({
+    url: server.url,
+    auth,
+    directory: options.cwd || options.paths.getRuntimeHomeDir(),
+    config: options.config,
+    async closeServer() {
+      server.close()
+      runtimeFiles.cleanup()
+    },
+  })
 }

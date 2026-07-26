@@ -1054,6 +1054,7 @@ while true; do sleep 1; done
     assert.equal(adapter.url, 'http://127.0.0.1:43231')
     assert.equal(readFileSync(envFile, 'utf8').includes(secret), false)
     assert.equal(readFileSync(envFile, 'utf8').includes('OPENCODE_CONFIG_CONTENT'), false)
+    assert.match(readFileSync(envFile, 'utf8'), /^OPENCODE_DISABLE_PROJECT_CONFIG=1$/m)
     assert.match(readFileSync(configCopyFile, 'utf8'), new RegExp(secret))
     // Config must remain on disk while the managed server is alive so OpenCode
     // V2 can reload it on later session/turn starts (not only at process boot).

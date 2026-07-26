@@ -10,6 +10,7 @@ const EXPECTED_DOMAIN_FOLDERS = [
   'ipc',
   'update',
   'workflow',
+  'workspace',
 ]
 
 const ALLOWED_TOP_LEVEL_TYPESCRIPT = [

@@ -132,6 +132,9 @@ export async function createWorkflowFromTool(request: WorkflowToolCreateRequest)
   try {
     const normalizedDraft = cloneWorkflowDraft(preview.normalizedDraft)
     const capabilities = await resolveWorkflowCapabilityContext(normalizedDraft)
+    // Tool output is persisted in the setup transcript, so creation must not
+    // mint a credential that cannot be delivered safely. The user provisions
+    // it explicitly through the one-time Playbooks rotation mutation.
     const workflow = createWorkflow(normalizedDraft, getWorkflowWebhookBaseUrl(), { capabilities })
     publishWorkflowUpdated?.()
     return { ok: true, workflow }

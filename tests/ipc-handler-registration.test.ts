@@ -131,6 +131,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('workspace:list'), true)
   assert.equal(handlers.has('workspace:activate'), true)
   assert.equal(handlers.has('workspace:add-gateway'), true)
+  assert.equal(handlers.has('workspace:reset-gateway-credentials'), true)
   assert.equal(handlers.has('workspace:policy'), true)
   assert.equal(handlers.has('workspace:support'), true)
   assert.equal(handlers.has('desktop-pairing:list'), true)

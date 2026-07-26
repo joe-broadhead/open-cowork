@@ -263,6 +263,10 @@ test('root deployment scripts expose provider smoke gates', () => {
     'node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts && node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs',
   )
   assert.equal(requireScript('release:gates:validate'), 'node scripts/validate-release-gates.mjs')
+  assert.equal(
+    requireScript('cloud:dev'),
+    'node --no-warnings --experimental-strip-types scripts/open-cowork-cloud.ts --development-process',
+  )
   assert.equal(requireScript('proof:opencode:compatibility'), 'node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts')
 })
 

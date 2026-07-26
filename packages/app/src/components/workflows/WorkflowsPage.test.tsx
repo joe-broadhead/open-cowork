@@ -5,6 +5,9 @@ import type { CoworkAPI, EffectiveAppSettings, WorkflowListPayload, WorkflowRun 
 import { WorkflowsPage } from './WorkflowsPage'
 import { useSessionStore } from '../../stores/session'
 import { WORKSPACE_SUPPORT_APIS, unavailableWorkspaceSupport, useWorkspaceSupportStore } from '../../stores/workspace-support'
+import { toast } from '../ui/Toaster'
+
+vi.mock('../ui/Toaster', () => ({ toast: vi.fn() }))
 
 function payload(overrides: Partial<WorkflowListPayload> = {}): WorkflowListPayload {
   return {
@@ -20,7 +23,7 @@ function payload(overrides: Partial<WorkflowListPayload> = {}): WorkflowListPayl
       draftSessionId: 'ses_draft',
       triggers: [
         { id: 'manual', type: 'manual', enabled: true },
-        { id: 'webhook', type: 'webhook', enabled: true, webhookSecret: 'secret' },
+        { id: 'webhook', type: 'webhook', enabled: true },
       ],
       createdAt: '2026-05-14T08:00:00.000Z',
       updatedAt: '2026-05-14T08:00:00.000Z',
@@ -98,7 +101,17 @@ function installApi(
       pause: vi.fn(async () => null),
       resume: vi.fn(async () => null),
       archive: vi.fn(async () => null),
-      regenerateWebhookSecret: vi.fn(async () => null),
+      regenerateWebhookSecret: vi.fn(async () => ({
+        workflow: {
+          ...workflowPayload.workflows[0]!,
+          runs: [],
+        },
+        webhookSecretReveal: {
+          workflowId: workflowPayload.workflows[0]!.id,
+          triggerId: 'webhook',
+          secret: 'rotated-secret',
+        },
+      })),
     },
     on: {
       workflowUpdated: vi.fn((handler: () => void) => {
@@ -127,6 +140,25 @@ function createDeferred<T>() {
     reject = rejectPromise
   })
   return { promise, resolve, reject }
+}
+
+function activateCloudWorkspace(workspaceId = 'cloud:test') {
+  useSessionStore.setState({ activeWorkspaceId: workspaceId })
+  useWorkspaceSupportStore.setState({
+    supportByWorkspace: {
+      [workspaceId]: WORKSPACE_SUPPORT_APIS.map((api) => ({
+        api,
+        status: api === 'workflows.list' || api === 'workflows.run' ? 'supported' : 'not_supported',
+        verdict: {
+          allowed: api === 'workflows.list' || api === 'workflows.run',
+          reason: api.startsWith('workflows') ? null : 'Blocked by cloud policy.',
+        },
+      })),
+    },
+    loadedByWorkspace: { [workspaceId]: true },
+    loadingByWorkspace: {},
+    errorByWorkspace: {},
+  })
 }
 
 describe('WorkflowsPage', () => {
@@ -314,6 +346,7 @@ describe('WorkflowsPage', () => {
       title: 'Archived inbox summary',
       status: 'archived' as const,
       webhookUrl: null,
+      triggers: [{ id: 'manual', type: 'manual' as const, enabled: true }],
     }
     const { api } = installApi(payload({
       workflows: [payload().workflows[0]!, archivedWorkflow],
@@ -337,36 +370,137 @@ describe('WorkflowsPage', () => {
     expect(api.workflows?.resume).toHaveBeenCalledWith('workflow-archived')
   })
 
-  it('uses cloud workflow APIs and hides local webhook mutation controls', async () => {
-    useSessionStore.setState({ activeWorkspaceId: 'cloud:test' })
-    useWorkspaceSupportStore.setState({
-      supportByWorkspace: {
-        'cloud:test': WORKSPACE_SUPPORT_APIS.map((api) => ({
-          api,
-          status: api === 'workflows.list' || api === 'workflows.run' ? 'supported' : 'not_supported',
-          verdict: {
-            allowed: api === 'workflows.list' || api === 'workflows.run',
-            reason: api.startsWith('workflows') ? null : 'Blocked by cloud policy.',
-          },
-        })),
-      },
-      loadedByWorkspace: { 'cloud:test': true },
-      loadingByWorkspace: {},
-      errorByWorkspace: {},
+  it('creates, copies, and restores an archived local webhook playbook as one truthful transition', async () => {
+    const archivedWorkflow = {
+      ...payload().workflows[0]!,
+      id: 'workflow-archived',
+      title: 'Archived inbox summary',
+      status: 'archived' as const,
+      webhookUrl: 'http://127.0.0.1:47839/workflows/workflow-archived',
+    }
+    const archivedPayload = payload({ workflows: [archivedWorkflow] })
+    const { api } = installApi(archivedPayload)
+    vi.mocked(api.workflows!.list)
+      .mockResolvedValueOnce(archivedPayload)
+      .mockResolvedValue(payload({
+        workflows: [{ ...archivedWorkflow, status: 'active' }],
+      }))
+    vi.mocked(api.workflows!.resume).mockRejectedValueOnce(
+      new Error('Regenerate the workflow webhook secret before restoring this playbook.'),
+    )
+
+    render(<WorkflowsPage onOpenThread={vi.fn()} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Archived (1)' }))
+    const archivedHeading = await screen.findByRole('heading', { name: 'Archived inbox summary' })
+    const archivedCard = archivedHeading.closest('[data-workflow-id="workflow-archived"]')
+    expect(archivedCard).not.toBeNull()
+    expect(within(archivedCard as HTMLElement).getByText(/Create and copy a replacement secret before restoring/i)).toBeInTheDocument()
+    expect(within(archivedCard as HTMLElement).getByRole('button', { name: 'Create replacement' })).toBeInTheDocument()
+
+    await userEvent.click(within(archivedCard as HTMLElement).getByRole('button', { name: 'Restore' }))
+    await waitFor(() => expect(toast).toHaveBeenCalledWith({
+      tone: 'error',
+      message: 'Regenerate the workflow webhook secret before restoring this playbook.',
+    }))
+    expect(api.workflows?.resume).toHaveBeenCalledWith('workflow-archived')
+    expect(toast).not.toHaveBeenCalledWith({ tone: 'success', message: 'Playbook restored.' })
+
+    await userEvent.click(within(archivedCard as HTMLElement).getByRole('button', { name: 'Create replacement' }))
+    expect(screen.getByRole('heading', { name: 'Create a replacement webhook secret?' })).toBeInTheDocument()
+    expect(screen.getByText(/copy the one-time curl command, and restore the playbook/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Create, copy, and restore' }))
+
+    await waitFor(() => expect(api.workflows?.regenerateWebhookSecret).toHaveBeenCalledWith('workflow-archived'))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('Authorization: Bearer rotated-secret'))
+    await waitFor(() => expect(api.workflows?.resume).toHaveBeenCalledTimes(2))
+    expect(toast).toHaveBeenCalledWith({ tone: 'success', message: 'Playbook restored.' })
+    expect(await screen.findByText('No archived playbooks')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Archived inbox summary' })).not.toBeInTheDocument()
+  })
+
+  it('uses cloud workflow APIs and rotates webhook credentials through the active workspace', async () => {
+    activateCloudWorkspace()
+    const cloudPayload = payload({
+      workflows: [{
+        ...payload().workflows[0]!,
+        webhookUrl: 'https://cowork.example.test/webhooks/workflows/workflow-1',
+      }],
     })
-    const { api } = installApi()
+    const { api } = installApi(cloudPayload)
     const onOpenThread = vi.fn()
 
     render(<WorkflowsPage onOpenThread={onOpenThread} />)
 
     expect(await screen.findByText('Inbox summary')).toBeInTheDocument()
     expect(api.workflows?.list).toHaveBeenCalledWith({ workspaceId: 'cloud:test' })
-    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate secret' }))
+    await waitFor(() => expect(api.workflows?.regenerateWebhookSecret).toHaveBeenCalledWith(
+      'workflow-1',
+      { workspaceId: 'cloud:test' },
+    ))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining(
+      "https://cowork.example.test/webhooks/workflows/workflow-1",
+    ))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining(
+      'x-open-cowork-signature: sha256=$signature',
+    ))
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalledWith(expect.stringContaining(
+      'Authorization: Bearer rotated-secret',
+    ))
 
     await userEvent.click(screen.getByRole('button', { name: 'Run' }))
 
     expect(api.workflows?.runNow).toHaveBeenCalledWith('workflow-1', { workspaceId: 'cloud:test' })
     await waitFor(() => expect(onOpenThread).toHaveBeenCalledWith('ses_run'))
+  })
+
+  it('creates, copies, and restores archived cloud webhook playbooks through the active workspace', async () => {
+    activateCloudWorkspace()
+    const archivedWorkflow = {
+      ...payload().workflows[0]!,
+      id: 'workflow-archived',
+      title: 'Archived cloud webhook',
+      status: 'archived' as const,
+      webhookUrl: 'https://cowork.example.test/webhooks/workflows/workflow-archived',
+    }
+    const archivedPayload = payload({ workflows: [archivedWorkflow] })
+    const { api } = installApi(archivedPayload)
+    vi.mocked(api.workflows!.list)
+      .mockResolvedValueOnce(archivedPayload)
+      .mockResolvedValue(payload({
+        workflows: [{ ...archivedWorkflow, status: 'active' }],
+      }))
+
+    render(<WorkflowsPage onOpenThread={vi.fn()} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Archived (1)' }))
+    const archivedCard = (await screen.findByRole('heading', { name: 'Archived cloud webhook' }))
+      .closest('[data-workflow-id="workflow-archived"]')
+    expect(archivedCard).not.toBeNull()
+    expect(within(archivedCard as HTMLElement).getByText(/Create and copy a replacement secret before restoring/i)).toBeInTheDocument()
+
+    await userEvent.click(within(archivedCard as HTMLElement).getByRole('button', { name: 'Create replacement' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create, copy, and restore' }))
+
+    await waitFor(() => expect(api.workflows?.regenerateWebhookSecret).toHaveBeenCalledWith(
+      'workflow-archived',
+      { workspaceId: 'cloud:test' },
+    ))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining(
+      "https://cowork.example.test/webhooks/workflows/workflow-archived",
+    ))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining(
+      'x-open-cowork-timestamp: $timestamp',
+    ))
+
+    await waitFor(() => expect(api.workflows?.resume).toHaveBeenCalledWith(
+      'workflow-archived',
+      { workspaceId: 'cloud:test' },
+    ))
+    expect(await screen.findByText('No archived playbooks')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Archived cloud webhook' })).not.toBeInTheDocument()
   })
 
   it('ignores stale workflow list refreshes from a previous workspace', async () => {
@@ -459,16 +593,14 @@ describe('WorkflowsPage', () => {
     expect(api.workflows?.runNow).not.toHaveBeenCalled()
   })
 
-  it('copies webhook invocation without putting the secret in the URL', async () => {
+  it('copies only the redacted webhook URL from ordinary workflow details', async () => {
     installApi()
     render(<WorkflowsPage onOpenThread={vi.fn()} />)
 
     expect(await screen.findByText('Inbox summary')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Copy curl' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Copy URL' }))
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('Authorization: Bearer secret'))
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('/workflows/workflow-1'))
-    expect(navigator.clipboard.writeText).not.toHaveBeenCalledWith(expect.stringContaining('/workflows/workflow-1/secret'))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://127.0.0.1:47839/workflows/workflow-1')
   })
 
   it('confirms webhook secret regeneration and warns that existing callers stop working', async () => {
@@ -484,5 +616,22 @@ describe('WorkflowsPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Regenerate secret' }))
     await waitFor(() => expect(api.workflows?.regenerateWebhookSecret).toHaveBeenCalledWith('workflow-1'))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('Authorization: Bearer rotated-secret'))
+  })
+
+  it('does not render or retain a rotated secret when clipboard access fails', async () => {
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error('clipboard denied'))
+    installApi()
+    render(<WorkflowsPage onOpenThread={vi.fn()} />)
+
+    expect(await screen.findByText('Inbox summary')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate secret' }))
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+      tone: 'error',
+      message: expect.stringMatching(/clipboard access failed/i),
+    })))
+    expect(screen.queryByText(/rotated-secret/)).not.toBeInTheDocument()
   })
 })

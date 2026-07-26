@@ -120,7 +120,11 @@ const draft = {
   ],
   triggers: [
     { type: 'manual', enabled: true },
-    { type: 'webhook', enabled: true },
+    {
+      type: 'webhook',
+      enabled: true,
+      webhookSecret: 'workflow-mcp-secret-sentinel-1234567890',
+    },
   ],
 }
 
@@ -140,6 +144,7 @@ test('workflows MCP previews and creates through the app bridge', async () => {
     assert.deepEqual(seen.map((entry) => entry.url), ['/preview', '/create'])
     assert.equal((seen[0]?.body as { title?: string }).title, 'Inbox summary')
     assert.deepEqual((seen[0]?.body as { steps?: unknown }).steps, draft.steps)
+    assert.equal(JSON.stringify(seen[0]?.body).includes('workflow-mcp-secret-sentinel'), false)
     assert.deepEqual(seen[1]?.body, { previewToken: 'preview-token-from-bridge' })
   })
 })

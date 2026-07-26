@@ -3,10 +3,16 @@
 Use the same `open-cowork-cloud` and `open-cowork-gateway` images on
 DigitalOcean with these services:
 
+> **Execution support boundary:** the stock DOKS Helm worker does not inject a
+> Kubernetes execution provider and cannot run the Docker-backed provider.
+> Use this as a web, scheduler, Gateway, storage, and downstream composition
+> reference. Production workers require a dedicated Docker-capable host or a
+> reviewed DOKS provider integration that passes the two-tenant proof.
+
 | Role | Recommended service |
 | --- | --- |
 | `web` | App Platform for demos or DOKS Deployment for production |
-| `worker` | DOKS Deployment |
+| `worker` | Dedicated Docker-capable host or reviewed DOKS provider integration |
 | `scheduler` | DOKS Deployment |
 | Gateway | App Platform component or DOKS Deployment |
 | Control plane | Managed PostgreSQL |
@@ -15,8 +21,9 @@ DigitalOcean with these services:
 | Observability | App Platform logs, Kubernetes logs, and OTLP exporter or collector |
 | Backups | Managed PostgreSQL backups plus Spaces versioning/lifecycle |
 
-For scalable deployments, install the provider-neutral Helm chart on DOKS and
-connect it to Managed PostgreSQL and Spaces.
+For scalable non-executing roles and downstream provider wiring, install the
+provider-neutral Helm chart on DOKS and connect it to Managed PostgreSQL and
+Spaces.
 
 Example Helm overrides. Keep real registry names, project IDs, domains, image
 tags, image digests, and secret values in a private deployment repo or
@@ -58,7 +65,8 @@ External Secrets. Only expose the gateway publicly when a webhook-mode provider
 needs inbound callbacks.
 
 App Platform all-in-one is acceptable for demos and focused-agent pilots.
-Production worker execution should use DOKS split roles.
+Production worker execution requires the dedicated-host or reviewed-provider
+path above; the stock DOKS split-role manifest is not sufficient.
 
 ## Secret Inventory
 

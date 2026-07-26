@@ -2,6 +2,7 @@ import {
   signKnowledgeAgentToken,
   KNOWLEDGE_AGENT_TOKEN_TTL_MS,
 } from './knowledge-agent-token.ts'
+import type { CloudRuntimePolicy } from './cloud-config.ts'
 
 // Structural subset of the OpenCode `Config` we touch. Declared locally (rather
 // than importing `@opencode-ai/sdk`) so this module stays OUTSIDE the documented
@@ -36,9 +37,15 @@ type RuntimeConfigWithMcp = {
 // The MCP resolves its own base path from OPEN_COWORK_KNOWLEDGE_TOOL_URL and
 // appends `/propose`. Keep this in lockstep with the route in http-server.ts.
 export const KNOWLEDGE_AGENT_ROUTE_BASE_PATH = '/api/knowledge/agent'
+export const KNOWLEDGE_CLOUD_CAPABILITY = {
+  toolId: 'knowledge',
+  mcpName: 'knowledge',
+} as const
 
 export type KnowledgeAgentRuntimeAugmentationInput = {
   knowledgeEnabled: boolean
+  /** Effective Cloud profile policy; Knowledge must be allowed as both a tool and MCP. */
+  policy: Pick<CloudRuntimePolicy, 'allowedTools' | 'allowedMcps'>
   /** Cloud signing secret; absent ⇒ fail closed (no token minted). */
   secret: string | null | undefined
   /** Stable public origin, e.g. https://cloud.example.com; absent ⇒ fail closed. */
@@ -75,8 +82,22 @@ export function buildKnowledgeAgentRuntimeAugmentation(
   const mcpScriptPath = input.mcpScriptPath?.trim()
   const tenantId = input.execution.tenantId?.trim()
   const sessionId = input.execution.sessionId?.trim()
-  // Fail closed on any missing prerequisite.
-  if (!input.knowledgeEnabled || !secret || !publicUrl || !mcpScriptPath || !tenantId || !sessionId) {
+  const toolAllowed = input.policy.allowedTools === null
+    || input.policy.allowedTools.includes(KNOWLEDGE_CLOUD_CAPABILITY.toolId)
+  const mcpAllowed = input.policy.allowedMcps === null
+    || input.policy.allowedMcps.includes(KNOWLEDGE_CLOUD_CAPABILITY.mcpName)
+  // Fail closed on any missing prerequisite or profile-policy denial. Checking
+  // before token creation ensures a denied capability receives no credential.
+  if (
+    !input.knowledgeEnabled
+    || !toolAllowed
+    || !mcpAllowed
+    || !secret
+    || !publicUrl
+    || !mcpScriptPath
+    || !tenantId
+    || !sessionId
+  ) {
     return null
   }
   const nowMs = (input.now ?? Date.now)()

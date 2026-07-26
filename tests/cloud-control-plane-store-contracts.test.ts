@@ -10,6 +10,7 @@ import {
 import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import { createPostgresControlPlaneStore } from '@open-cowork/cloud-server/postgres-control-plane-store'
 import { createPglitePool } from './helpers/pglite-pool.ts'
+import type { WorkflowDraft } from '@open-cowork/shared'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
   || process.env.OPEN_COWORK_CLOUD_TEST_POSTGRES_URL
@@ -103,6 +104,172 @@ test('pglite webhook security store enforces fail-closed rate limit / auth backo
       windowMs: 60_000,
       cacheLimit: 100,
     }), null)
+  } finally {
+    await store.close?.()
+  }
+})
+
+test('pglite workflow migration atomically replaces the expected encrypted record before stripping plaintext', async () => {
+  const pool = createPglitePool()
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool })
+  const tenantId = `workflow-migration-${randomUUID()}`
+  const userId = `${tenantId}-user`
+  const workflowId = `${tenantId}-workflow`
+  const triggerId = 'webhook'
+  const plaintext = 'pglite-legacy-workflow-secret-sentinel-1234567890'
+  const existingCiphertext = 'enc:v1:pglite-existing-ciphertext'
+  const replacementCiphertext = 'enc:v1:pglite-current-ciphertext'
+  try {
+    await store.createTenant({ tenantId, name: tenantId })
+    await store.ensureUser({ tenantId, userId, email: `${userId}@example.test` })
+    await store.createWorkflow({
+      tenantId,
+      userId,
+      workflowId,
+      draft: {
+        title: 'Migration race',
+        instructions: 'Preserve legacy plaintext across a ciphertext race.',
+        agentName: 'build',
+        triggers: [{ id: triggerId, type: 'webhook', enabled: true }],
+      },
+      webhookSecrets: [{
+        triggerId,
+        ciphertext: existingCiphertext,
+        envelopeVersion: 1,
+      }],
+    })
+    await pool.query(
+      `UPDATE cloud_workflows
+       SET triggers = jsonb_build_array(jsonb_build_object(
+         'id', $3::text,
+         'type', 'webhook',
+         'enabled', true,
+         'webhookSecret', $4::text
+       ))
+       WHERE tenant_id = $1 AND workflow_id = $2`,
+      [tenantId, workflowId, triggerId, plaintext],
+    )
+
+    assert.ok(await store.getLegacyWorkflowWebhookSecret(tenantId, workflowId, triggerId))
+    assert.equal(await store.migrateLegacyWorkflowWebhookSecret({
+      tenantId,
+      workflowId,
+      triggerId,
+      expectedPlaintext: plaintext,
+      expectedExistingCiphertext: 'enc:v1:stale-ciphertext',
+      expectedExistingEnvelopeVersion: 1,
+      ciphertext: 'enc:v1:replacement-must-not-write',
+      envelopeVersion: 1,
+    }), false)
+    assert.ok(await store.getLegacyWorkflowWebhookSecret(tenantId, workflowId, triggerId))
+    assert.equal(
+      (await store.getWorkflowWebhookSecret(tenantId, workflowId, triggerId))?.ciphertext,
+      existingCiphertext,
+    )
+
+    assert.equal(await store.migrateLegacyWorkflowWebhookSecret({
+      tenantId,
+      workflowId,
+      triggerId,
+      expectedPlaintext: plaintext,
+      expectedExistingCiphertext: existingCiphertext,
+      expectedExistingEnvelopeVersion: 1,
+      ciphertext: replacementCiphertext,
+      envelopeVersion: 1,
+    }), true)
+    assert.equal(await store.getLegacyWorkflowWebhookSecret(tenantId, workflowId, triggerId), null)
+    assert.equal(
+      (await store.getWorkflowWebhookSecret(tenantId, workflowId, triggerId))?.ciphertext,
+      replacementCiphertext,
+    )
+  } finally {
+    await store.close?.()
+  }
+})
+
+test('pglite workflow migration preserves archived revocation until an explicit replacement', async () => {
+  const pool = createPglitePool()
+  const store = await createPostgresControlPlaneStore({ connectionString: 'pglite://memory', pool })
+  const tenantId = `archived-workflow-migration-${randomUUID()}`
+  const userId = `${tenantId}-user`
+  const workflowId = `${tenantId}-workflow`
+  const triggerId = 'webhook'
+  const plaintext = 'pglite-archived-legacy-workflow-secret-sentinel'
+  try {
+    await store.createTenant({ tenantId, name: tenantId })
+    await store.ensureUser({ tenantId, userId, email: `${userId}@example.test` })
+    await store.createWorkflow({
+      tenantId,
+      userId,
+      workflowId,
+      draft: {
+        title: 'Archived migration',
+        instructions: 'Never revive an archived credential.',
+        agentName: 'build',
+        triggers: [{ id: triggerId, type: 'webhook', enabled: true }],
+      },
+    })
+    await pool.query(
+      `UPDATE cloud_workflows
+       SET status = 'archived',
+           next_run_at = NULL,
+           triggers = jsonb_build_array(jsonb_build_object(
+             'id', $3::text,
+             'type', 'webhook',
+             'enabled', true,
+             'webhookSecret', $4::text
+           ))
+       WHERE tenant_id = $1 AND workflow_id = $2`,
+      [tenantId, workflowId, triggerId, plaintext],
+    )
+
+    assert.equal(await store.migrateLegacyWorkflowWebhookSecret({
+      tenantId,
+      workflowId,
+      triggerId,
+      expectedPlaintext: plaintext,
+      expectedExistingCiphertext: null,
+      expectedExistingEnvelopeVersion: null,
+      ciphertext: 'enc:v1:pglite-archived-current-ciphertext',
+      envelopeVersion: 1,
+    }), true)
+    assert.equal(await store.getLegacyWorkflowWebhookSecret(tenantId, workflowId, triggerId), null)
+    assert.equal(
+      (await store.getWorkflowWebhookSecret(tenantId, workflowId, triggerId))?.status,
+      'revoked',
+    )
+    const persisted = await pool.query(
+      `SELECT status, triggers::text AS triggers
+       FROM cloud_workflows
+       WHERE tenant_id = $1 AND workflow_id = $2`,
+      [tenantId, workflowId],
+    )
+    assert.equal(persisted.rows[0]?.status, 'archived')
+    assert.equal(String(persisted.rows[0]?.triggers).includes(plaintext), false)
+    assert.equal(String(persisted.rows[0]?.triggers).includes('webhookSecret'), false)
+    assert.equal(await store.updateWorkflowStatus({
+      tenantId,
+      userId,
+      workflowId,
+      status: 'active',
+      nextRunAt: null,
+    }), null)
+
+    await store.rotateWorkflowWebhookSecret({
+      tenantId,
+      userId,
+      workflowId,
+      triggerId,
+      ciphertext: 'enc:v1:pglite-archived-replacement-ciphertext',
+      envelopeVersion: 1,
+    })
+    assert.equal((await store.updateWorkflowStatus({
+      tenantId,
+      userId,
+      workflowId,
+      status: 'active',
+      nextRunAt: null,
+    }))?.status, 'active')
   } finally {
     await store.close?.()
   }
@@ -1292,6 +1459,70 @@ function runControlPlaneDomainContracts(
       const secondWorkflowPage = await store.listWorkflowsPage({ tenantId, userId, limit: 2, cursor: firstWorkflowPage.nextCursor })
       assert.deepEqual(secondWorkflowPage.items.map((entry) => entry.id).slice(0, 2), [pagedWorkflowIds[0], workflowId])
       assert.equal(secondWorkflowPage.nextCursor, null)
+      const secretWorkflowId = `${prefix}-secret-workflow`
+      const legacySentinel = `${prefix}-legacy-webhook-secret`
+      await store.createWorkflow({
+        tenantId,
+        userId,
+        workflowId: secretWorkflowId,
+        draft: {
+          title: 'Secret lifecycle',
+          instructions: 'Exercise encrypted webhook lifecycle.',
+          agentName: 'default',
+          triggers: [{
+            id: 'webhook',
+            type: 'webhook',
+            enabled: true,
+            webhookSecret: legacySentinel,
+          }],
+        } as unknown as WorkflowDraft,
+        webhookSecrets: [{
+          triggerId: 'webhook',
+          ciphertext: `enc:v1:${prefix}-ciphertext-v1`,
+          envelopeVersion: 1,
+        }],
+      })
+      assert.equal(
+        JSON.stringify(await store.getWorkflow(tenantId, userId, secretWorkflowId)).includes(legacySentinel),
+        false,
+      )
+      assert.equal((await store.listLegacyWorkflowWebhookSecrets()).length, 0)
+      assert.equal((await store.getWorkflowWebhookSecret(tenantId, secretWorkflowId))?.status, 'active')
+      assert.equal((await store.updateWorkflowStatus({
+        tenantId,
+        userId,
+        workflowId: secretWorkflowId,
+        status: 'archived',
+        nextRunAt: null,
+      }))?.status, 'archived')
+      assert.equal((await store.getWorkflowWebhookSecret(tenantId, secretWorkflowId))?.status, 'revoked')
+      assert.equal(await store.updateWorkflowStatus({
+        tenantId,
+        userId,
+        workflowId: secretWorkflowId,
+        status: 'active',
+        nextRunAt: null,
+      }), null)
+      await store.rotateWorkflowWebhookSecret({
+        tenantId,
+        userId,
+        workflowId: secretWorkflowId,
+        triggerId: 'webhook',
+        ciphertext: `enc:v1:${prefix}-ciphertext-v2`,
+        envelopeVersion: 1,
+      })
+      assert.equal((await store.getWorkflowWebhookSecret(tenantId, secretWorkflowId))?.status, 'active')
+      assert.equal((await store.updateWorkflowStatus({
+        tenantId,
+        userId,
+        workflowId: secretWorkflowId,
+        status: 'active',
+        nextRunAt: null,
+      }))?.status, 'active')
+      assert.equal(
+        (await store.listLegacyWorkflowWebhookSecrets()).some((entry) => entry.workflowId === secretWorkflowId),
+        false,
+      )
       const workflowRun = await store.createWorkflowRun({
         tenantId,
         userId,
@@ -1568,7 +1799,7 @@ function runControlPlaneDomainContracts(
             toolIds: [],
             projectDirectory: null,
             draftSessionId: null,
-            triggers: [{ id: 'webhook', type: 'webhook', enabled: true, webhookSecret: tenant.tenantId }],
+            triggers: [{ id: 'webhook', type: 'webhook', enabled: true }],
           },
           createdAt: tenant.createdAt,
         })

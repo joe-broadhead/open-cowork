@@ -68,11 +68,9 @@ session loading, agent/permission/skill composition) now lives in
 share it. The remaining `apps/desktop/src/main` entries are product seams that
 still touch SDK event/types at the desktop edge.
 
-- `packages/cloud-server/src/app.ts`
 - `packages/cloud-server/src/byok-runtime-config.ts`
 - `packages/cloud-server/src/opencode-runtime-adapter.ts`
 - `packages/cloud-server/src/runtime-adapter.ts`
-- `packages/cloud-server/src/worker-scoped-runtime-adapter.ts`
 - `apps/desktop/src/main/durable-session-events.ts`
 - `apps/desktop/src/main/event-subscriptions.ts`
 - `apps/desktop/src/main/events.ts`

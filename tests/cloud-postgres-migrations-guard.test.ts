@@ -9,6 +9,7 @@ import {
   CLOUD_CONTROL_PLANE_MIGRATIONS,
   CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES,
   CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST,
+  CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID,
 } from '../packages/cloud-server/src/postgres-schema.ts'
 
 // A fake Postgres that models the migration ledger, physical product tables,
@@ -237,19 +238,26 @@ test('cloud current baseline repairs an interrupted invalid concurrent index pha
   assert.equal(db.executed.some((sql) => sql.includes('cloud_tenants')), false)
 })
 
-test('cloud schema starts from clean pre-release baselines without historical upgrade data paths', () => {
+test('cloud schema keeps its clean baseline and explicit additive upgrade migrations', () => {
   assert.equal(CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.tableNames.includes('cloud_schema_migrations'), true)
   assert.deepEqual(
     CLOUD_CONTROL_PLANE_MIGRATIONS.map((migration) => migration.id),
-    [CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID, CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID],
+    [
+      CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
+      CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID,
+      CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
+    ],
   )
 
-  const transactional = CLOUD_CONTROL_PLANE_MIGRATIONS[0]!
-  const concurrent = CLOUD_CONTROL_PLANE_MIGRATIONS[1]!
-  const baselineSql = transactional.statements.join('\n')
+  const baseline = CLOUD_CONTROL_PLANE_MIGRATIONS[0]!
+  const workflowSecrets = CLOUD_CONTROL_PLANE_MIGRATIONS[1]!
+  const concurrent = CLOUD_CONTROL_PLANE_MIGRATIONS[2]!
+  const baselineSql = baseline.statements.join('\n')
 
-  assert.equal(transactional.transactional, undefined)
+  assert.equal(baseline.transactional, undefined)
+  assert.equal(workflowSecrets.transactional, undefined)
   assert.equal(concurrent.transactional, false)
+  assert.match(workflowSecrets.statements.join('\n'), /CREATE TABLE IF NOT EXISTS cloud_workflow_webhook_secrets/)
   assert.doesNotMatch(baselineSql, /\bALTER TABLE\b/)
   assert.doesNotMatch(baselineSql, /\bDELETE FROM\b/)
   assert.doesNotMatch(baselineSql, /INSERT INTO cloud_(?:orgs|accounts|memberships)\b/)

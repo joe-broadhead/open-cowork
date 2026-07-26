@@ -93,13 +93,15 @@ export function writeFileAtomic(
 // Move a file that successfully decrypted/read but failed to PARSE out of the way for diagnosis,
 // instead of destroying it (audit P2-12). Reach this only after a non-transient corruption (a
 // momentary keychain/safeStorage hiccup must NOT lead here), so the bytes are worth preserving as
-// `<path>.corrupt` rather than rmSync'ing valid-looking-but-unreadable data. Best-effort.
-export function quarantineCorruptFile(targetPath: string): void {
+// `<path>.corrupt` rather than deleting valid-looking-but-unreadable data. Callers
+// must fail closed when this best-effort move cannot complete.
+export function quarantineCorruptFile(targetPath: string): boolean {
   try {
     renameSync(targetPath, `${targetPath}.corrupt`)
+    return true
   } catch {
-    // A pre-existing .corrupt on a platform whose rename won't clobber, or another rename failure —
-    // fall back to removing the unreadable file so it can't be re-read or clobber a later good write.
-    try { unlinkSync(targetPath) } catch { /* nothing more we can do */ }
+    // Deleting the source here would destroy the only recovery copy. Leave it
+    // untouched and let the caller block subsequent writes to the same path.
+    return false
   }
 }

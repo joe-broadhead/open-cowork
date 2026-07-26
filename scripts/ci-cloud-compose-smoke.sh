@@ -19,6 +19,33 @@ print_diagnostics() {
   docker compose -p "${project_name}" -f "${compose_file}" logs --no-color --tail=200 || true
 }
 
+run_split_role_isolation_proof() {
+  if [ "${compose_file}" != "docker-compose.cloud.split.yml" ]; then
+    return 0
+  fi
+  # Prove the exact platform image Compose started for the execution worker.
+  # A tag can inspect to an OCI-index digest when the containerd image store is
+  # enabled, which is not the image id Docker records on a running boundary.
+  local worker_container_id
+  local image_id
+  worker_container_id="$(
+    docker compose -p "${project_name}" -f "${compose_file}" \
+      ps -q open-cowork-cloud-worker
+  )"
+  if [[ ! "${worker_container_id}" =~ ^[a-f0-9]{12,64}$ ]]; then
+    echo "cloud isolation proof could not resolve the started worker container" >&2
+    return 1
+  fi
+  image_id="$(docker inspect --format '{{.Image}}' "${worker_container_id}")"
+  if [[ ! "${image_id}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+    echo "cloud isolation proof could not resolve the worker platform image id" >&2
+    return 1
+  fi
+  OPEN_COWORK_CLOUD_ISOLATION_IMAGE="${image_id}" \
+    OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256="${image_id}" \
+    pnpm proof:cloud:tenant-isolation -- --json
+}
+
 trap cleanup EXIT
 
 if ! docker compose -p "${project_name}" -f "${compose_file}" up --build -d; then
@@ -39,6 +66,10 @@ for _ in $(seq 1 90); do
       if ! OPEN_COWORK_SMOKE_CLOUD_URL="http://127.0.0.1:8787" \
         OPEN_COWORK_SMOKE_SKIP_GATEWAY=true \
         pnpm deploy:smoke; then
+        print_diagnostics
+        exit 1
+      fi
+      if ! run_split_role_isolation_proof; then
         print_diagnostics
         exit 1
       fi

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSummary, WorkflowTrigger } from '@open-cowork/shared'
+import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSummary, WorkflowTrigger, WorkflowWebhookSecretReveal } from '@open-cowork/shared'
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
@@ -68,27 +68,34 @@ function workflowLastRunLabel(workflow: WorkflowSummary) {
   return t('workflows.lastRunNever', 'never')
 }
 
-function activeWebhookSecret(workflow: WorkflowSummary) {
-  return workflow.triggers.find((trigger) => (
-    trigger.enabled
-    && trigger.type === 'webhook'
-    && typeof trigger.webhookSecret === 'string'
-    && trigger.webhookSecret.length > 0
-  ))?.webhookSecret || null
-}
-
 function shellSingleQuote(value: string) {
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
 
-function webhookCurlCommand(workflow: WorkflowSummary) {
+function webhookCurlCommand(
+  workflow: WorkflowSummary,
+  reveal: WorkflowWebhookSecretReveal,
+  authorization: 'bearer' | 'signature',
+) {
   if (!workflow.webhookUrl) return null
-  const secret = activeWebhookSecret(workflow)
-  if (!secret) return workflow.webhookUrl
+  if (authorization === 'signature') {
+    return [
+      `webhook_secret=${shellSingleQuote(reveal.secret)}`,
+      `body=${shellSingleQuote('{"source":"manual"}')}`,
+      'timestamp=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)',
+      'signature=$(printf \'%s.%s\' "$timestamp" "$body" | openssl dgst -sha256 -hmac "$webhook_secret" -hex | sed \'s/^.* //\')',
+      `curl -X POST ${shellSingleQuote(workflow.webhookUrl)}`,
+      `  -H ${shellSingleQuote('content-type: application/json')}`,
+      '  -H "x-open-cowork-timestamp: $timestamp"',
+      '  -H "x-open-cowork-signature: sha256=$signature"',
+      '  --data-binary "$body"',
+      'unset webhook_secret',
+    ].join('\n')
+  }
   return [
     `curl -X POST ${shellSingleQuote(workflow.webhookUrl)}`,
     `  -H ${shellSingleQuote('content-type: application/json')}`,
-    `  -H ${shellSingleQuote(`Authorization: Bearer ${secret}`)}`,
+    `  -H ${shellSingleQuote(`Authorization: Bearer ${reveal.secret}`)}`,
     `  --data ${shellSingleQuote('{"source":"manual"}')}`,
   ].join(' \\\n')
 }
@@ -294,21 +301,54 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
     const target = webhookRegenerationTarget
     setWebhookRegenerationTarget(null)
     if (!target) return
-    await runAction(
-      target.id,
-      () => window.coworkApi.workflows.regenerateWebhookSecret(target.id),
-      t('workflows.webhookSecretRegenerated', 'Webhook secret regenerated.'),
-    )
+    setBusyId(target.id)
+    try {
+      if (workflowActionBlocked) {
+        toast({ tone: 'warning', message: workflowActionReason || t('workflows.runsDisabledPolicy', 'Playbook runs are disabled by this workspace policy.') })
+        return
+      }
+      const result = activeWorkspaceIsLocal
+        ? await window.coworkApi.workflows.regenerateWebhookSecret(target.id)
+        : await window.coworkApi.workflows.regenerateWebhookSecret(target.id, workspaceOptions)
+      if (!result) throw new Error(t('workflows.webhookRegenerateMissing', 'The webhook could not be regenerated.'))
+      const command = webhookCurlCommand(
+        result.workflow,
+        result.webhookSecretReveal,
+        activeWorkspaceIsLocal ? 'bearer' : 'signature',
+      )
+      if (!command) throw new Error(t('workflows.webhookRegenerateMissingUrl', 'The webhook was regenerated, but its endpoint is unavailable. Regenerate again after the endpoint is ready.'))
+      try {
+        await navigator.clipboard.writeText(command)
+        toast({ tone: 'success', message: t('workflows.webhookSecretRegeneratedCopied', 'Webhook secret regenerated and its new curl command copied. This secret will not be shown again.') })
+      } catch {
+        toast({ tone: 'error', message: t('workflows.webhookSecretCopyFailedRedacted', 'The webhook secret was regenerated, but clipboard access failed. For safety it was not rendered or retained. Regenerate again to receive a new secret.') })
+        await refresh()
+        return
+      }
+      if (target.status === 'archived') {
+        if (activeWorkspaceIsLocal) {
+          await window.coworkApi.workflows.resume(target.id)
+        } else {
+          await window.coworkApi.workflows.resume(target.id, workspaceOptions)
+        }
+        toast({ tone: 'success', message: t('workflows.restored', 'Playbook restored.') })
+      }
+      await refresh()
+    } catch (error) {
+      toast({ tone: 'error', message: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setBusyId(null)
+    }
   }
 
   const copyWebhook = async (workflow: WorkflowSummary) => {
-    const command = webhookCurlCommand(workflow)
-    if (!command) return
+    const webhookUrl = workflow.webhookUrl
+    if (!webhookUrl) return
     try {
-      await navigator.clipboard.writeText(command)
-      toast({ tone: 'success', message: command === workflow.webhookUrl ? t('workflows.webhookUrlCopied', 'Webhook URL copied.') : t('workflows.webhookCurlCopied', 'Webhook curl copied.') })
+      await navigator.clipboard.writeText(webhookUrl)
+      toast({ tone: 'success', message: t('workflows.webhookUrlCopied', 'Webhook URL copied.') })
     } catch {
-      toast({ tone: 'error', message: t('workflows.webhookCopyFailed', 'Could not copy the webhook command. Copy it manually: {{command}}', { command }) })
+      toast({ tone: 'error', message: t('workflows.webhookCopyFailedRedacted', 'Could not copy the webhook URL. Clipboard access was denied.') })
     }
   }
 
@@ -417,6 +457,8 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
               const isHighlighted = highlightedTarget?.workflowId === workflow.id
               const isRunTarget = isHighlighted && Boolean(highlightedTarget?.runId)
               const exactRun = isRunTarget ? targetedRun : null
+              const hasWebhookTrigger = workflow.triggers.some((trigger) => trigger.type === 'webhook')
+              const archivedWebhook = workflow.status === 'archived' && hasWebhookTrigger
               return (
               <div
                 key={workflow.id}
@@ -591,15 +633,26 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                   )}
                 </div>
 
-                {workflow.webhookUrl ? (
+                {workflow.webhookUrl || archivedWebhook ? (
                   <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-border-subtle bg-elevated p-3">
-                    <code className="min-w-0 flex-1 truncate text-xs text-text-secondary">{workflow.webhookUrl}</code>
-                    <Button size="sm" variant="secondary" onClick={() => void copyWebhook(workflow)}>
-                      {t('workflows.copyCurl', 'Copy curl')}
-                    </Button>
-                    {activeWorkspaceIsLocal && workflow.status !== 'archived' ? (
+                    {workflow.webhookUrl ? (
+                      <>
+                        <code className="min-w-0 flex-1 truncate text-xs text-text-secondary">{workflow.webhookUrl}</code>
+                        <Button size="sm" variant="secondary" onClick={() => void copyWebhook(workflow)}>
+                          {t('workflows.copyWebhookUrl', 'Copy URL')}
+                        </Button>
+                      </>
+                    ) : null}
+                    {archivedWebhook ? (
+                      <p className="basis-full text-xs leading-5 text-text-muted">
+                        {t('workflows.archivedWebhookRequiresReplacement', 'Archiving revoked this webhook credential. Create and copy a replacement secret before restoring the playbook.')}
+                      </p>
+                    ) : null}
+                    {hasWebhookTrigger ? (
                       <Button size="sm" variant="secondary" disabled={busyId === workflow.id} onClick={() => setWebhookRegenerationTarget(workflow)}>
-                        {t('workflows.regenerate', 'Regenerate')}
+                        {workflow.status === 'archived'
+                          ? t('workflows.createWebhookReplacement', 'Create replacement')
+                          : t('workflows.regenerate', 'Regenerate')}
                       </Button>
                     ) : null}
                   </div>
@@ -625,12 +678,20 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
       />
       <ConfirmDialog
         open={Boolean(webhookRegenerationTarget)}
-        title={t('workflows.webhookRegenerateConfirmTitle', 'Regenerate this webhook secret?')}
+        title={webhookRegenerationTarget?.status === 'archived'
+          ? t('workflows.webhookReplacementConfirmTitle', 'Create a replacement webhook secret?')
+          : t('workflows.webhookRegenerateConfirmTitle', 'Regenerate this webhook secret?')}
         body={webhookRegenerationTarget
-          ? t('workflows.webhookRegenerateConfirmBody', 'Regenerating the webhook secret for “{{title}}” immediately invalidates the current secret. Existing callers will stop working until they use the new secret.', { title: webhookRegenerationTarget.title })
+          ? webhookRegenerationTarget.status === 'archived'
+            ? t('workflows.webhookReplacementConfirmBody', 'Restoring “{{title}}” requires a new webhook secret. Create it, copy the one-time curl command, and restore the playbook.', { title: webhookRegenerationTarget.title })
+            : t('workflows.webhookRegenerateConfirmBody', 'Regenerating the webhook secret for “{{title}}” immediately invalidates the current secret. Existing callers will stop working until they use the new secret.', { title: webhookRegenerationTarget.title })
           : undefined}
-        confirmLabel={t('workflows.webhookRegenerateConfirmAction', 'Regenerate secret')}
-        cancelLabel={t('workflows.webhookRegenerateConfirmCancel', 'Keep current secret')}
+        confirmLabel={webhookRegenerationTarget?.status === 'archived'
+          ? t('workflows.webhookReplacementConfirmAction', 'Create, copy, and restore')
+          : t('workflows.webhookRegenerateConfirmAction', 'Regenerate secret')}
+        cancelLabel={webhookRegenerationTarget?.status === 'archived'
+          ? t('workflows.webhookReplacementConfirmCancel', 'Cancel')
+          : t('workflows.webhookRegenerateConfirmCancel', 'Keep current secret')}
         tone="danger"
         onConfirm={confirmWebhookRegeneration}
         onCancel={() => setWebhookRegenerationTarget(null)}

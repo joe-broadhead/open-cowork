@@ -41,15 +41,18 @@ When a new shipped subprocess entrypoint is added, update
 `scripts/subprocess-v8-coverage.mjs` and add or adjust the matching
 package-specific coverage ratchet.
 
-`pnpm cloud:dev` starts the TypeScript source entrypoint for local iteration. It
-serves the unified renderer at `GET /` from `packages/app/dist-browser`; build
-that first with `pnpm --filter @open-cowork/app build:browser`.
+`pnpm cloud:dev` starts the TypeScript source entrypoint for local iteration and
+passes the explicit `--development-process` opt-in for its shared-process
+runtime. It serves the unified renderer at `GET /` from
+`packages/app/dist-browser`; build that first with
+`pnpm --filter @open-cowork/app build:browser`.
 `pnpm cloud:build` builds the unified renderer's browser bundle
 (`pnpm --filter @open-cowork/app build:browser` → `packages/app/dist-browser`),
 copies it next to the cloud entry under
 `apps/desktop/dist/cloud/browser-renderer/`, then emits the production cloud
 bundle. `pnpm cloud:start` starts
-the role selected by `OPEN_COWORK_CLOUD_ROLE` from that bundle. Use
+the role selected by `OPEN_COWORK_CLOUD_ROLE` from that bundle and does not add
+the development opt-in; an omitted isolation mode remains fail-closed. Use
 `docker-compose.cloud.yml` for local all-in-one checks and
 `docker-compose.cloud.split.yml` for web/worker/scheduler topology checks.
 `pnpm cloud:smoke:compose` starts the split-role compose topology, waits

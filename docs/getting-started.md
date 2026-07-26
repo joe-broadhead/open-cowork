@@ -96,10 +96,16 @@ workspace, Cloud, Gateway, and pairing readiness.
 By default this is an isolated in-app OpenCode config: Cowork-managed
 agents, skills, MCPs, provider auth, and runtime state live under the
 app runtime home, not your normal machine OpenCode install. The
-developer config bridge is enabled by default for normal project
-workflows, but it only links standard developer-tool config such as Git,
-SSH, package managers, and cloud CLIs. It does not link OpenCode agents,
-skills, MCPs, or provider auth.
+developer-tool bridge is off by default in every category. During setup,
+or later in Settings → Permissions, you can explicitly enable individual
+categories for Git, SSH, package managers, cloud CLIs, Docker, or
+Kubernetes. The consent screen lists every file-level projection. Each
+enabled file is a read-write link into the managed runtime, so a tool can
+change the corresponding host file. The SSH category can additionally
+forward only the current `SSH_AUTH_SOCK` through a broker; it never links a
+private-key directory. Turning a category off reconciles its Open
+Cowork-owned links and broker access at the next safe runtime restart. The
+bridge never links OpenCode agents, skills, MCPs, or provider auth.
 
 Advanced users can switch Settings -> Permissions -> OpenCode config
 source to **Machine OpenCode**. That makes the managed server read your

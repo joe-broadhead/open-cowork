@@ -28,6 +28,7 @@ import type {
   WorkflowListPayload,
   WorkflowListRequest,
   WorkflowRun,
+  WorkflowWebhookSecretMutationResult,
   WorkspacePolicy,
   ManagedDesktopPolicyView,
   AdminAccess,
@@ -94,6 +95,7 @@ export type CloudWorkspaceSessionAdapter = WorkspaceSessionPort & {
   uploadProjectSnapshot?(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult>
   importSession(input: SessionImportRequest): Promise<{ session: SessionInfo, view: SessionView }>
   listWorkflows(input?: WorkflowListRequest): Promise<WorkflowListPayload>
+  rotateWorkflowWebhookSecret?(workflowId: string): Promise<WorkflowWebhookSecretMutationResult | null>
   searchThreads?(query?: ThreadSearchQuery): Promise<ThreadSearchResult>
   threadFacets?(query?: ThreadSearchQuery): Promise<ThreadFacetSummary>
   listThreadTags?(): Promise<ThreadTag[]>
@@ -510,6 +512,13 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   async archiveWorkflow(workflowId: string): Promise<WorkflowDetail | null> {
     if (!this.transport.archiveWorkflow) throw new Error('Cloud workflow archive is not supported by this workspace.')
     return this.transport.archiveWorkflow(workflowId)
+  }
+
+  async rotateWorkflowWebhookSecret(workflowId: string): Promise<WorkflowWebhookSecretMutationResult | null> {
+    if (!this.transport.rotateWorkflowWebhookSecret) {
+      throw new Error('Cloud workflow webhook rotation is not supported by this workspace.')
+    }
+    return this.transport.rotateWorkflowWebhookSecret(workflowId)
   }
 
   // -- Admin control plane (#896) --------------------------------------------

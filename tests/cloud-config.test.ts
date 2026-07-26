@@ -15,11 +15,13 @@ test('cloud role and profile resolve from deployment environment', () => {
   const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
     OPEN_COWORK_CLOUD_ROLE: 'worker',
     OPEN_COWORK_CLOUD_PROFILE: 'focused-agent',
+    OPEN_COWORK_CLOUD_PUBLIC_URL: 'https://cowork.example.test',
   })
 
   assert.equal(resolveCloudRole(DEFAULT_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker' }), 'worker')
   assert.equal(policy.role, 'worker')
   assert.equal(policy.profileName, 'focused-agent')
+  assert.equal(policy.publicUrl, 'https://cowork.example.test')
   assert.equal(policy.features.workflows, false)
   assert.equal(policy.features.customMcps, false)
 })
@@ -196,6 +198,16 @@ test('cloud focused-agent profile uses explicit agent, tool, and MCP allowlists'
   assert.deepEqual(policy.allowedTools, ['warehouse'])
   assert.deepEqual(policy.allowedMcps, ['warehouse'])
   assert.equal(evaluateCloudMcpPolicy({ name: 'github', type: 'http' }, policy).allowed, false)
+})
+
+test('cloud focused-agent profile preserves explicit empty allowlists as deny-all', () => {
+  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_PROFILE: 'focused-agent',
+  })
+
+  assert.deepEqual(policy.allowedAgents, [])
+  assert.deepEqual(policy.allowedTools, [])
+  assert.deepEqual(policy.allowedMcps, [])
 })
 
 test('cloud project directory policy defaults to app-managed workspaces', () => {

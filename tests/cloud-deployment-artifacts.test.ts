@@ -134,7 +134,7 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /session command idempotency\/reclaim/)
   assert.match(docs, /X-CSRF-Token/)
   assert.match(docs, /\/auth\/login/)
-  assert.match(docs, /Cloud Run all-in-one demo only/)
+  assert.match(docs, /Cloud Run-style all-in-one\s+deployments are useful for demos/)
   assert.match(docs, /GET \/livez/)
   assert.match(docs, /GET \/readyz/)
   assert.match(docs, /GET \/api\/runtime\/status/)
@@ -179,6 +179,30 @@ test('provider deployment recipes pin production Helm images by digest', () => {
     assert.match(readme, /--set image\.digest=sha256:REPLACE_WITH_CLOUD_DIGEST/)
     assert.match(readme, /--set image\.digest=sha256:REPLACE_WITH_GATEWAY_DIGEST/)
   }
+})
+
+test('managed worker templates require a verifiable fail-closed execution boundary', () => {
+  for (const path of [
+    'deploy/managed-workers/self-host-worker.env.example',
+    'deploy/managed-workers/managed-operator-worker.env.template',
+  ]) {
+    const template = readRepoFile(path)
+    assert.match(template, /OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=/)
+    assert.match(template, /OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE=sandbox/)
+    assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_ENGINE=docker/)
+    assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_IMAGE=.*@sha256:/)
+    assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256=sha256:/)
+    assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_NETWORK_POLICY=deny-all/)
+    assert.match(template, /non-root service user/)
+  }
+  const managed = readRepoFile('deploy/managed-workers/managed-operator-worker.env.template')
+  assert.match(managed, /OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production/)
+  assert.match(managed, /OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false/)
+  assert.match(managed, /OPEN_COWORK_CLOUD_AUTH_MODE=header/)
+  assert.match(managed, /OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF=/)
+  assert.match(managed, /OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED=false/)
+  assert.match(managed, /OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS=/)
+  assert.match(managed, /OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS=/)
 })
 
 test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
@@ -860,7 +884,15 @@ test('cloud CLI entrypoint uses the shared config loader and cloud app bootstrap
   const script = readRepoFile('scripts/open-cowork-cloud.ts')
   assert.match(script, /getAppConfig/)
   assert.match(script, /startCloudApp/)
+  assert.match(script, /--development-process/)
+  assert.match(script, /OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE/)
+  assert.match(script, /conflicts with OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE/)
   assert.doesNotMatch(script, /loadConfig/)
+})
+
+test('cloud bundle import smoke explicitly opts into local development isolation', () => {
+  const script = readRepoFile('scripts/cloud-bundle-import-smoke.mjs')
+  assert.match(script, /'--experimental-sqlite', bundle, '--development-process'/)
 })
 
 test('cloud image builds workspace packages required by package entrypoints', () => {
@@ -1321,6 +1353,12 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
   assert.match(smoke, /http:\/\/127\.0\.0\.1:8787\/readyz/)
   assert.match(smoke, /OPEN_COWORK_GATEWAY_SMOKE_URL/)
   assert.match(smoke, /pnpm deploy:smoke/)
+  assert.match(smoke, /pnpm proof:cloud:tenant-isolation -- --json/)
+  assert.match(smoke, /ps -q open-cowork-cloud-worker/)
+  assert.match(smoke, /docker inspect --format '\{\{\.Image\}\}' "\$\{worker_container_id\}"/)
+  assert.doesNotMatch(smoke, /docker image inspect --format '\{\{\.Id\}\}'/)
+  assert.match(smoke, /OPEN_COWORK_CLOUD_ISOLATION_IMAGE="\$\{image_id\}"/)
+  assert.match(smoke, /OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256="\$\{image_id\}"/)
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" logs --no-color --tail=200/)
 })
 

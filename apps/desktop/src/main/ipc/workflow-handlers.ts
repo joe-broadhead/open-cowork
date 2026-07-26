@@ -5,7 +5,6 @@ import {
   optionalStringArg,
   registerIpcInvoke,
   stringAndOptionalObjectArgs,
-  stringArg,
 } from './schema.ts'
 import {
   archiveWorkflow,
@@ -93,8 +92,11 @@ export function registerWorkflowHandlers(context: IpcHandlerContext) {
     return archiveWorkflow(assertWorkflowId(workflowId))
   })
 
-  registerIpcInvoke(context, 'workflows:regenerate-webhook-secret', stringArg('workflow id'), async (event, workflowId) => {
-    context.workspaceGateway.assertLocalWorkspace(event)
+  registerIpcInvoke(context, 'workflows:regenerate-webhook-secret', stringAndOptionalObjectArgs<WorkspaceOptions>('workflow id', 'workspace options', {}, normalizeWorkspaceOptions), async (event, workflowId, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.rotateCloudWorkflowWebhookSecret(event, assertWorkflowId(workflowId), workspaceId)
+    }
     return regenerateWebhookSecret(assertWorkflowId(workflowId))
   })
 }

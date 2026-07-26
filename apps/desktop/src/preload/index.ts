@@ -39,6 +39,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'workspace:add-cloud',
   'workspace:add-gateway',
   'workspace:remove',
+  'workspace:reset-gateway-credentials',
   'workspace:login',
   'workspace:logout',
   'workspace:policy',
@@ -335,6 +336,8 @@ const api: CoworkAPI = {
     addCloud: (input) => invoke('workspace:add-cloud', input),
     addGateway: (input) => invoke('workspace:add-gateway', input),
     remove: (workspaceId) => invoke('workspace:remove', workspaceId),
+    resetGatewayCredentials: (confirmationToken) =>
+      invoke('workspace:reset-gateway-credentials', confirmationToken),
     login: (workspaceId) => invoke('workspace:login', workspaceId),
     logout: (workspaceId) => invoke('workspace:logout', workspaceId),
     policy: (workspaceId) => invoke('workspace:policy', workspaceId),
@@ -523,7 +526,9 @@ const api: CoworkAPI = {
     pause: (workflowId, options) => options ? invoke('workflows:pause', workflowId, options) : invoke('workflows:pause', workflowId),
     resume: (workflowId, options) => options ? invoke('workflows:resume', workflowId, options) : invoke('workflows:resume', workflowId),
     archive: (workflowId, options) => options ? invoke('workflows:archive', workflowId, options) : invoke('workflows:archive', workflowId),
-    regenerateWebhookSecret: (workflowId) => invoke('workflows:regenerate-webhook-secret', workflowId),
+    regenerateWebhookSecret: (workflowId, options) => options
+      ? invoke('workflows:regenerate-webhook-secret', workflowId, options)
+      : invoke('workflows:regenerate-webhook-secret', workflowId),
   },
   coordination: {
     board: (options) => options ? invoke('coordination:board', options) : invoke('coordination:board'),

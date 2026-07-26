@@ -2095,13 +2095,37 @@ function validateDocs() {
     const template = read(path)
     for (const phrase of [
       'OPEN_COWORK_CLOUD_ROLE=worker',
+      'OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=',
       'OPEN_COWORK_CLOUD_WORKER_ID',
       'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS',
       'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED',
+      'OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE=sandbox',
+      'OPEN_COWORK_CLOUD_ISOLATION_ENGINE=docker',
+      'OPEN_COWORK_CLOUD_ISOLATION_IMAGE=',
+      'OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256=',
+      'OPEN_COWORK_CLOUD_ISOLATION_NETWORK_POLICY=deny-all',
     ]) {
       if (!template.includes(phrase)) {
         throw new Error(`${path} must include ${phrase}`)
       }
+    }
+  }
+  const managedOperatorWorker = read(
+    'deploy/managed-workers/managed-operator-worker.env.template',
+  )
+  for (const phrase of [
+    'OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production',
+    'OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false',
+    'OPEN_COWORK_CLOUD_AUTH_MODE=header',
+    'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF=',
+    'OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED=false',
+    'OPEN_COWORK_CLOUD_RETENTION_SESSION_EVENT_MS=',
+    'OPEN_COWORK_CLOUD_RETENTION_WORKSPACE_EVENT_MS=',
+  ]) {
+    if (!managedOperatorWorker.includes(phrase)) {
+      throw new Error(
+        `deploy/managed-workers/managed-operator-worker.env.template must include ${phrase}`,
+      )
     }
   }
   const workerHelm = read('deploy/managed-workers/helm-values.worker-pool.yaml.example')

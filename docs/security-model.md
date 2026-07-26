@@ -86,14 +86,27 @@ are therefore treated as references to main-owned grants, not as
 standalone authority to read or run OpenCode in arbitrary filesystem
 roots.
 
-## Local workflow webhooks
+## Workflow webhooks
 
-Workflow webhooks are local desktop triggers. The webhook server binds to
-`127.0.0.1` only, accepts JSON `POST` requests with a bounded payload, and
-does not put the generated secret in the URL. Callers authenticate with either
-an `Authorization: Bearer <secret>` header or the signed
-`X-Open-Cowork-Timestamp` / `X-Open-Cowork-Signature` HMAC headers. Rotating a
-webhook secret keeps the local URL stable and invalidates old headers.
+Desktop workflow webhooks bind to `127.0.0.1` only. Cloud workflow webhook URLs
+are derived from the trusted `OPEN_COWORK_CLOUD_PUBLIC_URL` deployment origin,
+never from a request `Host` or forwarded-host header. Both accept bounded JSON
+`POST` payloads and keep the generated secret out of the URL. Desktop callers
+can use an `Authorization: Bearer <secret>` header or signed
+`X-Open-Cowork-Timestamp` / `X-Open-Cowork-Signature` HMAC headers. Public Cloud
+ingress requires the timestamped HMAC, rejects raw-secret authentication, and
+claims each signature once to prevent replay. Rotating a webhook secret keeps
+the URL stable and invalidates old authorization.
+
+Workflow list/detail responses, tool results, and transcripts never contain the
+secret. The initial provisioning/rotation mutation returns it once so the UI
+can copy a ready-to-run command directly to the clipboard; the UI does not
+render or retain the reveal, and discards it if clipboard access fails. The
+active verifier is persisted only as OS-backed ciphertext in local workflow
+storage or envelope-encrypted ciphertext in Cloud. Archiving revokes it.
+**Create replacement** copies a newly issued credential and restores the
+playbook as one UI action; clipboard failure leaves it archived and requires
+another rotation.
 
 ## Hybrid security gates
 
@@ -261,15 +274,20 @@ auth from the real `HOME`/XDG roots. Cowork does not inject its
 generated runtime config in that mode.
 
 To keep app-isolated developer workflows usable, Open Cowork can bridge
-a curated set of standard tooling paths such as Git, npm/pnpm/yarn, SSH,
-GitHub CLI, Docker, Kubernetes, AWS, Azure, and Google Cloud config into
-the app runtime home. Those bridged files are a deliberate trust
-boundary: tools invoked by OpenCode may read the linked developer-tool
-config. The bridge deliberately omits OpenCode, Claude, and agent
-compatibility roots. Users can disable it during first-run setup or
-later in Settings → Permissions → Developer config bridge; disabling it
-removes the curated symlinks from the managed runtime home on the next
-runtime restart.
+a curated set of standard tooling files for Git, npm/pnpm/Yarn, SSH,
+GitHub CLI, Docker, Kubernetes, AWS, Azure, and Google Cloud into the app
+runtime home. All nine categories are off by default and require separate,
+explicit consent during setup or later in Settings → Permissions. The
+consent surface lists every fixed host and runtime path and its access
+mode. Each enabled file is a read-write link: tools invoked by OpenCode
+may read or change the corresponding host file.
+
+The SSH category projects only its listed configuration files and, when
+available, can forward the current `SSH_AUTH_SOCK` through a broker into
+the managed runtime. It never projects a private-key root. The bridge also
+omits OpenCode, Claude, and agent compatibility roots. Turning a category
+off reconciles only Open Cowork-owned links and broker access at the next
+safe runtime restart; user-created conflicts are preserved and reported.
 
 The OpenCode server process also receives a curated environment, not the
 user's full login shell environment. On macOS/Linux, Open Cowork may execute a
@@ -280,9 +298,10 @@ OpenCode: Open Cowork preserves toolchain basics such as `PATH`, locale,
 temp-directory, proxy variables, custom CA trust-store variables, and
 app-managed OpenCode variables, then sets Cowork-owned `HOME`/XDG paths and the
 app-scoped Google ADC path when available. Arbitrary exported secrets,
-SSH-agent sockets, and command overrides such as `OPENAI_API_KEY`, cloud
-session tokens, `SSH_AUTH_SOCK`, and `GIT_SSH_COMMAND` are not forwarded into
-the managed runtime.
+cloud session tokens, and command overrides such as `OPENAI_API_KEY` and
+`GIT_SSH_COMMAND` are not inherited by the managed runtime. `SSH_AUTH_SOCK`
+is likewise filtered from the general shell environment; it is exposed
+only through the explicit SSH-category broker described above.
 
 Provider authentication is app-owned. OpenCode still owns provider login
 flows, but the managed runtime writes provider auth under Open Cowork's

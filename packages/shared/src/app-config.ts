@@ -4,6 +4,9 @@ import type {
 import type {
   ToolTraceConfig,
 } from './tool-trace.js'
+import type {
+  RuntimeToolingBridgeConsent,
+} from './runtime-tooling-bridge.js'
 
 export const SMALL_MODEL_USE_MAIN = '__open_cowork_use_main_model__'
 
@@ -516,7 +519,7 @@ export interface AppSettings {
   privacyKeepConversationHistory: boolean
   privacyShareAnonymizedUsage: boolean
   runtimeConfigSource?: 'app' | 'machine'
-  runtimeToolingBridgeEnabled: boolean
+  runtimeToolingBridge: RuntimeToolingBridgeConsent
   windowZoomFactor: number
   workflowLaunchAtLogin: boolean
   workflowRunInBackground: boolean

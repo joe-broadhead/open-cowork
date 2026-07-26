@@ -48,6 +48,27 @@ export type CloudWorkflowRecord = WorkflowSummary & {
   userId: string
 }
 
+export type CloudWorkflowWebhookSecretStatus = 'active' | 'revoked'
+
+export type CloudWorkflowWebhookSecretRecord = {
+  tenantId: string
+  workflowId: string
+  triggerId: string
+  ciphertext: string
+  envelopeVersion: number
+  status: CloudWorkflowWebhookSecretStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type LegacyCloudWorkflowWebhookSecretRecord = {
+  tenantId: string
+  workflowId: string
+  triggerId: string
+  plaintext: string
+  updatedAt: string
+}
+
 export type CloudWorkflowRunRecord = WorkflowRun & {
   tenantId: string
   userId: string

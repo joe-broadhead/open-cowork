@@ -92,7 +92,41 @@ export interface SandboxRuntimeEngineCheckResult {
 
 export interface SandboxRuntimeLaunchInput extends SandboxPolicyInput {
   runtimeId?: string | null
+  ownership?: SandboxRuntimeOwnership
   command?: string[]
+  entrypoint?: string
+  workingDirectory?: string
+  environmentFile?: string
+  runAsUser?: string
+  readOnlyRootFilesystem?: boolean
+  networkPolicy?: SandboxRuntimeNetworkPolicy
+  publishPorts?: SandboxRuntimePublishedPort[]
+  resourceLimits?: SandboxRuntimeResourceLimits
+}
+
+export interface SandboxRuntimeOwnership {
+  workerOwner: string
+  leaseId: string
+}
+
+export type SandboxRuntimeNetworkPolicy =
+  | { kind: 'deny-all' }
+  | {
+    kind: 'restricted'
+    networkName: string
+    policyId: string
+  }
+
+export interface SandboxRuntimePublishedPort {
+  containerPort: number
+  protocol?: 'tcp' | 'udp'
+  hostAddress?: string
+}
+
+export interface SandboxRuntimeResourceLimits {
+  memoryBytes?: number
+  cpuCount?: number
+  pids?: number
 }
 
 export interface SandboxRuntimeLaunchPlan {
@@ -105,6 +139,7 @@ export interface SandboxRuntimeLaunchPlan {
   commands: Record<SandboxRuntimeCommandKind, SandboxRuntimeCommandPlan>
   blockers: string[]
   developmentOverride: boolean
+  networkPolicy: SandboxRuntimeNetworkPolicy
 }
 
 export interface SandboxRuntimeState {
@@ -165,7 +200,10 @@ export interface SandboxRuntimeOneShotResult {
 
 const execFileAsync = promisify(execFile)
 const SANDBOX_RUNTIME_ID_MAX_LENGTH = 63
-const SANDBOX_RUNTIME_LABEL_PREFIX = 'open-cowork.sandbox'
+export const SANDBOX_RUNTIME_LABEL = 'open-cowork.sandbox'
+export const SANDBOX_RUNTIME_ID_LABEL = `${SANDBOX_RUNTIME_LABEL}.runtime_id`
+export const SANDBOX_RUNTIME_OWNER_LABEL = `${SANDBOX_RUNTIME_LABEL}.worker_owner`
+export const SANDBOX_RUNTIME_LEASE_LABEL = `${SANDBOX_RUNTIME_LABEL}.lease_id`
 
 function pathInside(root: string, candidate: string) {
   const rel = relative(root, candidate)
@@ -229,12 +267,22 @@ function sandboxCommandPlan(
   command: string,
   args: string[],
   mounts: Array<SandboxMountPolicy & { source: string }>,
+  sensitiveHostPaths: string[] = [],
 ): SandboxRuntimeCommandPlan {
+  const redactionMounts = [
+    ...mounts,
+    ...sensitiveHostPaths.map((source) => ({
+      source,
+      target: '[redacted-path]',
+      mode: 'read-only' as const,
+      purpose: 'metadata' as const,
+    })),
+  ]
   return {
     kind,
     command,
     args,
-    redactedArgs: args.map((arg) => redactedSandboxArg(arg, mounts)),
+    redactedArgs: args.map((arg) => redactedSandboxArg(arg, redactionMounts)),
   }
 }
 
@@ -268,11 +316,38 @@ function appleContainerMountArg(mount: SandboxMountPolicy & { source: string }) 
   return `type=bind,source=${mount.source},target=${mount.target}${mode}`
 }
 
+function sandboxRuntimeLabels(
+  runtimeId: string,
+  ownership: SandboxRuntimeOwnership | undefined,
+) {
+  return [
+    `${SANDBOX_RUNTIME_LABEL}=true`,
+    `${SANDBOX_RUNTIME_ID_LABEL}=${runtimeId}`,
+    ...(ownership
+      ? [
+          `${SANDBOX_RUNTIME_OWNER_LABEL}=${ownership.workerOwner}`,
+          `${SANDBOX_RUNTIME_LEASE_LABEL}=${ownership.leaseId}`,
+        ]
+      : []),
+  ]
+}
+
+function appendSandboxRuntimeLabels(
+  args: string[],
+  runtimeId: string,
+  ownership: SandboxRuntimeOwnership | undefined,
+) {
+  for (const label of sandboxRuntimeLabels(runtimeId, ownership)) {
+    args.push('--label', label)
+  }
+}
+
 function dockerSandboxRuntimeCommands(input: {
   runtimeId: string
   image: string
   mounts: Array<SandboxMountPolicy & { source: string }>
   commandArgs: string[]
+  launch: SandboxRuntimeLaunchInput
 }): Record<SandboxRuntimeCommandKind, SandboxRuntimeCommandPlan> {
   const startArgs = [
     'run',
@@ -283,23 +358,41 @@ function dockerSandboxRuntimeCommands(input: {
     '--name',
     input.runtimeId,
     '--network',
-    'none',
+    input.launch.networkPolicy?.kind === 'restricted'
+      ? input.launch.networkPolicy.networkName
+      : 'none',
     '--security-opt',
     'no-new-privileges',
     '--cap-drop',
     'ALL',
-    '--label',
-    `${SANDBOX_RUNTIME_LABEL_PREFIX}=true`,
-    '--label',
-    `${SANDBOX_RUNTIME_LABEL_PREFIX}.runtime_id=${input.runtimeId}`,
+    '--init',
   ]
+  appendSandboxRuntimeLabels(startArgs, input.runtimeId, input.launch.ownership)
+  if (input.launch.readOnlyRootFilesystem !== false) {
+    startArgs.push('--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=268435456')
+  }
+  if (input.launch.runAsUser) startArgs.push('--user', input.launch.runAsUser)
+  if (input.launch.workingDirectory) startArgs.push('--workdir', input.launch.workingDirectory)
+  if (input.launch.entrypoint) startArgs.push('--entrypoint', input.launch.entrypoint)
+  if (input.launch.environmentFile) startArgs.push('--env-file', input.launch.environmentFile)
+  const limits = input.launch.resourceLimits
+  if (limits?.memoryBytes) startArgs.push('--memory', String(limits.memoryBytes))
+  if (limits?.cpuCount) startArgs.push('--cpus', String(limits.cpuCount))
+  if (limits?.pids) startArgs.push('--pids-limit', String(limits.pids))
+  for (const port of input.launch.publishPorts || []) {
+    startArgs.push(
+      '--publish',
+      `${port.hostAddress || '127.0.0.1'}::${port.containerPort}/${port.protocol || 'tcp'}`,
+    )
+  }
   for (const mount of input.mounts) {
     startArgs.push('--mount', dockerMountArg(mount))
   }
   startArgs.push(input.image, ...input.commandArgs)
+  const sensitiveHostPaths = input.launch.environmentFile ? [input.launch.environmentFile] : []
 
   return {
-    start: sandboxCommandPlan('start', 'docker', startArgs, input.mounts),
+    start: sandboxCommandPlan('start', 'docker', startArgs, input.mounts, sensitiveHostPaths),
     status: sandboxCommandPlan(
       'status',
       'docker',
@@ -316,6 +409,7 @@ function appleContainerSandboxRuntimeCommands(input: {
   image: string
   mounts: Array<SandboxMountPolicy & { source: string }>
   commandArgs: string[]
+  launch: SandboxRuntimeLaunchInput
 }): Record<SandboxRuntimeCommandKind, SandboxRuntimeCommandPlan> {
   const startArgs = [
     'run',
@@ -324,21 +418,31 @@ function appleContainerSandboxRuntimeCommands(input: {
     '--name',
     input.runtimeId,
     '--network',
-    'none',
+    input.launch.networkPolicy?.kind === 'restricted'
+      ? input.launch.networkPolicy.networkName
+      : 'none',
     '--cap-drop',
     'ALL',
-    '--label',
-    `${SANDBOX_RUNTIME_LABEL_PREFIX}=true`,
-    '--label',
-    `${SANDBOX_RUNTIME_LABEL_PREFIX}.runtime_id=${input.runtimeId}`,
   ]
+  appendSandboxRuntimeLabels(startArgs, input.runtimeId, input.launch.ownership)
+  if (input.launch.runAsUser) startArgs.push('--user', input.launch.runAsUser)
+  if (input.launch.workingDirectory) startArgs.push('--workdir', input.launch.workingDirectory)
+  if (input.launch.entrypoint) startArgs.push('--entrypoint', input.launch.entrypoint)
+  if (input.launch.environmentFile) startArgs.push('--env-file', input.launch.environmentFile)
+  for (const port of input.launch.publishPorts || []) {
+    startArgs.push(
+      '--publish',
+      `${port.hostAddress || '127.0.0.1'}::${port.containerPort}/${port.protocol || 'tcp'}`,
+    )
+  }
   for (const mount of input.mounts) {
     startArgs.push('--mount', appleContainerMountArg(mount))
   }
   startArgs.push(input.image, ...input.commandArgs)
+  const sensitiveHostPaths = input.launch.environmentFile ? [input.launch.environmentFile] : []
 
   return {
-    start: sandboxCommandPlan('start', 'container', startArgs, input.mounts),
+    start: sandboxCommandPlan('start', 'container', startArgs, input.mounts, sensitiveHostPaths),
     status: sandboxCommandPlan('status', 'container', ['inspect', input.runtimeId], input.mounts),
     stop: sandboxCommandPlan('stop', 'container', ['stop', input.runtimeId], input.mounts),
     cleanup: sandboxCommandPlan('cleanup', 'container', ['delete', input.runtimeId], input.mounts),
@@ -350,6 +454,7 @@ function dockerSandboxRuntimeOneShotCommand(input: {
   image: string
   mounts: Array<SandboxMountPolicy & { source: string }>
   commandArgs: string[]
+  launch: SandboxRuntimeLaunchInput
 }): SandboxRuntimeCommandPlan {
   const args = [
     'run',
@@ -359,21 +464,38 @@ function dockerSandboxRuntimeOneShotCommand(input: {
     '--name',
     input.runtimeId,
     '--network',
-    'none',
+    input.launch.networkPolicy?.kind === 'restricted'
+      ? input.launch.networkPolicy.networkName
+      : 'none',
     '--security-opt',
     'no-new-privileges',
     '--cap-drop',
     'ALL',
-    '--label',
-    `${SANDBOX_RUNTIME_LABEL_PREFIX}=true`,
-    '--label',
-    `${SANDBOX_RUNTIME_LABEL_PREFIX}.runtime_id=${input.runtimeId}`,
+    '--init',
   ]
+  appendSandboxRuntimeLabels(args, input.runtimeId, input.launch.ownership)
+  if (input.launch.readOnlyRootFilesystem !== false) {
+    args.push('--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=268435456')
+  }
+  if (input.launch.runAsUser) args.push('--user', input.launch.runAsUser)
+  if (input.launch.workingDirectory) args.push('--workdir', input.launch.workingDirectory)
+  if (input.launch.entrypoint) args.push('--entrypoint', input.launch.entrypoint)
+  if (input.launch.environmentFile) args.push('--env-file', input.launch.environmentFile)
+  const limits = input.launch.resourceLimits
+  if (limits?.memoryBytes) args.push('--memory', String(limits.memoryBytes))
+  if (limits?.cpuCount) args.push('--cpus', String(limits.cpuCount))
+  if (limits?.pids) args.push('--pids-limit', String(limits.pids))
   for (const mount of input.mounts) {
     args.push('--mount', dockerMountArg(mount))
   }
   args.push(input.image, ...input.commandArgs)
-  return sandboxCommandPlan('start', 'docker', args, input.mounts)
+  return sandboxCommandPlan(
+    'start',
+    'docker',
+    args,
+    input.mounts,
+    input.launch.environmentFile ? [input.launch.environmentFile] : [],
+  )
 }
 
 function appleContainerSandboxRuntimeOneShotCommand(input: {
@@ -381,6 +503,7 @@ function appleContainerSandboxRuntimeOneShotCommand(input: {
   image: string
   mounts: Array<SandboxMountPolicy & { source: string }>
   commandArgs: string[]
+  launch: SandboxRuntimeLaunchInput
 }): SandboxRuntimeCommandPlan {
   const args = [
     'run',
@@ -388,19 +511,28 @@ function appleContainerSandboxRuntimeOneShotCommand(input: {
     '--name',
     input.runtimeId,
     '--network',
-    'none',
+    input.launch.networkPolicy?.kind === 'restricted'
+      ? input.launch.networkPolicy.networkName
+      : 'none',
     '--cap-drop',
     'ALL',
-    '--label',
-    `${SANDBOX_RUNTIME_LABEL_PREFIX}=true`,
-    '--label',
-    `${SANDBOX_RUNTIME_LABEL_PREFIX}.runtime_id=${input.runtimeId}`,
   ]
+  appendSandboxRuntimeLabels(args, input.runtimeId, input.launch.ownership)
+  if (input.launch.runAsUser) args.push('--user', input.launch.runAsUser)
+  if (input.launch.workingDirectory) args.push('--workdir', input.launch.workingDirectory)
+  if (input.launch.entrypoint) args.push('--entrypoint', input.launch.entrypoint)
+  if (input.launch.environmentFile) args.push('--env-file', input.launch.environmentFile)
   for (const mount of input.mounts) {
     args.push('--mount', appleContainerMountArg(mount))
   }
   args.push(input.image, ...input.commandArgs)
-  return sandboxCommandPlan('start', 'container', args, input.mounts)
+  return sandboxCommandPlan(
+    'start',
+    'container',
+    args,
+    input.mounts,
+    input.launch.environmentFile ? [input.launch.environmentFile] : [],
+  )
 }
 
 function sandboxRuntimeBlockedState(
@@ -448,6 +580,14 @@ async function defaultSandboxRuntimeCommandRunner(command: string, args: string[
       stderr: error.stderr?.toString() || error.message,
     }
   }
+}
+
+export async function runSandboxRuntimeCommand(
+  command: string,
+  args: string[],
+  runner?: SandboxRuntimeCommandRunner,
+) {
+  return (runner || { run: defaultSandboxRuntimeCommandRunner }).run(command, args)
 }
 
 export async function checkSandboxRuntimeEngine(
@@ -569,6 +709,7 @@ export function createSandboxRuntimeLaunchPlan(input: SandboxRuntimeLaunchInput)
   const policy = planSandboxPolicy(input)
   const blockers = [...policy.blockers]
   const runtimeId = normalizeSandboxRuntimeId(input)
+  const networkPolicy = input.networkPolicy || { kind: 'deny-all' as const }
   if (!validSandboxRuntimeId(runtimeId)) blockers.push(`sandbox-runtime-id-invalid:${input.runtimeId || runtimeId}`)
 
   const image = imageReferenceFromComponent(policy.components.find((component) => component.id === input.imageComponentId))
@@ -584,6 +725,58 @@ export function createSandboxRuntimeLaunchPlan(input: SandboxRuntimeLaunchInput)
   for (const arg of commandArgs) {
     if (arg.includes('\0')) blockers.push('sandbox-runtime-command-arg-invalid')
   }
+  if (input.entrypoint?.includes('\0')) blockers.push('sandbox-runtime-entrypoint-invalid')
+  if (input.workingDirectory && !validContainerTarget(input.workingDirectory)) {
+    blockers.push(`sandbox-runtime-working-directory-invalid:${input.workingDirectory}`)
+  }
+  if (input.runAsUser && !/^[0-9]+(?::[0-9]+)?$/.test(input.runAsUser)) {
+    blockers.push('sandbox-runtime-user-invalid')
+  }
+  if (
+    input.ownership
+    && !/^[a-f0-9]{32}$/.test(input.ownership.workerOwner)
+  ) {
+    blockers.push('sandbox-runtime-worker-owner-invalid')
+  }
+  if (
+    input.ownership
+    && !/^[a-f0-9]{32}$/.test(input.ownership.leaseId)
+  ) {
+    blockers.push('sandbox-runtime-lease-id-invalid')
+  }
+  if (input.environmentFile) {
+    const environmentFile = resolve(input.environmentFile)
+    if (!isAbsolute(input.environmentFile)) blockers.push('sandbox-runtime-env-file-not-absolute')
+    if (!input.allowedSourceRoots.some((root) => pathInside(resolve(root), environmentFile))) {
+      blockers.push('sandbox-runtime-env-file-not-allowlisted')
+    }
+  }
+  if (networkPolicy.kind === 'restricted') {
+    if (!networkPolicy.networkName.trim()) blockers.push('sandbox-runtime-network-name-missing')
+    if (!networkPolicy.policyId.trim()) blockers.push('sandbox-runtime-egress-policy-id-missing')
+    if (/[\0\s]/.test(networkPolicy.networkName)) blockers.push('sandbox-runtime-network-name-invalid')
+  }
+  for (const port of input.publishPorts || []) {
+    if (!Number.isInteger(port.containerPort) || port.containerPort < 1 || port.containerPort > 65_535) {
+      blockers.push(`sandbox-runtime-publish-port-invalid:${port.containerPort}`)
+    }
+    if ((port.hostAddress || '127.0.0.1') !== '127.0.0.1' && (port.hostAddress || '') !== '::1') {
+      blockers.push('sandbox-runtime-publish-address-not-loopback')
+    }
+  }
+  if (input.engine !== 'docker' && input.resourceLimits) {
+    blockers.push('sandbox-runtime-resource-limits-unsupported')
+  }
+  const limits = input.resourceLimits
+  if (limits?.memoryBytes !== undefined && (!Number.isSafeInteger(limits.memoryBytes) || limits.memoryBytes <= 0)) {
+    blockers.push('sandbox-runtime-memory-limit-invalid')
+  }
+  if (limits?.cpuCount !== undefined && (!Number.isFinite(limits.cpuCount) || limits.cpuCount <= 0)) {
+    blockers.push('sandbox-runtime-cpu-limit-invalid')
+  }
+  if (limits?.pids !== undefined && (!Number.isSafeInteger(limits.pids) || limits.pids <= 0)) {
+    blockers.push('sandbox-runtime-pids-limit-invalid')
+  }
 
   const ok = blockers.length === 0 && Boolean(image)
   const commands = ok
@@ -593,12 +786,14 @@ export function createSandboxRuntimeLaunchPlan(input: SandboxRuntimeLaunchInput)
         image: image!,
         mounts: policy.mounts,
         commandArgs,
+        launch: input,
       })
       : appleContainerSandboxRuntimeCommands({
         runtimeId,
         image: image!,
         mounts: policy.mounts,
         commandArgs,
+        launch: input,
       })
     : emptySandboxRuntimeCommands()
 
@@ -612,6 +807,7 @@ export function createSandboxRuntimeLaunchPlan(input: SandboxRuntimeLaunchInput)
     commands,
     blockers,
     developmentOverride: policy.developmentOverride,
+    networkPolicy,
   }
 }
 
@@ -730,7 +926,7 @@ export async function stopSandboxRuntime(
     failureStatus: 'failed',
     runner,
   })
-  if (!stopResult.ok || !plan.ok) return stopResult
+  if (!plan.ok) return stopResult
 
   const cleanupResult = await runSandboxRuntimeLifecycleCommand({
     plan,
@@ -740,7 +936,23 @@ export async function stopSandboxRuntime(
     failureStatus: 'failed',
     runner,
   })
-  return cleanupResult.ok ? cleanupResult : stopResult
+  const absent = /no such (container|runtime)|not found/i.test(
+    `${stopResult.state.output || ''}\n${cleanupResult.state.output || ''}`,
+  )
+  if (cleanupResult.ok || absent) {
+    return {
+      ...cleanupResult,
+      ok: true,
+      reasonCode: 'sandbox-runtime-stopped',
+      state: {
+        ...cleanupResult.state,
+        status: 'stopped',
+        exitCode: 0,
+        output: absent ? undefined : cleanupResult.state.output,
+      },
+    }
+  }
+  return stopResult.ok ? cleanupResult : stopResult
 }
 
 export async function runSandboxRuntimeSmoke(
@@ -808,12 +1020,14 @@ export async function runSandboxRuntimeOneShot(
         image: plan.image,
         mounts: plan.mounts,
         commandArgs: input.command || [],
+        launch: input,
       })
       : appleContainerSandboxRuntimeOneShotCommand({
         runtimeId: plan.runtimeId,
         image: plan.image,
         mounts: plan.mounts,
         commandArgs: input.command || [],
+        launch: input,
       })
     : sandboxCommandPlan('start', '', [], [])
 

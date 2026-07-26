@@ -14,6 +14,8 @@ services:
       OPEN_COWORK_CLOUD_ROLE: all-in-one
       OPEN_COWORK_CLOUD_PROFILE: full
       OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: local
+      # Shared-process execution is an explicit local-development choice.
+      OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: development-process
       # pnpm places the OpenCode CLI under node_modules; managed prompts need it on PATH.
       PATH: /app/node_modules/.pnpm/node_modules/.bin:/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # Default to the in-container mount targets so a config dropped at the advertised

@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
-import type { CoworkAPI, EffectiveAppSettings } from '@open-cowork/shared'
+import {
+  createDisabledRuntimeToolingBridgeConsent,
+  type CoworkAPI,
+  type EffectiveAppSettings,
+} from '@open-cowork/shared'
 
 type TestCoworkApi = {
   [Group in keyof CoworkAPI]?: Record<string, unknown>
@@ -28,7 +32,7 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     notificationSounds: true,
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
-    runtimeToolingBridgeEnabled: true,
+    runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
@@ -81,6 +85,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         lastSyncedAt: null,
       })),
       remove: vi.fn(async () => true),
+      resetGatewayCredentials: vi.fn(async () => true),
       login: vi.fn(async () => ({
         id: 'local',
         kind: 'local',

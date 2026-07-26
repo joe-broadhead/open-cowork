@@ -13,7 +13,6 @@ import {
   boundedOptionalText,
   boundedText,
   includesAllowed,
-  readNullableString,
   readString,
 } from './session-input-validation.ts'
 
@@ -76,7 +75,6 @@ export function normalizeWorkflowTriggers(value: unknown, ids: WorkflowIdFactory
       type,
       enabled: trigger.enabled !== false,
       schedule: null,
-      webhookSecret: null,
     }
     if (type === 'schedule') {
       const schedule = asRecord(trigger.schedule) as unknown as WorkflowTrigger['schedule']
@@ -84,9 +82,6 @@ export function normalizeWorkflowTriggers(value: unknown, ids: WorkflowIdFactory
       const scheduleError = validateWorkflowSchedule(schedule, now)
       if (scheduleError) throw new Error(scheduleError)
       normalized.schedule = schedule
-    }
-    if (type === 'webhook') {
-      normalized.webhookSecret = readNullableString(trigger.webhookSecret) || ids.randomUUID()
     }
     return normalized
   })

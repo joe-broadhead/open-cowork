@@ -14,6 +14,12 @@ import {
 
 export type PermissionAction = PermissionActionConfig
 export type PermissionRuleMap = PermissionObjectConfig
+export type {
+  PermissionActionConfig,
+  PermissionConfig,
+  PermissionObjectConfig,
+  PermissionRuleConfig,
+}
 
 export function buildManagedSkillRules(skillNames: string[]): PermissionRuleMap {
   return Object.fromEntries(

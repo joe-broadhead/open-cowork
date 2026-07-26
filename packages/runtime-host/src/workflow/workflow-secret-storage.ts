@@ -1,6 +1,6 @@
-import type { WorkflowTrigger } from '@open-cowork/shared'
 import type { SecretStorageMode } from '../secure-storage-policy.js'
 import { isWorkflowTriggerType } from './workflow-normalization.js'
+import type { InternalWorkflowTrigger } from './workflow-secret-contract.js'
 
 const ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION = 2
 
@@ -74,7 +74,7 @@ function decodeWebhookSecretFromStorage(secret: unknown, storage: WorkflowSecret
 }
 
 export function serializeWorkflowTriggersForStorageWithAdapter(
-  triggers: WorkflowTrigger[],
+  triggers: InternalWorkflowTrigger[],
   storage: WorkflowSecretStorageAdapter,
 ) {
   return JSON.stringify(triggers.map((trigger) => trigger.type === 'webhook'
@@ -88,12 +88,12 @@ export function parseWorkflowTriggersFromStorageWithAdapter(
 ) {
   const parsed = parseJson<unknown>(value, [])
   if (!Array.isArray(parsed)) return []
-  return parsed.flatMap((raw): WorkflowTrigger[] => {
+  return parsed.flatMap((raw): InternalWorkflowTrigger[] => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
-    const trigger = raw as Partial<WorkflowTrigger>
+    const trigger = raw as Partial<InternalWorkflowTrigger>
     if (!isWorkflowTriggerType(trigger.type)) return []
     return [trigger.type === 'webhook'
-      ? { ...trigger, webhookSecret: decodeWebhookSecretFromStorage(trigger.webhookSecret, storage) } as WorkflowTrigger
-      : trigger as WorkflowTrigger]
+      ? { ...trigger, webhookSecret: decodeWebhookSecretFromStorage(trigger.webhookSecret, storage) } as InternalWorkflowTrigger
+      : trigger as InternalWorkflowTrigger]
   })
 }

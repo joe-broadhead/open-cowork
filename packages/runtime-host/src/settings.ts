@@ -2,6 +2,8 @@ import { getAppPathHost, getDesktopShellHost, getSafeStorageHost, writeFileAtomi
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  createDisabledRuntimeToolingBridgeConsent,
+  normalizeRuntimeToolingBridgeConsent,
   SMALL_MODEL_USE_MAIN,
   VOICE_PTT_SHORTCUT,
   type AgentColor,
@@ -144,7 +146,7 @@ function createDefaults(): AppSettings {
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
     runtimeConfigSource: 'app',
-    runtimeToolingBridgeEnabled: true,
+    runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     windowZoomFactor: DEFAULT_WINDOW_ZOOM_FACTOR,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
@@ -292,7 +294,9 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (typeof settings.notificationSounds === 'boolean') update.notificationSounds = settings.notificationSounds
   if (typeof settings.privacyKeepConversationHistory === 'boolean') update.privacyKeepConversationHistory = settings.privacyKeepConversationHistory
   if (typeof settings.privacyShareAnonymizedUsage === 'boolean') update.privacyShareAnonymizedUsage = settings.privacyShareAnonymizedUsage
-  if (typeof settings.runtimeToolingBridgeEnabled === 'boolean') update.runtimeToolingBridgeEnabled = settings.runtimeToolingBridgeEnabled
+  if (settings.runtimeToolingBridge !== undefined) {
+    update.runtimeToolingBridge = normalizeRuntimeToolingBridgeConsent(settings.runtimeToolingBridge)
+  }
   const windowZoomFactor = normalizeWindowZoomFactor(settings.windowZoomFactor)
   if (windowZoomFactor !== undefined) update.windowZoomFactor = windowZoomFactor
   const runtimeConfigSource = normalizeRuntimeConfigSource(settings.runtimeConfigSource)
@@ -352,7 +356,10 @@ function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
     privacyKeepConversationHistory: raw?.privacyKeepConversationHistory !== false,
     privacyShareAnonymizedUsage: raw?.privacyShareAnonymizedUsage === true,
     runtimeConfigSource: normalizeRuntimeConfigSource(raw?.runtimeConfigSource) || defaults.runtimeConfigSource,
-    runtimeToolingBridgeEnabled: raw?.runtimeToolingBridgeEnabled !== false,
+    // Legacy runtimeToolingBridgeEnabled values, including true, are
+    // intentionally ignored. A monolithic historical switch cannot prove
+    // informed consent for newly separated credential categories.
+    runtimeToolingBridge: normalizeRuntimeToolingBridgeConsent(raw?.runtimeToolingBridge),
     windowZoomFactor: normalizeWindowZoomFactor(raw?.windowZoomFactor) ?? defaults.windowZoomFactor,
     workflowLaunchAtLogin: raw?.workflowLaunchAtLogin === true,
     workflowRunInBackground: raw?.workflowRunInBackground === true,

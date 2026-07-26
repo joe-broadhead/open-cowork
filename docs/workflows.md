@@ -30,7 +30,10 @@ The product rule is simple:
 - **OpenCode executes** sessions, agents, approvals, tools, skills, and
   streaming events.
 - **Open Cowork remembers** the workflow definition, trigger schedule,
-  webhook secret, run history, and links back to the setup/run chats.
+  run history, and links back to the setup/run chats. Webhook verifiers are
+  retained only as ciphertext: OS-backed local ciphertext on Desktop and
+  envelope-encrypted ciphertext in Cloud. They are not part of public workflow
+  metadata or chat/tool transcripts.
 
 There is no separate workflow runtime, inbox board, or hidden task engine.
 Open Cowork does include a hidden built-in **Executive Assistant** agent for
@@ -57,7 +60,10 @@ local project directory or host-path grant.
    preview tool.
 
 The saved playbook points back to that setup chat so you can reopen the
-conversation that created it.
+conversation that created it. A webhook created through that transcript does
+not mint a credential in the tool result. Provision the first secret explicitly
+from the Playbooks page, where the one-time reveal can be delivered directly to
+the clipboard.
 
 ## What A Playbook Stores
 
@@ -85,15 +91,22 @@ Scheduled triggers support:
 - weekly
 - monthly
 
-Webhook triggers expose a local HTTP URL. POST a JSON object to the copied URL
-to start a run and pass trigger payload into the run prompt. The webhook secret
-is sent in headers, not embedded in the URL, and can be regenerated from the
-Playbooks page.
+Each playbook can have at most one webhook trigger. Desktop exposes a loopback
+HTTP URL. Cloud exposes
+`<OPEN_COWORK_CLOUD_PUBLIC_URL>/webhooks/workflows/<workflow-id>`, derived only
+from the deployment's trusted configured origin rather than request headers.
+POST a JSON object to the relevant URL to start a run and pass trigger payload
+into the run prompt. The secret is sent in headers, never embedded in the URL.
 
-Supported auth is `Authorization: Bearer`, `x-open-cowork-webhook-secret`, or
-timestamped HMAC.
+Desktop supports `Authorization: Bearer`, `x-open-cowork-webhook-secret`, or
+timestamped HMAC. Public Cloud ingress requires timestamped HMAC and rejects
+raw bearer/shared-secret authentication.
 
-The Playbooks page copies a ready-to-run bearer example:
+An ordinary playbook card displays and copies only the non-secret URL. To
+provision the first secret or rotate an existing one, choose **Regenerate** and
+confirm. The mutation returns the new secret once, and the Playbooks page copies
+a ready-to-run command directly to the clipboard. Desktop commands use bearer
+authentication:
 
 ```bash
 curl -X POST 'http://127.0.0.1:47839/workflows/<workflow-id>' \
@@ -101,6 +114,12 @@ curl -X POST 'http://127.0.0.1:47839/workflows/<workflow-id>' \
   -H 'Authorization: Bearer <webhook-secret>' \
   --data '{"source":"manual"}'
 ```
+
+Cloud commands calculate a timestamped HMAC over the exact raw body and require
+`openssl`. The UI does not render or retain either one-time reveal. If clipboard
+access fails, the reveal is discarded; regenerate again to receive a new
+secret. Workflow list/detail responses, tool results, transcripts, and Desktop
+cache records contain only public trigger metadata.
 
 For webhook senders that should not handle raw bearer secrets, sign the raw
 JSON body with `HMAC-SHA256(secret, "<timestamp>.<raw-body>")` and send:
@@ -145,7 +164,7 @@ It shows:
 - lead coworker
 - linked skills/tools
 - trigger summary
-- webhook URL plus an authorization-header curl example
+- webhook URL without credentials
 - latest run status and summary
 
 Actions:
@@ -156,12 +175,15 @@ Actions:
   displayed run summary.
 - **Run** starts a manual run.
 - **Pause/Resume** controls scheduled and webhook execution.
-- **Archive** stops schedules and webhook triggers, then moves the playbook to
-  the archived view without deleting its history.
+- **Archive** stops schedules and webhook triggers, revokes any webhook secret,
+  then moves the playbook to the archived view without deleting its history.
 - **Restore** returns an archived playbook to the active view; it does not run
-  the playbook automatically.
-- **Regenerate** rotates the webhook authorization secret after destructive
-  confirmation, invalidating the previous secret.
+  the playbook automatically. For a webhook playbook, **Create replacement**
+  creates and copies a replacement secret, then restores the playbook as one
+  action.
+- **Regenerate** provisions or rotates the webhook authorization secret after
+  destructive confirmation, invalidating the previous secret and copying the
+  one-time deployment-specific authorized curl command.
 
 ## When To Use Playbooks
 

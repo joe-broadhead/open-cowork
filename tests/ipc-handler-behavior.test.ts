@@ -24,6 +24,7 @@ import { normalizeFindTextPattern, registerExplorerHandlers } from '../apps/desk
 import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-handlers.ts'
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
+import { registerWorkspaceHandlers } from '../apps/desktop/src/main/ipc/workspace-handlers.ts'
 import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
 import { registerChannelHandlers, resetDesktopChannelServiceForTests } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support.ts'
@@ -638,6 +639,36 @@ test('session:delete refuses to delete without a valid destructive confirmation'
   assert.equal(result, false)
   assert.equal(deleteCalled, false)
   assert.match(errors[0] || '', /Confirmation required before deleting a thread/)
+})
+
+test('Gateway unreadable credential reset requires an action-bound destructive confirmation', async () => {
+  const { context, handlers } = createBaseContext()
+  let resetCalls = 0
+  const requests: unknown[] = []
+  context.workspaceGateway.resetUnreadableGatewayCredentials = () => {
+    resetCalls += 1
+    return true
+  }
+  context.consumeDestructiveConfirmation = (request, token) => {
+    requests.push(request)
+    return token === 'confirmed-gateway-reset'
+  }
+
+  registerWorkspaceHandlers(context)
+  const handler = handlers.get('workspace:reset-gateway-credentials')
+  assert.ok(handler, 'expected Gateway credential recovery handler to be registered')
+
+  await assert.rejects(
+    () => handler({}, null),
+    /requires explicit confirmation/,
+  )
+  assert.equal(resetCalls, 0)
+  assert.equal(await handler({}, 'confirmed-gateway-reset'), true)
+  assert.equal(resetCalls, 1)
+  assert.deepEqual(requests, [
+    { action: 'gateway.credentials.reset' },
+    { action: 'gateway.credentials.reset' },
+  ])
 })
 
 test('classic session mutations fail closed when the SDK returns an HTTP error response', async () => {
@@ -1643,6 +1674,10 @@ test('workflow handlers route cloud workspace operations through the workspace g
       calls.push(`archive:${workflowId}`)
       return null
     },
+    rotateWorkflowWebhookSecret: async (workflowId) => {
+      calls.push(`rotate:${workflowId}`)
+      return null
+    },
   }
   context.workspaceGateway = createWorkspaceGateway({
     cloudRegistry: null,
@@ -1674,6 +1709,7 @@ test('workflow handlers route cloud workspace operations through the workspace g
   await handlers.get('workflows:pause')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
   await handlers.get('workflows:resume')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
   await handlers.get('workflows:archive')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
+  await handlers.get('workflows:regenerate-webhook-secret')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
 
   assert.deepEqual(calls, [
     'list',
@@ -1682,6 +1718,7 @@ test('workflow handlers route cloud workspace operations through the workspace g
     'pause:workflow-1',
     'resume:workflow-1',
     'archive:workflow-1',
+    'rotate:workflow-1',
   ])
 
   context.workspaceGateway.activate({}, 'cloud:test')

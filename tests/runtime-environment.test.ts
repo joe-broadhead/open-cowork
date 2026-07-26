@@ -1,6 +1,7 @@
 import { OPEN_COWORK_MANAGED_RUNTIME_ENV, OPEN_COWORK_MANAGED_RUNTIME_VALUE } from '@open-cowork/runtime-host/runtime-process-cleanup'
 import { buildManagedOpencodeAuthorizationHeader, buildManagedOpencodeServerEnvironment, createManagedOpencodeServerAuth, drainManagedOpencodeProcessOutput, parseManagedOpencodeServerStdoutChunk, resolveManagedOpencodeCommand, resolveManagedOpencodeSpawn } from '@open-cowork/runtime-host/runtime-managed-server'
 import { buildManagedRuntimeEnvironment } from '@open-cowork/runtime-host/runtime-environment'
+import { createDisabledRuntimeToolingBridgeConsent } from '@open-cowork/shared'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PassThrough } from 'node:stream'
@@ -117,6 +118,25 @@ test('managed runtime env can deliberately use native OpenCode config roots', ()
   assert.equal(env.XDG_STATE_HOME, nativePaths.stateHome)
   assert.equal(env.OPENAI_API_KEY, undefined)
   assert.equal(env.OPENCODE_CONFIG_CONTENT, undefined)
+})
+
+test('managed runtime env exposes only the SSH agent broker after granular consent', () => {
+  const toolingBridgeConsent = createDisabledRuntimeToolingBridgeConsent()
+  toolingBridgeConsent.categories.ssh = true
+  const env = buildManagedRuntimeEnvironment({
+    currentEnv: {
+      PATH: '/usr/bin:/bin',
+      SSH_AUTH_SOCK: '/tmp/agent.sock',
+      SSH_AGENT_PID: '12345',
+      AWS_SESSION_TOKEN: 'aws-secret',
+    },
+    runtimePaths,
+    toolingBridgeConsent,
+  })
+
+  assert.equal(env.SSH_AUTH_SOCK, '/tmp/agent.sock')
+  assert.equal(env.SSH_AGENT_PID, undefined)
+  assert.equal(env.AWS_SESSION_TOKEN, undefined)
 })
 
 test('managed runtime env drops inherited opencode binary overrides', () => {

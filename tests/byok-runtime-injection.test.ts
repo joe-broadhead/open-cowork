@@ -201,6 +201,9 @@ test('worker-scoped BYOK runtime injects provider options for the correct tenant
 
     assert.equal(captures[0]?.execution.tenantId, 'tenant-a')
     assert.equal(captures[0]?.execution.sessionId, sessionA.session.sessionId)
+    const runtimePermission = captures[0]?.runtimeConfig?.permission as Record<string, unknown> | undefined
+    assert.equal(runtimePermission?.read, 'allow')
+    assert.deepEqual(captures[0]?.runtimeConfig?.mcp, {})
     assert.equal(runtimes[0]?.apiKey, KEY_A)
     assert.equal(captures[1]?.execution.tenantId, 'tenant-b')
     assert.equal(captures[1]?.execution.sessionId, sessionB.session.sessionId)
@@ -222,6 +225,7 @@ test('worker-scoped runtime cache evicts least-recently-used idle runtimes', asy
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-runtime-test-key'))
   const created: string[] = []
   const closed: string[] = []
+  const restored: string[] = []
   const metrics: unknown[] = []
   const observability: CloudObservabilityAdapter = {
     log() {},
@@ -237,6 +241,9 @@ test('worker-scoped runtime cache evicts least-recently-used idle runtimes', asy
     observability,
     maxRuntimeEntries: 1,
     runtimeIdleTtlMs: 60_000,
+    async prepareProvision(input) {
+      restored.push(input.execution.sessionId)
+    },
     runtimeFactory(input) {
       created.push(input.execution.sessionId)
       return new ClosableRuntime(input, (sessionId) => closed.push(sessionId))
@@ -269,6 +276,7 @@ test('worker-scoped runtime cache evicts least-recently-used idle runtimes', asy
       context: { tenantId: 'tenant-a', sessionId: 'session-b' },
     })
     assert.deepEqual(created, ['session-a', 'session-b'])
+    assert.deepEqual(restored, ['session-a', 'session-b'])
     assert.equal(metrics.some((metric) => (
       (metric as Record<string, unknown>).name === 'open_cowork_cloud_runtime_cache_misses_total'
     )), true)
@@ -279,11 +287,19 @@ test('worker-scoped runtime cache evicts least-recently-used idle runtimes', asy
       (metric as Record<string, unknown>).name === 'open_cowork_cloud_runtime_cache_evictions_total'
       && ((metric as Record<string, unknown>).attributes as Record<string, unknown>)?.reason === 'max_entries'
     )), true)
+    await runtime.promptSession({
+      sessionId: 'runtime-a',
+      parts: [],
+      agent: 'build',
+      context: { tenantId: 'tenant-a', sessionId: 'session-a' },
+    })
+    assert.deepEqual(created, ['session-a', 'session-b', 'session-a'])
+    assert.deepEqual(restored, ['session-a', 'session-b', 'session-a'])
   } finally {
     await runtime.close?.()
     rmSync(root, { recursive: true, force: true })
   }
-  assert.deepEqual(closed, ['session-a', 'session-b'])
+  assert.deepEqual(closed, ['session-a', 'session-b', 'session-a'])
 })
 
 test('worker-scoped runtime preserves admitted V2 runs and awaits terminal event persistence', async () => {
@@ -508,6 +524,11 @@ test('worker-scoped BYOK runtime enforces provider policy before revealing activ
       (metric as Record<string, unknown>).name === 'open_cowork_cloud_byok_reveal_failures_total'
       && (((metric as Record<string, unknown>).attributes as Record<string, unknown>)?.reason === 'provider_not_allowed')
     )), true)
+    const revealFailure = metrics.find((metric) => (
+      (metric as Record<string, unknown>).name === 'open_cowork_cloud_byok_reveal_failures_total'
+    )) as { attributes?: Record<string, unknown> } | undefined
+    assert.equal('tenant_id' in (revealFailure?.attributes || {}), false)
+    assert.equal('session_id' in (revealFailure?.attributes || {}), false)
   } finally {
     await runtime.close?.()
     rmSync(root, { recursive: true, force: true })
@@ -572,6 +593,11 @@ test('missing or disabled required BYOK key fails before runtime spawn', async (
       (metric as Record<string, unknown>).name === 'open_cowork_cloud_byok_reveal_failures_total'
       && (((metric as Record<string, unknown>).attributes as Record<string, unknown>)?.reason === 'missing_required_byok')
     )), true)
+    const revealFailure = metrics.find((metric) => (
+      (metric as Record<string, unknown>).name === 'open_cowork_cloud_byok_reveal_failures_total'
+    )) as { attributes?: Record<string, unknown> } | undefined
+    assert.equal('tenant_id' in (revealFailure?.attributes || {}), false)
+    assert.equal('session_id' in (revealFailure?.attributes || {}), false)
   } finally {
     await runtime.close?.()
     rmSync(root, { recursive: true, force: true })

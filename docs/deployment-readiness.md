@@ -214,11 +214,18 @@ provider control plane.
   durable Postgres, object storage is provider-backed, secret/cookie material is
   production-strength or resolved from a managed secret ref, auth is enabled,
   the web role has a canonical HTTPS public URL, web does not process commands
-  inline, and workers have checkpoints enabled.
+  inline, workers have checkpoints enabled, and every worker has a verified
+  execution-isolation provider.
 - For Kubernetes, keep `networkPolicy.enabled=true`. Public production Cloud
   and public Gateway chart renders force egress isolation; an empty allowlist is
   deny-all, and each opened dependency should use a typed
   `networkPolicy.egress.allow[]` entry with explicit peers and ports.
+- The stock Helm Cloud worker is not a production execution path: the chart
+  neither supplies the Docker runtime required by the built-in provider nor
+  injects a Kubernetes provider. Kubernetes NetworkPolicy is necessary but
+  does not establish the required per-execution process/user/mount boundary.
+  Use the chart for non-executing roles and downstream composition only until
+  an external provider passes the same adversarial proof.
 - Use `/livez` for process liveness and `/readyz` for dependency readiness.
 
 ### Worker/Scheduler Scaling
@@ -227,8 +234,9 @@ provider control plane.
   replicas beyond one.
 - Set `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` and the platform termination grace
   so active command loops can finish after a drain request.
-- Keep worker runtime roots ephemeral for horizontally scaled Kubernetes
-  workers unless a single-worker persistent root is intentionally configured.
+- Keep runtime roots private to each worker/provider. The existing Helm
+  ephemeral/PVC settings are storage inputs for a future downstream provider;
+  they do not make the stock Kubernetes worker execution-ready.
 - Run at least one scheduler. Multiple schedulers are safe when they use
   database claims.
 - For Kubernetes, add HPA or KEDA in the provider overlay that owns metrics.
@@ -664,6 +672,76 @@ HTTP API, verifies the prompt message was recorded, then exits. Without
 engine/image prerequisites. `sandbox-runtime-engine-unavailable`,
 `sandbox-runtime-image-not-configured`, and `sandbox-runtime-policy-blocked`
 are not successful sandbox session proofs.
+
+Cloud worker release candidates also require the adversarial two-tenant proof:
+
+```bash
+OPEN_COWORK_CLOUD_ISOLATION_IMAGE=open-cowork/opencode@sha256:... \
+OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256=sha256:... \
+pnpm proof:cloud:tenant-isolation -- --json
+```
+
+The package command runs both required network modes. It first starts two
+concurrent deny-all production-policy boundaries, then creates an ephemeral
+labeled internal network and real health service and repeats the two-tenant
+proof with that service as the sole explicitly allowed destination. It uses
+only synthetic markers to test own-workspace positive controls, sibling workspace
+and runtime-home denial, process-namespace and signal isolation, deny-by-default
+network access, transient-credential cleanup, and output redaction. Missing
+engine, image provenance, network attestation, or any failed attack is a hard
+non-zero result; the release proof never silently skips. For restricted egress,
+the pre-created Docker network must use Docker's `--internal` enforcement
+property and be labeled
+`open-cowork.isolation=true` and
+`open-cowork.egress_policy=<OPEN_COWORK_CLOUD_ISOLATION_EGRESS_POLICY_ID>`.
+Allowed upstreams must be attached directly to that internal network or
+exposed through a policy-enforcing proxy attached to it; an ordinary
+NAT-enabled bridge with the same labels fails readiness.
+Set `OPEN_COWORK_CLOUD_ISOLATION_PROOF_ALLOWED_URL` to a health endpoint that
+is explicitly reachable through that policy. The proof requires the declared
+endpoint to succeed while an undeclared destination remains unreachable, so
+restricted mode cannot pass using denial-only evidence.
+Use `--configured-only` only for an additional check of an operator-supplied
+restricted network; the required package command is the two-mode matrix.
+Use the same Cloud runtime image intended for workers; the proof harness
+requires that image to contain Node.js (the standard `open-cowork-cloud` image
+does) and does not install anything at runtime.
+
+The same proof places malicious project config, plugin, and agent fixtures in
+both workspaces. It must show that managed `bash: deny` policy remains
+effective, the plugin never executes, the project agent is absent, and the
+explicit `/workspace/AGENTS.md` instruction path remains configured. The
+runtime image must report pinned OpenCode `1.18.1`, and each admitted boundary
+must first create a native V2 `/api/session`, load `/api/agent`, and prove an
+unknown invocation is denied by `/api/session/:id/permission`. The restricted
+mode additionally proves the token-auth Knowledge proposal route is reachable
+from inside the boundary. It also
+captures both runtime containers' Docker logs before the forced-crash teardown
+and every provider log/metric/span record, then scans the serialized evidence
+for both fixture secrets and all host fixture paths. Reports contain counts and
+redacted booleans only.
+
+At runtime, every non-local worker tier requires the same verified capability
+before startup. Boundary provisioning completes before prompt admission;
+provisioning failure returns the stable
+`cloud_execution_isolation_unavailable` class without tenant paths or
+credentials. `/readyz` reports provider, engine, declared network policy, and
+verification state only. The built-in provider mounts exactly one session
+workspace, its private runtime/XDG roots, and explicitly allowlisted read-only
+runtime assets; it never mounts the shared Cloud root.
+The OpenCode API is not published from the container network. A bounded
+loopback-only broker carries each authenticated HTTP connection through
+`docker exec`, so the default `--network none` boundary remains reachable by
+the worker without acquiring an egress route.
+Before admission, the provider inspects the launched container and verifies
+the pinned image, exact bind-mount set and modes, network, non-root identity,
+read-only root, dropped capabilities, `no-new-privileges`, init, resource
+limits, command, and boundary labels. The attestation is issued only after that
+live state matches policy. Concurrent requests for one tenant/session share one
+pending provision operation. If a failed provision cannot tear its container
+down immediately, the provider retains an internal orphan-cleanup owner,
+reports isolation unavailable through readiness, and retries until both the
+container and private credential roots are gone.
 
 For local operator runtime checks without launching the Desktop renderer, run:
 

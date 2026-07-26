@@ -76,7 +76,10 @@ pnpm deploy:standalone-gateway:smoke
 Use this path for self-hosted or managed browser/org workspaces. Production
 Cloud is split-role: `web`, `worker`, and `scheduler`. The all-in-one service
 and root Compose files are local/demo references unless the deployment tier is
-explicitly a focused pilot.
+explicitly a focused pilot. The stock Helm worker is also not a production
+execution path until a downstream isolation provider is injected; production
+workers currently run on dedicated Docker-capable hosts or reviewed provider
+integrations.
 
 Production inputs:
 
@@ -85,6 +88,7 @@ Production inputs:
 - managed secret refs or Kubernetes secrets
 - OIDC or trusted signed header auth
 - worker checkpoints before multiple workers
+- verified per-execution isolation and the adversarial two-tenant proof
 - `/livez` and `/readyz` probes
 - backup/restore evidence
 - multi-web-pod SSE: `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY=true` on web and worker

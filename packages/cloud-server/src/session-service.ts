@@ -412,6 +412,8 @@ export class CloudSessionService {
       principalOrgId: (principal) => this.principalOrgId(principal),
       assertBillingAllowed: (input) => this.assertBillingAllowed(input),
       createCloudSessionRecord: (input) => this.createCloudSessionRecord(input),
+      secretAdapter,
+      observability,
     })
     this.sessionImportService = new CloudSessionImportService({
       store,
@@ -953,6 +955,17 @@ export class CloudSessionService {
     options: { signal?: AbortSignal, deferAck?: boolean } = {},
   ): Promise<void> {
     return this.sessionExecution.executeCommand(lease, command, options)
+  }
+
+  async withRuntimeExecutionScope<T>(
+    lease: WorkerLeaseRecord,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    if (!this.runtime.withExecutionScope) return callback()
+    return this.runtime.withExecutionScope({
+      tenantId: lease.tenantId,
+      sessionId: lease.sessionId,
+    }, callback)
   }
 
   appendRuntimeEvent(input: {

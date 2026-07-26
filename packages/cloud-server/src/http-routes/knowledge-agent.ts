@@ -1,7 +1,12 @@
 import { normalizeKnowledgeProposalContent, sanitizeLogMessage } from '@open-cowork/shared'
 import type { KnowledgeStore } from '@open-cowork/shared'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import {
+  isCloudRuntimeCapabilityAllowed,
+  type CompiledCloudRuntimeCapabilityPolicy,
+} from '../cloud-runtime-capability-policy.ts'
 import { verifyKnowledgeAgentToken } from '../knowledge-agent-token.ts'
+import { KNOWLEDGE_CLOUD_CAPABILITY } from '../knowledge-agent-runtime.ts'
 
 // Cloud agent-propose route. A coworker (agent) running in a CLOUD session
 // proposes a knowledge-wiki edit via the knowledge MCP, which POSTs here with a
@@ -30,7 +35,9 @@ export type KnowledgeAgentProposeRouteInput = {
   secret: string | Buffer
   /** Resolved knowledge backend (Postgres in cloud, SQLite fallback otherwise). */
   store: KnowledgeStore
+  /** Product feature gate, combined here with the compiled tool/MCP ceiling. */
   knowledgeEnabled: boolean
+  runtimeCapabilityPolicy?: CompiledCloudRuntimeCapabilityPolicy | null
   maxBodyBytes: number
   corsOrigin?: string | null
   now?: () => number
@@ -71,8 +78,17 @@ export async function handleKnowledgeAgentProposeRoute(input: KnowledgeAgentProp
     return
   }
 
-  // Feature-gate identically to the human knowledge route.
-  if (!input.knowledgeEnabled) {
+  // Re-check the current runtime ceiling independently of the token so a
+  // previously issued credential cannot outlive a feature or allowlist denial.
+  const knowledgeAllowed = input.knowledgeEnabled
+    && Boolean(
+      input.runtimeCapabilityPolicy
+      && isCloudRuntimeCapabilityAllowed(
+        input.runtimeCapabilityPolicy,
+        KNOWLEDGE_CLOUD_CAPABILITY,
+      ),
+    )
+  if (!knowledgeAllowed) {
     tools.writePolicyError(res, 403, 'Knowledge is disabled for this cloud profile.', 'knowledge.disabled', corsOrigin)
     return
   }

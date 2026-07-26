@@ -7,7 +7,9 @@ adapter wiring rather than in core runtime/session logic.
 
 Use these invariants across every provider:
 
-- Run `web`, `worker`, and `scheduler` as separate roles for production.
+- Run `web`, `worker`, and `scheduler` as separate roles for production, with
+  every execution worker on a dedicated Docker-capable host or behind a
+  reviewed injected provider that passes the two-tenant isolation proof.
 - Run the gateway as a separate deployment or service. It owns channel
   credentials and long-poll/webhook connections, not OpenCode execution.
 - Use Postgres for the control plane.
@@ -29,8 +31,9 @@ Use these invariants across every provider:
 - Use `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production` only for split-role
   public deployments with Postgres, provider-backed object storage,
   production-strength secret/cookie material, enabled auth, non-inline web
-  command handling, and worker checkpoints. Local/self-host beta tiers remain
-  available for demos and internal evaluation.
+  command handling, worker checkpoints, and verified per-execution isolation.
+  Local/self-host beta tiers remain available for demos and internal
+  evaluation.
 - Wire Kubernetes probes to cloud `/livez` for liveness and `/readyz` for
   dependency readiness. The CI Compose smoke waits for `/readyz` before running
   its end-to-end checks.
@@ -50,9 +53,11 @@ Use these invariants across every provider:
   It should agree with `pnpm deploy:validate`, `pnpm ops:validate`, Gateway
   doctor output, and smoke evidence before production traffic is routed.
 
-The canonical scalable manifest is the provider-neutral Helm chart in
-`helm/open-cowork-cloud`; the gateway chart lives in `helm/open-cowork-gateway`
-and can also be enabled as the cloud chart's optional gateway dependency.
+The provider-neutral Helm chart in `helm/open-cowork-cloud` is the canonical
+web/scheduler/policy composition reference, but its stock worker is not
+execution-ready because the chart does not inject an isolation provider. The
+gateway chart lives in `helm/open-cowork-gateway` and can also be enabled as
+the cloud chart's optional gateway dependency.
 
 ## Topology Profiles
 
