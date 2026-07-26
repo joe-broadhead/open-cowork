@@ -1349,6 +1349,8 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
   assert.match(smoke, /OPEN_COWORK_GATEWAY_SMOKE_URL/)
   assert.match(smoke, /pnpm deploy:smoke/)
   assert.match(smoke, /pnpm proof:cloud:tenant-isolation -- --json/)
+  assert.match(smoke, /local image_ref="\$\{OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local\}"/)
+  assert.doesNotMatch(smoke, /local image_ref="open-cowork-cloud:ci"/)
   assert.match(smoke, /OPEN_COWORK_CLOUD_ISOLATION_IMAGE="\$\{image_id\}"/)
   assert.match(smoke, /OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256="\$\{image_id\}"/)
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" logs --no-color --tail=200/)

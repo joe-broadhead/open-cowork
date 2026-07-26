@@ -23,10 +23,10 @@ run_split_role_isolation_proof() {
   if [ "${compose_file}" != "docker-compose.cloud.split.yml" ]; then
     return 0
   fi
-  local image_ref="open-cowork-cloud:ci"
-  if ! docker image inspect "${image_ref}" >/dev/null 2>&1; then
-    image_ref="${OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local}"
-  fi
+  # Prove the exact image Compose just built and started. A separately built
+  # BuildKit OCI-index tag can inspect to the index digest rather than the
+  # loaded platform image id, which is not valid per-boundary evidence.
+  local image_ref="${OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local}"
   local image_id
   image_id="$(docker image inspect --format '{{.Id}}' "${image_ref}")"
   if [[ ! "${image_id}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
