@@ -1,5 +1,5 @@
 import type { WorkflowWebhookAuth, WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
-import type { WorkflowDetail, WorkflowDraft, WorkflowListPayload, WorkflowStatus, WorkflowTriggerType } from '@open-cowork/shared'
+import type { WorkflowCreateResult, WorkflowDetail, WorkflowDraft, WorkflowListPayload, WorkflowStatus, WorkflowTriggerType, WorkflowWebhookSecretMutationResult } from '@open-cowork/shared'
 import type { CloudPrincipal, CloudWorkflowStartResult } from '../session-service.ts'
 export type CloudWorkflowWebhookInput = {
   workflowId: string
@@ -12,7 +12,8 @@ export type CloudWorkflowWebhookInput = {
 export type CloudWorkflowServiceDelegate = {
   listWorkflows(principal: CloudPrincipal, input?: { limit?: number | null, cursor?: string | null }): Promise<WorkflowListPayload>
   getWorkflow(principal: CloudPrincipal, workflowId: string): Promise<WorkflowDetail | null>
-  createWorkflow(principal: CloudPrincipal, draft: WorkflowDraft): Promise<WorkflowDetail>
+  createWorkflow(principal: CloudPrincipal, draft: WorkflowDraft): Promise<WorkflowCreateResult>
+  rotateWorkflowWebhookSecret(principal: CloudPrincipal, workflowId: string): Promise<WorkflowWebhookSecretMutationResult | null>
   updateWorkflowStatus(principal: CloudPrincipal, workflowId: string, status: WorkflowStatus): Promise<WorkflowDetail | null>
   runWorkflow(principal: CloudPrincipal, workflowId: string, input: {
     triggerType?: WorkflowTriggerType
@@ -32,6 +33,9 @@ export class CloudWorkflowService {
   list(principal: CloudPrincipal, input?: { limit?: number | null, cursor?: string | null }) { return this.delegate.listWorkflows(principal, input) }
   get(principal: CloudPrincipal, workflowId: string) { return this.delegate.getWorkflow(principal, workflowId) }
   create(principal: CloudPrincipal, draft: WorkflowDraft) { return this.delegate.createWorkflow(principal, draft) }
+  rotateWebhookSecret(principal: CloudPrincipal, workflowId: string) {
+    return this.delegate.rotateWorkflowWebhookSecret(principal, workflowId)
+  }
   updateStatus(principal: CloudPrincipal, workflowId: string, status: WorkflowStatus) {
     return this.delegate.updateWorkflowStatus(principal, workflowId, status)
   }

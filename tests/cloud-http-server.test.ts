@@ -9,7 +9,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '@open-cowork/shared'
+import {
+  DEFAULT_CONFIG,
+  type CloudAbuseConfig,
+  type CloudBillingConfig,
+  type OpenCoworkConfig,
+} from '@open-cowork/shared'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { CloudArtifactService } from '@open-cowork/cloud-server/artifact-service'
 import type { BillingAdapter } from '@open-cowork/cloud-server/billing-adapter'
@@ -30,6 +35,7 @@ import { CloudWorkspaceAdapter } from '../apps/desktop/src/main/cloud-workspace-
 import { createInMemoryObjectStore, type ObjectStoreAdapter } from '@open-cowork/cloud-server/object-store'
 import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
 import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import { compileCloudRuntimeCapabilityPolicy } from '@open-cowork/cloud-server/cloud-runtime-capability-policy'
 import { createCloudSessionCookieManager } from '@open-cowork/cloud-server/session-cookie-auth'
 import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudIdentityPolicy, type CloudPrincipal } from '@open-cowork/cloud-server/session-service'
 import { createStubBillingAdapter } from '@open-cowork/cloud-server/stub-billing-adapter'
@@ -43,6 +49,24 @@ import type {
   CloudRuntimePromptPart,
 } from '@open-cowork/cloud-server/runtime-adapter'
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests!'
+const KNOWLEDGE_CAPABILITY_CONFIG: OpenCoworkConfig = {
+  ...DEFAULT_CONFIG,
+  tools: [{
+    id: 'knowledge',
+    name: 'Knowledge',
+    description: 'Knowledge tool',
+    kind: 'built-in',
+    namespace: 'knowledge',
+    patterns: ['mcp__knowledge__*'],
+    askPatterns: ['mcp__knowledge__propose_knowledge_edit'],
+  }],
+  mcps: [{
+    name: 'knowledge',
+    type: 'local',
+    description: 'Knowledge MCP',
+    authMode: 'none',
+  }],
+}
 
 class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
@@ -102,6 +126,7 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
 }
 
 function createFixture(options: {
+  appConfig?: OpenCoworkConfig
   autoProcessCommands?: boolean
   ssePollMs?: number
   policy?: CloudRuntimePolicy
@@ -128,7 +153,13 @@ function createFixture(options: {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
   const objectStore = options.objectStore || createInMemoryObjectStore()
-  const policy = options.policy || resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const policy = options.policy || resolveCloudRuntimePolicy(options.appConfig || DEFAULT_CONFIG)
+  const runtimeCapabilityPolicy = options.appConfig
+    ? compileCloudRuntimeCapabilityPolicy({
+        appConfig: options.appConfig,
+        policy,
+      })
+    : null
   let nextId = 0
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('cloud-http-test-byok-key'), {
     ids: { randomUUID: () => `byok-${nextId += 1}` },
@@ -136,7 +167,7 @@ function createFixture(options: {
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy, null, options.inviteSigningSecret ?? null, options.emailSender ?? null)
+  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy, null, options.inviteSigningSecret ?? null, options.emailSender ?? null, undefined, options.observability ?? null, createEnvelopeSecretAdapter('cloud-http-workflow-secret-encryption-key'))
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
@@ -159,6 +190,7 @@ function createFixture(options: {
     trustProxyHeaders: options.trustProxyHeaders,
     trustedProxyCidrs: options.trustedProxyCidrs,
     knowledgeAgentTokenSecret: options.knowledgeAgentTokenSecret,
+    runtimeCapabilityPolicy,
     auth: options.auth || (async (req) => {
       const authorization = String(req.headers.authorization || '')
       if (authorization.startsWith('Bearer ocw_')) return workerAuth(req)
@@ -724,7 +756,10 @@ test('cloud HTTP knowledge agent-propose route is token-authed, tenant-scoped fr
   const now = Date.now()
   // A principal is still supplied by the fixture, but this route is pre-user-auth:
   // it authenticates ONLY via the signed agent token, not the principal.
-  const fixture = createFixture({ knowledgeAgentTokenSecret: AGENT_SECRET })
+  const fixture = createFixture({
+    appConfig: KNOWLEDGE_CAPABILITY_CONFIG,
+    knowledgeAgentTokenSecret: AGENT_SECRET,
+  })
   const baseUrl = await fixture.server.listen()
   const proposeUrl = `${baseUrl}/api/knowledge/agent/propose`
   // The seeded default Space for the token's tenant (cloud:tenant-1). The agent
@@ -808,7 +843,7 @@ test('cloud HTTP knowledge agent-propose route is token-authed, tenant-scoped fr
   }
 })
 
-test('cloud HTTP knowledge agent-propose route fails closed without a secret and when knowledge is disabled', async () => {
+test('cloud HTTP knowledge agent-propose route fails closed without a secret or current feature/tool/MCP permission', async () => {
   const knowledgeDb = new DatabaseSync(':memory:')
   setKnowledgeDatabaseForTests(knowledgeDb)
   const now = Date.now()
@@ -821,7 +856,10 @@ test('cloud HTTP knowledge agent-propose route fails closed without a secret and
 
   // No configured secret ⇒ the route rejects even a structurally valid-looking
   // token (it must NOT verify against an empty secret). Fail closed → 401.
-  const noSecretFixture = createFixture({ knowledgeAgentTokenSecret: null })
+  const noSecretFixture = createFixture({
+    appConfig: KNOWLEDGE_CAPABILITY_CONFIG,
+    knowledgeAgentTokenSecret: null,
+  })
   const noSecretUrl = await noSecretFixture.server.listen()
   try {
     const forged = signKnowledgeAgentToken('', { tenantId: 'tenant-1', sessionId: 's-1', exp: now + 1000 })
@@ -835,24 +873,80 @@ test('cloud HTTP knowledge agent-propose route fails closed without a secret and
     await noSecretFixture.server.close()
   }
 
-  // Knowledge disabled by policy ⇒ 403 (feature gate), even with a valid token.
-  const disabledPolicy: CloudRuntimePolicy = {
-    ...resolveCloudRuntimePolicy(DEFAULT_CONFIG),
-    features: { ...resolveCloudRuntimePolicy(DEFAULT_CONFIG).features, knowledge: false },
-  }
   const AGENT_SECRET = 'cloud-knowledge-agent-secret-for-tests'
-  const disabledFixture = createFixture({ policy: disabledPolicy, knowledgeAgentTokenSecret: AGENT_SECRET })
-  const disabledUrl = await disabledFixture.server.listen()
+  // Mint once while all three current-policy prerequisites permit Knowledge.
+  // The same still-valid token must not retain authority after any prerequisite
+  // is revoked.
+  const validToken = signKnowledgeAgentToken(AGENT_SECRET, {
+    tenantId: 'tenant-1',
+    sessionId: 's-1',
+    exp: now + KNOWLEDGE_AGENT_TOKEN_TTL_MS,
+  })
+  const basePolicy = resolveCloudRuntimePolicy(KNOWLEDGE_CAPABILITY_CONFIG)
+  const allowedPolicy: CloudRuntimePolicy = {
+    ...basePolicy,
+    allowedTools: ['knowledge'],
+    allowedMcps: ['knowledge'],
+  }
+  const policyCases: Array<{
+    name: string
+    policy: CloudRuntimePolicy
+    expectedStatus: number
+  }> = [{
+    name: 'feature, tool, and MCP allowed',
+    policy: allowedPolicy,
+    expectedStatus: 201,
+  }, {
+    name: 'feature removed',
+    policy: {
+      ...allowedPolicy,
+      features: { ...allowedPolicy.features, knowledge: false },
+    },
+    expectedStatus: 403,
+  }, {
+    name: 'tool removed',
+    policy: {
+      ...allowedPolicy,
+      allowedTools: [],
+    },
+    expectedStatus: 403,
+  }, {
+    name: 'MCP removed',
+    policy: {
+      ...allowedPolicy,
+      allowedMcps: [],
+    },
+    expectedStatus: 403,
+  }]
   try {
-    const validToken = signKnowledgeAgentToken(AGENT_SECRET, { tenantId: 'tenant-1', sessionId: 's-1', exp: now + KNOWLEDGE_AGENT_TOKEN_TTL_MS })
-    const gated = await fetch(`${disabledUrl}/api/knowledge/agent/propose`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${validToken}` },
-      body: proposalBody,
-    })
-    assert.equal(gated.status, 403)
+    for (const policyCase of policyCases) {
+      const fixture = createFixture({
+        appConfig: KNOWLEDGE_CAPABILITY_CONFIG,
+        policy: policyCase.policy,
+        knowledgeAgentTokenSecret: AGENT_SECRET,
+      })
+      const baseUrl = await fixture.server.listen()
+      try {
+        const response = await fetch(`${baseUrl}/api/knowledge/agent/propose`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${validToken}`,
+          },
+          body: proposalBody,
+        })
+        assert.equal(response.status, policyCase.expectedStatus, policyCase.name)
+        if (policyCase.expectedStatus === 403) {
+          assert.equal(
+            asRecord((await readJson(response)).verdict).policyCode,
+            'knowledge.disabled',
+          )
+        }
+      } finally {
+        await fixture.server.close()
+      }
+    }
   } finally {
-    await disabledFixture.server.close()
     setKnowledgeDatabaseForTests(null)
     knowledgeDb.close()
   }
@@ -7793,6 +7887,7 @@ test('cloud HTTP public workflow webhooks require HMAC signatures and reject rep
   const fixture = createFixture({
     policy: {
       ...basePolicy,
+      publicUrl: 'https://cowork.example.test',
       features: {
         ...basePolicy.features,
         webhooks: true,
@@ -7817,10 +7912,34 @@ test('cloud HTTP public workflow webhooks require HMAC signatures and reject rep
       }),
     })
     assert.equal(createResponse.status, 201)
-    const workflowId = String(asRecord((await readJson(createResponse)).workflow).id)
+    const createBody = await readJson(createResponse)
+    const workflowId = String(asRecord(createBody.workflow).id)
+    const expectedWebhookUrl = `https://cowork.example.test/webhooks/workflows/${encodeURIComponent(workflowId)}`
+    assert.equal(asRecord(createBody.workflow).webhookUrl, expectedWebhookUrl)
+    const webhookSecret = String(asRecord(createBody.webhookSecretReveal).secret)
+    assert.notEqual(webhookSecret, 'cloud-webhook-secret')
+    const publicWorkflowJson = JSON.stringify(createBody.workflow)
+    assert.equal(publicWorkflowJson.includes(webhookSecret), false)
+    assert.equal(publicWorkflowJson.includes('cloud-webhook-secret'), false)
+    assert.equal(publicWorkflowJson.includes('webhookSecret'), false)
+    const storedWorkflow = await fixture.store.findWorkflow(workflowId)
+    const storedSecret = await fixture.store.getWorkflowWebhookSecret(storedWorkflow?.tenantId || '', workflowId)
+    assert.equal(JSON.stringify(storedWorkflow).includes('webhookSecret'), false)
+    assert.match(storedSecret?.ciphertext || '', /^enc:v1:/)
+    assert.equal(storedSecret?.ciphertext.includes(webhookSecret), false)
+    const ordinaryDetail = await readJson(await fetch(`${baseUrl}/api/workflows/${workflowId}`))
+    const ordinaryList = await readJson(await fetch(`${baseUrl}/api/workflows`))
+    assert.equal(asRecord(ordinaryDetail.workflow).webhookUrl, expectedWebhookUrl)
+    assert.equal(asRecord(asArray(ordinaryList.workflows)[0]).webhookUrl, expectedWebhookUrl)
+    for (const ordinaryPayload of [ordinaryDetail, ordinaryList]) {
+      const serialized = JSON.stringify(ordinaryPayload)
+      assert.equal(serialized.includes(webhookSecret), false)
+      assert.equal(serialized.includes('cloud-webhook-secret'), false)
+      assert.equal(serialized.includes('webhookSecret'), false)
+    }
     const rawBody = JSON.stringify({ source: 'test-webhook' })
     const timestamp = new Date().toISOString()
-    const signature = signWorkflowWebhookPayload('cloud-webhook-secret', rawBody, timestamp)
+    const signature = signWorkflowWebhookPayload(webhookSecret, rawBody, timestamp)
 
     const sharedSecretResponse = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
       method: 'POST',
@@ -7845,6 +7964,11 @@ test('cloud HTTP public workflow webhooks require HMAC signatures and reject rep
     const acceptedBody = await readJson(accepted)
     assert.equal(acceptedBody.ok, true)
     assert.equal(acceptedBody.processed, 1)
+    const workflowEvents = await fixture.store.listWorkspaceEvents('tenant-1', 'user-1')
+    const serializedEvents = JSON.stringify(workflowEvents)
+    assert.equal(serializedEvents.includes(webhookSecret), false)
+    assert.equal(serializedEvents.includes('cloud-webhook-secret'), false)
+    assert.equal(serializedEvents.includes('webhookSecret'), false)
     assert.equal(fixture.runtime.prompts[0]?.parts[0]?.type === 'text'
       ? fixture.runtime.prompts[0].parts[0].text
       : null, 'Run from webhook.')
@@ -7859,6 +7983,110 @@ test('cloud HTTP public workflow webhooks require HMAC signatures and reject rep
       body: rawBody,
     })
     assert.equal(replay.status, 401)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud workflow secret rotation reveals once, atomically invalidates the old secret, and archive revokes execution', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      publicUrl: 'https://cowork.example.test',
+      features: {
+        ...basePolicy.features,
+        webhooks: true,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/workflows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Rotated webhook',
+        instructions: 'Run from the rotated webhook.',
+        agentName: 'data-analyst',
+        triggers: [{ id: 'webhook-rotate', type: 'webhook', enabled: true }],
+      }),
+    }))
+    const workflowId = String(asRecord(created.workflow).id)
+    const oldSecret = String(asRecord(created.webhookSecretReveal).secret)
+    const rotated = await readJson(await fetch(`${baseUrl}/api/workflows/${workflowId}/rotate-webhook-secret`, {
+      method: 'POST',
+    }))
+    const newSecret = String(asRecord(rotated.webhookSecretReveal).secret)
+    assert.equal(
+      asRecord(rotated.workflow).webhookUrl,
+      `https://cowork.example.test/webhooks/workflows/${encodeURIComponent(workflowId)}`,
+    )
+    assert.notEqual(newSecret, oldSecret)
+    assert.equal(JSON.stringify(rotated.workflow).includes(oldSecret), false)
+    assert.equal(JSON.stringify(rotated.workflow).includes(newSecret), false)
+
+    const rawBody = JSON.stringify({ source: 'rotation-test' })
+    const oldTimestamp = new Date().toISOString()
+    const oldResponse = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-timestamp': oldTimestamp,
+        'x-open-cowork-signature': signWorkflowWebhookPayload(oldSecret, rawBody, oldTimestamp),
+      },
+      body: rawBody,
+    })
+    assert.equal(oldResponse.status, 401)
+
+    const newTimestamp = new Date(Date.now() + 1).toISOString()
+    const accepted = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-timestamp': newTimestamp,
+        'x-open-cowork-signature': signWorkflowWebhookPayload(newSecret, rawBody, newTimestamp),
+      },
+      body: rawBody,
+    })
+    assert.equal(accepted.status, 202)
+
+    const archived = await fetch(`${baseUrl}/api/workflows/${workflowId}/archive`, { method: 'POST' })
+    assert.equal(archived.status, 200)
+    const revokedRecord = await fixture.store.getWorkflowWebhookSecret(
+      'tenant-1',
+      workflowId,
+    )
+    assert.equal(revokedRecord?.status, 'revoked')
+    const archivedTimestamp = new Date(Date.now() + 2).toISOString()
+    const revoked = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-timestamp': archivedTimestamp,
+        'x-open-cowork-signature': signWorkflowWebhookPayload(newSecret, rawBody, archivedTimestamp),
+      },
+      body: rawBody,
+    })
+    assert.equal(revoked.status, 401)
+
+    const resumeWithoutRotation = await fetch(`${baseUrl}/api/workflows/${workflowId}/resume`, { method: 'POST' })
+    assert.equal(resumeWithoutRotation.status, 409)
+    const replacement = await readJson(await fetch(`${baseUrl}/api/workflows/${workflowId}/rotate-webhook-secret`, {
+      method: 'POST',
+    }))
+    const replacementSecret = String(asRecord(replacement.webhookSecretReveal).secret)
+    assert.equal(
+      asRecord(replacement.workflow).webhookUrl,
+      `https://cowork.example.test/webhooks/workflows/${encodeURIComponent(workflowId)}`,
+    )
+    assert.notEqual(replacementSecret, newSecret)
+    assert.equal(
+      (await fixture.store.getWorkflowWebhookSecret('tenant-1', workflowId))?.status,
+      'active',
+    )
+    const resumed = await fetch(`${baseUrl}/api/workflows/${workflowId}/resume`, { method: 'POST' })
+    assert.equal(resumed.status, 200)
   } finally {
     await fixture.server.close()
   }
@@ -7917,10 +8145,12 @@ test('cloud workflow webhook security keys honor trusted proxy client attributio
       }),
     })
     assert.equal(createResponse.status, 201)
-    const workflowId = String(asRecord((await readJson(createResponse)).workflow).id)
+    const createBody = await readJson(createResponse)
+    const workflowId = String(asRecord(createBody.workflow).id)
+    const webhookSecret = String(asRecord(createBody.webhookSecretReveal).secret)
     const rawBody = JSON.stringify({ source: 'trusted-proxy-test' })
     const timestamp = new Date().toISOString()
-    const signature = signWorkflowWebhookPayload('cloud-webhook-secret', rawBody, timestamp)
+    const signature = signWorkflowWebhookPayload(webhookSecret, rawBody, timestamp)
 
     const accepted = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
       method: 'POST',
@@ -7971,10 +8201,12 @@ test('cloud workflow webhooks enqueue managed worker execution without web auto-
       }),
     })
     assert.equal(createResponse.status, 201)
-    const workflowId = String(asRecord((await readJson(createResponse)).workflow).id)
+    const createBody = await readJson(createResponse)
+    const workflowId = String(asRecord(createBody.workflow).id)
+    const webhookSecret = String(asRecord(createBody.webhookSecretReveal).secret)
     const rawBody = JSON.stringify({ source: 'test-webhook' })
     const timestamp = new Date().toISOString()
-    const signature = signWorkflowWebhookPayload('cloud-webhook-secret', rawBody, timestamp)
+    const signature = signWorkflowWebhookPayload(webhookSecret, rawBody, timestamp)
 
     const accepted = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
       method: 'POST',

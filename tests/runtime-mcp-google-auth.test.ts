@@ -4,8 +4,8 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import type { CustomMcpConfig } from '../packages/shared/src/index.ts'
-import type { AppSettings } from '../packages/shared/src/index.ts'
+import type { AppSettings, CustomMcpConfig } from '../packages/shared/src/index.ts'
+import { createDisabledRuntimeToolingBridgeConsent } from '../packages/shared/src/runtime-tooling-bridge.ts'
 import { clearConfigCaches, type BundleMcp } from '@open-cowork/runtime-host/config'
 
 const BASE_SETTINGS: AppSettings = {
@@ -30,7 +30,7 @@ const BASE_SETTINGS: AppSettings = {
   privacyKeepConversationHistory: true,
   privacyShareAnonymizedUsage: false,
   runtimeConfigSource: 'app',
-  runtimeToolingBridgeEnabled: true,
+  runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
   windowZoomFactor: 1,
   workflowLaunchAtLogin: false,
   workflowRunInBackground: false,

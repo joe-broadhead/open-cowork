@@ -3,10 +3,17 @@
 Use the same `open-cowork-cloud` and `open-cowork-gateway` images on Azure
 with these services:
 
+> **Execution support boundary:** the stock AKS Helm worker and Container Apps
+> image do not supply the Docker-backed provider or inject an Azure execution
+> provider. Use these as web, scheduler, Gateway, storage, and downstream
+> composition references. Production workers require a dedicated
+> Docker-capable host or a reviewed Container Apps/AKS provider integration
+> that passes the two-tenant proof.
+
 | Role | Recommended service |
 | --- | --- |
 | `web` | Azure Container Apps or AKS Deployment |
-| `worker` | Azure Container Apps service/jobs or AKS Deployment |
+| `worker` | Dedicated Docker-capable host or reviewed Container Apps/AKS provider integration |
 | `scheduler` | Azure Container Apps service/job or AKS Deployment |
 | Gateway | Azure Container Apps service or AKS Deployment |
 | Control plane | Azure Database for PostgreSQL |
@@ -15,9 +22,10 @@ with these services:
 | Observability | Azure Monitor/Application Insights plus OTLP exporter or collector |
 | Backups | Azure PostgreSQL PITR plus Blob versioning/lifecycle |
 
-For scalable deployments, install the provider-neutral Helm chart on AKS and
-connect it to Azure Database for PostgreSQL, Blob Storage, and Key Vault
-through workload identity or External Secrets.
+For scalable non-executing roles and downstream provider wiring, install the
+provider-neutral Helm chart on AKS and connect it to Azure Database for
+PostgreSQL, Blob Storage, and Key Vault through workload identity or External
+Secrets.
 
 Example Helm overrides. Keep real subscription IDs, tenant IDs, registry names,
 resource groups, domains, image tags, image digests, and secret values in a
@@ -58,8 +66,9 @@ Use Key Vault-backed secret injection for
 Webhook providers require a public HTTPS gateway URL; polling providers can
 remain private with outbound channel API access.
 
-Use Container Apps for focused pilots when that operational model is simpler,
-but keep split roles and checkpointing enabled before adding worker replicas.
+Use Container Apps for focused non-execution pilots when that operational
+model is simpler. Do not add worker replicas until a verified execution
+provider and checkpointing are both enabled.
 
 When the envelope key is read directly by the app, set
 `OPEN_COWORK_CLOUD_SECRET_KEY_REF` to a Key Vault URI such as

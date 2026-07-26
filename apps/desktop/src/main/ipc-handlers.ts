@@ -204,6 +204,9 @@ export function setupIpcHandlers(
     if (request.action === 'app.reset') {
       return 'app=reset'
     }
+    if (request.action === 'gateway.credentials.reset') {
+      return 'gateway-credentials=reset'
+    }
     const target = request.target
     return `${target.scope}:${target.name}${target.directory ? `@${target.directory}` : ''}`
   }
@@ -223,6 +226,14 @@ export function setupIpcHandlers(
         message: 'Reset all app data? This cannot be undone.',
         detail: 'This deletes every saved thread, credential, custom agent, skill, MCP, and sandbox workspace from this machine. The app will relaunch with a fresh first-run experience.',
         confirmLabel: 'Reset',
+      }
+    }
+    if (request.action === 'gateway.credentials.reset') {
+      return {
+        title: 'Reset stored Gateway credentials?',
+        message: 'Reset all stored Gateway tokens and require re-entry?',
+        detail: 'The unreadable credential file will be preserved in quarantine. Every Standalone Gateway connection will require a new token. Use this only when Gateway credential storage remains corrupt or unavailable.',
+        confirmLabel: 'Reset credentials',
       }
     }
     const target = request.target

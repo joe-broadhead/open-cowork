@@ -289,6 +289,9 @@ export type WorkspaceInfo = {
   profileName?: string
   lastSyncedAt?: string | null
   error?: string | null
+  // Non-secret Desktop state for Standalone Gateway credential recovery.
+  // Present only on Gateway workspaces; never contains a token or ciphertext.
+  gatewayCredentialStatus?: 'available' | 'missing' | 'unavailable' | 'corrupt'
 }
 
 export type WorkspaceRef = {

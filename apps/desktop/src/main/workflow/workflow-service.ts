@@ -1,5 +1,5 @@
 import { configureWorkflowToolActions } from '@open-cowork/runtime-host/workflow/workflow-tool-actions'
-import { attachWorkflowRunSession, claimDueWorkflowRun, createWorkflowRun, createWorkflowWebhookSecurityStore, getWorkflow, getWorkflowRun, listWorkflows as listWorkflowState, markWorkflowRunCompleted, markWorkflowRunFailed, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
+import { attachWorkflowRunSession, claimDueWorkflowRun, createWorkflowRun, createWorkflowWebhookSecurityStore, getWorkflow, getWorkflowRun, getWorkflowWebhookSecret, listWorkflows as listWorkflowState, markWorkflowRunCompleted, markWorkflowRunFailed, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
 import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
 import { toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
 import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
@@ -123,6 +123,7 @@ function workflowDraftPrompt(sessionId: string) {
     `Set draftSessionId to "${sessionId}" on the preview draft so the saved workflow links back to this setup thread.`,
     'Only after the user explicitly confirms, call workflows_create_workflow with the previewToken returned by the preview tool.',
     'Do not reconstruct or change the draft in create_workflow.',
+    'If the saved workflow has a webhook, explain that no credential is created in chat and the user must use Regenerate in Playbooks to provision and copy a one-time authenticated curl command.',
   ].join('\n')
 }
 
@@ -235,13 +236,13 @@ export function configureWorkflowService(options: {
   configureWorkflowToolActions({ publishWorkflowUpdated })
   configureWorkflowWebhookServer(async ({ workflowId, auth, payload }) => {
     const workflow = getWorkflow(workflowId, workflowWebhookBaseUrl())
-    const webhook = workflow?.triggers.find((trigger) => (
-      trigger.type === 'webhook'
-      && trigger.enabled
-      && typeof trigger.webhookSecret === 'string'
-      && verifyWorkflowWebhookAuth(auth, trigger.webhookSecret)
-    ))
-    if (!workflow || !webhook) {
+    const webhook = getWorkflowWebhookSecret(workflowId)
+    if (
+      !workflow
+      || workflow.status !== 'active'
+      || !webhook
+      || !verifyWorkflowWebhookAuth(auth, webhook.secret)
+    ) {
       throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
     }
     const replayClaim = await claimWorkflowWebhookSignatureOnce(auth, workflowId)

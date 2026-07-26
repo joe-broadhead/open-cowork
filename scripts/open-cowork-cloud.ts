@@ -2,6 +2,17 @@ import { setLogStorage } from '@open-cowork/shared/node'
 import { getAppConfig, getAppDataDir, getLogFilePrefix } from '@open-cowork/runtime-host/config'
 import { startCloudApp } from '../packages/cloud-server/src/app.ts'
 
+const developmentProcessRequested = process.argv.includes('--development-process')
+if (developmentProcessRequested) {
+  const configuredMode = process.env.OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE?.trim()
+  if (configuredMode && configuredMode !== 'development-process') {
+    throw new Error(
+      '--development-process conflicts with OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE.',
+    )
+  }
+  process.env.OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE = 'development-process'
+}
+
 // The cloud has no Electron host wiring; point the shared logger at the cloud data
 // directory (resolved by the Electron-free config core from OPEN_COWORK_* env) so
 // logs land beside the cloud root instead of the unconfigured temp-dir fallback.

@@ -110,6 +110,8 @@ import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  CloudWorkflowWebhookSecretRecord,
+  LegacyCloudWorkflowWebhookSecretRecord,
   ListWorkflowRunsForWorkflowsInput,
   ListWorkflowsPageInput,
   ListWorkflowsPageRecord,
@@ -193,6 +195,8 @@ import type {
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   FailWorkflowRunInput,
+  MigrateLegacyWorkflowWebhookSecretInput,
+  RotateWorkflowWebhookSecretInput,
   ThreadTagLinkInput,
   UpdateHeadlessAgentInput,
   UpdateThreadSmartFilterInput,
@@ -496,6 +500,11 @@ export type ControlPlaneStore = {
   getWorkflow(tenantId: string, userId: string, workflowId: string): MaybePromise<CloudWorkflowRecord | null>
   getWorkflowForTenant(tenantId: string, workflowId: string): MaybePromise<CloudWorkflowRecord | null>
   updateWorkflowStatus(input: UpdateWorkflowStatusInput): MaybePromise<CloudWorkflowRecord | null>
+  getWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId?: string): MaybePromise<CloudWorkflowWebhookSecretRecord | null>
+  rotateWorkflowWebhookSecret(input: RotateWorkflowWebhookSecretInput): MaybePromise<CloudWorkflowWebhookSecretRecord | null>
+  listLegacyWorkflowWebhookSecrets(limit?: number): MaybePromise<LegacyCloudWorkflowWebhookSecretRecord[]>
+  getLegacyWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId: string): MaybePromise<LegacyCloudWorkflowWebhookSecretRecord | null>
+  migrateLegacyWorkflowWebhookSecret(input: MigrateLegacyWorkflowWebhookSecretInput): MaybePromise<boolean>
   listWorkflowRuns(tenantId: string, workflowId: string, limit?: number): MaybePromise<CloudWorkflowRunRecord[]>
   listWorkflowRunsForWorkflows(input: ListWorkflowRunsForWorkflowsInput): MaybePromise<CloudWorkflowRunRecord[]>
   createWorkflowRun(input: CreateWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord>

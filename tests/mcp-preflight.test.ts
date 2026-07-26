@@ -5,7 +5,11 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AppSettings, CapabilityToolEntry } from '@open-cowork/shared'
+import {
+  createDisabledRuntimeToolingBridgeConsent,
+  type AppSettings,
+  type CapabilityToolEntry,
+} from '@open-cowork/shared'
 import { preflightConfiguredApiTokenMcp } from '../apps/desktop/src/main/mcp-preflight.ts'
 import { clearConfigCaches, type BundleMcp } from '@open-cowork/runtime-host/config'
 const resolvePublicTestHost = async () => [{ address: '140.82.112.22', family: 4 }]
@@ -33,7 +37,7 @@ function baseSettings(): AppSettings {
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
     runtimeConfigSource: 'app',
-    runtimeToolingBridgeEnabled: true,
+    runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,

@@ -2,6 +2,7 @@ import type {
   WorkflowDetail,
   WorkflowListPayload,
   WorkflowRun,
+  WorkflowWebhookSecretMutationResult,
 } from '@open-cowork/shared'
 import type { CloudWorkspaceSessionAdapter } from './cloud-workspace-adapter.ts'
 
@@ -68,6 +69,18 @@ export function createCloudWorkflowGateway(resolveAdapter: ResolveCloudAdapter) 
       const adapter = await resolveAdapter(event, workspaceIdInput)
       if (!adapter.archiveWorkflow) throw new Error('Cloud workflow archive is not supported by this workspace.')
       return adapter.archiveWorkflow(workflowId)
+    },
+
+    async rotateWebhookSecret(
+      event: WorkspaceEventLike,
+      workflowId: string,
+      workspaceIdInput?: string | null,
+    ): Promise<WorkflowWebhookSecretMutationResult | null> {
+      const adapter = await resolveAdapter(event, workspaceIdInput)
+      if (!adapter.rotateWorkflowWebhookSecret) {
+        throw new Error('Cloud workflow webhook rotation is not supported by this workspace.')
+      }
+      return adapter.rotateWorkflowWebhookSecret(workflowId)
     },
   }
 }

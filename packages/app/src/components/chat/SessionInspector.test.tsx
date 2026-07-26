@@ -176,7 +176,6 @@ function installInspectorApi() {
         integrationEnabled: {},
         bashPermission: 'deny',
         fileWritePermission: 'deny',
-        runtimeToolingBridgeEnabled: true,
         workflowLaunchAtLogin: false,
         workflowRunInBackground: false,
         workflowDesktopNotifications: true,

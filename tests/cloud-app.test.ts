@@ -1173,6 +1173,7 @@ test('cloud all-in-one app starts web and worker and routes runtime events into 
     paths,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'all-in-one',
+        OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
         OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
@@ -1228,6 +1229,163 @@ test('cloud all-in-one app starts web and worker and routes runtime events into 
   }
 
   assert.equal(runtime.closed, true)
+})
+
+test('cloud startup unwinds owned resources and preserves the original migration failure', async () => {
+  const runtime = new FakeRuntime()
+  let runtimeCloseCalls = 0
+  runtime.close = () => {
+    runtimeCloseCalls += 1
+    throw new Error('synthetic runtime cleanup failure')
+  }
+  const store = new InMemoryControlPlaneStore()
+  let storeCloseCalls = 0
+  store.close = async () => {
+    storeCloseCalls += 1
+  }
+  store.listLegacyWorkflowWebhookSecrets = async () => {
+    throw new Error('synthetic migration startup failure')
+  }
+  let objectStoreCloseCalls = 0
+  const objectStore = {
+    ...createInMemoryObjectStore(),
+    async close() {
+      objectStoreCloseCalls += 1
+    },
+  }
+  const root = await mkdtemp(
+    join(tmpdir(), 'open-cowork-cloud-startup-unwind-'),
+  )
+
+  await assert.rejects(() => startCloudApp({
+    runtime,
+    store,
+    objectStore,
+    paths: createCloudPathProvider(root),
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
+      OPEN_COWORK_CLOUD_WORKER_ID: 'startup-unwind-worker',
+    },
+  }), /synthetic migration startup failure/)
+  assert.equal(runtimeCloseCalls, 1)
+  assert.equal(objectStoreCloseCalls, 1)
+  assert.equal(storeCloseCalls, 1)
+})
+
+test('cloud listen failure unwinds worker resources and permits retry on the same identity', async () => {
+  const blocker = createServer()
+  await new Promise<void>((resolveListen, reject) => {
+    blocker.once('error', reject)
+    blocker.listen(0, '127.0.0.1', resolveListen)
+  })
+  const blockerAddress = blocker.address()
+  assert.ok(blockerAddress && typeof blockerAddress !== 'string')
+  const port = blockerAddress.port
+  const runtime = new FakeRuntime()
+  const store = new InMemoryControlPlaneStore()
+  let storeCloseCalls = 0
+  store.close = async () => {
+    storeCloseCalls += 1
+  }
+  const objectStore = createInMemoryObjectStore()
+  let objectStoreCloseCalls = 0
+  objectStore.close = async () => {
+    objectStoreCloseCalls += 1
+  }
+  const env = {
+    OPEN_COWORK_CLOUD_ROLE: 'all-in-one',
+    OPEN_COWORK_CLOUD_PROFILE: 'full',
+    OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
+    OPEN_COWORK_CLOUD_WORKER_ID: 'listen-retry-worker',
+  }
+  const failureRoot = await mkdtemp(
+    join(tmpdir(), 'open-cowork-cloud-listen-failure-'),
+  )
+
+  try {
+    await assert.rejects(() => startCloudApp({
+      runtime,
+      store,
+      objectStore,
+      paths: createCloudPathProvider(failureRoot),
+      env,
+      hostname: '127.0.0.1',
+      port,
+    }), (error: unknown) => (
+      error instanceof Error
+      && 'code' in error
+      && error.code === 'EADDRINUSE'
+    ))
+    assert.equal(runtime.closed, true)
+    assert.equal(objectStoreCloseCalls, 1)
+    assert.equal(storeCloseCalls, 1)
+  } finally {
+    await new Promise<void>((resolveClose, reject) => {
+      blocker.close((error) => error ? reject(error) : resolveClose())
+    })
+  }
+
+  const retry = await startCloudApp({
+    runtime: new FakeRuntime(),
+    store: new InMemoryControlPlaneStore(),
+    objectStore: createInMemoryObjectStore(),
+    paths: createCloudPathProvider(await mkdtemp(
+      join(tmpdir(), 'open-cowork-cloud-listen-retry-'),
+    )),
+    env,
+    hostname: '127.0.0.1',
+    port,
+  })
+  try {
+    assert.match(retry.url || '', new RegExp(`:${port}$`))
+  } finally {
+    await retry.close()
+  }
+})
+
+test('cloud shutdown continues durable cleanup after runtime teardown fails', async () => {
+  const runtime = new FakeRuntime()
+  runtime.close = () => {
+    throw new Error('synthetic runtime cleanup failure')
+  }
+  const store = new InMemoryControlPlaneStore()
+  let storeCloseCalls = 0
+  store.close = async () => {
+    storeCloseCalls += 1
+  }
+  let objectStoreCloseCalls = 0
+  const objectStore = {
+    ...createInMemoryObjectStore(),
+    async close() {
+      objectStoreCloseCalls += 1
+    },
+  }
+  const root = await mkdtemp(
+    join(tmpdir(), 'open-cowork-cloud-shutdown-settle-'),
+  )
+  const app = await startCloudApp({
+    runtime,
+    store,
+    objectStore,
+    paths: createCloudPathProvider(root),
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'all-in-one',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
+      OPEN_COWORK_CLOUD_WORKER_ID: 'shutdown-settle-worker',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  })
+
+  const firstClose = app.close()
+  const duplicateClose = app.close()
+  assert.equal(firstClose, duplicateClose)
+  await assert.rejects(firstClose, /Cloud app shutdown encountered/)
+  assert.equal(objectStoreCloseCalls, 1)
+  assert.equal(storeCloseCalls, 1)
 })
 
 test('cloud web role starts transport without processing worker commands inline', async () => {
@@ -1311,6 +1469,7 @@ test('cloud all-in-one app rejects malformed project source payloads', async () 
     runtime: new FakeRuntime(),
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'all-in-one',
+        OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
         OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
@@ -1358,6 +1517,7 @@ test('cloud web and worker roles hand off session runtime creation through the c
     runtime,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
         OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
@@ -1446,6 +1606,7 @@ test('cloud worker shutdown waits for an active command loop before closing runt
     runtime,
     env: {
       OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
       OPEN_COWORK_CLOUD_PROFILE: 'full',
       OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-drain',
@@ -1520,6 +1681,7 @@ test('cloud worker shutdown aborts and recovers active commands after drain grac
     runtime,
     env: {
       OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
       OPEN_COWORK_CLOUD_PROFILE: 'full',
       OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-forced-shutdown',
@@ -1596,6 +1758,7 @@ test('cloud worker reclaims stale running commands after worker lease expiry', a
     runtime,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
         OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-b',
@@ -1665,6 +1828,7 @@ test('cloud worker applies durable question replies and permission responses to 
     runtime,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
         OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
@@ -1746,6 +1910,7 @@ test('cloud worker can checkpoint workspace state to object storage after comman
     paths: workerPaths,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
         OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
@@ -1841,6 +2006,7 @@ test('cloud web and worker roles hand off workflow run execution through the con
     runtime,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
         OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
@@ -1987,6 +2153,7 @@ test('cloud scheduler role claims due workflows for workers without owning runti
     runtime,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
         OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
@@ -2111,6 +2278,7 @@ test('cloud worker liveness server exposes only the canonical liveness route', a
     runtime: new FakeRuntime(),
     env: {
       OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: 'development-process',
       OPEN_COWORK_CLOUD_PROFILE: 'full',
       OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_LIVENESS_PORT: String(livenessPort),
@@ -2388,10 +2556,25 @@ test('secret adapter boot canary passes a healthy adapter and fails a broken one
   const brokenAdapter: SecretAdapter = { mode: 'envelope-v1', protect: (value) => value, reveal: () => 'tampered' }
   assert.throws(() => assertSecretAdapterRoundTrips(brokenAdapter), /did not round-trip/)
 
+  const secretBackendSentinel = 'vault://tenant-a/key?access_key_id=AKIA_SENTINEL'
   const throwingAdapter: SecretAdapter = {
     mode: 'envelope-v1',
     protect: (value) => value,
-    reveal: () => { throw new Error('key unavailable') },
+    reveal: () => { throw new Error(secretBackendSentinel) },
   }
-  assert.throws(() => assertSecretAdapterRoundTrips(throwingAdapter), /boot canary/)
+  let canaryFailure: Error | null = null
+  try {
+    assertSecretAdapterRoundTrips(throwingAdapter)
+  } catch (error) {
+    canaryFailure = error as Error
+  }
+  assert.ok(canaryFailure)
+  assert.match(canaryFailure.message, /boot canary/)
+  const serializedFailure = [
+    canaryFailure.message,
+    canaryFailure.stack || '',
+    JSON.stringify(canaryFailure),
+    JSON.stringify(canaryFailure.cause),
+  ].join('\n')
+  assert.equal(serializedFailure.includes(secretBackendSentinel), false)
 })

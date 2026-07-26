@@ -3,6 +3,11 @@
 
 import {
   emptySessionView,
+  type McpStatus,
+  type PermissionRequest,
+  type RuntimeLoadingStatus,
+  type RuntimeNotification,
+  type SessionChangeSummary,
   type SessionInfo,
   type SessionPatch,
   type SessionView,
@@ -70,6 +75,7 @@ const DEFAULT_ENDPOINTS: Record<string, string> = {
   workflowPause: '/api/workflows/:workflowId/pause',
   workflowResume: '/api/workflows/:workflowId/resume',
   workflowArchive: '/api/workflows/:workflowId/archive',
+  workflowRotateWebhookSecret: '/api/workflows/:workflowId/rotate-webhook-secret',
   coordinationBoard: '/api/coordination/board',
   coordinationProjects: '/api/coordination/projects',
   coordinationProjectCreate: '/api/coordination/projects',

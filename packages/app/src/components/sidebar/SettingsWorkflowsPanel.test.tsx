@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { EffectiveAppSettings } from '@open-cowork/shared'
+import { createDisabledRuntimeToolingBridgeConsent, type EffectiveAppSettings } from '@open-cowork/shared'
 import { WorkflowSettingsPanel } from './SettingsWorkflowsPanel'
 
 function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSettings {
@@ -24,7 +24,7 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     notificationSounds: true,
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
-    runtimeToolingBridgeEnabled: true,
+    runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: true,

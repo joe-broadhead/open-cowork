@@ -5,14 +5,19 @@ import {
   createOpencodeV2Client,
 } from './opencode-client-kernel.js'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
-import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import {
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+} from 'node:fs'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
   getAppConfig,
   getAppDataDir,
   getConfiguredModelFallbacks,
 } from './config-loader-core.js'
-import { log } from '@open-cowork/shared/node'
+import { log, writeFileAtomic } from '@open-cowork/shared/node'
 import { ensureAgentToolBridge, stopAgentToolBridge } from './agent-tool-bridge.js'
 import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow/workflow-tool-bridge.js'
 import { ensureKnowledgeToolBridge, stopKnowledgeToolBridge } from './knowledge/knowledge-tool-bridge.js'
@@ -144,8 +149,65 @@ function normalizeDirectory(directory?: string | null) {
   return resolve(directory)
 }
 
-function ensureSandboxDirs() {
-  const base = getAppDataDir()
+function isContainedPath(root: string, target: string) {
+  const relativePath = relative(root, target)
+  return (
+    relativePath === ''
+    || (
+      relativePath !== '..'
+      && !relativePath.startsWith(`..${sep}`)
+      && !isAbsolute(relativePath)
+    )
+  )
+}
+
+function assertOwnedDirectory(path: string) {
+  try {
+    const stats = lstatSync(path)
+    if (!stats.isSymbolicLink() && stats.isDirectory()) return
+  } catch {
+    // Use the same fail-closed error for missing, unreadable, and unsafe paths.
+  }
+  throw new Error('Managed runtime directory boundary is unsafe.')
+}
+
+function ensureOwnedDirectoryTree(root: string, target: string) {
+  const normalizedRoot = resolve(root)
+  const normalizedTarget = resolve(target)
+  if (!isContainedPath(normalizedRoot, normalizedTarget)) {
+    throw new Error('Managed runtime directory is outside the app data boundary.')
+  }
+
+  // getAppDataDir establishes the trusted root. Do not create or traverse it
+  // here: an attacker-controlled symlink at that boundary must fail closed.
+  assertOwnedDirectory(normalizedRoot)
+  const realRoot = realpathSync(normalizedRoot)
+  let cursor = normalizedRoot
+  const relativeTarget = relative(normalizedRoot, normalizedTarget)
+  for (const segment of relativeTarget.split(sep).filter(Boolean)) {
+    cursor = join(cursor, segment)
+    try {
+      assertOwnedDirectory(cursor)
+    } catch (error) {
+      try {
+        mkdirSync(cursor, { mode: 0o700 })
+      } catch (mkdirError) {
+        if ((mkdirError as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      }
+      assertOwnedDirectory(cursor)
+    }
+
+    // Lexical containment is insufficient when any existing component can be
+    // swapped for a symlink. Verify the resolved directory remains below the
+    // trusted app-data root after every create/inspection.
+    if (!isContainedPath(realRoot, realpathSync(cursor))) {
+      throw new Error('Managed runtime directory escaped the app data boundary.')
+    }
+  }
+}
+
+export function ensureSandboxDirs() {
+  const base = resolve(getAppDataDir())
   const runtimePaths = getRuntimeEnvPaths()
   const dirs = [
     base,
@@ -159,7 +221,7 @@ function ensureSandboxDirs() {
     join(runtimePaths.cacheHome, 'opencode'),
   ]
   for (const dir of dirs) {
-    mkdirSync(dir, { recursive: true })
+    ensureOwnedDirectoryTree(base, dir)
   }
 }
 
@@ -169,18 +231,31 @@ export function getRuntimeOpencodeAuthPath() {
 
 // Provider auth is always app-owned: the managed runtime writes provider
 // auth under Cowork's runtime data directory, never into the user's real
-// OpenCode auth store. Prevent path redirection by replacing any symlinked
-// target with a regular app-owned path before credentials can be written.
+// OpenCode auth store. Existing state is accepted only when it is an
+// app-owned, private, single-link regular file. Anything else could redirect
+// or block credential I/O and must fail closed without modifying the target.
 export function ensureIsolatedProviderAuthStore() {
+  // This function is also called independently of full runtime startup.
+  // Re-establish the owned-directory boundary before touching credential data.
+  ensureSandboxDirs()
   const runtimeAuthPath = getRuntimeOpencodeAuthPath()
-  mkdirSync(dirname(runtimeAuthPath), { recursive: true })
 
   try {
-    if (lstatSync(runtimeAuthPath).isSymbolicLink()) {
-      rmSync(runtimeAuthPath, { force: true })
+    const stats = lstatSync(runtimeAuthPath)
+    const currentUid = typeof process.getuid === 'function' ? process.getuid() : null
+    const hasUnsafeOwner = currentUid !== null && stats.uid !== currentUid
+    const hasUnsafeMode = process.platform !== 'win32' && (stats.mode & 0o077) !== 0
+    if (
+      stats.isSymbolicLink()
+      || !stats.isFile()
+      || stats.nlink !== 1
+      || hasUnsafeOwner
+      || hasUnsafeMode
+    ) {
+      throw new Error('Managed provider auth target is unsafe.')
     }
-  } catch {
-    // No runtime auth path exists yet.
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
 }
 
@@ -202,7 +277,7 @@ export function writeRuntimeProviderApiAuth(providerID: string, key: string) {
     existing = {}
   }
   existing[providerID] = { type: 'api', key }
-  writeFileSync(runtimeAuthPath, `${JSON.stringify(existing, null, 2)}\n`, { mode: 0o600 })
+  writeFileAtomic(runtimeAuthPath, `${JSON.stringify(existing, null, 2)}\n`, { mode: 0o600 })
 }
 
 /**
@@ -321,6 +396,7 @@ async function createManagedOpencode(
   options: OpencodeServerOptions & { logLevel?: ManagedOpencodeServerLogLevel },
   opencodeBinPath?: string | null,
   runtimeConfigSource: RuntimeConfigSource = 'app',
+  toolingBridgeConsent?: RuntimeStartupPlan['settings']['runtimeToolingBridge'],
   onUnexpectedExit?: ((event: ManagedOpencodeServerUnexpectedExit) => void) | null,
 ) {
   const runtimePaths = getRuntimeEnvPathsForSource(runtimeConfigSource)
@@ -338,6 +414,7 @@ async function createManagedOpencode(
     adcPath,
     enableNativeWebSearch: shouldEnableNativeWebSearch(),
     serverAuth: auth,
+    toolingBridgeConsent,
   })
   const server = await createManagedOpencodeServer({
     ...options,
@@ -397,6 +474,15 @@ async function logRuntimeVersions(
 
 async function prepareRuntimeSandbox(plan: RuntimeStartupPlan) {
   ensureSandboxDirs()
+  // The process-only sweep runs before this boundary. Once every managed
+  // directory component is proven safe, reconcile the PID ledger as a second
+  // pass before any bridge, provider, or shell state is materialized.
+  await cleanupRuntimeOrphansFromLedger()
+  // Reconcile stale/broad host bridges before writing provider credentials or
+  // importing any shell-derived state into the managed runtime.
+  syncRuntimeHomeToolingBridge({
+    consent: plan.useMachineOpenCodeConfig ? undefined : plan.settings.runtimeToolingBridge,
+  })
   ensureIsolatedProviderAuthStore()
   // Write provider API keys into managed auth.json *before* OpenCode boots so
   // models.dev builtins (openrouter, etc.) see credentials on first load.
@@ -404,17 +490,27 @@ async function prepareRuntimeSandbox(plan: RuntimeStartupPlan) {
     syncRuntimeProviderAuthFromSettings()
   }
   await prepareShellEnvironment()
-  syncRuntimeHomeToolingBridge({
-    enabled: !plan.useMachineOpenCodeConfig && plan.settings.runtimeToolingBridgeEnabled,
-  })
 }
 
-async function cleanupRuntimeOrphansOnce() {
+async function cleanupRuntimeOrphansBeforeBoundary() {
   if (runtimeState.isOrphanCleanupComplete()) return
-  await cleanupOrphanedManagedOpencodeProcesses().catch((error) => {
-    log('runtime', `Orphaned runtime cleanup failed: ${error instanceof Error ? error.message : String(error)}`)
-  })
+  // A surviving prior runtime has same-user access to runtime-home. Do not
+  // inspect its filesystem-owned PID ledger before validating that boundary.
+  await cleanupOrphanedManagedOpencodeProcesses({ usePidLedger: false })
+}
+
+async function cleanupRuntimeOrphansFromLedger() {
+  if (runtimeState.isOrphanCleanupComplete()) return
+  await cleanupOrphanedManagedOpencodeProcesses()
   runtimeState.markOrphanCleanupComplete()
+}
+
+export async function runRuntimeStartupSecuritySequence(steps: {
+  cleanupOrphans: () => Promise<void>
+  prepareSandbox: () => Promise<void>
+}) {
+  await steps.cleanupOrphans()
+  await steps.prepareSandbox()
 }
 
 async function configureRuntimeTokenRefresh(plan: RuntimeStartupPlan) {
@@ -545,10 +641,12 @@ export async function startRuntime(
 
   const startRuntimePromise = (async () => {
     const plan = computeRuntimeStartupPlan()
-    await prepareRuntimeSandbox(plan)
+    await runRuntimeStartupSecuritySequence({
+      cleanupOrphans: cleanupRuntimeOrphansBeforeBoundary,
+      prepareSandbox: () => prepareRuntimeSandbox(plan),
+    })
     const bundledOpencodeEnv = applyBundledOpencodeCliEnvironment()
     await recordCurrentRuntimeComponentVerification({ bundledOpencodeEnv })
-    await cleanupRuntimeOrphansOnce()
     await configureRuntimeTokenRefresh(plan)
 
     if (!plan.useMachineOpenCodeConfig) {
@@ -562,6 +660,7 @@ export async function startRuntime(
         buildManagedServerOptions(config),
         bundledOpencodeEnv.opencodeBinPath,
         plan.runtimeConfigSource,
+        plan.useMachineOpenCodeConfig ? undefined : plan.settings.runtimeToolingBridge,
         options.onUnexpectedExit,
       )
 

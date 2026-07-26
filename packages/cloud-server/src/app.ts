@@ -1,17 +1,18 @@
 import { createPostgresKnowledgeStore } from '@open-cowork/runtime-host/knowledge/postgres-knowledge-store'
 import type { WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { createHmac, randomUUID } from 'node:crypto'
-import { constantTimeEquals as constantTimeStringEqual } from '@open-cowork/shared/node'
+import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
-import { createServer, type IncomingMessage } from 'node:http'
-import { splitTrustedProxyCidrs, type KnowledgeStore } from '@open-cowork/shared'
+import { createServer } from 'node:http'
+import {
+  normalizeCloudProjectSource,
+  splitTrustedProxyCidrs,
+  type KnowledgeStore,
+} from '@open-cowork/shared'
 import { DEFAULT_CONFIG, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '@open-cowork/shared'
 import { CloudArtifactService } from './artifact-service.ts'
 import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
 import {
-  DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
   parseCloudDeploymentTier,
   resolveCloudAbuseConfig,
   resolveCloudAuthConfig,
@@ -25,12 +26,15 @@ import type { ControlPlaneStore } from './control-plane-store.ts'
 import { InMemoryControlPlaneStore } from './in-memory-control-plane-store.ts'
 import {
   createCloudHttpServer,
-  CloudHttpError,
   type CloudAuthResolver,
   type CloudBrowserAuthProvider,
-  type CloudDesktopAuthConfig,
   type CloudHttpServer,
 } from './http-server.ts'
+import { compileCloudRuntimeCapabilityPolicy } from './cloud-runtime-capability-policy.ts'
+import {
+  createCloudStartupCleanupStack,
+  settleCloudCleanups,
+} from './cloud-app-cleanup.ts'
 import { CloudSseReplayHub } from './sse-replay.ts'
 import { CloudSsePgNotifyListener } from './sse-pg-notify.ts'
 import {
@@ -49,14 +53,11 @@ import {
 } from './byok-secret-store.ts'
 import {
   createOidcBrowserAuthProvider,
-  createOidcCloudAuthResolver,
-  type OidcCloudAuthResolverOptions,
 } from './oidc-auth.ts'
 import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvider } from './path-provider.ts'
 import { createPostgresControlPlaneStore, loadPgPool } from './postgres-control-plane-store.ts'
 import { createCloudProjectSourceService } from './project-source-service.ts'
 import { createCloudReadinessCheck } from './readiness.ts'
-import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
 import {
   assertCloudSecretKeyMaterialStrong,
@@ -66,7 +67,7 @@ import {
 } from './secret-adapter.ts'
 import { isManagedCloudSecretRef } from './secret-ref-policy.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
-import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender, type CloudPrincipal } from './session-service.ts'
+import { CloudSessionService, type ByokManagementPolicy, type CloudEmailSender } from './session-service.ts'
 import { CloudScheduler, type CloudRetentionOptions } from './scheduler.ts'
 import {
   DEFAULT_RUNTIME_DELTA_FLUSH_MS,
@@ -78,11 +79,20 @@ import { createStubBillingAdapter } from './stub-billing-adapter.ts'
 import { resolveEntitlementResolver } from './entitlements/entitlement-provider.ts'
 import { CloudWorker } from './worker.ts'
 import { createWorkerScopedRuntimeAdapter } from './worker-scoped-runtime-adapter.ts'
-import {
-  applyKnowledgeAgentRuntimeAugmentation,
-  buildKnowledgeAgentRuntimeAugmentation,
-} from './knowledge-agent-runtime.ts'
 import { createUnavailableRuntimeAdapter } from './unavailable-runtime-adapter.ts'
+import {
+  assertCloudExecutionIsolationCapability,
+  CloudExecutionIsolationError,
+  createDevelopmentProcessIsolationProvider,
+  developmentProcessIsolationCapability,
+  resolveCloudExecutionIsolationPolicy,
+  resolveCloudExecutionWorkerId,
+  type CloudExecutionIsolationCapability,
+  type CloudExecutionIsolationPolicy,
+  type CloudExecutionIsolationProvider,
+  type CloudExecutionProvisionInput,
+} from './execution-isolation.ts'
+import { createSandboxCloudExecutionIsolationProvider } from './sandbox-execution-isolation-provider.ts'
 import { isLoopbackCloudHost, isNonPublicCloudHost } from './cloud-host-policy.ts'
 import {
   createObjectWorkspaceCheckpointStore,
@@ -91,7 +101,45 @@ import {
 } from './workspace-checkpoint-store.ts'
 import { type Env, envValue, parseBoolean, parsePort, parsePositiveInt, resolveEnvRef } from './cloud-config-parse.ts'
 import { resolveCloudPublicBranding } from './cloud-branding-config.ts'
+import {
+  createDefaultCloudRuntimeFactory,
+  prepareDefaultCloudRuntimeFactoryInput,
+  resolveCloudKnowledgeAgentOrigin,
+  resolveCloudKnowledgeRuntimeAssets,
+  type CloudRuntimeFactory,
+  type KnowledgeAgentSpawnOptions,
+} from './cloud-runtime-composition.ts'
+import {
+  createApiTokenCloudAuthResolver,
+  createCloudAuthResolverForConfig,
+  createCloudDesktopAuthConfig,
+  createCompositeCloudAuthResolver,
+  createManagedWorkerCloudAuthResolver,
+} from './cloud-auth-resolvers.ts'
 export { resolveCloudPublicBranding } from './cloud-branding-config.ts'
+export {
+  createApiTokenCloudAuthResolver,
+  createCloudAuthResolverForConfig,
+  createCloudDesktopAuthConfig,
+  createCompositeCloudAuthResolver,
+  createHeaderCloudAuthResolver,
+  createLocalCloudAuthResolver,
+  createManagedWorkerCloudAuthResolver,
+  signHeaderCloudAuthRequest,
+} from './cloud-auth-resolvers.ts'
+export {
+  cloudKnowledgeRuntimeEligible,
+  createDefaultCloudRuntimeFactory,
+  prepareDefaultCloudRuntimeFactoryInput,
+  resolveCloudKnowledgeAgentOrigin,
+  resolveCloudKnowledgeMcpScriptPath,
+  resolveCloudKnowledgeRuntimeAssets,
+} from './cloud-runtime-composition.ts'
+export type {
+  CloudRoleRuntimeFactoryInput,
+  CloudRuntimeFactory,
+  KnowledgeAgentSpawnOptions,
+} from './cloud-runtime-composition.ts'
 
 const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
 const ALLOW_EPHEMERAL_STORAGE_ENV = 'OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE'
@@ -102,32 +150,6 @@ const RUN_MIGRATIONS_ENV = 'OPEN_COWORK_CLOUD_RUN_MIGRATIONS'
 // the unchanged poll loop. ON only wakes the matching SSE topic earlier; polling remains
 // the guaranteed backstop. Postgres-only (the in-memory store path ignores it).
 const SSE_PG_NOTIFY_ENV = 'OPEN_COWORK_CLOUD_SSE_PG_NOTIFY'
-const HEADER_AUTH_SIGNED_HEADERS = [
-  'x-open-cowork-tenant-id',
-  'x-open-cowork-tenant-name',
-  'x-open-cowork-user-id',
-  'x-open-cowork-user-email',
-  'x-open-cowork-user-role',
-] as const
-
-export type CloudRoleRuntimeFactoryInput = {
-  paths: PathProvider
-  policy: CloudRuntimePolicy
-  env: Env
-  config: OpenCoworkConfig
-  execution: {
-    tenantId: string
-    sessionId: string
-    profileName?: string | null
-  }
-  runtimeConfig: import('@opencode-ai/sdk/v2/server').ServerOptions['config']
-  onUnexpectedExit?: () => void
-}
-
-export type CloudRuntimeFactory = (
-  input: CloudRoleRuntimeFactoryInput,
-) => Promise<CloudRuntimeAdapter> | CloudRuntimeAdapter
-
 export type CloudControlPlaneStoreFactoryInput = {
   config: OpenCoworkConfig
   env: Env
@@ -164,6 +186,7 @@ export type CloudAppOptions = {
   billingAdapter?: BillingAdapter | null
   runtime?: CloudRuntimeAdapter
   runtimeFactory?: CloudRuntimeFactory
+  executionIsolationProvider?: CloudExecutionIsolationProvider
   paths?: PathProvider
   checkpointStore?: WorkspaceCheckpointStore | null
   checkpointsEnabled?: boolean
@@ -200,6 +223,8 @@ export type CloudApp = {
   scheduler: CloudScheduler | null
   server: CloudHttpServer | null
   observability: CloudObservabilityAdapter | null
+  executionIsolationPolicy: CloudExecutionIsolationPolicy
+  executionIsolationCapability: CloudExecutionIsolationCapability
   url: string | null
   close: () => Promise<void>
 }
@@ -294,21 +319,6 @@ async function resolveCloudOidcClientSecretForRuntime(config: Pick<OpenCoworkCon
   return resolveConfiguredSecretRef(clientSecretRef, env)
 }
 
-// Filesystem path to the bundled cloud knowledge MCP. build-cloud.mjs bundles
-// mcps/knowledge/src/index.ts → apps/desktop/dist/cloud/mcp-knowledge.mjs, which
-// sits next to the bundled cloud entrypoint (this module). An env override lets
-// non-default deployments relocate it; null/missing means the agent path is not
-// wired (fail closed). Resolved lazily so a bad URL never throws at import time.
-export function resolveCloudKnowledgeMcpScriptPath(env: Env = process.env): string | null {
-  const override = envValue(env, 'OPEN_COWORK_CLOUD_KNOWLEDGE_MCP_PATH')
-  if (override) return override
-  try {
-    return fileURLToPath(new URL('./mcp-knowledge.mjs', import.meta.url))
-  } catch {
-    return null
-  }
-}
-
 export function resolveCloudInternalToken(env: Env = process.env) {
   return envValue(env, 'OPEN_COWORK_CLOUD_INTERNAL_TOKEN')
     || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF') || undefined, env)
@@ -401,53 +411,6 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
   }
 }
 
-// Per-session knowledge-agent spawn options. When all three are present the
-// default runtime factory mints a per-session token and injects the knowledge
-// MCP + its env so a cloud coworker can propose a knowledge edit. Any missing
-// field ⇒ nothing is injected (fail closed).
-export type KnowledgeAgentSpawnOptions = {
-  knowledgeEnabled: boolean
-  secret: string | null
-  publicUrl: string | null
-  mcpScriptPath: string | null
-}
-
-export function createDefaultCloudRuntimeFactory(
-  knowledgeAgent: KnowledgeAgentSpawnOptions,
-): CloudRuntimeFactory {
-  return (input: CloudRoleRuntimeFactoryInput) => {
-    // Mint the per-session token + inject the knowledge MCP/env only for THIS
-    // session's tenant. Returns null (no augmentation) when fail-closed.
-    const augmentation = buildKnowledgeAgentRuntimeAugmentation({
-      knowledgeEnabled: knowledgeAgent.knowledgeEnabled,
-      secret: knowledgeAgent.secret,
-      publicUrl: knowledgeAgent.publicUrl,
-      mcpScriptPath: knowledgeAgent.mcpScriptPath,
-      execution: input.execution,
-    })
-    const { env, runtimeConfig } = applyKnowledgeAgentRuntimeAugmentation({
-      env: input.env,
-      runtimeConfig: input.runtimeConfig,
-      augmentation,
-    })
-    return createNodeOpencodeCloudRuntimeAdapter({
-      paths: input.paths,
-      env: env as NodeJS.ProcessEnv,
-      // The augmentation only ever adds a valid local-MCP entry to `mcp`; this
-      // module owns the OpenCode `Config` typing (the helper stays SDK-free so it
-      // sits outside the OpenCode SDK boundary), so re-narrow back to it here.
-      config: runtimeConfig as CloudRoleRuntimeFactoryInput['runtimeConfig'],
-      // Dual delivery: OPENCODE_CONFIG_DIR + session XDG opencode.json (see
-      // createNodeOpencodeCloudRuntimeAdapter). V2 reloads config from XDG on
-      // session turns; the runtime provider id is `or` (not models.dev openrouter).
-      configDelivery: 'ephemeral-file',
-      cwd: input.paths.resolveWorkspacePath(input.execution.tenantId, input.execution.sessionId),
-      // Crash recovery: forward the cache-eviction hook so a dead managed child is rebuilt.
-      onUnexpectedExit: input.onUnexpectedExit,
-    })
-  }
-}
-
 export function listConfiguredByokProviderIds(config: OpenCoworkConfig) {
   const configuredProviderIds = (config.providers.available || [])
     .map((providerId) => providerId.trim().toLowerCase())
@@ -461,224 +424,6 @@ export function listConfiguredByokProviderIds(config: OpenCoworkConfig) {
     })
   if (providerIds.length > 0) return Array.from(new Set(providerIds))
   return configuredProviderIds.length > 0 ? [] : null
-}
-
-function readHeader(req: IncomingMessage, name: string) {
-  const value = req.headers[name.toLowerCase()]
-  if (Array.isArray(value)) return value[0] || null
-  return value || null
-}
-
-
-
-export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> = {}, options: {
-  headerSecret?: string | null
-  requireSignedHeaders?: boolean
-  maxSignatureAgeMs?: number
-  now?: () => Date
-} = {}): CloudAuthResolver {
-  return (req) => {
-    const expectedSecret = options.headerSecret?.trim()
-    if (expectedSecret && !constantTimeStringEqual(readHeader(req, 'x-open-cowork-header-auth-secret'), expectedSecret)) {
-      throw new CloudHttpError(401, 'Trusted header authentication secret is invalid.')
-    }
-    // JOE-832: whenever a shared secret is configured, require HMAC-signed
-    // identity headers. Unsigned role headers cannot elevate to owner/admin.
-    const mustVerifySignature = Boolean(expectedSecret) || Boolean(options.requireSignedHeaders)
-    if (mustVerifySignature) {
-      if (!expectedSecret) {
-        throw new CloudHttpError(401, 'Trusted header authentication requires a configured secret for signed headers.')
-      }
-      assertHeaderAuthSignature(req, expectedSecret, {
-        maxAgeMs: options.maxSignatureAgeMs || DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
-        now: options.now,
-      })
-    }
-    const tenantId = readHeader(req, 'x-open-cowork-tenant-id') || defaults.tenantId || 'default'
-    const userId = readHeader(req, 'x-open-cowork-user-id') || defaults.userId || 'local-user'
-    const email = readHeader(req, 'x-open-cowork-user-email') || defaults.email || 'local@example.test'
-    const role = readHeader(req, 'x-open-cowork-user-role') || defaults.role || 'member'
-    if (role !== 'owner' && role !== 'admin' && role !== 'member') {
-      throw new CloudHttpError(401, 'Trusted header authentication role is invalid.')
-    }
-    if (!mustVerifySignature && (role === 'owner' || role === 'admin')) {
-      throw new CloudHttpError(401, 'Trusted header authentication refuses elevated roles without signed headers.')
-    }
-    return {
-      tenantId,
-      orgId: defaults.orgId || tenantId,
-      tenantName: readHeader(req, 'x-open-cowork-tenant-name') || defaults.tenantName || tenantId,
-      userId,
-      accountId: defaults.accountId || userId,
-      email,
-      role,
-      authSource: 'header',
-    }
-  }
-}
-
-function canonicalHeaderAuthPayload(req: IncomingMessage, timestamp: string) {
-  return [
-    'v1',
-    timestamp,
-    ...HEADER_AUTH_SIGNED_HEADERS.map((name) => readHeader(req, name) || ''),
-  ].join('\n')
-}
-
-export function signHeaderCloudAuthRequest(input: {
-  headers: Record<string, string | undefined>
-  secret: string
-  timestamp: string
-}) {
-  const payload = [
-    'v1',
-    input.timestamp,
-    ...HEADER_AUTH_SIGNED_HEADERS.map((name) => input.headers[name] || input.headers[name.toLowerCase()] || ''),
-  ].join('\n')
-  return `v1=${createHmac('sha256', input.secret).update(payload).digest('hex')}`
-}
-
-function assertHeaderAuthSignature(req: IncomingMessage, secret: string, options: {
-  maxAgeMs: number
-  now?: () => Date
-}) {
-  const timestamp = readHeader(req, 'x-open-cowork-header-auth-timestamp')
-  const signature = readHeader(req, 'x-open-cowork-header-auth-signature')
-  if (!timestamp || !signature) {
-    throw new CloudHttpError(401, 'Trusted header authentication signature is required.')
-  }
-  const timestampMs = Number(timestamp) * 1000
-  if (!Number.isFinite(timestampMs)) {
-    throw new CloudHttpError(401, 'Trusted header authentication timestamp is invalid.')
-  }
-  const nowMs = (options.now?.() || new Date()).getTime()
-  if (Math.abs(nowMs - timestampMs) > options.maxAgeMs) {
-    throw new CloudHttpError(401, 'Trusted header authentication timestamp is outside the allowed window.')
-  }
-  const expected = `v1=${createHmac('sha256', secret).update(canonicalHeaderAuthPayload(req, timestamp)).digest('hex')}`
-  if (!constantTimeStringEqual(signature, expected)) {
-    throw new CloudHttpError(401, 'Trusted header authentication signature is invalid.')
-  }
-}
-
-export function createLocalCloudAuthResolver(defaults: Partial<CloudPrincipal> = {}): CloudAuthResolver {
-  return () => ({
-    tenantId: defaults.tenantId || 'default',
-    orgId: defaults.orgId || defaults.tenantId || 'default',
-    tenantName: defaults.tenantName || defaults.tenantId || 'Default',
-    userId: defaults.userId || 'local-user',
-    accountId: defaults.accountId || defaults.userId || 'local-user',
-    email: defaults.email || 'local@example.test',
-    role: defaults.role || 'owner',
-    authSource: 'local',
-  })
-}
-
-function readBearerToken(req: IncomingMessage) {
-  const raw = readHeader(req, 'authorization') || ''
-  return raw.toLowerCase().startsWith('bearer ') ? raw.slice('bearer '.length).trim() : ''
-}
-
-export function createApiTokenCloudAuthResolver(store: ControlPlaneStore): CloudAuthResolver {
-  return async (req) => {
-    const token = readBearerToken(req)
-    if (!token) throw new CloudHttpError(401, 'Cloud API token authorization is required.')
-    const record = await store.findApiTokenByPlaintext(token)
-    if (!record) throw new CloudHttpError(401, 'Cloud API token is invalid or expired.')
-    const membership = await store.resolvePrincipalMembership({
-      tenantId: record.orgId,
-      accountId: record.accountId,
-    })
-    if (!membership || membership.membership.status !== 'active') {
-      throw new CloudHttpError(401, 'Cloud API token membership is not active.')
-    }
-    return {
-      tenantId: membership.org.tenantId,
-      orgId: membership.org.orgId,
-      tenantName: membership.org.name,
-      userId: membership.account.accountId,
-      accountId: membership.account.accountId,
-      email: membership.account.email,
-      role: membership.membership.role,
-      authSource: 'api_token',
-      tokenId: record.tokenId,
-      tokenScopes: record.scopes,
-    }
-  }
-}
-
-export function createManagedWorkerCloudAuthResolver(store: ControlPlaneStore): CloudAuthResolver {
-  return async (req) => {
-    const token = readBearerToken(req)
-    if (!token) throw new CloudHttpError(401, 'Managed worker authorization is required.')
-    if (!token.startsWith('ocw_')) throw new CloudHttpError(401, 'Managed worker authorization is required.')
-    const resolved = await store.findManagedWorkerCredentialByPlaintext(token)
-    if (!resolved) throw new CloudHttpError(401, 'Managed worker credential is invalid or expired.')
-    return {
-      tenantId: resolved.worker.tenantId || resolved.pool.tenantId || resolved.pool.orgId,
-      orgId: resolved.pool.orgId,
-      tenantName: resolved.pool.name,
-      userId: resolved.worker.workerId,
-      accountId: resolved.worker.workerId,
-      email: `${resolved.worker.workerId}@workers.open-cowork.local`,
-      role: 'member',
-      authSource: 'worker',
-      workerId: resolved.worker.workerId,
-      workerPoolId: resolved.pool.poolId,
-      workerCredentialId: resolved.credential.credentialId,
-      workerScopes: resolved.credential.scopes,
-    }
-  }
-}
-
-export function createCompositeCloudAuthResolver(...resolvers: CloudAuthResolver[]): CloudAuthResolver {
-  return async (req) => {
-    let lastError: unknown = null
-    for (const resolver of resolvers) {
-      try {
-        return await resolver(req)
-      } catch (error) {
-        // Only a clean "credential not recognized" signal (CloudHttpError 401) may fall
-        // through to the next resolver. Anything else — a DB timeout, a provider outage,
-        // a programming error — is an infrastructure failure; masking it as 401 would
-        // silently degrade authentication to a laxer resolver, so surface it instead.
-        if (!(error instanceof CloudHttpError) || error.status !== 401) throw error
-        lastError = error
-      }
-    }
-    if (lastError instanceof CloudHttpError) throw lastError
-    throw new CloudHttpError(401, 'Cloud authentication failed.')
-  }
-}
-
-export function createCloudAuthResolverForConfig(
-  config: Pick<OpenCoworkConfig, 'cloud'>,
-  options: OidcCloudAuthResolverOptions = {},
-): CloudAuthResolver {
-  if (config.cloud.auth.mode === 'oidc') {
-    return createOidcCloudAuthResolver(config.cloud.auth, options)
-  }
-  if (config.cloud.auth.mode === 'header') {
-    return createHeaderCloudAuthResolver({}, {
-      headerSecret: config.cloud.auth.headerSecret,
-      // Signature verification is mandatory whenever a secret is set (JOE-832).
-      // headerAllowUnsigned is ignored once a secret exists; loopback demos without
-      // a secret remain the only unsigned path.
-      requireSignedHeaders: Boolean(config.cloud.auth.headerSecret),
-      maxSignatureAgeMs: config.cloud.auth.headerMaxSignatureAgeMs,
-    })
-  }
-  return createLocalCloudAuthResolver()
-}
-
-export function createCloudDesktopAuthConfig(auth: CloudAuthConfig): CloudDesktopAuthConfig | null {
-  if (auth.mode !== 'oidc' || !auth.issuerUrl?.trim() || !auth.clientId?.trim()) return null
-  return {
-    mode: 'oidc',
-    issuerUrl: auth.issuerUrl.trim(),
-    clientId: auth.clientId.trim(),
-    scope: 'openid email profile offline_access',
-  }
 }
 
 export { isLoopbackCloudHost, isNonPublicCloudHost } from './cloud-host-policy.ts'
@@ -967,10 +712,15 @@ export function assertSecretAdapterRoundTrips(secretAdapter: SecretAdapter) {
   let revealed: string
   try {
     revealed = secretAdapter.reveal(secretAdapter.protect(probe, 'boot-canary'), 'boot-canary')
-  } catch (error) {
+  } catch {
+    // Secret backends commonly include key references, vault endpoints, or
+    // provider response details in their errors. Startup failures are logged,
+    // so keep this boundary deliberately generic and do not retain the raw
+    // adapter error as a cause.
     throw new Error(
-      `Cloud secret adapter failed its encrypt/decrypt boot canary (${error instanceof Error ? error.message : String(error)}). The configured cloud secret key cannot round-trip — refusing to start a worker/scheduler that would fail to reveal stored secrets at runtime.`,
-      { cause: error },
+      'Cloud secret adapter failed its encrypt/decrypt boot canary. '
+      + 'The configured cloud secret key cannot round-trip — refusing to start '
+      + 'a worker/scheduler that would fail to reveal stored secrets at runtime.',
     )
   }
   if (revealed !== probe) {
@@ -1339,8 +1089,106 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const observability = hasObservabilityOverride
     ? options.observability || null
     : createCloudObservabilityFromEnv(env)
-  const paths = options.paths || createCloudPathProvider(envOptions.root)
+  const startupCleanup = createCloudStartupCleanupStack()
+  startupCleanup.add(() => observability?.close?.())
+  try {
+    const paths = options.paths || createCloudPathProvider(envOptions.root)
+  const executionIsolationPolicy = resolveCloudExecutionIsolationPolicy({
+    deploymentTier: envOptions.deploymentTier,
+    role: policy.role,
+    env,
+  })
+  const cloudWorkerIdentity = shouldRunCloudWorker(policy.role)
+    ? resolveCloudExecutionWorkerId({
+        deploymentTier: envOptions.deploymentTier,
+        role: policy.role,
+        isolationMode: executionIsolationPolicy.mode,
+        env,
+      })
+    : {
+        workerId: `${policy.role}-worker`,
+        usedDevelopmentFallback: false,
+      }
+  const cloudWorkerId = cloudWorkerIdentity.workerId
+  const runtimeCapabilityPolicy = compileCloudRuntimeCapabilityPolicy({
+    appConfig: config,
+    policy,
+  })
+  if (executionIsolationPolicy.required && options.runtime) {
+    throw new Error('Production Cloud workers cannot bypass the execution isolation provider with a shared runtime adapter.')
+  }
+  if (
+    executionIsolationPolicy.mode === 'external-provider'
+    && !options.executionIsolationProvider
+  ) {
+    throw new CloudExecutionIsolationError(
+      'external_isolation_provider_missing',
+      'External Cloud execution isolation requires an injected provider.',
+    )
+  }
+  if (
+    executionIsolationPolicy.mode !== 'development-process'
+    && options.runtimeFactory
+    && !options.executionIsolationProvider
+  ) {
+    throw new Error('Isolated Cloud runtime factory overrides require an explicit execution isolation provider.')
+  }
+  const knowledgeRuntime = resolveCloudKnowledgeRuntimeAssets({
+    policy,
+    isolationPolicy: executionIsolationPolicy,
+    env,
+  })
+  let knowledgeAgentSpawnOptions: KnowledgeAgentSpawnOptions | null = null
+  const defaultSandboxIsolationProvider = executionIsolationPolicy.mode === 'sandbox'
+    ? createSandboxCloudExecutionIsolationProvider({
+        policy: executionIsolationPolicy,
+        workerId: cloudWorkerId,
+        runtimeRootPath: envOptions.root,
+        observability,
+        runtimeAssetPaths: knowledgeRuntime.runtimeAssetPaths,
+        prepareInput(input) {
+          return knowledgeAgentSpawnOptions
+            ? prepareDefaultCloudRuntimeFactoryInput(input, knowledgeAgentSpawnOptions)
+            : input
+        },
+      })
+    : null
+  const executionIsolationProvider = options.executionIsolationProvider
+    || defaultSandboxIsolationProvider
+  const isolationProviderCleanup = startupCleanup.add(
+    () => executionIsolationProvider?.close?.(),
+  )
+  const executionIsolationCapability = executionIsolationProvider
+    ? await executionIsolationProvider.capability()
+    : developmentProcessIsolationCapability()
+  assertCloudExecutionIsolationCapability(
+    executionIsolationPolicy,
+    executionIsolationCapability,
+  )
+  if (executionIsolationPolicy.warning) {
+    await recordCloudLog(observability, {
+      level: 'warn',
+      name: 'cloud.execution_isolation.development_only',
+      message: executionIsolationPolicy.warning,
+      attributes: {
+        deployment_tier: envOptions.deploymentTier,
+        isolation_mode: executionIsolationPolicy.mode,
+      },
+    })
+  }
+  if (cloudWorkerIdentity.usedDevelopmentFallback) {
+    await recordCloudLog(observability, {
+      level: 'warn',
+      name: 'cloud.worker_identity.development_fallback',
+      message: 'Development-only Cloud execution is using a non-unique fallback worker identity.',
+      attributes: {
+        cloud_role: policy.role,
+        isolation_mode: executionIsolationPolicy.mode,
+      },
+    })
+  }
   const store = options.store || await (options.storeFactory || createControlPlaneStoreForCloud)({ config, env })
+  startupCleanup.add(() => store.close?.())
   // When the control plane resolves to Postgres (same condition as
   // createControlPlaneStoreForCloud), back cloud knowledge with the same Postgres
   // (cloud_knowledge_* tables) so it is durable + shared across replicas rather
@@ -1359,6 +1207,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     && knowledgeControlPlaneUrl
     ? createPostgresKnowledgeStore(loadPgPool(knowledgeControlPlaneUrl), { ownsPool: true })
     : null
+  if (ownedKnowledgeStore) {
+    startupCleanup.add(() => ownedKnowledgeStore.close?.())
+  }
   const knowledgeStore: KnowledgeStore | null = options.knowledgeStore ?? ownedKnowledgeStore
   // Instrument the durable object store so get/put/head/delete (and, transitively, checkpoint
   // save/restore) emit success/error + latency metrics (audit P1-O4).
@@ -1366,6 +1217,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths }),
     observability,
   )
+  startupCleanup.add(() => objectStore.close?.())
   const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env, {
     requireStrongKeyMaterial: envOptions.deploymentTier === 'public_production',
   })
@@ -1453,18 +1305,76 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   // secret + the stable public URL. Any missing piece ⇒ no token minted, no env
   // injected, and the route fails closed.
   const knowledgeAgentSecret = await resolveCloudCookieSecretForRuntime(resolvedAuthConfig, env)
-  // The knowledge MCP requires a loopback http endpoint. In all-in-one the worker
-  // (which mints the per-session token + spawns the MCP) is co-located with the web
-  // role (which verifies the token on the propose route), so the MCP reaches it over
-  // loopback at the bind port — regardless of the (possibly https) public URL. Split
-  // roles can't reach the web over loopback and the MCP rejects a remote https URL,
-  // so they fall through to the public URL which fails closed at the MCP — i.e. the
-  // cloud agent write-path is effectively all-in-one-only today (broadening to split
-  // would need the MCP to accept a same-origin https endpoint).
-  const knowledgeAgentPublicUrl = policy.role === 'all-in-one'
-    ? `http://127.0.0.1:${options.port ?? envOptions.port}`
-    : (envOptions.publicUrl?.trim() || null)
-  const knowledgeAgentMcpScriptPath = resolveCloudKnowledgeMcpScriptPath(env)
+  // Only the shared-process development runtime can use the web process's host
+  // loopback. Sandboxed/split workers use the stable HTTPS origin through their
+  // declared restricted network; the provider probes the exact token-auth
+  // proposal route from inside each boundary before admitting the session.
+  const knowledgeAgentPublicUrl = resolveCloudKnowledgeAgentOrigin({
+    isolationMode: executionIsolationPolicy.mode,
+    role: policy.role,
+    allInOnePort: options.port ?? envOptions.port,
+    publicUrl: envOptions.publicUrl,
+  })
+  knowledgeAgentSpawnOptions = {
+    knowledgeEnabled: knowledgeRuntime.knowledgeEnabled,
+    secret: knowledgeAgentSecret,
+    publicUrl: knowledgeAgentPublicUrl,
+    mcpScriptPath: knowledgeRuntime.mcpScriptPath,
+  }
+  const runtimeFactory = options.runtimeFactory || createDefaultCloudRuntimeFactory(
+    knowledgeAgentSpawnOptions,
+  )
+  const effectiveIsolationProvider = executionIsolationProvider
+    || createDevelopmentProcessIsolationProvider(runtimeFactory)
+  const projectSources = createCloudProjectSourceService({
+    policy,
+    objectStore,
+    credentialResolver: (credentialRef) => resolveCloudSecretRef(credentialRef, { env }),
+  })
+  const prepareWorkerRuntimeProvision = async (input: Pick<
+    CloudExecutionProvisionInput,
+    'execution' | 'paths'
+  >) => {
+    await mkdir(
+      input.paths.resolveWorkspacePath(
+        input.execution.tenantId,
+        input.execution.sessionId,
+      ),
+      { recursive: true },
+    )
+    let restoredCheckpointEntries = 0
+    if (checkpointStore) {
+      try {
+        const restored = await checkpointStore.restoreSessionCheckpoint({
+          tenantId: input.execution.tenantId,
+          sessionId: input.execution.sessionId,
+          roots: defaultCloudSessionCheckpointRoots(
+            input.paths,
+            input.execution.tenantId,
+            input.execution.sessionId,
+          ),
+        })
+        restoredCheckpointEntries = restored.restoredEntries
+      } catch (error) {
+        if (!isMissingCheckpointError(error)) throw error
+      }
+    }
+    if (restoredCheckpointEntries === 0) {
+      const projection = await store.getSessionProjection(
+        input.execution.tenantId,
+        input.execution.sessionId,
+      )
+      const source = normalizeCloudProjectSource(projection?.view?.projectSource)
+      if (source) {
+        await projectSources.restoreProjectSource({
+          tenantId: input.execution.tenantId,
+          sessionId: input.execution.sessionId,
+          source,
+          paths: input.paths,
+        })
+      }
+    }
+  }
   const runtime = options.runtime || (
     shouldRunCloudWorker(policy.role)
       ? createWorkerScopedRuntimeAdapter({
@@ -1478,22 +1388,19 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
             checkEntitlement: byokPolicy.checkRuntimeEntitlement,
           },
           observability,
-          runtimeFactory: options.runtimeFactory || createDefaultCloudRuntimeFactory({
-            knowledgeEnabled: policy.features.knowledge,
-            secret: knowledgeAgentSecret,
-            publicUrl: knowledgeAgentPublicUrl,
-            mcpScriptPath: knowledgeAgentMcpScriptPath,
-          }),
+          runtimeFactory,
+          isolationPolicy: executionIsolationPolicy,
+          isolationProvider: effectiveIsolationProvider,
+          prepareProvision: prepareWorkerRuntimeProvision,
           maxRuntimeEntries: options.runtimeCacheMaxEntries ?? envOptions.runtimeCacheMaxEntries,
           runtimeIdleTtlMs: options.runtimeCacheIdleTtlMs ?? envOptions.runtimeCacheIdleTtlMs,
         })
       : createUnavailableRuntimeAdapter()
   )
-  const projectSources = createCloudProjectSourceService({
-    policy,
-    objectStore,
-    credentialResolver: (credentialRef) => resolveCloudSecretRef(credentialRef, { env }),
-  })
+  const runtimeOwnsIsolationProvider = !options.runtime
+    && shouldRunCloudWorker(policy.role)
+  if (runtimeOwnsIsolationProvider) isolationProviderCleanup.deactivate()
+  startupCleanup.add(() => runtime.close?.())
   // Resolved before the service so the same signing secret powers both session cookies and the
   // stateless team-invite tokens. Invites are a cloud-web capability; null for non-web roles.
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
@@ -1539,6 +1446,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     // Envelope-encryption adapter for enterprise SSO IdP secrets (#895).
     secretAdapter,
   )
+  await service.domains.workflows.migrateLegacyWebhookSecrets()
   const artifacts = new CloudArtifactService(service, objectStore)
   const sessionCookies = shouldRunCloudWeb(policy.role)
     ? hasSessionCookieOverride
@@ -1575,37 +1483,26 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     ? new CloudWorker(
         store,
         service,
-        envValue(env, 'OPEN_COWORK_CLOUD_WORKER_ID') || `${policy.role}-worker`,
+        cloudWorkerId,
         30_000,
         {
-          async restoreBeforeCommands(lease) {
-            const leasePaths = createCloudSessionPathProvider(paths, lease.tenantId, lease.sessionId)
-            await mkdir(leasePaths.resolveWorkspacePath(lease.tenantId, lease.sessionId), { recursive: true })
-            let restoredCheckpointEntries = 0
-            if (checkpointStore) {
-              try {
-                const restored = await checkpointStore.restoreSessionCheckpoint({
-                  tenantId: lease.tenantId,
-                  sessionId: lease.sessionId,
-                  roots: defaultCloudSessionCheckpointRoots(leasePaths, lease.tenantId, lease.sessionId),
-                })
-                restoredCheckpointEntries = restored.restoredEntries
-              } catch (error) {
-                if (!isMissingCheckpointError(error)) throw error
+          ...(options.runtime
+            ? {
+                async restoreBeforeCommand(lease) {
+                  await prepareWorkerRuntimeProvision({
+                    paths: createCloudSessionPathProvider(
+                      paths,
+                      lease.tenantId,
+                      lease.sessionId,
+                    ),
+                    execution: {
+                      tenantId: lease.tenantId,
+                      sessionId: lease.sessionId,
+                    },
+                  })
+                },
               }
-            }
-            if (restoredCheckpointEntries === 0) {
-              const source = await service.domains.projectSources.getSessionProjectSource(lease.tenantId, lease.sessionId)
-              if (source) {
-                await projectSources.restoreProjectSource({
-                  tenantId: lease.tenantId,
-                  sessionId: lease.sessionId,
-                  source,
-                  paths: leasePaths,
-                })
-              }
-            }
-          },
+            : {}),
           async saveAfterCommand(lease) {
             if (!checkpointStore) return
             const leasePaths = createCloudSessionPathProvider(paths, lease.tenantId, lease.sessionId)
@@ -1625,6 +1522,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         },
       )
     : null
+  if (worker) {
+    startupCleanup.add(async () => {
+      worker.beginShutdown()
+      await worker.completeShutdown({ drained: false })
+    })
+  }
   const retention: CloudRetentionOptions = {
     // Default null (disabled) — retention is opt-in per the operator's compliance policy.
     channelDeliveryMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_CHANNEL_DELIVERY_MS'), 0) || null,
@@ -1667,6 +1570,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         }))),
       })
     : null
+  if (runtimeDeltaCoalescer) {
+    startupCleanup.add(() => runtimeDeltaCoalescer.flushAll())
+  }
   const runtimeUnsubscribe = runtimeDeltaCoalescer && runtime.subscribeEvents
     ? await runtime.subscribeEvents((event) => runtimeDeltaCoalescer.handle(event), {
       onDroppedEvent(event) {
@@ -1689,6 +1595,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       },
     })
     : null
+  if (runtimeUnsubscribe) {
+    startupCleanup.add(() => runtimeUnsubscribe())
+  }
   // Worker/scheduler roles run no HTTP server, so a liveness heartbeat + a tiny /livez
   // server lets the orchestrator restart a wedged-event-loop pod. The web (and all-in-one)
   // role already exposes /livez through its main server, so it needs neither.
@@ -1704,6 +1613,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       loopHeartbeat ?? undefined,
     )
     : null
+  if (stopWorkerLoop) startupCleanup.add(() => stopWorkerLoop())
   const stopSchedulerLoop = scheduler
     ? startSchedulerLoop(
       scheduler,
@@ -1713,6 +1623,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       loopHeartbeat ?? undefined,
     )
     : null
+  if (stopSchedulerLoop) startupCleanup.add(() => stopSchedulerLoop())
   // Opt-in via an explicitly-set port (the Helm chart sets it for worker/scheduler).
   // Unset (local/test runs) ⇒ no server, so the fixed port can't conflict across them.
   const livenessPort = parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_LIVENESS_PORT'), 0)
@@ -1723,6 +1634,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       () => loopHeartbeat.ageMs() < Math.max(30_000, Math.max(workerPollMs, schedulerPollMs) * 10),
     )
     : null
+  if (livenessServer) startupCleanup.add(() => livenessServer.close())
 
   const webhookSecurity = isWorkflowWebhookSecurityStore(store) ? store : undefined
   // Opt-in Postgres LISTEN/NOTIFY accelerator (audit F1b). Default OFF ⇒ sseReplayHub
@@ -1773,6 +1685,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         // Same signing secret the worker uses to mint the token. Null ⇒ the route
         // fails closed (401).
         knowledgeAgentTokenSecret: knowledgeAgentSecret,
+        runtimeCapabilityPolicy,
         readiness: createCloudReadinessCheck({
           policy,
           store,
@@ -1788,10 +1701,13 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           browserAuthConfigured: Boolean(browserAuth),
           checkpointsEnabled,
           checkpointStoreConfigured: Boolean(checkpointStore),
+          executionIsolationPolicy,
+          executionIsolationCapability: () => effectiveIsolationProvider.capability(),
           requireSchemaMigrations: envOptions.deploymentTier === 'public_production',
         }),
       })
     : null
+  if (server) startupCleanup.add(() => server.close())
   const url = server
     ? await server.listen(options.port ?? envOptions.port, listenHostname)
     : null
@@ -1803,9 +1719,47 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const ssePgNotifyListener = sseReplayHub && server && knowledgeControlPlaneUrl
     ? new CloudSsePgNotifyListener({ connectionString: knowledgeControlPlaneUrl, hub: sseReplayHub })
     : null
+  if (ssePgNotifyListener) {
+    startupCleanup.add(() => ssePgNotifyListener.close())
+  }
   ssePgNotifyListener?.start()
 
-  return {
+  startupCleanup.disarm()
+  let appClosePromise: Promise<void> | null = null
+  const closeApp = () => {
+    if (!appClosePromise) {
+      appClosePromise = (async () => {
+        worker?.beginShutdown()
+        let workerLoopDrained = !stopWorkerLoop
+        await settleCloudCleanups([
+          async () => {
+            workerLoopDrained = await stopWorkerLoop?.() ?? true
+          },
+          async () => {
+            await stopSchedulerLoop?.()
+          },
+          () => livenessServer?.close(),
+          () => runtimeUnsubscribe?.(),
+          () => runtimeDeltaCoalescer?.flushAll(),
+          () => ssePgNotifyListener?.close(),
+          () => server?.close(),
+          () => worker?.completeShutdown({
+            drained: workerLoopDrained && worker.getActiveCommandCount() === 0,
+          }),
+          () => runtime.close?.(),
+          () => runtimeOwnsIsolationProvider
+            ? undefined
+            : executionIsolationProvider?.close?.(),
+          () => objectStore.close?.(),
+          () => ownedKnowledgeStore?.close?.(),
+          () => store.close?.(),
+          () => observability?.close?.(),
+        ])
+      })()
+    }
+    return appClosePromise
+  }
+    return {
     policy,
     store,
     objectStore,
@@ -1818,33 +1772,14 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     scheduler,
     server,
     observability,
+    executionIsolationPolicy,
+    executionIsolationCapability,
     url,
-    async close() {
-      worker?.beginShutdown()
-      const [workerLoopDrained] = await Promise.all([
-        stopWorkerLoop?.() ?? Promise.resolve(true),
-        stopSchedulerLoop?.() ?? Promise.resolve(true),
-      ])
-      await livenessServer?.close()
-      runtimeUnsubscribe?.()
-      // Flush any buffered streaming deltas before teardown so no token is lost (PERF-1).
-      await runtimeDeltaCoalescer?.flushAll()
-      // Stop waking before the server (which owns/closes the shared hub) shuts down.
-      await ssePgNotifyListener?.close()
-      await server?.close()
-      await worker?.completeShutdown({
-        drained: workerLoopDrained && worker.getActiveCommandCount() === 0,
-      })
-      try {
-        await observability?.close?.()
-      } catch {
-        // Telemetry shutdown must not block runtime, object-store, or control-plane cleanup.
-      }
-      await runtime.close?.()
-      await objectStore.close?.()
-      await ownedKnowledgeStore?.close?.()
-      await store.close?.()
-    },
+    close: closeApp,
+    }
+  } catch (error) {
+    await startupCleanup.unwind()
+    throw error
   }
 }
 

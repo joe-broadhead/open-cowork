@@ -10,6 +10,11 @@ import type { CredentialField } from '@open-cowork/shared'
 import type { OpenCoworkConfig } from '@open-cowork/shared'
 import { log } from '@open-cowork/shared/node'
 import type { ByokSecretStore } from './byok-secret-store.ts'
+import {
+  applyCloudRuntimeCapabilityPolicy,
+  compileCloudRuntimeCapabilityPolicy,
+} from './cloud-runtime-capability-policy.ts'
+import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudRuntimeExecutionContext } from './runtime-adapter.ts'
 
 export class CloudByokRuntimeConfigError extends Error {
@@ -28,6 +33,7 @@ export type CloudByokRuntimeConfigInput = {
   appConfig: OpenCoworkConfig
   byokSecrets: ByokSecretStore
   context: CloudRuntimeExecutionContext
+  runtimePolicy: Pick<CloudRuntimePolicy, 'allowedTools' | 'allowedMcps'>
   allowKmsRef?: boolean
   byokPolicy?: CloudByokRuntimeProviderPolicy | null
 }
@@ -100,6 +106,10 @@ async function resolveProviderPolicy(input: {
 
 export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigInput): Promise<Config> {
   const { appConfig, byokSecrets, context } = input
+  const capabilityPolicy = compileCloudRuntimeCapabilityPolicy({
+    appConfig,
+    policy: input.runtimePolicy,
+  })
   const defaultProviderId = appConfig.providers.defaultProvider
   const providerEntries: Record<string, ProviderConfig> = {}
   const metadata = await byokSecrets.listMetadata(context.tenantId)
@@ -198,7 +208,7 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
   const modelId = stripProviderPrefix(appProviderId, appConfig.providers.defaultModel)
   const model = modelId ? `${runtimeProviderId}/${modelId}` : runtimeProviderId
   const enabledProviders = Object.keys(providerEntries)
-  return {
+  return applyCloudRuntimeCapabilityPolicy({
     $schema: 'https://opencode.ai/config.json',
     autoupdate: false,
     share: 'manual',
@@ -206,5 +216,5 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
     small_model: model,
     ...(enabledProviders.length > 0 ? { enabled_providers: enabledProviders } : {}),
     ...(enabledProviders.length > 0 ? { provider: providerEntries } : {}),
-  }
+  }, capabilityPolicy)
 }

@@ -9,6 +9,7 @@ import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
 import { CloudWorker, CloudWorkerLeaseLostError, CloudWorkerShutdownAbortError } from '@open-cowork/cloud-server/worker'
 import type {
   CloudRuntimeAdapter,
+  CloudRuntimeExecutionContext,
   CloudRuntimePromptPart,
 } from '@open-cowork/cloud-server/runtime-adapter'
 
@@ -105,6 +106,34 @@ class SlowSuccessfulRuntime implements CloudRuntimeAdapter {
   }
 
   async abortSession() {}
+}
+
+class ScopedSuccessfulRuntime extends SlowSuccessfulRuntime {
+  private readonly order: string[]
+
+  constructor(order: string[]) {
+    super(0)
+    this.order = order
+  }
+
+  async withExecutionScope<T>(
+    _context: CloudRuntimeExecutionContext,
+    callback: () => Promise<T>,
+  ): Promise<T> {
+    this.order.push('scope-start')
+    try {
+      return await callback()
+    } finally {
+      this.order.push('scope-end')
+    }
+  }
+
+  override async promptSession(
+    input: Parameters<SlowSuccessfulRuntime['promptSession']>[0],
+  ) {
+    this.order.push('execute')
+    return super.promptSession(input)
+  }
 }
 
 class FailingRenewalMetricObservability implements CloudObservabilityAdapter {
@@ -346,7 +375,8 @@ test('cloud worker does not treat renewal metric failures as lease loss', async 
 
 test('cloud worker saves checkpoint before atomically acking and completing a command', async () => {
   const store = seedStore()
-  const runtime = new SlowSuccessfulRuntime(0)
+  const order: string[] = []
+  const runtime = new ScopedSuccessfulRuntime(order)
   const service = new CloudSessionService(
     store,
     runtime,
@@ -354,7 +384,6 @@ test('cloud worker saves checkpoint before atomically acking and completing a co
     undefined,
     { randomUUID: () => 'test-id' },
   )
-  const order: string[] = []
   const originalRecordExecution = service.recordManagedExecutionEvent.bind(service)
   service.recordManagedExecutionEvent = (async (input) => {
     order.push(input.eventType)
@@ -380,8 +409,11 @@ test('cloud worker saves checkpoint before atomically acking and completing a co
   assert.equal(await worker.processSessionCommands('tenant-1', 'session-1'), 1)
   assert.deepEqual(order, [
     'worker.execution_started',
+    'scope-start',
+    'execute',
     'save:1',
     'checkpointAndAck',
+    'scope-end',
     'worker.execution_completed',
   ])
   assert.deepEqual(runtime.messageIds, ['cmd-1'])

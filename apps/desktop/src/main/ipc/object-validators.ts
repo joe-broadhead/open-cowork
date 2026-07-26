@@ -11,6 +11,7 @@ import type {
   DestructiveConfirmationRequest,
   LaunchpadFeedRequest,
   RuntimeContextOptions,
+  RuntimeToolingBridgeConsent,
   ScopedArtifactRef,
   SessionArtifactExportRequest,
   SessionArtifactListRequest,
@@ -20,7 +21,12 @@ import type {
   ToolListOptions,
   WorkspaceOptions,
 } from '@open-cowork/shared'
-import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
+import {
+  isArtifactKind,
+  isArtifactStatus,
+  RUNTIME_TOOLING_BRIDGE_CATEGORIES,
+  RUNTIME_TOOLING_BRIDGE_CONSENT_VERSION,
+} from '@open-cowork/shared'
 import { validateCustomAgentContentLimits } from '@open-cowork/runtime-host/custom-content-limits'
 const MAX_IPC_STRING_BYTES = 64 * 1024
 const MAX_IPC_ID_BYTES = 512
@@ -35,7 +41,14 @@ const MCP_PERMISSION_MODES = new Set(['ask', 'allow'])
 const AGENT_COLORS = new Set(['primary', 'warning', 'accent', 'success', 'info', 'secondary'])
 const RUNTIME_PERMISSION_POLICIES = new Set(['allow', 'ask', 'deny'])
 const RUNTIME_CONFIG_SOURCES = new Set(['app', 'machine'])
-const DESTRUCTIVE_ACTIONS = new Set(['session.delete', 'agent.remove', 'mcp.remove', 'skill.remove', 'app.reset'])
+const DESTRUCTIVE_ACTIONS = new Set([
+  'session.delete',
+  'agent.remove',
+  'mcp.remove',
+  'skill.remove',
+  'gateway.credentials.reset',
+  'app.reset',
+])
 
 const SETTINGS_UPDATE_KEYS = new Set([
   '_schemaVersion',
@@ -60,7 +73,7 @@ const SETTINGS_UPDATE_KEYS = new Set([
   'privacyKeepConversationHistory',
   'privacyShareAnonymizedUsage',
   'runtimeConfigSource',
-  'runtimeToolingBridgeEnabled',
+  'runtimeToolingBridge',
   'windowZoomFactor',
   'workflowLaunchAtLogin',
   'workflowRunInBackground',
@@ -92,6 +105,37 @@ function plainRecord(value: unknown, label: string): Record<string, unknown> {
     throw new Error(`${label} must be an object.`)
   }
   return value as Record<string, unknown>
+}
+
+function optionalRuntimeToolingBridgeConsent(
+  record: Record<string, unknown>,
+): RuntimeToolingBridgeConsent | undefined {
+  if (record.runtimeToolingBridge === undefined) return undefined
+  const bridge = plainRecord(record.runtimeToolingBridge, 'Runtime tooling bridge consent')
+  for (const key of Object.keys(bridge)) {
+    if (key !== 'version' && key !== 'categories') {
+      throw new Error(`Unknown runtime tooling bridge consent key: ${key}`)
+    }
+  }
+  if (bridge.version !== RUNTIME_TOOLING_BRIDGE_CONSENT_VERSION) {
+    throw new Error(`Runtime tooling bridge consent version must be ${RUNTIME_TOOLING_BRIDGE_CONSENT_VERSION}.`)
+  }
+  const categories = plainRecord(bridge.categories, 'Runtime tooling bridge categories')
+  const allowedCategories = new Set<string>(RUNTIME_TOOLING_BRIDGE_CATEGORIES.map(({ id }) => id))
+  for (const key of Object.keys(categories)) {
+    if (!allowedCategories.has(key)) {
+      throw new Error(`Unknown runtime tooling bridge category: ${key}`)
+    }
+  }
+  return {
+    version: RUNTIME_TOOLING_BRIDGE_CONSENT_VERSION,
+    categories: Object.fromEntries(RUNTIME_TOOLING_BRIDGE_CATEGORIES.map(({ id }) => {
+      if (typeof categories[id] !== 'boolean') {
+        throw new Error(`Runtime tooling bridge category "${id}" must be a boolean.`)
+      }
+      return [id, categories[id]]
+    })) as RuntimeToolingBridgeConsent['categories'],
+  }
 }
 
 function requiredString(record: Record<string, unknown>, key: string, label: string, maxBytes = MAX_IPC_STRING_BYTES) {
@@ -416,7 +460,7 @@ export function validateSettingsUpdate(record: Record<string, unknown>): Partial
     }
     update.runtimeConfigSource = record.runtimeConfigSource as 'app' | 'machine'
   }
-  update.runtimeToolingBridgeEnabled = optionalBoolean(record, 'runtimeToolingBridgeEnabled', 'Runtime tooling bridge enabled')
+  update.runtimeToolingBridge = optionalRuntimeToolingBridgeConsent(record)
   update.windowZoomFactor = optionalNumber(record, 'windowZoomFactor', 'Window zoom factor') ?? undefined
   update.workflowLaunchAtLogin = optionalBoolean(record, 'workflowLaunchAtLogin', 'Workflow launch at login')
   update.workflowRunInBackground = optionalBoolean(record, 'workflowRunInBackground', 'Workflow run in background')
@@ -583,7 +627,7 @@ export function validateDestructiveConfirmationRequest(record: Record<string, un
   if (typeof action !== 'string' || !DESTRUCTIVE_ACTIONS.has(action)) {
     throw new Error('Destructive action is invalid.')
   }
-  if (action === 'app.reset') return { action }
+  if (action === 'app.reset' || action === 'gateway.credentials.reset') return { action }
   if (action === 'session.delete') {
     return {
       action,

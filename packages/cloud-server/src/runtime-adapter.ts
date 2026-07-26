@@ -56,6 +56,15 @@ export type CloudRuntimeExecutionContext = {
 
 export type CloudRuntimeAdapter = {
   requiresWorkerContext?: boolean
+  /**
+   * Keep one tenant/session runtime generation alive for a complete durable
+   * command transaction. Worker-scoped runtimes use this to prevent eviction
+   * between execution, checkpoint publication, and command acknowledgement.
+   */
+  withExecutionScope?<T>(
+    context: CloudRuntimeExecutionContext,
+    callback: () => Promise<T>,
+  ): Promise<T>
   createSession(input?: { profileName?: string | null, context?: CloudRuntimeExecutionContext | null }): Promise<CloudRuntimeSession>
   promptSession(input: {
     sessionId: string

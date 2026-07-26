@@ -13,6 +13,8 @@ domain that owns the behavior.
   capability state.
 - `workflow/` — durable workflow definitions, run orchestration, webhook
   intake, and the local Workflows MCP bridge.
+- `workspace/` — cloud-workspace cache safety and Gateway credential-state
+  helpers shared by the desktop workspace authority.
 
 Thread indexing now lives in `packages/runtime-host/src/thread-index/` so the
 desktop and cloud paths share one runtime substrate.
@@ -39,8 +41,9 @@ new behavior has more than one file or clear lifecycle ownership.
 
 These clusters are explicitly too large to keep growing at top level:
 
-- `workspace-gateway*`, `cloud-workspace-*`, and `gateway-workspace-*` should
-  move into a workspace authority folder.
+- Remaining `workspace-gateway*`, `cloud-workspace-*`, and
+  `gateway-workspace-*` entry points should continue moving into `workspace/`
+  as their desktop-specific responsibilities are split.
 - `event-*` and `session-*` should move into event projection and session
   lifecycle folders once the remaining desktop-specific responsibilities are
   split from `@open-cowork/runtime-host`.

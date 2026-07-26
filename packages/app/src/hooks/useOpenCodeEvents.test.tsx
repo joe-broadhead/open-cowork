@@ -1,6 +1,13 @@
 import { act, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EffectiveAppSettings, RuntimeNotification, SessionPatch, SessionView, WorkspaceSessionsUpdatedEvent } from '@open-cowork/shared'
+import {
+  createDisabledRuntimeToolingBridgeConsent,
+  type EffectiveAppSettings,
+  type RuntimeNotification,
+  type SessionPatch,
+  type SessionView,
+  type WorkspaceSessionsUpdatedEvent,
+} from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../test/setup'
 import { useSessionStore } from '../stores/session'
 import { useOpenCodeEvents } from './useOpenCodeEvents'
@@ -190,7 +197,7 @@ describe('useOpenCodeEvents', () => {
       notificationSounds,
       privacyKeepConversationHistory: true,
       privacyShareAnonymizedUsage: false,
-      runtimeToolingBridgeEnabled: true,
+      runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
       windowZoomFactor: 1,
       workflowLaunchAtLogin: false,
       workflowRunInBackground: false,

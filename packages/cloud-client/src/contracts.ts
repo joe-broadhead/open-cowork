@@ -34,6 +34,7 @@ import type {
   WorkflowListRequest,
   WorkflowRun,
   WorkflowTriggerType,
+  WorkflowWebhookSecretMutationResult,
   ManagedDesktopPolicyView,
   AdminAccess,
   AdminAuditExport,
@@ -92,6 +93,7 @@ export type {
   WorkflowListRequest,
   WorkflowRun,
   WorkflowTriggerType,
+  WorkflowWebhookSecretMutationResult,
 }
 
 export type CloudClientSessionStatus = 'idle' | 'running' | 'closed' | 'errored'
@@ -677,6 +679,7 @@ export type CloudTransportAdapter = {
   pauseWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   resumeWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   archiveWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
+  rotateWorkflowWebhookSecret?(workflowId: string): Promise<WorkflowWebhookSecretMutationResult | null>
   searchThreads?(query?: ThreadSearchQuery): Promise<ThreadSearchResult>
   threadFacets?(query?: ThreadSearchQuery): Promise<ThreadFacetSummary>
   listThreadTags?(): Promise<ThreadTag[]>

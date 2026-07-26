@@ -2,6 +2,7 @@ import { createPostgresSchemaManifest } from '@open-cowork/shared/node'
 
 export const CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID = '001_cloud_control_plane_baseline'
 export const CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID = '002_cloud_control_plane_concurrent_indexes'
+export const CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID = '003_cloud_workflow_webhook_secrets'
 export const CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS = [720_908_611, 1_762_083_497] as const
 
 export type CloudControlPlaneMigration = {
@@ -10,6 +11,21 @@ export type CloudControlPlaneMigration = {
   transactional?: boolean
   concurrentIndexes?: readonly string[]
 }
+
+const CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_workflow_webhook_secrets (
+    tenant_id text NOT NULL,
+    workflow_id text NOT NULL,
+    trigger_id text NOT NULL,
+    ciphertext text NOT NULL CHECK (ciphertext LIKE 'enc:v1:%'),
+    envelope_version integer NOT NULL CHECK (envelope_version > 0),
+    status text NOT NULL CHECK (status IN ('active', 'revoked')),
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, workflow_id, trigger_id),
+    FOREIGN KEY (tenant_id, workflow_id) REFERENCES cloud_workflows(tenant_id, workflow_id) ON DELETE CASCADE
+  )`,
+] as const
 
 export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_tenants (
@@ -213,6 +229,7 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     ON cloud_workflows (tenant_id, user_id, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS cloud_workflows_due_idx
     ON cloud_workflows (status, next_run_at)`,
+  ...CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_STATEMENTS,
   `CREATE TABLE IF NOT EXISTS cloud_workflow_runs (
     tenant_id text NOT NULL,
     run_id text NOT NULL,
@@ -1224,14 +1241,18 @@ export const CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES = [
   'cloud_workflows_webhook_lookup_idx',
 ] as const
 
-// This pre-release project starts from one clean schema baseline. Concurrent
-// indexes stay in a second phase because PostgreSQL forbids CREATE INDEX
-// CONCURRENTLY inside a transaction; this is an execution boundary, not
-// historical upgrade compatibility.
+// New installs start from the current clean baseline. Forward migrations remain
+// for deployed schemas that already recorded an older baseline. Concurrent
+// indexes stay in a separate phase because PostgreSQL forbids CREATE INDEX
+// CONCURRENTLY inside a transaction.
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_BASELINE_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_STATEMENTS,
   },
   {
     id: CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,

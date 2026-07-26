@@ -10,6 +10,7 @@
 // service is composed. Workflow-draft validation continues to live in
 // session-workflow-validation.ts.
 import { computeNextWorkflowRunAt } from '@open-cowork/runtime-host/workflow/workflow-schedule'
+import { randomBytes } from 'node:crypto'
 import {
   verifyWorkflowWebhookAuth,
   WebhookHttpError,
@@ -18,10 +19,12 @@ import {
 } from '@open-cowork/shared/node'
 import type {
   WorkflowDetail,
+  WorkflowCreateResult,
   WorkflowDraft,
   WorkflowListPayload,
   WorkflowStatus,
   WorkflowTriggerType,
+  WorkflowWebhookSecretMutationResult,
 } from '@open-cowork/shared'
 import type {
   ClaimedWorkflowRunRecord,
@@ -30,6 +33,7 @@ import type {
   CompleteWorkflowRunInput,
   ControlPlaneStore,
   FailWorkflowRunInput,
+  LegacyCloudWorkflowWebhookSecretRecord,
   SessionCommandRecord,
   SessionRecord,
 } from './control-plane-store.ts'
@@ -57,9 +61,55 @@ import {
   stableCloudId,
 } from './session-input-validation.ts'
 import type { CloudPrincipal, CloudWorkflowStartResult } from './session-service.ts'
+import type { SecretAdapter } from './secret-adapter.ts'
+import {
+  recordCloudLog,
+  recordCloudMetric,
+  type CloudObservabilityAdapter,
+} from './observability.ts'
 
 const WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS = 5 * 60 * 1000
 const WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT = 512
+const WORKFLOW_WEBHOOK_SECRET_ENVELOPE_VERSION = 1
+const WORKFLOW_SECRET_MIGRATION_BATCH_SIZE = 100
+
+function workflowWebhookSecretAad(tenantId: string, workflowId: string, triggerId: string) {
+  return `workflow-webhook:${tenantId}:${workflowId}:${triggerId}`
+}
+
+function randomWorkflowWebhookSecret() {
+  return randomBytes(32).toString('base64url')
+}
+
+function workflowWebhookPublicOrigin(value: string | null | undefined) {
+  if (!value?.trim()) return null
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error('Cloud workflow webhook public URL must be a valid HTTP(S) origin.')
+  }
+  if (
+    (url.protocol !== 'http:' && url.protocol !== 'https:')
+    || url.username
+    || url.password
+    || url.pathname !== '/'
+    || url.search
+    || url.hash
+  ) {
+    throw new Error('Cloud workflow webhook public URL must be an HTTP(S) origin without credentials, path, query, or fragment.')
+  }
+  return url.origin
+}
+
+function legacyWorkflowSecretBatchFingerprint(
+  records: readonly LegacyCloudWorkflowWebhookSecretRecord[],
+) {
+  return records
+    .map((record) => `${record.tenantId}\0${record.workflowId}\0${record.triggerId}\0${record.updatedAt}`)
+    .sort()
+    .join('\n')
+}
 
 export type WorkflowSessionRecordInput = {
   tenantId: string
@@ -86,6 +136,8 @@ export type CloudWorkflowOperationsServiceOptions = {
     providerId?: string | null
   }) => Promise<void>
   createCloudSessionRecord: (input: WorkflowSessionRecordInput) => Promise<SessionRecord>
+  secretAdapter: SecretAdapter | null
+  observability: CloudObservabilityAdapter | null
 }
 
 export class CloudWorkflowOperationsService {
@@ -97,6 +149,9 @@ export class CloudWorkflowOperationsService {
   private readonly principalOrgId: CloudWorkflowOperationsServiceOptions['principalOrgId']
   private readonly assertBillingAllowed: CloudWorkflowOperationsServiceOptions['assertBillingAllowed']
   private readonly createCloudSessionRecord: CloudWorkflowOperationsServiceOptions['createCloudSessionRecord']
+  private readonly secretAdapter: SecretAdapter | null
+  private readonly observability: CloudObservabilityAdapter | null
+  private readonly webhookPublicOrigin: string | null
 
   constructor(options: CloudWorkflowOperationsServiceOptions) {
     this.store = options.store
@@ -107,6 +162,9 @@ export class CloudWorkflowOperationsService {
     this.principalOrgId = options.principalOrgId
     this.assertBillingAllowed = options.assertBillingAllowed
     this.createCloudSessionRecord = options.createCloudSessionRecord
+    this.secretAdapter = options.secretAdapter
+    this.observability = options.observability
+    this.webhookPublicOrigin = workflowWebhookPublicOrigin(options.policy.publicUrl)
   }
 
   async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null, cursor?: string | null } = {}): Promise<WorkflowListPayload> {
@@ -137,7 +195,7 @@ export class CloudWorkflowOperationsService {
       limit: 100,
     })
     return {
-      workflows: workflows.map(toWorkflowSummary),
+      workflows: workflows.map((workflow) => this.workflowSummary(workflow)),
       runs: runs.map(toWorkflowRun),
       nextCursor: page.nextCursor,
       totalEstimate: page.totalEstimate,
@@ -151,7 +209,7 @@ export class CloudWorkflowOperationsService {
     return workflow ? this.workflowDetail(workflow) : null
   }
 
-  async createWorkflow(principal: CloudPrincipal, draft: WorkflowDraft): Promise<WorkflowDetail> {
+  async createWorkflow(principal: CloudPrincipal, draft: WorkflowDraft): Promise<WorkflowCreateResult> {
     await this.ensurePrincipal(principal)
     this.assertWorkflowsEnabled()
     const now = new Date()
@@ -162,15 +220,161 @@ export class CloudWorkflowOperationsService {
       throw new CloudServiceError(400, error instanceof Error ? error.message : 'Workflow draft is invalid.')
     }
     assertWorkflowDraftAllowed(normalized, this.policy)
+    const webhookTriggers = normalized.triggers.filter((trigger) => trigger.type === 'webhook')
+    if (webhookTriggers.length > 1) {
+      throw new CloudServiceError(400, 'A workflow can have at most one webhook trigger.')
+    }
+    const workflowId = this.ids.randomUUID()
+    const secret = webhookTriggers[0] ? randomWorkflowWebhookSecret() : null
+    const webhookSecrets = webhookTriggers[0] && secret
+      ? [{
+          triggerId: webhookTriggers[0].id,
+          ciphertext: this.protectWebhookSecret(principal.tenantId, workflowId, webhookTriggers[0].id, secret),
+          envelopeVersion: WORKFLOW_WEBHOOK_SECRET_ENVELOPE_VERSION,
+        }]
+      : []
     const workflow = await this.store.createWorkflow({
       tenantId: principal.tenantId,
       userId: principal.userId,
-      workflowId: this.ids.randomUUID(),
+      workflowId,
       draft: normalized,
+      webhookSecrets,
       nextRunAt: computeNextWorkflowRunAt(normalized.triggers, now),
       createdAt: now,
     })
-    return this.workflowDetail(workflow)
+    if (webhookSecrets[0]) {
+      const storedSecret = await this.store.getWorkflowWebhookSecret(
+        principal.tenantId,
+        workflowId,
+        webhookSecrets[0].triggerId,
+      )
+      if (
+        !storedSecret
+        || storedSecret.status !== 'active'
+        || storedSecret.envelopeVersion !== webhookSecrets[0].envelopeVersion
+        || storedSecret.ciphertext !== webhookSecrets[0].ciphertext
+      ) {
+        throw new CloudServiceError(409, 'Workflow creation conflicted with an existing workflow.')
+      }
+    }
+    return {
+      workflow: await this.workflowDetail(workflow),
+      webhookSecretReveal: webhookTriggers[0] && secret
+        ? {
+            workflowId,
+            triggerId: webhookTriggers[0].id,
+            secret,
+          }
+        : null,
+    }
+  }
+
+  async rotateWorkflowWebhookSecret(
+    principal: CloudPrincipal,
+    workflowId: string,
+  ): Promise<WorkflowWebhookSecretMutationResult | null> {
+    await this.ensurePrincipal(principal)
+    this.assertWorkflowsEnabled()
+    const workflow = await this.store.getWorkflow(principal.tenantId, principal.userId, workflowId)
+    if (!workflow) return null
+    const webhook = workflow.triggers.find((trigger) => trigger.type === 'webhook')
+    if (!webhook) return null
+    const secret = randomWorkflowWebhookSecret()
+    const stored = await this.store.rotateWorkflowWebhookSecret({
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+      workflowId,
+      triggerId: webhook.id,
+      ciphertext: this.protectWebhookSecret(principal.tenantId, workflowId, webhook.id, secret),
+      envelopeVersion: WORKFLOW_WEBHOOK_SECRET_ENVELOPE_VERSION,
+    })
+    if (!stored) return null
+    const updated = await this.store.getWorkflow(principal.tenantId, principal.userId, workflowId)
+    if (!updated) return null
+    return {
+      workflow: await this.workflowDetail(updated),
+      webhookSecretReveal: {
+        workflowId,
+        triggerId: webhook.id,
+        secret,
+      },
+    }
+  }
+
+  async migrateLegacyWebhookSecrets() {
+    let migrated = 0
+    let stalledBatchFingerprint: string | null = null
+    while (true) {
+      const candidates = await this.store.listLegacyWorkflowWebhookSecrets(WORKFLOW_SECRET_MIGRATION_BATCH_SIZE)
+      if (candidates.length === 0) {
+        if (migrated === 0) await this.observeWorkflowSecretMigrationBatch('ok', 0)
+        return { migrated }
+      }
+      let migratedThisBatch = 0
+      try {
+        for (const candidate of candidates) {
+          if (await this.migrateLegacyWebhookSecret(candidate)) {
+            migrated += 1
+            migratedThisBatch += 1
+          }
+        }
+      } catch {
+        await this.observeWorkflowSecretMigrationBatch('error', migratedThisBatch)
+        throw new CloudServiceError(
+          503,
+          'Workflow webhook secret migration failed; unprocessed legacy records remain unchanged.',
+        )
+      }
+      if (migratedThisBatch === 0) {
+        const remaining = await this.store.listLegacyWorkflowWebhookSecrets(WORKFLOW_SECRET_MIGRATION_BATCH_SIZE)
+        if (remaining.length === 0) {
+          await this.observeWorkflowSecretMigrationBatch('ok', 0)
+          return { migrated }
+        }
+        const fingerprint = legacyWorkflowSecretBatchFingerprint(remaining)
+        if (fingerprint !== stalledBatchFingerprint) {
+          stalledBatchFingerprint = fingerprint
+          continue
+        }
+        await this.observeWorkflowSecretMigrationBatch('error', 0)
+        throw new CloudServiceError(
+          503,
+          'Workflow webhook secret migration could not make progress; legacy records remain unchanged.',
+        )
+      }
+      stalledBatchFingerprint = null
+      await this.observeWorkflowSecretMigrationBatch('ok', migratedThisBatch)
+    }
+  }
+
+  private async migrateLegacyWebhookSecret(
+    candidate: LegacyCloudWorkflowWebhookSecretRecord,
+  ) {
+    const existing = await this.store.getWorkflowWebhookSecret(
+      candidate.tenantId,
+      candidate.workflowId,
+      candidate.triggerId,
+    )
+    // The legacy plaintext is the only value migration can prove remains
+    // usable. Always protect it with the current adapter and atomically replace
+    // any expected envelope; never decrypt an unknown/retired envelope merely
+    // to decide whether it can be reused.
+    const ciphertext = this.protectWebhookSecret(
+      candidate.tenantId,
+      candidate.workflowId,
+      candidate.triggerId,
+      candidate.plaintext,
+    )
+    return this.store.migrateLegacyWorkflowWebhookSecret({
+      tenantId: candidate.tenantId,
+      workflowId: candidate.workflowId,
+      triggerId: candidate.triggerId,
+      expectedPlaintext: candidate.plaintext,
+      expectedExistingCiphertext: existing?.ciphertext || null,
+      expectedExistingEnvelopeVersion: existing?.envelopeVersion || null,
+      ciphertext,
+      envelopeVersion: WORKFLOW_WEBHOOK_SECRET_ENVELOPE_VERSION,
+    })
   }
 
   async updateWorkflowStatus(
@@ -194,6 +398,16 @@ export class CloudWorkflowOperationsService {
       nextRunAt: status === 'active' ? computeNextWorkflowRunAt(current.triggers, now) : null,
       updatedAt: now,
     })
+    if (
+      !updated
+      && status === 'active'
+      && current.triggers.some((trigger) => trigger.type === 'webhook')
+    ) {
+      throw new CloudServiceError(
+        409,
+        'Rotate the workflow webhook secret before activating this workflow.',
+      )
+    }
     return updated ? this.workflowDetail(updated) : null
   }
 
@@ -283,10 +497,48 @@ export class CloudWorkflowOperationsService {
     const webhook = workflow?.triggers.find((trigger) => (
       trigger.enabled
       && trigger.type === 'webhook'
-      && typeof trigger.webhookSecret === 'string'
-      && verifyWorkflowWebhookAuth(input.auth, trigger.webhookSecret, input.now || new Date())
-    ))
-    if (!workflow || !webhook) {
+    )) || null
+    let secretRecord = workflow?.status === 'active' && webhook
+      ? await this.store.getWorkflowWebhookSecret(workflow.tenantId, workflow.id, webhook.id)
+      : null
+    if (workflow?.status === 'active' && webhook && !secretRecord) {
+      // Rolling-deploy compatibility: an older writer may have committed a
+      // legacy trigger after this process completed startup migration.
+      const legacy = await this.store.getLegacyWorkflowWebhookSecret(
+        workflow.tenantId,
+        workflow.id,
+        webhook.id,
+      )
+      if (legacy) {
+        try {
+          await this.migrateLegacyWebhookSecret(legacy)
+        } catch {
+          throw new WebhookHttpError(503, 'Workflow webhook authorization is temporarily unavailable.')
+        }
+        secretRecord = await this.store.getWorkflowWebhookSecret(
+          workflow.tenantId,
+          workflow.id,
+          webhook.id,
+        )
+      }
+    }
+    if (
+      !workflow
+      || workflow.status !== 'active'
+      || !webhook
+      || !secretRecord
+      || secretRecord.triggerId !== webhook.id
+      || secretRecord.status !== 'active'
+    ) {
+      throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
+    }
+    let secret: string
+    try {
+      secret = this.revealWebhookSecret(secretRecord)
+    } catch {
+      throw new WebhookHttpError(503, 'Workflow webhook authorization is temporarily unavailable.')
+    }
+    if (!verifyWorkflowWebhookAuth(input.auth, secret, input.now || new Date())) {
       throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
     }
     const replayClaim = await input.securityStore.claimSignature({
@@ -325,9 +577,82 @@ export class CloudWorkflowOperationsService {
 
   private async workflowDetail(workflow: CloudWorkflowRecord): Promise<WorkflowDetail> {
     return {
-      ...toWorkflowSummary(workflow),
+      ...this.workflowSummary(workflow),
       runs: (await this.store.listWorkflowRuns(workflow.tenantId, workflow.id, 25)).map(toWorkflowRun),
     }
+  }
+
+  private workflowSummary(workflow: CloudWorkflowRecord) {
+    const summary = toWorkflowSummary(workflow)
+    const hasWebhook = summary.triggers.some((trigger) => trigger.type === 'webhook')
+    return {
+      ...summary,
+      webhookUrl: hasWebhook && this.webhookPublicOrigin
+        ? `${this.webhookPublicOrigin}/webhooks/workflows/${encodeURIComponent(workflow.id)}`
+        : null,
+    }
+  }
+
+  private protectWebhookSecret(tenantId: string, workflowId: string, triggerId: string, secret: string) {
+    if (!this.secretAdapter || this.secretAdapter.mode !== 'envelope-v1') {
+      throw new CloudServiceError(503, 'Workflow webhooks require envelope-encrypted Cloud secret storage.')
+    }
+    return this.secretAdapter.protect(secret, workflowWebhookSecretAad(tenantId, workflowId, triggerId))
+  }
+
+  private async observeWorkflowSecretMigrationBatch(
+    status: 'ok' | 'error',
+    migratedRecords: number,
+  ) {
+    const attributes = {
+      operation: 'legacy_migration_batch',
+      status,
+    }
+    await Promise.all([
+      recordCloudMetric(this.observability, {
+        name: 'open_cowork_cloud_workflow_secret_operations_total',
+        value: 1,
+        unit: '1',
+        attributes,
+      }),
+      recordCloudMetric(this.observability, {
+        name: 'open_cowork_cloud_workflow_secret_records_total',
+        value: migratedRecords,
+        unit: '1',
+        attributes,
+      }),
+      status === 'error'
+        ? recordCloudLog(this.observability, {
+            level: 'error',
+            name: 'cloud.workflow_secrets.operation_failed',
+            message: 'Workflow webhook secret migration batch failed.',
+            attributes: {
+              ...attributes,
+              migrated_records: migratedRecords,
+            },
+          })
+        : Promise.resolve(),
+    ])
+  }
+
+  private revealWebhookSecret(secret: {
+    tenantId: string
+    workflowId: string
+    triggerId: string
+    ciphertext: string
+    envelopeVersion: number
+  }) {
+    if (
+      !this.secretAdapter
+      || this.secretAdapter.mode !== 'envelope-v1'
+      || secret.envelopeVersion !== WORKFLOW_WEBHOOK_SECRET_ENVELOPE_VERSION
+    ) {
+      throw new Error('Workflow webhook secret storage is unavailable.')
+    }
+    return this.secretAdapter.reveal(
+      secret.ciphertext,
+      workflowWebhookSecretAad(secret.tenantId, secret.workflowId, secret.triggerId),
+    )
   }
 
   private async startClaimedWorkflowRun(claimed: ClaimedWorkflowRunRecord): Promise<CloudWorkflowStartResult | null> {
@@ -421,7 +746,7 @@ export class CloudWorkflowOperationsService {
     return {
       tenantId: workflow.tenantId,
       workflow: updatedWorkflow ? await this.workflowDetail(updatedWorkflow) : {
-        ...toWorkflowSummary(workflow),
+        ...this.workflowSummary(workflow),
         runs: [toWorkflowRun(attached || run)],
       },
       run: toWorkflowRun(attached || run),

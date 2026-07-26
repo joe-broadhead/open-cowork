@@ -91,8 +91,17 @@ ticket with related context, draft a response, and return the result in the
 run thread. It should not send the response automatically.
 ```
 
-After saving, copy the webhook curl example from the playbook card and POST
-JSON with the generated secret in an authorization header:
+After saving, open the playbook and choose **Regenerate** to provision its first
+secret. The secret is delivered once by copying a ready-to-run curl command
+directly to the clipboard; ordinary playbook cards copy only the non-secret
+webhook URL. If clipboard access fails, the reveal is discarded, so regenerate
+again before configuring the caller.
+
+The copied command is deployment-specific: Desktop/local commands use bearer
+authentication, while public Cloud commands use a timestamped HMAC and reject
+raw bearer/shared-secret authentication. Run the copied command as generated
+after replacing its example body. This hand-written example is for
+Desktop/local only:
 
 ```bash
 curl -X POST "$WEBHOOK_URL" \
@@ -100,6 +109,9 @@ curl -X POST "$WEBHOOK_URL" \
   -H "authorization: Bearer $WEBHOOK_SECRET" \
   -d '{"ticket_id":"T-123","customer_name":"Acme","issue_summary":"Login failures"}'
 ```
+
+See [Triggers](workflows.md#triggers) for the public Cloud HMAC
+contract and signing headers.
 
 The trigger payload is included in the run prompt.
 

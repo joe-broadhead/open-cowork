@@ -19,6 +19,25 @@ print_diagnostics() {
   docker compose -p "${project_name}" -f "${compose_file}" logs --no-color --tail=200 || true
 }
 
+run_split_role_isolation_proof() {
+  if [ "${compose_file}" != "docker-compose.cloud.split.yml" ]; then
+    return 0
+  fi
+  local image_ref="open-cowork-cloud:ci"
+  if ! docker image inspect "${image_ref}" >/dev/null 2>&1; then
+    image_ref="${OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local}"
+  fi
+  local image_id
+  image_id="$(docker image inspect --format '{{.Id}}' "${image_ref}")"
+  if [[ ! "${image_id}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+    echo "cloud isolation proof could not resolve an immutable local image id" >&2
+    return 1
+  fi
+  OPEN_COWORK_CLOUD_ISOLATION_IMAGE="${image_id}" \
+    OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256="${image_id}" \
+    pnpm proof:cloud:tenant-isolation -- --json
+}
+
 trap cleanup EXIT
 
 if ! docker compose -p "${project_name}" -f "${compose_file}" up --build -d; then
@@ -39,6 +58,10 @@ for _ in $(seq 1 90); do
       if ! OPEN_COWORK_SMOKE_CLOUD_URL="http://127.0.0.1:8787" \
         OPEN_COWORK_SMOKE_SKIP_GATEWAY=true \
         pnpm deploy:smoke; then
+        print_diagnostics
+        exit 1
+      fi
+      if ! run_split_role_isolation_proof; then
         print_diagnostics
         exit 1
       fi

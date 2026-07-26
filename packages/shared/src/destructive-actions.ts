@@ -5,6 +5,7 @@ export type DestructiveAction =
   | 'agent.remove'
   | 'mcp.remove'
   | 'skill.remove'
+  | 'gateway.credentials.reset'
   | 'app.reset'
 
 export type DestructiveConfirmationRequest =
@@ -15,6 +16,11 @@ export type DestructiveConfirmationRequest =
   | {
       action: 'agent.remove' | 'mcp.remove' | 'skill.remove'
       target: ScopedArtifactRef
+    }
+  | {
+      // Quarantines an unreadable Gateway credential document and resets all
+      // Gateway connections to require newly entered tokens.
+      action: 'gateway.credentials.reset'
     }
   | {
       // Resets every piece of on-disk state owned by the app:

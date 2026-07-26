@@ -97,6 +97,19 @@ export function registerWorkspaceHandlers(context: IpcHandlerContext) {
     return context.workspaceGateway.remove(event, workspaceId)
   })
 
+  registerIpcInvoke(
+    context,
+    'workspace:reset-gateway-credentials',
+    optionalStringArg('confirmation token'),
+    async (_event, confirmationToken) => {
+      const request = { action: 'gateway.credentials.reset' } as const
+      if (!context.consumeDestructiveConfirmation(request, confirmationToken)) {
+        throw new Error('Resetting stored Gateway credentials requires explicit confirmation.')
+      }
+      return context.workspaceGateway.resetUnreadableGatewayCredentials()
+    },
+  )
+
   registerIpcInvoke(context, 'workspace:login', stringArg('workspace id'), async (event, workspaceId) => {
     const loggedIn = await context.workspaceGateway.login(event, workspaceId)
     await subscribeWorkspaceUpdates(context, event, loggedIn.id)

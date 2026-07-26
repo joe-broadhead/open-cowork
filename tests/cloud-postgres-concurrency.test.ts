@@ -10,6 +10,7 @@ import {
   CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES,
   CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
   CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
+  CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID,
 } from '@open-cowork/cloud-server/postgres-schema'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
@@ -175,8 +176,13 @@ test('real Postgres cloud baseline rejects ledger-only schema drift', {
         applied_at timestamptz NOT NULL
       )`)
       await pool.query(
-        `INSERT INTO cloud_schema_migrations (id, applied_at) VALUES ($1, now()), ($2, now())`,
-        [CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID, CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID],
+        `INSERT INTO cloud_schema_migrations (id, applied_at)
+         VALUES ($1, now()), ($2, now()), ($3, now())`,
+        [
+          CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
+          CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID,
+          CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
+        ],
       )
       await assert.rejects(
         () => createPostgresControlPlaneStore({ connectionString, pool: pool as never }),
@@ -185,7 +191,7 @@ test('real Postgres cloud baseline rejects ledger-only schema drift', {
       const result = await pool.query('SELECT count(*)::int AS count FROM cloud_schema_migrations') as {
         rows: Array<{ count: number }>
       }
-      assert.equal(result.rows[0]?.count, 2)
+      assert.equal(result.rows[0]?.count, 3)
     } finally {
       await pool.end()
     }
@@ -1284,7 +1290,6 @@ test('real Postgres cloud store recovers expired webhook workflow start claims',
           id: 'webhook-1',
           type: 'webhook',
           enabled: true,
-          webhookSecret: 'secret',
         }],
       },
     })

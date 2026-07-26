@@ -1,7 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EffectiveAppSettings, ProviderDescriptor } from '@open-cowork/shared'
+import {
+  createDisabledRuntimeToolingBridgeConsent,
+  type EffectiveAppSettings,
+  type ProviderDescriptor,
+} from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { installRendererTestCoworkApi } from '../test/setup'
 import { SetupScreen } from './SetupScreen'
@@ -27,7 +31,7 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     notificationSounds: true,
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
-    runtimeToolingBridgeEnabled: true,
+    runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
@@ -133,7 +137,7 @@ describe('SetupScreen', () => {
     expect(screen.queryByRole('button', { name: /Deploy Gateway/ })).not.toBeInTheDocument()
     expect(screen.queryByText(/Gateway/)).not.toBeInTheDocument()
     expect(screen.queryByText('desktop-only')).not.toBeInTheDocument()
-    expect(screen.queryByText(/pnpm/)).not.toBeInTheDocument()
+    expect(screen.queryByText('pnpm standalone-gateway:setup')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute(
       'href',
       expect.stringContaining('https://github.com/joe-broadhead/open-cowork/blob/master/docs/desktop-app.md'),
@@ -290,7 +294,7 @@ describe('SetupScreen', () => {
     const onComplete = vi.fn()
     installRendererTestCoworkApi({
       settings: {
-        get: vi.fn(async () => settings({ runtimeToolingBridgeEnabled: true })),
+        get: vi.fn(async () => settings()),
         getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-scoped' })),
         set,
       },
@@ -313,13 +317,34 @@ describe('SetupScreen', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: /Set up a team or server deployment/ }))
-    const bridgeToggle = await screen.findByRole('switch', { name: /Reuse developer tools from this Mac/ })
-    expect(bridgeToggle).toHaveAttribute('aria-checked', 'true')
+    const bridgeToggle = await screen.findByRole('switch', { name: 'Allow Git configuration' })
+    expect(bridgeToggle).toHaveAttribute('aria-checked', 'false')
+    const bridgeDescriptionIds = (bridgeToggle.getAttribute('aria-describedby') || '')
+      .split(/\s+/)
+      .filter(Boolean)
+    expect(bridgeDescriptionIds).toHaveLength(3)
+    const bridgeDescription = bridgeDescriptionIds
+      .map((descriptionId) => document.getElementById(descriptionId)?.textContent || '')
+      .join(' ')
+    expect(bridgeDescription).toContain('Git config, ignore, and commit-message files')
+    expect(bridgeDescription).toContain('Use your Git identity')
+    expect(bridgeDescription).toContain('~/.gitconfig')
+    expect(bridgeDescription).toContain('~/.config/git/config')
+    expect(bridgeDescription).toContain('Read and change (linked host file)')
+    const sshToggle = screen.getByRole('switch', { name: 'Allow SSH' })
+    const sshDescription = (sshToggle.getAttribute('aria-describedby') || '')
+      .split(/\s+/)
+      .map((descriptionId) => document.getElementById(descriptionId)?.textContent || '')
+      .join(' ')
+    expect(sshDescription).toContain('$SSH_AUTH_SOCK')
+    expect(sshDescription).toContain('managed runtime environment')
+    expect(sshDescription).toContain('SSH agent broker access')
 
-    await user.click(bridgeToggle)
     await user.click(screen.getByRole('button', { name: 'Test connection' }))
     await waitFor(() => expect(screen.getByText(/Connection tested/)).toBeInTheDocument())
+    await user.click(bridgeToggle)
+    expect(screen.queryByText(/provider or model changed/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Connection tested/)).toBeInTheDocument()
     expect(screen.queryByText('Runtime is ready.')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Get Started' }))
 
@@ -331,7 +356,13 @@ describe('SetupScreen', () => {
     expect(set).toHaveBeenCalledWith(expect.objectContaining({
       selectedProviderId: 'openrouter',
       selectedModelId: 'anthropic/claude-sonnet-4',
-      runtimeToolingBridgeEnabled: false,
+      runtimeToolingBridge: expect.objectContaining({
+        version: 1,
+        categories: expect.objectContaining({
+          sourceControl: true,
+          ssh: false,
+        }),
+      }),
       providerCredentials: {
         openrouter: expect.objectContaining({ apiKey: 'sk-or-scoped' }),
       },

@@ -4,6 +4,13 @@ This recipe is the first provider deployment target for Open Cowork Cloud. It
 keeps GCP wiring in deploy assets and documentation; core cloud, Desktop sync,
 Gateway, BYOK, billing, and projection code must stay provider-neutral.
 
+> **Current execution boundary:** the GKE values and stock Helm chart do not
+> inject a Kubernetes execution provider, and the stock Cloud pod cannot run
+> the Docker-backed provider. The web, scheduler, storage, identity, and
+> Gateway references remain useful, but the GKE worker is not
+> production-execution-ready. Use a dedicated Docker-capable worker host or a
+> reviewed downstream provider that passes `proof:cloud:tenant-isolation`.
+
 Use this directory for reusable reference assets only. Put real project ids,
 domains, image tags, and environment overlays in a private deployment repo or a
 local scratch directory. Store secret values in GCP Secret Manager or KMS, not
@@ -32,7 +39,7 @@ public evidence until its outputs have been redacted and generalized.
 | Component | GCP service | Notes |
 | --- | --- | --- |
 | Cloud Web | GKE Deployment behind HTTPS Ingress | Stateless web/API/SSE surface. Cloud Run is acceptable for demo/all-in-one only. |
-| Cloud Worker | GKE Deployment | Long-running OpenCode execution and fenced command processing. |
+| Cloud Worker | Dedicated Docker-capable host or downstream GKE provider | Long-running OpenCode execution only after isolation proof. |
 | Cloud Scheduler | GKE Deployment | Durable workflow claims; one replica is enough, multiple are safe. |
 | Gateway | GKE Deployment or Cloud Run | Separate deployable with separate channel/provider secrets. |
 | Control plane | Cloud SQL for PostgreSQL | Enable automated backups and Cloud SQL PITR. |
@@ -41,10 +48,10 @@ public evidence until its outputs have been redacted and generalized.
 | Images | Artifact Registry | `open-cowork-cloud` and `open-cowork-gateway` images. |
 | Observability | Cloud Logging/Monitoring plus optional OTLP collector | JSON logs with request/session/run correlation. |
 
-Production deployments should use the GKE split-role profile in
-`gke/values.gke.yaml.example`. `cloud-run/all-in-one.service.yaml.example` is a
-focused pilot profile for demos and smoke testing; it is not the scale-out
-worker topology.
+The GKE split-role profile in `gke/values.gke.yaml.example` is a reference for
+non-executing roles and downstream provider wiring, not a complete production
+worker topology. `cloud-run/all-in-one.service.yaml.example` remains a focused
+pilot profile for demos and smoke testing.
 
 For teams that prefer Terraform over Helm/YAML, [`terraform/`](terraform/)
 carries a syntax-checked reference module (Cloud Run split roles, Cloud SQL,

@@ -30,6 +30,7 @@ const CLOUD_ROLES = new Set<CloudRole>(['all-in-one', 'web', 'worker', 'schedule
 export type CloudRuntimePolicy = {
   role: CloudRole
   profileName: string
+  publicUrl?: string | null
   profile: CloudProfileConfig
   features: CloudFeatureConfig
   runtimeConfigSource: 'app'
@@ -64,8 +65,7 @@ function unique(values: readonly string[] | undefined) {
 }
 
 function allowlist(values: readonly string[] | undefined) {
-  const list = unique(values)
-  return list.length > 0 ? list : null
+  return values === undefined ? null : unique(values)
 }
 
 function hasName(list: string[] | null | undefined, name: string) {
@@ -140,6 +140,7 @@ export function resolveCloudRuntimePolicy(
   return {
     role: resolveCloudRole(config, env),
     profileName,
+    publicUrl: envValue(env, 'OPEN_COWORK_CLOUD_PUBLIC_URL'),
     profile,
     features: {
       ...cloud.features,

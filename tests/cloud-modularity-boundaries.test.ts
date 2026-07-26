@@ -15,6 +15,7 @@ const postgresStore = readFileSync(join(cloudRoot, 'postgres-control-plane-store
 const postgresChannelDeliveriesDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/channel-deliveries.ts'), 'utf8')
 const postgresQuotaDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/quotas.ts'), 'utf8')
 const postgresWorkflowsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/workflows.ts'), 'utf8')
+const postgresWorkflowDefinitionsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/workflow-definitions.ts'), 'utf8')
 const postgresSessionsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/sessions.ts'), 'utf8')
 const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
 
@@ -205,8 +206,10 @@ test('postgres store delegates row mapping to domain modules', () => {
   assert.match(source, /postgres-domains\/channels\.ts/)
   assert.match(source, /postgres-store-domains\/workers\.ts/)
   assert.match(source, /postgres-store-domains\/workflows\.ts/)
-  // The workflow row mappers now live in the extracted workflows repository.
+  // Workflow runs and definitions stay behind separate repositories and shared row mappers.
   assert.match(postgresWorkflowsDomain, /postgres-domains\/workflows\.ts/)
+  assert.match(postgresWorkflowsDomain, /workflow-definitions\.ts/)
+  assert.match(postgresWorkflowDefinitionsDomain, /postgres-domains\/workflows\.ts/)
 
   for (const file of sourceFiles(join(cloudRoot, 'postgres-domains'))) {
     const relativePath = relative(root, file)
@@ -327,7 +330,7 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   const workflowRunBatchQuery = extractMethodSource(postgresWorkflowsDomain, 'listWorkflowRunsForWorkflows')
   assert.match(workflowRunBatchQuery, /CROSS JOIN LATERAL[\s\S]*ORDER BY candidate\.created_at DESC, candidate\.run_id[\s\S]*LIMIT \$4/)
   assert.doesNotMatch(workflowRunBatchQuery, /row_number\(\) OVER/)
-  const workflowWebhookLookup = extractMethodSource(postgresWorkflowsDomain, 'findWorkflow')
+  const workflowWebhookLookup = extractMethodSource(postgresWorkflowDefinitionsDomain, 'findWorkflow')
   assert.match(workflowWebhookLookup, /WHERE workflow_id = \$1[\s\S]*ORDER BY updated_at DESC, tenant_id[\s\S]*LIMIT 1/)
   assertIndexShape('cloud_channel_deliveries_claim_idx', 'cloud_channel_deliveries', 'org_id, status, next_attempt_at, created_at')
   assertIndexShape('cloud_usage_events_org_created_idx', 'cloud_usage_events', 'org_id, created_at DESC')

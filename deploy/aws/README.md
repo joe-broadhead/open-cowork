@@ -3,10 +3,16 @@
 Use the same `open-cowork-cloud` and `open-cowork-gateway` images on AWS with
 these services:
 
+> **Execution support boundary:** the stock EKS Helm worker and ECS image do
+> not supply the Docker-backed provider or inject an AWS execution provider.
+> Use these as web, scheduler, Gateway, storage, and downstream composition
+> references. Production workers require a dedicated Docker-capable host or a
+> reviewed ECS/EKS provider integration that passes the two-tenant proof.
+
 | Role | Recommended service |
 | --- | --- |
 | `web` | ECS/Fargate service or EKS Deployment |
-| `worker` | ECS service or EKS Deployment |
+| `worker` | Dedicated Docker-capable host or reviewed ECS/EKS provider integration |
 | `scheduler` | ECS service or EKS Deployment |
 | Gateway | ECS/Fargate service or EKS Deployment |
 | Control plane | RDS for PostgreSQL |
@@ -15,9 +21,9 @@ these services:
 | Observability | CloudWatch Logs plus OTLP exporter or collector |
 | Backups | RDS PITR plus S3 versioning/lifecycle |
 
-For Kubernetes-first deployments, install the provider-neutral Helm chart on
-EKS and connect it to RDS, S3, and Secrets Manager through External Secrets or
-IRSA.
+For Kubernetes-first deployments, use the provider-neutral Helm chart on EKS
+for non-executing roles and downstream provider wiring. Connect it to RDS, S3,
+and Secrets Manager through External Secrets or IRSA.
 
 Example Helm overrides. Keep real AWS account IDs, cluster names, image tags,
 image digests, domains, and secret values in a private deployment repo or

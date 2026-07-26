@@ -23,7 +23,6 @@ const triggerSchema = z.object({
   type: z.enum(['manual', 'schedule', 'webhook']).describe('How this workflow can start.'),
   enabled: z.boolean().optional().default(true),
   schedule: scheduleSchema.optional().nullable(),
-  webhookSecret: z.string().optional().nullable().describe('Optional existing webhook secret; omit for generated secret.'),
 })
 
 const workflowStepSchema = z.object({
@@ -79,7 +78,7 @@ server.tool(
 
 server.tool(
   'create_workflow',
-  'Save a confirmed Open Cowork workflow. Call only after the user explicitly confirms the preview, passing the previewToken returned by preview_workflow.',
+  'Save a confirmed Open Cowork workflow. Call only after the user explicitly confirms the preview, passing the previewToken returned by preview_workflow. No webhook credential is created in this transcript-persisted operation; direct the user to the Playbooks UI to provision one through the one-time secret mutation.',
   workflowCreateShape,
   async (request) => textResult(await postToBridge('/create', request)),
 )

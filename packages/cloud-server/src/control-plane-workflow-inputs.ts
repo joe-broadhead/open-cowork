@@ -36,8 +36,37 @@ export type CreateWorkflowInput = {
   userId: string
   workflowId: string
   draft: WorkflowDraft
+  webhookSecrets?: CreateWorkflowWebhookSecretInput[]
   nextRunAt?: string | null
   createdAt?: Date
+}
+
+export type CreateWorkflowWebhookSecretInput = {
+  triggerId: string
+  ciphertext: string
+  envelopeVersion: number
+}
+
+export type RotateWorkflowWebhookSecretInput = {
+  tenantId: string
+  userId: string
+  workflowId: string
+  triggerId: string
+  ciphertext: string
+  envelopeVersion: number
+  updatedAt?: Date
+}
+
+export type MigrateLegacyWorkflowWebhookSecretInput = {
+  tenantId: string
+  workflowId: string
+  triggerId: string
+  expectedPlaintext: string
+  expectedExistingCiphertext: string | null
+  expectedExistingEnvelopeVersion: number | null
+  ciphertext: string
+  envelopeVersion: number
+  migratedAt?: Date
 }
 
 export type CreateWorkflowRunInput = {

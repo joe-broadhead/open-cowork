@@ -6,6 +6,10 @@ import {
   OPEN_COWORK_MANAGED_RUNTIME_VALUE,
 } from './runtime-process-cleanup.js'
 import type { ManagedOpencodeServerAuth } from './runtime-managed-server.js'
+import {
+  normalizeRuntimeToolingBridgeConsent,
+  type RuntimeToolingBridgeConsent,
+} from '@open-cowork/shared'
 
 type RuntimeEnvPaths = ReturnType<typeof getRuntimeEnvPaths>
 
@@ -74,6 +78,7 @@ export function buildManagedRuntimeEnvironment(input: {
   adcPath?: string | null
   enableNativeWebSearch?: boolean
   serverAuth?: ManagedOpencodeServerAuth
+  toolingBridgeConsent?: RuntimeToolingBridgeConsent
 }) {
   const env: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(input.currentEnv)) {
@@ -96,5 +101,11 @@ export function buildManagedRuntimeEnvironment(input: {
   }
   if (input.enableNativeWebSearch) env.OPENCODE_ENABLE_EXA = '1'
   if (input.adcPath) env.GOOGLE_APPLICATION_CREDENTIALS = input.adcPath
+  const toolingBridgeConsent = normalizeRuntimeToolingBridgeConsent(input.toolingBridgeConsent)
+  if (toolingBridgeConsent.categories.ssh && input.currentEnv.SSH_AUTH_SOCK) {
+    // Broker SSH authentication through the existing agent socket. Private-key
+    // files stay outside runtime home, and SSH_AGENT_PID remains stripped.
+    env.SSH_AUTH_SOCK = input.currentEnv.SSH_AUTH_SOCK
+  }
   return env
 }

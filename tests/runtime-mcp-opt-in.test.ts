@@ -12,6 +12,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import type { AppSettings } from '../packages/shared/src/index.ts'
+import { createDisabledRuntimeToolingBridgeConsent } from '../packages/shared/src/runtime-tooling-bridge.ts'
 import type { BundleMcp } from '@open-cowork/runtime-host/config'
 
 const BASE_SETTINGS: AppSettings = {
@@ -36,7 +37,7 @@ const BASE_SETTINGS: AppSettings = {
   privacyKeepConversationHistory: true,
   privacyShareAnonymizedUsage: false,
   runtimeConfigSource: 'app',
-  runtimeToolingBridgeEnabled: true,
+  runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
   windowZoomFactor: 1,
   workflowLaunchAtLogin: false,
   workflowRunInBackground: false,

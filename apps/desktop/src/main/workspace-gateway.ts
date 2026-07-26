@@ -41,6 +41,7 @@ import type {
   WorkflowDetail,
   WorkflowListPayload,
   WorkflowRun,
+  WorkflowWebhookSecretMutationResult,
   WorkspaceInfo,
   WorkspaceApiSupport,
   WorkspaceApiSupportStatus,
@@ -101,6 +102,17 @@ import {
   createFileGatewayWorkspaceCredentialStore,
   type GatewayWorkspaceCredentialStore,
 } from './gateway-workspace-credentials.ts'
+import {
+  applyGatewayCredentialStatus,
+  assertGatewayCredentialCleared,
+  GatewayCredentialStorageReadError,
+  gatewayConnectionFromWorkspace,
+  gatewayCredentialFailureWorkspaceStatus,
+  gatewayCredentialReadError,
+  gatewayRegistrationFromConnection,
+  resetGatewayCredentialWorkspaceStates,
+  type WorkspaceRegistration,
+} from './workspace/workspace-gateway-credential-state.ts'
 import { DEFAULT_CONFIG, type CloudDesktopConfig } from '@open-cowork/shared'
 import { createCloudSessionGateway } from './workspace-gateway-cloud-sessions.ts'
 import { createCloudWorkflowGateway } from './workspace-gateway-cloud-workflows.ts'
@@ -109,8 +121,6 @@ import { createCloudArtifactGateway } from './workspace-gateway-cloud-artifacts.
 import { CloudSubscriptionManager } from './cloud-subscription-manager.ts'
 
 export const LOCAL_WORKSPACE_ID = 'local'
-
-type WorkspaceRegistration = Omit<WorkspaceInfo, 'active'>
 
 type WorkspaceEventLike = { sender?: { id?: number } } | null | undefined
 
@@ -270,37 +280,6 @@ function connectionFromWorkspace(workspace: WorkspaceRegistration): CloudWorkspa
   }
 }
 
-function gatewayRegistrationFromConnection(
-  connection: GatewayWorkspaceConnectionRecord,
-  status: WorkspaceStatus = 'auth_required',
-): WorkspaceRegistration {
-  return {
-    id: connection.id,
-    kind: 'gateway',
-    authority: 'gateway_standalone',
-    label: connection.label,
-    status,
-    baseUrl: connection.baseUrl,
-    lastSyncedAt: connection.lastSyncedAt,
-    error: status === 'auth_required' ? 'Add a Gateway workspace token to enable this private Gateway connection.' : null,
-  }
-}
-
-function gatewayConnectionFromWorkspace(workspace: WorkspaceRegistration): GatewayWorkspaceConnectionRecord {
-  if (workspace.kind !== 'gateway' || !workspace.baseUrl) {
-    throw new Error('Gateway workspace requires a base URL.')
-  }
-  const timestamp = new Date(0).toISOString()
-  return {
-    id: workspace.id,
-    baseUrl: normalizeGatewayWorkspaceBaseUrl(workspace.baseUrl),
-    label: workspace.label,
-    lastSyncedAt: workspace.lastSyncedAt || null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-}
-
 function pairedWorkspaceId(pairingId: string) {
   return `paired-desktop:${pairingId}`
 }
@@ -415,7 +394,10 @@ export class WorkspaceGateway {
     this.registerWorkspace(LOCAL_WORKSPACE)
     for (const connection of this.gatewayRegistry?.list() || []) {
       this.gatewayConnections.set(connection.id, connection)
-      this.registerWorkspace(this.applyGatewayCredentialStatus(gatewayRegistrationFromConnection(connection)))
+      this.registerWorkspace(applyGatewayCredentialStatus(
+        gatewayRegistrationFromConnection(connection),
+        this.gatewayCredentialStore,
+      ))
     }
     for (const workspace of options.workspaces || []) {
       if (workspace.kind !== 'cloud') this.registerWorkspace(workspace)
@@ -542,8 +524,14 @@ export class WorkspaceGateway {
         workspaceId: connection.id,
         token: input.token,
       })
+      // A same-id update must never retain an adapter that captured the old
+      // token. Drop it immediately after the replacement is durable.
+      this.gatewayAdapters.delete(connection.id)
     }
-    const workspace = this.applyGatewayCredentialStatus(gatewayRegistrationFromConnection(connection))
+    const workspace = applyGatewayCredentialStatus(
+      gatewayRegistrationFromConnection(connection),
+      this.gatewayCredentialStore,
+    )
     this.registerWorkspace(workspace)
     return this.toInfo(workspace, workspace.id === this.activeWorkspaceId(event))
   }
@@ -552,13 +540,16 @@ export class WorkspaceGateway {
     const workspaceId = normalizeWorkspaceId(workspaceIdInput)
     if (!workspaceId || workspaceId === LOCAL_WORKSPACE_ID) return false
     if (this.cloudDesktopConfig.requireManagedOrg && this.managedCloudWorkspaceIds.has(workspaceId)) return false
+    const workspace = this.workspaces.get(workspaceId)
+    if (workspace?.kind === 'gateway' && this.gatewayCredentialStore) {
+      assertGatewayCredentialCleared(this.gatewayCredentialStore.clear(workspaceId))
+    }
     const connection = this.cloudConnections.get(workspaceId)
     const gatewayConnection = this.gatewayConnections.get(workspaceId)
     const removed = this.workspaces.delete(workspaceId)
     const persistedRemoved = this.cloudRegistry?.remove(workspaceId) || false
     const gatewayPersistedRemoved = this.gatewayRegistry?.remove(workspaceId) || false
     this.cloudCredentialStore?.remove(workspaceId)
-    this.gatewayCredentialStore?.remove(workspaceId)
     this.clearCloudCache(connection)
     this.cloudConnections.delete(workspaceId)
     this.gatewayConnections.delete(workspaceId)
@@ -626,11 +617,14 @@ export class WorkspaceGateway {
     const workspace = this.getWorkspace(workspaceIdInput)
     if (workspace.kind === 'local') return this.toInfo(workspace, workspace.id === this.activeWorkspaceId(event))
     if (workspace.kind === 'gateway') {
-      this.gatewayCredentialStore?.remove(workspace.id)
+      if (this.gatewayCredentialStore) {
+        assertGatewayCredentialCleared(this.gatewayCredentialStore.clear(workspace.id))
+      }
       this.gatewayAdapters.delete(workspace.id)
       const next = {
         ...workspace,
         status: 'auth_required',
+        gatewayCredentialStatus: 'missing',
         error: 'Add a Gateway workspace token to enable this private Gateway connection.',
       } satisfies WorkspaceRegistration
       this.workspaces.set(workspace.id, next)
@@ -650,6 +644,30 @@ export class WorkspaceGateway {
     } satisfies WorkspaceRegistration
     this.workspaces.set(workspace.id, next)
     return this.toInfo(next, workspace.id === this.activeWorkspaceId(event))
+  }
+
+  resetUnreadableGatewayCredentials(): boolean {
+    if (!this.gatewayCredentialStore) {
+      throw new Error('Gateway workspace credential storage is not configured.')
+    }
+    const result = this.gatewayCredentialStore.resetUnreadable()
+    if (result.status === 'readable') {
+      throw new Error('Gateway credential storage is readable. No stored credentials were changed.')
+    }
+    if (result.status === 'unavailable') {
+      throw new Error(
+        result.reason === 'recovery-failed'
+          ? 'Gateway credential recovery could not quarantine the unreadable store. No stored credentials were changed.'
+          : 'Gateway credential recovery could not access the stored file. No stored credentials were changed.',
+      )
+    }
+
+    // The reset quarantines the entire unreadable document, so every cached
+    // Gateway adapter must drop its captured token and every registered
+    // Gateway must return to an explicit token-required state.
+    this.gatewayAdapters.clear()
+    resetGatewayCredentialWorkspaceStates(this.workspaces)
+    return true
   }
 
   policy(event: WorkspaceEventLike, workspaceIdInput?: string | null): WorkspacePolicy {
@@ -1114,6 +1132,14 @@ export class WorkspaceGateway {
     return this.cloudWorkflows.archive(event, workflowId, workspaceIdInput)
   }
 
+  async rotateCloudWorkflowWebhookSecret(
+    event: WorkspaceEventLike,
+    workflowId: string,
+    workspaceIdInput?: string | null,
+  ): Promise<WorkflowWebhookSecretMutationResult | null> {
+    return this.cloudWorkflows.rotateWebhookSecret(event, workflowId, workspaceIdInput)
+  }
+
   async searchCloudThreads(
     event: WorkspaceEventLike,
     query?: ThreadSearchQuery,
@@ -1493,14 +1519,17 @@ export class WorkspaceGateway {
     if (workspace.kind !== 'gateway') throw new Error('This action requires a Gateway workspace.')
     const connection = this.gatewayConnections.get(workspace.id)
     if (!connection) throw new Error('Gateway workspace connection is missing.')
-    const token = this.gatewayCredentialStore?.getToken(workspace.id) || null
-    if (!token) {
+    const tokenResult = this.gatewayCredentialStore?.getToken(workspace.id) || { status: 'missing' as const }
+    if (tokenResult.status === 'unavailable' || tokenResult.status === 'corrupt') {
+      throw new GatewayCredentialStorageReadError(tokenResult)
+    }
+    if (tokenResult.status === 'missing') {
       const latestWorkspace = this.workspaces.get(workspace.id) || workspace
       throw new Error(latestWorkspace.error || 'Gateway workspace token is required.')
     }
     const existing = this.gatewayAdapters.get(workspace.id)
     if (existing) return existing
-    const adapter = this.gatewayAdapterFactory(connection, token)
+    const adapter = this.gatewayAdapterFactory(connection, tokenResult.token)
     this.gatewayAdapters.set(workspace.id, adapter)
     return adapter
   }
@@ -1516,13 +1545,23 @@ export class WorkspaceGateway {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.gatewayAdapters.delete(workspace.id)
-      const missingToken = /token is required|credential|authorization|unauthorized|401|403/i.test(message)
+      const credentialStorageFailure = error instanceof GatewayCredentialStorageReadError
+        ? error.failure
+        : null
+      const missingToken = !credentialStorageFailure
+        && /token is required|credential|authorization|unauthorized|401|403/i.test(message)
       this.workspaces.set(workspace.id, {
         ...workspace,
-        status: missingToken ? 'auth_required' : 'offline',
-        error: missingToken
-          ? 'Add a Gateway workspace token to enable this private Gateway connection.'
-          : message || 'Gateway workspace is offline or unavailable. Retry when the connection recovers.',
+        status: credentialStorageFailure
+          ? gatewayCredentialFailureWorkspaceStatus(credentialStorageFailure)
+          : missingToken ? 'auth_required' : 'offline',
+        gatewayCredentialStatus: credentialStorageFailure?.status
+          || (missingToken ? 'missing' : workspace.gatewayCredentialStatus),
+        error: credentialStorageFailure
+          ? gatewayCredentialReadError(credentialStorageFailure)
+          : missingToken
+            ? 'Add a Gateway workspace token to enable this private Gateway connection.'
+            : message || 'Gateway workspace is offline or unavailable. Retry when the connection recovers.',
       })
       throw error
     }
@@ -1665,17 +1704,6 @@ export class WorkspaceGateway {
     const accessToken = this.cloudCredentialStore?.getUsableAccessToken(workspace.id)
     const credential = accessToken ? null : this.cloudCredentialStore?.get(workspace.id)
     if (!accessToken && !credential?.refreshToken) return workspace
-    return {
-      ...workspace,
-      status: 'online',
-      error: null,
-    }
-  }
-
-  private applyGatewayCredentialStatus(workspace: WorkspaceRegistration): WorkspaceRegistration {
-    if (workspace.kind !== 'gateway') return workspace
-    const token = this.gatewayCredentialStore?.getToken(workspace.id)
-    if (!token) return workspace
     return {
       ...workspace,
       status: 'online',

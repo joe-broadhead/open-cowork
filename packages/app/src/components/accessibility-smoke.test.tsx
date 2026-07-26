@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { axe } from 'vitest-axe'
-import type { ProviderDescriptor } from '@open-cowork/shared'
+import { createDisabledRuntimeToolingBridgeConsent, type ProviderDescriptor } from '@open-cowork/shared'
 import { LoginScreen } from './LoginScreen'
 import { ApprovalCard } from './chat/ApprovalCard'
 import { ChatInput } from './chat/ChatInput'
@@ -153,7 +153,7 @@ describe('focused accessibility smoke', () => {
           notificationSounds: true,
           privacyKeepConversationHistory: true,
           privacyShareAnonymizedUsage: false,
-          runtimeToolingBridgeEnabled: true,
+          runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
           windowZoomFactor: 1,
           workflowLaunchAtLogin: false,
           workflowRunInBackground: false,

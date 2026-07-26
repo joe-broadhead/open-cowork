@@ -1,8 +1,14 @@
-import { readSafeStorageBackendForPolicy, resolveSecretStorageMode, type SecretStorageMode } from '@open-cowork/runtime-host/secure-storage-policy'
+import {
+  readSafeStorageBackendForPolicy,
+  resolveSecretStorageMode,
+  type SecretStorageMode,
+} from '@open-cowork/runtime-host/secure-storage-policy'
 import { getAppPathHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
-import { join } from 'path'
+import { randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs'
+import { join } from 'node:path'
 import { getAppDataDir } from '@open-cowork/runtime-host/config'
+
 type SecretStorageAdapter = {
   mode: SecretStorageMode
   encryptString: (plaintext: string) => Buffer
@@ -26,12 +32,105 @@ export type GatewayWorkspaceCredentialMetadata = {
   updatedAt: string
 }
 
+export type GatewayWorkspaceCredentialUnavailableReason =
+  | 'secure-storage-unavailable'
+  | 'read-failed'
+  | 'decrypt-failed'
+  | 'recovery-failed'
+
+export type GatewayWorkspaceCredentialCorruptReason =
+  | 'invalid-payload'
+  | 'invalid-record'
+
+export type GatewayWorkspaceCredentialReadFailure =
+  | {
+      status: 'unavailable'
+      reason: GatewayWorkspaceCredentialUnavailableReason
+    }
+  | {
+      status: 'corrupt'
+      reason: GatewayWorkspaceCredentialCorruptReason
+    }
+
+export type GatewayWorkspaceCredentialReadResult =
+  | {
+      status: 'available'
+      credential: GatewayWorkspaceCredentialRecord
+    }
+  | {
+      status: 'missing'
+    }
+  | GatewayWorkspaceCredentialReadFailure
+
+export type GatewayWorkspaceCredentialTokenResult =
+  | {
+      status: 'available'
+      token: string
+      updatedAt: string
+    }
+  | {
+      status: 'missing'
+    }
+  | GatewayWorkspaceCredentialReadFailure
+
+export type GatewayWorkspaceCredentialMetadataResult =
+  | {
+      status: 'available'
+      credentials: GatewayWorkspaceCredentialMetadata[]
+    }
+  | GatewayWorkspaceCredentialReadFailure
+
+export type GatewayWorkspaceCredentialClearResult =
+  | {
+      status: 'cleared'
+    }
+  | {
+      status: 'missing'
+    }
+  | GatewayWorkspaceCredentialReadFailure
+
+export type GatewayWorkspaceCredentialUnreadableResetResult =
+  | {
+      status: 'reset'
+    }
+  | {
+      status: 'readable'
+    }
+  | {
+      status: 'unavailable'
+      reason: GatewayWorkspaceCredentialUnavailableReason
+    }
+
 export type GatewayWorkspaceCredentialStore = {
-  get(workspaceId: string): GatewayWorkspaceCredentialRecord | null
-  getToken(workspaceId: string): string | null
-  listMetadata(): GatewayWorkspaceCredentialMetadata[]
+  get(workspaceId: string): GatewayWorkspaceCredentialReadResult
+  getToken(workspaceId: string): GatewayWorkspaceCredentialTokenResult
+  listMetadata(): GatewayWorkspaceCredentialMetadataResult
   save(input: GatewayWorkspaceCredentialInput, now?: Date): GatewayWorkspaceCredentialRecord
-  remove(workspaceId: string): boolean
+  clear(workspaceId: string): GatewayWorkspaceCredentialClearResult
+  resetUnreadable(): GatewayWorkspaceCredentialUnreadableResetResult
+}
+
+type GatewayWorkspaceCredentialSnapshot =
+  | {
+      status: 'available'
+      records: GatewayWorkspaceCredentialRecord[]
+    }
+  | GatewayWorkspaceCredentialReadFailure
+
+export class GatewayWorkspaceCredentialStoreError extends Error {
+  readonly status: GatewayWorkspaceCredentialReadFailure['status']
+  readonly reason: GatewayWorkspaceCredentialReadFailure['reason']
+
+  constructor(failure: GatewayWorkspaceCredentialReadFailure) {
+    super(
+      failure.status === 'unavailable'
+        ? 'Gateway credential storage is temporarily unavailable. Retry after OS credential access recovers.'
+        : 'Gateway credential storage is corrupt. The stored bytes were preserved for an explicit recovery action.',
+    )
+    this.name = 'GatewayWorkspaceCredentialStoreError'
+    this.status = failure.status
+    this.reason = failure.reason
+  }
 }
 
 function defaultCredentialPath() {
@@ -64,9 +163,13 @@ function boundedToken(value: unknown) {
 }
 
 function normalizeWorkspaceId(value: unknown) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error('Gateway workspace credential workspace id is required.')
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('Gateway workspace credential workspace id is required.')
+  }
   const trimmed = value.trim()
-  if (Buffer.byteLength(trimmed, 'utf8') > 512) throw new Error('Gateway workspace credential workspace id is too large.')
+  if (Buffer.byteLength(trimmed, 'utf8') > 512) {
+    throw new Error('Gateway workspace credential workspace id is too large.')
+  }
   return trimmed
 }
 
@@ -95,7 +198,7 @@ function normalizeRecord(value: unknown): GatewayWorkspaceCredentialRecord | nul
 function metadata(record: GatewayWorkspaceCredentialRecord): GatewayWorkspaceCredentialMetadata {
   return {
     workspaceId: record.workspaceId,
-    hasToken: Boolean(record.token),
+    hasToken: true,
     updatedAt: record.updatedAt,
   }
 }
@@ -109,17 +212,31 @@ export class FileGatewayWorkspaceCredentialStore implements GatewayWorkspaceCred
     this.secretStorage = options.secretStorage === undefined ? null : options.secretStorage
   }
 
-  get(workspaceId: string): GatewayWorkspaceCredentialRecord | null {
+  get(workspaceId: string): GatewayWorkspaceCredentialReadResult {
     const id = normalizeWorkspaceId(workspaceId)
-    return this.readRecords().find((record) => record.workspaceId === id) || null
+    const snapshot = this.readSnapshot()
+    if (snapshot.status !== 'available') return snapshot
+    const credential = snapshot.records.find((record) => record.workspaceId === id)
+    return credential ? { status: 'available', credential } : { status: 'missing' }
   }
 
-  getToken(workspaceId: string): string | null {
-    return this.get(workspaceId)?.token || null
+  getToken(workspaceId: string): GatewayWorkspaceCredentialTokenResult {
+    const result = this.get(workspaceId)
+    if (result.status !== 'available') return result
+    return {
+      status: 'available',
+      token: result.credential.token,
+      updatedAt: result.credential.updatedAt,
+    }
   }
 
-  listMetadata(): GatewayWorkspaceCredentialMetadata[] {
-    return this.readRecords().map(metadata)
+  listMetadata(): GatewayWorkspaceCredentialMetadataResult {
+    const snapshot = this.readSnapshot()
+    if (snapshot.status !== 'available') return snapshot
+    return {
+      status: 'available',
+      credentials: snapshot.records.map(metadata),
+    }
   }
 
   save(input: GatewayWorkspaceCredentialInput, now = new Date()): GatewayWorkspaceCredentialRecord {
@@ -128,21 +245,46 @@ export class FileGatewayWorkspaceCredentialStore implements GatewayWorkspaceCred
       token: boundedToken(input.token),
       updatedAt: now.toISOString(),
     }
-    const records = this.readRecords()
-    const next = records.some((entry) => entry.workspaceId === record.workspaceId)
-      ? records.map((entry) => entry.workspaceId === record.workspaceId ? record : entry)
-      : [...records, record]
+    const snapshot = this.readSnapshot()
+    if (snapshot.status !== 'available') {
+      // Refuse a replacement when the current ciphertext cannot be read. An
+      // encrypt/write failure therefore leaves the previous atomic file intact.
+      throw new GatewayWorkspaceCredentialStoreError(snapshot)
+    }
+    const next = snapshot.records.some((entry) => entry.workspaceId === record.workspaceId)
+      ? snapshot.records.map((entry) => entry.workspaceId === record.workspaceId ? record : entry)
+      : [...snapshot.records, record]
     this.writeRecords(next)
     return record
   }
 
-  remove(workspaceId: string): boolean {
+  clear(workspaceId: string): GatewayWorkspaceCredentialClearResult {
     const id = normalizeWorkspaceId(workspaceId)
-    const records = this.readRecords()
-    const next = records.filter((record) => record.workspaceId !== id)
-    if (next.length === records.length) return false
+    const snapshot = this.readSnapshot()
+    if (snapshot.status !== 'available') return snapshot
+    const next = snapshot.records.filter((record) => record.workspaceId !== id)
+    if (next.length === snapshot.records.length) return { status: 'missing' }
     this.writeRecords(next)
-    return true
+    return { status: 'cleared' }
+  }
+
+  resetUnreadable(): GatewayWorkspaceCredentialUnreadableResetResult {
+    const snapshot = this.readSnapshot()
+    if (snapshot.status === 'available') return { status: 'readable' }
+
+    // This is the only destructive recovery path for a document that cannot
+    // currently be read, including permanent key loss. The caller must gate it
+    // behind explicit native confirmation; ordinary reads always preserve and
+    // retry the original bytes.
+    // Rename preserves the original bytes as a sibling quarantine artifact;
+    // there is deliberately no delete fallback if quarantine cannot complete.
+    const quarantinePath = `${this.path}.corrupt-${Date.now()}-${randomUUID()}`
+    try {
+      renameSync(this.path, quarantinePath)
+      return { status: 'reset' }
+    } catch {
+      return { status: 'unavailable', reason: 'recovery-failed' }
+    }
   }
 
   private storageMode() {
@@ -153,25 +295,56 @@ export class FileGatewayWorkspaceCredentialStore implements GatewayWorkspaceCred
     return this.secretStorage || requireSafeStorage()
   }
 
-  private readRecords(): GatewayWorkspaceCredentialRecord[] {
-    if (!existsSync(this.path)) return []
-    const mode = this.storageMode()
-    if (mode === 'unavailable') return []
+  private readSnapshot(): GatewayWorkspaceCredentialSnapshot {
+    if (!existsSync(this.path)) return { status: 'available', records: [] }
+
+    let mode: SecretStorageMode
     try {
-      const raw = readFileSync(this.path)
-      const json = mode === 'encrypted'
+      mode = this.storageMode()
+    } catch {
+      return { status: 'unavailable', reason: 'secure-storage-unavailable' }
+    }
+    if (mode === 'unavailable') {
+      return { status: 'unavailable', reason: 'secure-storage-unavailable' }
+    }
+
+    let raw: Buffer
+    try {
+      raw = readFileSync(this.path)
+    } catch {
+      return { status: 'unavailable', reason: 'read-failed' }
+    }
+
+    let json: string
+    try {
+      json = mode === 'encrypted'
         ? this.storage().decryptString(raw)
         : raw.toString('utf-8')
-      const parsed = JSON.parse(json) as unknown
-      if (!Array.isArray(parsed)) return []
-      return parsed
-        .map(normalizeRecord)
-        .filter((record): record is GatewayWorkspaceCredentialRecord => Boolean(record))
     } catch {
-      if (mode === 'encrypted') {
-        try { rmSync(this.path, { force: true }) } catch { /* ignore corrupted credential cleanup */ }
-      }
-      return []
+      // Keychain denial and decrypt-provider failures can be transient. Never
+      // move, truncate, or delete the ciphertext; the next read retries it.
+      return { status: 'unavailable', reason: 'decrypt-failed' }
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(json) as unknown
+    } catch {
+      return { status: 'corrupt', reason: 'invalid-payload' }
+    }
+    if (!Array.isArray(parsed)) return { status: 'corrupt', reason: 'invalid-payload' }
+
+    const records = parsed.map(normalizeRecord)
+    if (records.some((record) => !record)) {
+      return { status: 'corrupt', reason: 'invalid-record' }
+    }
+    const normalizedRecords = records as GatewayWorkspaceCredentialRecord[]
+    if (new Set(normalizedRecords.map(({ workspaceId }) => workspaceId)).size !== normalizedRecords.length) {
+      return { status: 'corrupt', reason: 'invalid-record' }
+    }
+    return {
+      status: 'available',
+      records: normalizedRecords,
     }
   }
 
@@ -179,14 +352,18 @@ export class FileGatewayWorkspaceCredentialStore implements GatewayWorkspaceCred
     const json = JSON.stringify(records, null, 2)
     const mode = this.storageMode()
     if (mode === 'encrypted') {
-      writeFileAtomic(this.path, this.storage().encryptString(json), { mode: 0o600 })
+      const encrypted = this.storage().encryptString(json)
+      writeFileAtomic(this.path, encrypted, { mode: 0o600 })
       return
     }
     if (mode === 'plaintext') {
       writeFileAtomic(this.path, json, { mode: 0o600 })
       return
     }
-    throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist gateway workspace tokens in production without OS-backed secret storage.')
+    throw new Error(
+      'Secure storage unavailable on this system. '
+      + 'Open Cowork cannot persist gateway workspace tokens in production without OS-backed secret storage.',
+    )
   }
 }
 

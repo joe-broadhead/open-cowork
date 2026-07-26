@@ -7,6 +7,10 @@ import type {
 } from '@open-cowork/shared'
 import { normalizeWorkflowSteps } from '@open-cowork/shared'
 import { validateWorkflowSchedule } from './workflow-schedule.js'
+import type {
+  InternalWorkflowDraft,
+  InternalWorkflowTrigger,
+} from './workflow-secret-contract.js'
 
 const MAX_TEXT = 32 * 1024
 export const MAX_WORKFLOW_LIST_ITEMS = 50
@@ -23,6 +27,7 @@ export type WorkflowDraftNormalizationOptions = {
   capabilities?: WorkflowCapabilityValidationContext
   idGenerator?: () => string
   secretGenerator?: () => string
+  generateWebhookSecrets?: boolean
   projectDirectoryExists?: (directory: string) => boolean
 }
 
@@ -121,7 +126,7 @@ export function assertWorkflowCapabilities(draft: WorkflowDraft, options?: Pick<
   return gaps
 }
 
-export function normalizeWorkflowDraft(draft: WorkflowDraft, options?: WorkflowDraftNormalizationOptions): WorkflowDraft {
+export function normalizeWorkflowDraft(draft: WorkflowDraft, options?: WorkflowDraftNormalizationOptions): InternalWorkflowDraft {
   const title = boundedText(draft.title, 'Workflow title', 512)
   const instructions = boundedText(draft.instructions, 'Workflow instructions', MAX_TEXT)
   const agentName = boundedText(draft.agentName || 'build', 'Workflow agent', 256)
@@ -132,6 +137,7 @@ export function normalizeWorkflowDraft(draft: WorkflowDraft, options?: WorkflowD
     now: options?.now ?? new Date(),
     idGenerator,
     secretGenerator: options?.secretGenerator ?? randomWorkflowSecret,
+    generateWebhookSecrets: options?.generateWebhookSecrets === true,
   })
   if (!triggers.some((trigger) => trigger.type === 'manual')) {
     triggers.unshift({ id: idGenerator(), type: 'manual', enabled: true })
@@ -160,22 +166,22 @@ function normalizeWorkflowTriggers(
     now: Date
     idGenerator: () => string
     secretGenerator: () => string
+    generateWebhookSecrets: boolean
   },
-): WorkflowTrigger[] {
+): InternalWorkflowTrigger[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error('Workflow requires at least one trigger.')
   }
-  return value.slice(0, 8).map((raw) => {
+  const triggers = value.slice(0, 8).map((raw) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Workflow trigger must be an object.')
     const trigger = raw as Partial<WorkflowTrigger>
     const type = String(trigger.type || '')
     if (!isWorkflowTriggerType(type)) throw new Error('Workflow trigger type is invalid.')
-    const normalized: WorkflowTrigger = {
+    const normalized: InternalWorkflowTrigger = {
       id: typeof trigger.id === 'string' && trigger.id.trim() ? trigger.id.trim() : options.idGenerator(),
       type,
       enabled: trigger.enabled !== false,
       schedule: null,
-      webhookSecret: null,
     }
     if (normalized.type === 'schedule') {
       if (!trigger.schedule) throw new Error('Scheduled workflow trigger requires a schedule.')
@@ -183,28 +189,39 @@ function normalizeWorkflowTriggers(
       if (scheduleError) throw new Error(scheduleError)
       normalized.schedule = trigger.schedule
     }
-    if (normalized.type === 'webhook') {
-      normalized.webhookSecret = typeof trigger.webhookSecret === 'string' && trigger.webhookSecret.trim()
-        ? trigger.webhookSecret.trim()
-        : options.secretGenerator()
-    }
     return normalized
   })
+  if (triggers.filter((trigger) => trigger.type === 'webhook').length > 1) {
+    throw new Error('A workflow can have at most one webhook trigger.')
+  }
+  if (options.generateWebhookSecrets) {
+    const webhook = triggers.find((trigger) => trigger.type === 'webhook')
+    if (webhook) webhook.webhookSecret = options.secretGenerator()
+  }
+  return triggers
 }
 
 export function previewWorkflowDraft(draft: WorkflowDraft, options?: WorkflowDraftNormalizationOptions): WorkflowToolPreview {
   try {
     const now = options?.now ?? new Date()
-    const normalizedDraft = normalizeWorkflowDraft(draft, { ...options, now })
+    const normalizedDraft = normalizeWorkflowDraft(draft, {
+      ...options,
+      now,
+      generateWebhookSecrets: false,
+    })
     const gaps = validateWorkflowDraftCapabilities(normalizedDraft, options)
     const missing = requiredWorkflowGaps(gaps).map((gap) => gap.message)
+    const publicDraft: WorkflowDraft = {
+      ...normalizedDraft,
+      triggers: normalizedDraft.triggers.map(({ webhookSecret: _webhookSecret, ...trigger }) => trigger),
+    }
     return {
       ok: missing.length === 0,
       title: normalizedDraft.title,
       summary: normalizedDraft.instructions.slice(0, 500),
       missing,
       gaps,
-      normalizedDraft,
+      normalizedDraft: publicDraft,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Workflow draft is invalid.'

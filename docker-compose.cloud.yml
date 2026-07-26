@@ -13,6 +13,8 @@ services:
       OPEN_COWORK_CLOUD_ROLE: all-in-one
       OPEN_COWORK_CLOUD_PROFILE: full
       OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: local
+      # Shared-process execution is an explicit local-development choice.
+      OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE: development-process
       # Default to the in-container mount targets so a config dropped at the advertised
       # bind-mount path is actually loaded out-of-box. An explicit external value still
       # wins, and the volume mounts the same path.

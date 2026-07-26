@@ -3,6 +3,7 @@ import { installRendererTestCoworkApi } from '../test/setup'
 import {
   confirmAgentRemoval,
   confirmAppReset,
+  confirmGatewayCredentialReset,
   confirmMcpRemoval,
   confirmSessionDelete,
   confirmSkillRemoval,
@@ -22,6 +23,7 @@ describe('renderer destructive-action helpers', () => {
     await expect(confirmAgentRemoval({ name: 'analyst', scope: 'machine', directory: null })).resolves.toMatchObject({ token: 'token:agent.remove' })
     await expect(confirmMcpRemoval({ name: 'github', scope: 'project', directory: '/repo' })).resolves.toMatchObject({ token: 'token:mcp.remove' })
     await expect(confirmSkillRemoval({ name: 'chart-creator', scope: 'machine', directory: null })).resolves.toMatchObject({ token: 'token:skill.remove' })
+    await expect(confirmGatewayCredentialReset()).resolves.toMatchObject({ token: 'token:gateway.credentials.reset' })
     await expect(confirmAppReset()).resolves.toMatchObject({ token: 'token:app.reset' })
 
     expect(requestDestructive).toHaveBeenNthCalledWith(1, { action: 'session.delete', sessionId: 'session-1' })
@@ -37,6 +39,7 @@ describe('renderer destructive-action helpers', () => {
       action: 'skill.remove',
       target: { name: 'chart-creator', scope: 'machine', directory: null },
     })
-    expect(requestDestructive).toHaveBeenNthCalledWith(5, { action: 'app.reset' })
+    expect(requestDestructive).toHaveBeenNthCalledWith(5, { action: 'gateway.credentials.reset' })
+    expect(requestDestructive).toHaveBeenNthCalledWith(6, { action: 'app.reset' })
   })
 })

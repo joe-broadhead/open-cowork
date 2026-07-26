@@ -39,11 +39,9 @@ const runtimeAuthoritySourceRoots = [
 const sdkImportPattern = /\bfrom\s+['"]@opencode-ai\/sdk(?:\/v2(?:\/server)?)?['"]|import\s*\(\s*['"]@opencode-ai\/sdk(?:\/v2(?:\/server)?)?['"]\s*\)/
 
 const allowedSdkImportPaths = new Set([
-  'packages/cloud-server/src/app.ts',
   'packages/cloud-server/src/byok-runtime-config.ts',
   'packages/cloud-server/src/opencode-runtime-adapter.ts',
   'packages/cloud-server/src/runtime-adapter.ts',
-  'packages/cloud-server/src/worker-scoped-runtime-adapter.ts',
   'apps/desktop/src/main/durable-session-events.ts',
   'apps/desktop/src/main/event-subscriptions.ts',
   'apps/desktop/src/main/events.ts',

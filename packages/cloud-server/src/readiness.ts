@@ -7,6 +7,11 @@ import type { ObjectStoreAdapter } from './object-store.ts'
 import { CLOUD_CONTROL_PLANE_MIGRATIONS } from './postgres-schema.ts'
 import type { SecretAdapter } from './secret-adapter.ts'
 import { isNonPublicCloudHost } from './cloud-host-policy.ts'
+import {
+  evaluateCloudExecutionIsolationCapability,
+  type CloudExecutionIsolationCapability,
+  type CloudExecutionIsolationPolicy,
+} from './execution-isolation.ts'
 
 export type CloudReadinessCheckStatus = 'ok' | 'error'
 
@@ -38,6 +43,10 @@ export type CloudReadinessOptions = {
   browserAuthConfigured?: boolean
   checkpointsEnabled?: boolean
   checkpointStoreConfigured?: boolean
+  executionIsolationPolicy?: CloudExecutionIsolationPolicy
+  executionIsolationCapability?:
+    | CloudExecutionIsolationCapability
+    | (() => Promise<CloudExecutionIsolationCapability> | CloudExecutionIsolationCapability)
   requireSchemaMigrations?: boolean
   now?: () => Date
   objectStoreCheckTtlMs?: number
@@ -51,6 +60,13 @@ type CachedCheck = {
 const DEFAULT_OBJECT_STORE_CHECK_TTL_MS = 30_000
 const READINESS_SECRET_CONTEXT = 'cloud:readiness'
 const READINESS_OBJECT_PREFIX = 'health/readiness'
+const READINESS_DETAIL_TOKEN_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/
+
+function readinessDetailToken(value: unknown, fallback: string) {
+  return typeof value === 'string' && READINESS_DETAIL_TOKEN_PATTERN.test(value)
+    ? value
+    : fallback
+}
 
 function errorDetail(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -182,6 +198,41 @@ function checkRoleDependencies(options: CloudReadinessOptions) {
   }
 }
 
+async function checkExecutionIsolation(options: CloudReadinessOptions): Promise<CloudReadinessCheckResult> {
+  const policy = options.executionIsolationPolicy
+  const capability = typeof options.executionIsolationCapability === 'function'
+    ? await options.executionIsolationCapability()
+    : options.executionIsolationCapability
+  if (!policy || !capability) {
+    return {
+      name: 'execution_isolation',
+      status: policy?.required ? 'error' : 'ok',
+      detail: policy?.required ? 'reason=isolation_capability_missing' : 'not_applicable',
+    }
+  }
+  const verdict = evaluateCloudExecutionIsolationCapability(policy, capability)
+  const provider = readinessDetailToken(capability.provider, 'invalid')
+  const engine = readinessDetailToken(capability.engine, 'unverified')
+  const networkPolicy = readinessDetailToken(capability.networkPolicy, 'unverified')
+  const reasonCode = readinessDetailToken(
+    verdict.blockers[0] || capability.reasonCode,
+    'isolation_capability_unavailable',
+  )
+  const summary = [
+    `provider=${provider}`,
+    `engine=${engine}`,
+    `network=${networkPolicy}`,
+    `verified=${capability.verified === true}`,
+  ].join(';')
+  return {
+    name: 'execution_isolation',
+    status: verdict.ok ? 'ok' : 'error',
+    detail: verdict.ok
+      ? summary
+      : `${summary};reason=${reasonCode}`,
+  }
+}
+
 export function createCloudReadinessCheck(options: CloudReadinessOptions) {
   let cachedObjectStore: CachedCheck | null = null
   const objectStoreCheckTtlMs = options.objectStoreCheckTtlMs ?? DEFAULT_OBJECT_STORE_CHECK_TTL_MS
@@ -209,6 +260,7 @@ export function createCloudReadinessCheck(options: CloudReadinessOptions) {
     checks.push(await check('billing_adapter', () => checkBillingAdapter(options.billingConfig, options.billingAdapter)))
     checks.push(await check('auth_config', () => checkAuthConfig(options)))
     checks.push(await check('role_dependencies', () => checkRoleDependencies(options)))
+    checks.push(await checkExecutionIsolation(options))
 
     return {
       ok: checks.every((entry) => entry.status === 'ok'),

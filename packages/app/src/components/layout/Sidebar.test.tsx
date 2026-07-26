@@ -983,6 +983,90 @@ describe('Sidebar', () => {
     expect(screen.queryByDisplayValue('secret-token')).toBeNull()
   })
 
+  it('requires native confirmation before quarantining unavailable Gateway credentials', async () => {
+    const requestDestructive = vi.fn(async () => ({
+      token: 'gateway-reset-confirmation',
+      expiresAt: '2026-07-26T04:30:00.000Z',
+    }))
+    const resetGatewayCredentials = vi.fn(async () => true)
+    installRendererTestCoworkApi({
+      workspace: {
+        resetGatewayCredentials,
+        list: vi.fn()
+          .mockResolvedValueOnce([
+            {
+              id: 'local',
+              kind: 'local',
+              authority: 'desktop_local',
+              label: 'Local',
+              status: 'online',
+              active: true,
+              lastSyncedAt: null,
+            },
+            {
+              id: 'gateway:private',
+              kind: 'gateway',
+              authority: 'gateway_standalone',
+              label: 'Private Gateway',
+              status: 'offline',
+              active: false,
+              baseUrl: 'https://gateway.example.test',
+              gatewayCredentialStatus: 'unavailable',
+              error: 'Gateway credential storage is unavailable. The stored bytes were preserved.',
+              lastSyncedAt: null,
+            },
+          ])
+          .mockResolvedValueOnce([
+            {
+              id: 'local',
+              kind: 'local',
+              authority: 'desktop_local',
+              label: 'Local',
+              status: 'online',
+              active: true,
+              lastSyncedAt: null,
+            },
+            {
+              id: 'gateway:private',
+              kind: 'gateway',
+              authority: 'gateway_standalone',
+              label: 'Private Gateway',
+              status: 'auth_required',
+              active: false,
+              baseUrl: 'https://gateway.example.test',
+              gatewayCredentialStatus: 'missing',
+              error: 'Gateway credentials were reset after storage recovery. Add a new token to reconnect.',
+              lastSyncedAt: null,
+            },
+          ]),
+      },
+      confirm: { requestDestructive },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', {
+      name: /Local.*Online.*Local workspace - private on this device/i,
+    }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The unreadable credential file is still preserved.',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Reset stored Gateway credentials' }))
+
+    await waitFor(() => {
+      expect(requestDestructive).toHaveBeenCalledWith({ action: 'gateway.credentials.reset' })
+      expect(resetGatewayCredentials).toHaveBeenCalledWith('gateway-reset-confirmation')
+    })
+    expect(await screen.findByDisplayValue('https://gateway.example.test')).toBeTruthy()
+    expect(screen.getByDisplayValue('Private Gateway')).toBeTruthy()
+    expect(screen.getByLabelText('Gateway token')).toHaveValue('')
+  })
+
   it('renders configured top and lower downstream branding surfaces', () => {
     render(
       <Sidebar

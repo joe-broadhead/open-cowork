@@ -28,6 +28,8 @@ import {
 import { listEffectiveSkillsSync } from './effective-skills.js'
 import { evaluateHttpMcpUrlResolved } from './mcp-url-policy.js'
 import type { PermissionAction } from './permission-config.js'
+
+export type OpencodeRuntimeConfig = Config
 import {
   clampManagedPolicyDimension,
   filterProvidersByManagedPolicy,

@@ -2,7 +2,7 @@ import { createWorkClaimToken, nowIso, stableId } from '../postgres-store-id-hel
 import { workflowFromRow, workflowRunFromRow } from '../postgres-domains/workflows.ts'
 import type { QueryResult, QueryRow } from '../postgres-domains/shared.ts'
 import { assertPostgresWorkflowRunQuota, type PostgresQuotaDomainDeps } from './quotas.ts'
-import { normalizeWorkflowSteps, type WorkflowRunStatus, type WorkflowStatus } from '@open-cowork/shared'
+import type { WorkflowRunStatus, WorkflowStatus } from '@open-cowork/shared'
 import type {
   AttachWorkflowRunSessionInput,
   ClaimDueWorkflowRunInput,
@@ -15,20 +15,19 @@ import type {
   FailWorkflowRunInput,
   ListWorkflowRunsForWorkflowsInput,
   ListWorkflowsPageInput,
-  ListWorkflowsPageRecord,
+  MigrateLegacyWorkflowWebhookSecretInput,
   ReapExpiredWorkflowClaimsInput,
   ReapedWorkflowClaimRecord,
+  RotateWorkflowWebhookSecretInput,
   UpdateWorkflowStatusInput,
 } from '../control-plane-store.ts'
-import { decodeWorkflowPageCursor, encodeWorkflowPageCursor } from '../workflow-page-cursor.ts'
+import { PostgresWorkflowDefinitionsRepository } from './workflow-definitions.ts'
 
-// Workflow SQL domain extracted from postgres-control-plane-store.ts. Owns the workflow
-// drafts + runs lifecycle: create/find/list/get, status transitions, run creation (with
-// the workflow-run quota gate), due-run claiming (claim tokens + leases), claim reaping,
-// session attach, and completion/failure. Tenant/tenant-user checks, lease-token
-// validation, the transaction runner and the shared quota deps arrive via the injected
-// host (the session core stays in the store). Behaviour-preserving; covered by the
-// pglite + real-Postgres control-plane contract suites.
+// Workflow-run SQL domain extracted from postgres-control-plane-store.ts. It composes
+// the workflow-definition repository for the stable store surface, while owning run
+// creation, quota gating, claim/reaping, session attachment, and completion/failure.
+// Tenant/tenant-user checks, lease fencing, transactions, and quota dependencies are
+// injected by the composition root.
 
 const WORKFLOW_RUN_LIST_LIMIT = 100
 const WORKFLOW_LIST_LIMIT = 500
@@ -53,141 +52,30 @@ type PostgresWorkflowsRepositoryOptions = {
 
 export class PostgresWorkflowsRepository {
   private readonly options: PostgresWorkflowsRepositoryOptions
+  private readonly definitions: PostgresWorkflowDefinitionsRepository
 
   constructor(options: PostgresWorkflowsRepositoryOptions) {
     this.options = options
-  }
-
-  async createWorkflow(input: CreateWorkflowInput) {
-    await this.options.requireTenantUser(input.tenantId, input.userId)
-    const createdAt = nowIso(input.createdAt)
-    const draft = input.draft
-    const skillNames = draft.skillNames || []
-    const toolIds = draft.toolIds || []
-    const steps = normalizeWorkflowSteps(draft.steps, {
-      instructions: draft.instructions,
-      agentName: draft.agentName,
-      skillNames,
-      toolIds,
+    this.definitions = new PostgresWorkflowDefinitionsRepository({
+      pool: options.pool,
+      withTransaction: options.withTransaction,
+      requireTenant: options.requireTenant,
+      requireTenantUser: options.requireTenantUser,
     })
-    await this.options.pool.query(
-      `INSERT INTO cloud_workflows (
-        tenant_id, workflow_id, user_id, title, instructions, agent_name,
-        skill_names, tool_ids, steps, status, project_directory, draft_session_id,
-        triggers, created_at, updated_at, next_run_at, last_run_at,
-        latest_run_id, latest_run_status, latest_run_session_id, latest_run_summary
-       )
-       VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7::jsonb, $8::jsonb, $9::jsonb, 'active', $10, $11,
-        $12::jsonb, $13, $13, $14, NULL,
-        NULL, NULL, NULL, NULL
-       )
-       ON CONFLICT (tenant_id, workflow_id) DO NOTHING`,
-      [
-        input.tenantId,
-        input.workflowId,
-        input.userId,
-        draft.title,
-        draft.instructions,
-        draft.agentName,
-        JSON.stringify(skillNames),
-        JSON.stringify(toolIds),
-        JSON.stringify(steps),
-        draft.projectDirectory || null,
-        draft.draftSessionId || null,
-        JSON.stringify(draft.triggers),
-        createdAt,
-        input.nextRunAt || null,
-      ],
-    )
-    return workflowFromRow(await this.requireWorkflow(input.tenantId, input.workflowId))
   }
 
-  async findWorkflow(workflowId: string) {
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflows
-       WHERE workflow_id = $1
-       ORDER BY updated_at DESC, tenant_id
-       LIMIT 1`,
-      [workflowId],
-    )
-    return row ? workflowFromRow(row) : null
-  }
-
-  async listWorkflows(tenantId: string, userId: string) {
-    return (await this.listWorkflowsPage({ tenantId, userId, limit: WORKFLOW_LIST_LIMIT })).items
-  }
-
-  async listWorkflowsPage(input: ListWorkflowsPageInput): Promise<ListWorkflowsPageRecord> {
-    const { tenantId, userId } = input
-    await this.options.requireTenantUser(tenantId, userId)
-    const limit = Math.max(1, Math.min(WORKFLOW_LIST_LIMIT, Math.floor(input.limit ?? 100)))
-    const cursor = decodeWorkflowPageCursor(input.cursor, input)
-    const params: unknown[] = [tenantId, userId]
-    const where = ['tenant_id = $1', 'user_id = $2']
-    if (cursor) {
-      params.push(cursor.updatedAt, cursor.workflowId)
-      const updatedAtParam = params.length - 1
-      const workflowIdParam = params.length
-      where.push(`(updated_at < $${updatedAtParam} OR (updated_at = $${updatedAtParam} AND workflow_id > $${workflowIdParam}))`)
-    }
-    params.push(limit + 1)
-    const result = await this.options.pool.query(
-      `SELECT * FROM cloud_workflows
-       WHERE ${where.join(' AND ')}
-       ORDER BY updated_at DESC, workflow_id
-       LIMIT $${params.length}`,
-      params,
-    )
-    const rows = result.rows.map(workflowFromRow)
-    const items = rows.slice(0, limit)
-    return {
-      items,
-      nextCursor: rows.length > limit && items.length > 0 ? encodeWorkflowPageCursor(items[items.length - 1]!, input) : null,
-      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
-    }
-  }
-
-  async getWorkflow(tenantId: string, userId: string, workflowId: string) {
-    await this.options.requireTenantUser(tenantId, userId)
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflows
-       WHERE tenant_id = $1 AND user_id = $2 AND workflow_id = $3`,
-      [tenantId, userId, workflowId],
-    )
-    return row ? workflowFromRow(row) : null
-  }
-
-  async getWorkflowForTenant(tenantId: string, workflowId: string) {
-    await this.options.requireTenant(tenantId)
-    const row = await this.maybeOne(
-      `SELECT * FROM cloud_workflows WHERE tenant_id = $1 AND workflow_id = $2`,
-      [tenantId, workflowId],
-    )
-    return row ? workflowFromRow(row) : null
-  }
-
-  async updateWorkflowStatus(input: UpdateWorkflowStatusInput) {
-    await this.options.requireTenantUser(input.tenantId, input.userId)
-    const result = await this.options.pool.query(
-      `UPDATE cloud_workflows
-       SET status = $4,
-           next_run_at = $5,
-           updated_at = $6
-       WHERE tenant_id = $1 AND user_id = $2 AND workflow_id = $3
-       RETURNING *`,
-      [
-        input.tenantId,
-        input.userId,
-        input.workflowId,
-        input.status,
-        input.nextRunAt || null,
-        nowIso(input.updatedAt),
-      ],
-    )
-    return result.rows[0] ? workflowFromRow(result.rows[0]) : null
-  }
+  async createWorkflow(input: CreateWorkflowInput) { return this.definitions.createWorkflow(input) }
+  async findWorkflow(workflowId: string) { return this.definitions.findWorkflow(workflowId) }
+  async listWorkflows(tenantId: string, userId: string) { return this.definitions.listWorkflows(tenantId, userId) }
+  async listWorkflowsPage(input: ListWorkflowsPageInput) { return this.definitions.listWorkflowsPage(input) }
+  async getWorkflow(tenantId: string, userId: string, workflowId: string) { return this.definitions.getWorkflow(tenantId, userId, workflowId) }
+  async getWorkflowForTenant(tenantId: string, workflowId: string) { return this.definitions.getWorkflowForTenant(tenantId, workflowId) }
+  async updateWorkflowStatus(input: UpdateWorkflowStatusInput) { return this.definitions.updateWorkflowStatus(input) }
+  async getWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId?: string) { return this.definitions.getWorkflowWebhookSecret(tenantId, workflowId, triggerId) }
+  async rotateWorkflowWebhookSecret(input: RotateWorkflowWebhookSecretInput) { return this.definitions.rotateWorkflowWebhookSecret(input) }
+  async listLegacyWorkflowWebhookSecrets(limit = 100) { return this.definitions.listLegacyWorkflowWebhookSecrets(limit) }
+  async getLegacyWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId: string) { return this.definitions.getLegacyWorkflowWebhookSecret(tenantId, workflowId, triggerId) }
+  async migrateLegacyWorkflowWebhookSecret(input: MigrateLegacyWorkflowWebhookSecretInput) { return this.definitions.migrateLegacyWorkflowWebhookSecret(input) }
 
   async listWorkflowRuns(tenantId: string, workflowId: string, limit = 25) {
     await this.requireWorkflow(tenantId, workflowId)

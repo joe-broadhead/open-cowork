@@ -320,6 +320,14 @@ function transport(): CloudTransportAdapter {
     pauseWorkflow: async () => workflowDetail('paused'),
     resumeWorkflow: async () => workflowDetail('active'),
     archiveWorkflow: async () => workflowDetail('archived'),
+    rotateWorkflowWebhookSecret: async (workflowId) => ({
+      workflow: workflowDetail(),
+      webhookSecretReveal: {
+        workflowId,
+        triggerId: 'webhook',
+        secret: 'one-time-secret',
+      },
+    }),
     searchThreads: async () => ({
       threads: [{
         sessionId: 'session-1',
@@ -613,6 +621,10 @@ test('cloud workspace adapter maps cloud records to desktop session contracts', 
   assert.equal((await adapter.pauseWorkflow('workflow-1'))?.status, 'paused')
   assert.equal((await adapter.resumeWorkflow('workflow-1'))?.status, 'active')
   assert.equal((await adapter.archiveWorkflow('workflow-1'))?.status, 'archived')
+  assert.equal(
+    (await adapter.rotateWorkflowWebhookSecret('workflow-1'))?.webhookSecretReveal.secret,
+    'one-time-secret',
+  )
 
   assert.equal((await adapter.searchThreads({ tagIds: ['tag-1'] })).threads[0]?.sessionId, 'session-1')
   assert.equal((await adapter.threadFacets()).tags[0]?.value, 'tag-1')

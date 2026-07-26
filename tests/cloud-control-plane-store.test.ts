@@ -1895,7 +1895,6 @@ test('cloud control plane recovers expired webhook workflow start claims', () =>
         id: 'webhook-1',
         type: 'webhook',
         enabled: true,
-        webhookSecret: 'secret',
       }],
     },
   })

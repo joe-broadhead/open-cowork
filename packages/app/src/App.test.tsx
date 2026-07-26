@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  createDisabledRuntimeToolingBridgeConsent,
   createResourceDeepLink,
   createResourceIdentity,
   workspaceApiSupportContextForAuthority,
@@ -281,7 +282,7 @@ const completeSettings: EffectiveAppSettings = {
   notificationSounds: true,
   privacyKeepConversationHistory: true,
   privacyShareAnonymizedUsage: false,
-  runtimeToolingBridgeEnabled: true,
+  runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
   windowZoomFactor: 1,
   workflowLaunchAtLogin: false,
   workflowRunInBackground: false,

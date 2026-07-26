@@ -229,6 +229,8 @@ import type {
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   FailWorkflowRunInput,
+  MigrateLegacyWorkflowWebhookSecretInput,
+  RotateWorkflowWebhookSecretInput,
   ThreadTagLinkInput,
   UpdateHeadlessAgentInput,
   UpdateThreadSmartFilterInput,
@@ -1455,9 +1457,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.workflowsDomain.getWorkflowForTenant(tenantId, workflowId)
   }
 
-  updateWorkflowStatus(input: UpdateWorkflowStatusInput): CloudWorkflowRecord | null {
-    return this.workflowsDomain.updateWorkflowStatus(input)
-  }
+  updateWorkflowStatus(input: UpdateWorkflowStatusInput): CloudWorkflowRecord | null { return this.workflowsDomain.updateWorkflowStatus(input) }
+  getWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId?: string) { return this.workflowsDomain.getWorkflowWebhookSecret(tenantId, workflowId, triggerId) }
+  rotateWorkflowWebhookSecret(input: RotateWorkflowWebhookSecretInput) { return this.workflowsDomain.rotateWorkflowWebhookSecret(input) }
+  listLegacyWorkflowWebhookSecrets(limit = 100) { return this.workflowsDomain.listLegacyWorkflowWebhookSecrets(limit) }
+  getLegacyWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId: string) { return this.workflowsDomain.getLegacyWorkflowWebhookSecret(tenantId, workflowId, triggerId) }
+  migrateLegacyWorkflowWebhookSecret(input: MigrateLegacyWorkflowWebhookSecretInput) { return this.workflowsDomain.migrateLegacyWorkflowWebhookSecret(input) }
 
   listWorkflowRuns(tenantId: string, workflowId: string, limit = 25): CloudWorkflowRunRecord[] {
     return this.workflowsDomain.listWorkflowRuns(tenantId, workflowId, limit)

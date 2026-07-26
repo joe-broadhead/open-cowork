@@ -214,7 +214,6 @@ function renderCapabilitiesPage(overrides: {
     integrationEnabled: overrides.integrationEnabled ?? {},
     bashPermission: 'deny',
     fileWritePermission: 'deny',
-    runtimeToolingBridgeEnabled: true,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,

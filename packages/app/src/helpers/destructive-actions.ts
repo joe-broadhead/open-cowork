@@ -23,6 +23,10 @@ export async function confirmSkillRemoval(target: ScopedArtifactRef) {
   return requestToken({ action: 'skill.remove', target })
 }
 
+export async function confirmGatewayCredentialReset() {
+  return requestToken({ action: 'gateway.credentials.reset' })
+}
+
 export async function confirmAppReset() {
   return requestToken({ action: 'app.reset' })
 }

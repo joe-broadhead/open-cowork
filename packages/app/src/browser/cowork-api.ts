@@ -68,6 +68,7 @@ import {
   type WorkflowDetail,
   type WorkflowListPayload,
   type WorkflowRun,
+  type WorkflowWebhookSecretMutationResult,
   type WorkspaceApiSupport,
   type WorkspaceInfo,
   createDeferredVoiceHostStatus,
@@ -143,6 +144,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
       addCloud: () => browserUnavailable('workspace.addCloud'),
       addGateway: () => browserUnavailable('workspace.addGateway'),
       remove: () => browserUnavailable('workspace.remove'),
+      resetGatewayCredentials: () => browserUnavailable('workspace.resetGatewayCredentials'),
       login: () => browserUnavailable('workspace.login'),
       logout: () => browserUnavailable('workspace.logout'),
       policy: async () => {
@@ -733,7 +735,8 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
         unwrap(await request(endpoint('workflowResume', { workflowId }), { method: 'POST' }), 'workflow', null),
       archive: async (workflowId): Promise<WorkflowDetail | null> =>
         unwrap(await request(endpoint('workflowArchive', { workflowId }), { method: 'POST' }), 'workflow', null),
-      regenerateWebhookSecret: () => browserUnavailable('workflows.regenerateWebhookSecret'),
+      regenerateWebhookSecret: (workflowId): Promise<WorkflowWebhookSecretMutationResult | null> =>
+        request(endpoint('workflowRotateWebhookSecret', { workflowId }), { method: 'POST', body: {} }),
     },
 
     // -- threads -----------------------------------------------------------

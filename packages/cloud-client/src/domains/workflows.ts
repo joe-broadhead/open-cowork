@@ -3,6 +3,7 @@ export type {
   WorkflowListPayload,
   WorkflowRun,
   WorkflowTriggerType,
+  WorkflowWebhookSecretMutationResult,
 } from '../contracts.js'
 
 import type {
@@ -11,6 +12,7 @@ import type {
   WorkflowListRequest,
   WorkflowRun,
   WorkflowTriggerType,
+  WorkflowWebhookSecretMutationResult,
 } from '../contracts.js'
 import type { CloudDomainClientContext } from './shared.js'
 import { encodePath, queryString } from './shared.js'
@@ -22,6 +24,7 @@ export type CloudWorkflowsClient = {
   pauseWorkflow(workflowId: string): Promise<WorkflowDetail | null>
   resumeWorkflow(workflowId: string): Promise<WorkflowDetail | null>
   archiveWorkflow(workflowId: string): Promise<WorkflowDetail | null>
+  rotateWorkflowWebhookSecret(workflowId: string): Promise<WorkflowWebhookSecretMutationResult | null>
 }
 
 export function createCloudWorkflowsClient({ request }: CloudDomainClientContext): CloudWorkflowsClient {
@@ -58,6 +61,12 @@ export function createCloudWorkflowsClient({ request }: CloudDomainClientContext
         method: 'POST',
         body: {},
       })).workflow
+    },
+    rotateWorkflowWebhookSecret(workflowId) {
+      return request<WorkflowWebhookSecretMutationResult>(
+        `/api/workflows/${encodePath(workflowId)}/rotate-webhook-secret`,
+        { method: 'POST', body: {} },
+      )
     },
   }
 }

@@ -4,12 +4,20 @@ Use this recipe when the target cluster is not tied to the GCP, AWS, Azure, or
 DigitalOcean reference paths. The deployment still uses the same
 `open-cowork-cloud` and `open-cowork-gateway` images and the provider-neutral Helm charts.
 
+> **Execution support boundary:** the stock Cloud chart currently has no
+> Kubernetes execution provider, and the stock image/pod has no Docker
+> daemon/CLI. Its worker fails the required isolation readiness gate. Treat
+> this recipe as web, scheduler, Gateway, backing-service, and downstream
+> provider composition only. Do not run the worker against production traffic
+> until a reviewed external provider is injected and the two-tenant isolation
+> proof passes.
+
 ## Required Cluster Services
 
 | Role | Required backing service |
 | --- | --- |
 | `web` | Kubernetes Deployment behind HTTPS ingress or a trusted private load balancer |
-| `worker` | Kubernetes Deployment with durable Postgres and object-store access |
+| `worker` | Downstream isolated provider required; the stock Deployment is not execution-ready |
 | `scheduler` | Kubernetes Deployment with the same Postgres control-plane connection |
 | Gateway | Separate Kubernetes Deployment or external VPS/local Compose appliance |
 | Control plane | Managed or operator-owned Postgres |
@@ -22,7 +30,9 @@ DigitalOcean reference paths. The deployment still uses the same
 
 Copy these overrides into a private values file and replace placeholders there.
 Keep this recipe provider-config only and free of real cluster, account,
-domain, and credential values.
+domain, and credential values. The worker block below documents storage and
+operational inputs for a downstream provider; it is not a runnable stock
+public-production worker.
 
 ```yaml
 image:
@@ -120,9 +130,9 @@ destination. The charts also reject `image.tag=latest`.
 The chart exposes PodDisruptionBudget and topology spread values, but it does
 not create HPA or KEDA resources. Add autoscaling manifests in the private
 cluster overlay where CPU/memory metrics, queue-depth metrics, and operational
-SLOs are owned. Worker autoscaling beyond one replica requires
+SLOs are owned. Downstream worker autoscaling beyond one replica requires
 `cloud.checkpoints.enabled=true`, `roles.worker.checkpointsEnabled=true`, and
-a shared object store.
+a shared object store, in addition to a verified execution provider.
 
 Install Cloud and Gateway as separate releases so Gateway tokens and channel
 credentials can be rotated without changing the Cloud control plane:

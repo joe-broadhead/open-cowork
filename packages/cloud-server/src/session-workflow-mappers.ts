@@ -8,8 +8,17 @@ import type { CloudWorkflowRecord, CloudWorkflowRunRecord } from './control-plan
 // session-service.ts; no service state.
 
 export function toWorkflowSummary(record: CloudWorkflowRecord) {
-  const { tenantId: _tenantId, userId: _userId, ...workflow } = record
-  return workflow
+  const { tenantId: _tenantId, userId: _userId, triggers, ...workflow } = record
+  return {
+    ...workflow,
+    triggers: triggers.map((trigger) => {
+      const {
+        webhookSecret: _webhookSecret,
+        ...publicTrigger
+      } = trigger as typeof trigger & { webhookSecret?: unknown }
+      return publicTrigger
+    }),
+  }
 }
 
 export function toWorkflowRun(record: CloudWorkflowRunRecord): WorkflowRun {

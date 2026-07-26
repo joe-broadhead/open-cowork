@@ -1,12 +1,38 @@
-import { buildManagedOpencodeClientConfig, ensureIsolatedProviderAuthStore, getRuntimeOpencodeAuthPath, getActiveProjectOverlayDirectory, getClient, getModelInfo, getModelInfoAsync, getServerUrl, shouldEnableNativeWebSearch, stopRuntime } from '@open-cowork/runtime-host/runtime'
+import {
+  buildManagedOpencodeClientConfig,
+  ensureIsolatedProviderAuthStore,
+  getRuntimeOpencodeAuthPath,
+  getActiveProjectOverlayDirectory,
+  getClient,
+  getModelInfo,
+  getModelInfoAsync,
+  getServerUrl,
+  runRuntimeStartupSecuritySequence,
+  shouldEnableNativeWebSearch,
+  stopRuntime,
+  writeRuntimeProviderApiAuth,
+} from '@open-cowork/runtime-host/runtime'
 import { createNodeManagedOpencodeServer } from '@open-cowork/runtime-host/runtime-node-managed-server'
 import { buildManagedOpencodeAuthorizationHeader, createManagedOpencodeServer, type ManagedOpencodeSupervisorFork } from '@open-cowork/runtime-host/runtime-managed-server'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { fork, type ChildProcess } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'fs'
+import { execFileSync, fork, type ChildProcess } from 'node:child_process'
+import {
+  chmodSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'fs'
 import { tmpdir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { dirname, join, resolve, sep } from 'path'
 import { fileURLToPath } from 'url'
 import { setTimeout as delay } from 'timers/promises'
 
@@ -337,7 +363,7 @@ test('managed OpenCode client config includes Basic auth for root and directory-
   })
 })
 
-test('isolated provider auth store clears stale native-store symlinks and keeps app-owned auth', () => {
+test('isolated provider auth store rejects stale native-store symlinks and keeps host auth untouched', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-auth-'))
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
@@ -350,19 +376,191 @@ test('isolated provider auth store clears stale native-store symlinks and keeps 
     mkdirSync(dirname(nativeAuth), { recursive: true })
     writeFileSync(nativeAuth, '{"provider":{}}\n')
 
-    // A leftover symlink from an older build that bridged the native auth
-    // store is removed; the native file itself stays untouched.
+    // A leftover or attacker-created symlink cannot be followed or silently
+    // replaced during secret materialization.
     mkdirSync(dirname(runtimeAuth), { recursive: true })
     symlinkSync(nativeAuth, runtimeAuth)
     assert.equal(resolve(dirname(runtimeAuth), readlinkSync(runtimeAuth)), resolve(nativeAuth))
-    ensureIsolatedProviderAuthStore()
-    assert.throws(() => readlinkSync(runtimeAuth), { code: 'ENOENT' })
+    assert.throws(() => ensureIsolatedProviderAuthStore(), /auth target is unsafe/)
+    assert.equal(resolve(dirname(runtimeAuth), readlinkSync(runtimeAuth)), resolve(nativeAuth))
     assert.equal(readFileSync(nativeAuth, 'utf8'), '{"provider":{}}\n')
 
     // A regular app-owned runtime auth file is left in place.
-    writeFileSync(runtimeAuth, '{"isolated":true}\n')
+    rmSync(runtimeAuth)
+    writeFileSync(runtimeAuth, '{"isolated":true}\n', { mode: 0o600 })
     ensureIsolatedProviderAuthStore()
     assert.equal(readFileSync(runtimeAuth, 'utf8'), '{"isolated":true}\n')
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('provider auth rejects hardlinks without truncating either link target', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-auth-hardlink-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'app-data')
+  clearConfigCaches()
+
+  try {
+    ensureIsolatedProviderAuthStore()
+    const runtimeAuth = getRuntimeOpencodeAuthPath()
+    const hostFile = join(root, 'host-file')
+    writeFileSync(hostFile, 'preserve-host-content', { mode: 0o600 })
+    linkSync(hostFile, runtimeAuth)
+    assert.equal(statSync(runtimeAuth).nlink, 2)
+
+    assert.throws(
+      () => writeRuntimeProviderApiAuth('openai', 'must-not-be-written'),
+      /auth target is unsafe/,
+    )
+    assert.equal(readFileSync(hostFile, 'utf8'), 'preserve-host-content')
+    assert.equal(readFileSync(runtimeAuth, 'utf8'), 'preserve-host-content')
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('provider auth rejects non-private files and atomically replaces safe files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-auth-mode-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'app-data')
+  clearConfigCaches()
+
+  try {
+    ensureIsolatedProviderAuthStore()
+    const runtimeAuth = getRuntimeOpencodeAuthPath()
+    writeFileSync(runtimeAuth, '{}\n', { mode: 0o644 })
+    assert.throws(() => ensureIsolatedProviderAuthStore(), /auth target is unsafe/)
+
+    chmodSync(runtimeAuth, 0o600)
+    const previousInode = statSync(runtimeAuth).ino
+    writeRuntimeProviderApiAuth('openai', 'contained-secret')
+    const nextStats = statSync(runtimeAuth)
+    assert.notEqual(nextStats.ino, previousInode)
+    assert.equal(nextStats.mode & 0o077, 0)
+    assert.deepEqual(JSON.parse(readFileSync(runtimeAuth, 'utf8')), {
+      openai: { type: 'api', key: 'contained-secret' },
+    })
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('provider auth rejects a FIFO before credential I/O', {
+  skip: process.platform === 'win32',
+}, () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-auth-fifo-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(root, 'app-data')
+  clearConfigCaches()
+
+  try {
+    ensureIsolatedProviderAuthStore()
+    const runtimeAuth = getRuntimeOpencodeAuthPath()
+    execFileSync('mkfifo', [runtimeAuth])
+    assert.throws(() => ensureIsolatedProviderAuthStore(), /auth target is unsafe/)
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('runtime startup cleans prior managed processes before preparing sandbox credentials', async () => {
+  const order: string[] = []
+  await runRuntimeStartupSecuritySequence({
+    cleanupOrphans: async () => { order.push('cleanup') },
+    prepareSandbox: async () => { order.push('prepare') },
+  })
+  assert.deepEqual(order, ['cleanup', 'prepare'])
+
+  await assert.rejects(
+    () => runRuntimeStartupSecuritySequence({
+      cleanupOrphans: async () => {
+        order.push('failed-cleanup')
+        throw new Error('survivor')
+      },
+      prepareSandbox: async () => { order.push('unsafe-prepare') },
+    }),
+    /survivor/,
+  )
+  assert.equal(order.includes('unsafe-prepare'), false)
+})
+
+test('managed runtime directories reject a runtime-home root symlink before credential access', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-root-symlink-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const appData = join(root, 'app-data')
+  const outside = join(root, 'outside')
+  mkdirSync(appData)
+  mkdirSync(outside)
+  symlinkSync(outside, join(appData, 'runtime-home'), 'dir')
+  process.env.OPEN_COWORK_USER_DATA_DIR = appData
+  clearConfigCaches()
+
+  try {
+    assert.throws(
+      () => ensureIsolatedProviderAuthStore(),
+      /runtime directory boundary is unsafe/,
+    )
+    assert.equal(existsSync(join(outside, '.local', 'share', 'opencode', 'auth.json')), false)
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('managed runtime directories reject an ancestor symlink before credential access', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-ancestor-symlink-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const appData = join(root, 'app-data')
+  const runtimeHome = join(appData, 'runtime-home')
+  const outside = join(root, 'outside')
+  mkdirSync(runtimeHome, { recursive: true })
+  mkdirSync(outside)
+  symlinkSync(outside, join(runtimeHome, '.local'), 'dir')
+  process.env.OPEN_COWORK_USER_DATA_DIR = appData
+  clearConfigCaches()
+
+  try {
+    assert.throws(
+      () => ensureIsolatedProviderAuthStore(),
+      /runtime directory boundary is unsafe/,
+    )
+    assert.equal(existsSync(join(outside, 'share', 'opencode', 'auth.json')), false)
+  } finally {
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('managed runtime directories create a fresh contained credential path', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-fresh-owned-path-'))
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const appData = join(root, 'app-data')
+  process.env.OPEN_COWORK_USER_DATA_DIR = appData
+  clearConfigCaches()
+
+  try {
+    ensureIsolatedProviderAuthStore()
+    const runtimeAuth = getRuntimeOpencodeAuthPath()
+    writeFileSync(runtimeAuth, '{"contained":true}\n', { mode: 0o600 })
+    assert.equal(readFileSync(runtimeAuth, 'utf8'), '{"contained":true}\n')
+    assert.equal(realpathSync(runtimeAuth).startsWith(`${realpathSync(appData)}${sep}`), true)
   } finally {
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir

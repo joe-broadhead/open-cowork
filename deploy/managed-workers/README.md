@@ -6,6 +6,11 @@ They are reference artifacts for self-hosters and downstream operators; copy
 them into a private deployment repo before replacing placeholders with real
 project, account, domain, credential, or customer values.
 
+The templates do not supply an execution-isolation provider. A worker is not
+production-capable merely because it can claim durable work: it must run on a
+dedicated Docker-capable host with the built-in provider or inject a reviewed
+external provider, and it must pass the two-tenant isolation proof.
+
 Managed workers remain a composition layer around OpenCode. They claim work
 from Open Cowork Cloud, run OpenCode with app-managed runtime config, write
 lease-fenced events/projections/checkpoints, and never become a second
@@ -15,7 +20,7 @@ runtime, scheduler, session store, or gateway execution path.
 
 | Mode | Operator | Public support | Notes |
 | --- | --- | --- | --- |
-| `self_hosted` | Same org that owns the Cloud control plane | Yes | Internal teams can run Cloud, workers, scheduler, and Gateway together on Kubernetes or Compose. Billing can be `none` or `stub`. |
+| `self_hosted` | Same org that owns the Cloud control plane | Yes | Web, scheduler, and Gateway can run on Kubernetes or Compose. The built-in execution worker requires a dedicated Docker-capable host; Kubernetes workers require a reviewed injected provider. Billing can be `none` or `stub`. |
 | `saas_operated` | Managed Open Cowork Cloud operator | Yes, as a template | Use private downstream operations repos for real project ids, domains, prices, customers, and launch evidence. |
 | `customer_hosted` | Customer worker connects to a separate managed control plane | Deferred | Do not enable in v1. It needs a separate trust, update, liability, and data-residency review. |
 
@@ -25,9 +30,10 @@ runtime, scheduler, session store, or gateway execution path.
   environment for an internal self-host deployment.
 - `managed-operator-worker.env.template`: managed-operator environment
   shape. It deliberately uses secret-manager refs and placeholders.
-- `helm-values.worker-pool.yaml.example`: Kubernetes overlay for scalable
-  worker pools with image pinning, checkpointed workers, PDBs, topology spread,
-  and graceful shutdown windows.
+- `helm-values.worker-pool.yaml.example`: storage, disruption, and scheduling
+  shape for a downstream Kubernetes worker pool. The stock image/chart does
+  not supply a Kubernetes execution provider, so this overlay is not runnable
+  against production traffic by itself.
 - `worker-release-evidence.template.md`: go/no-go evidence shape for image,
   compatibility, drain, rollback, and emergency revoke validation.
 - `worker-restore-drill.template.md`: restore drill evidence shape for
@@ -42,8 +48,10 @@ runtime, scheduler, session store, or gateway execution path.
    `maxWorkers`, `maxConcurrentWork`, region, and capabilities.
 3. Register workers in `pending`, issue scoped expiring credentials, and store
    the one-time plaintext in the platform secret manager.
-4. Start one worker with `OPEN_COWORK_CLOUD_ROLE=worker`, shared control-plane
-   URL, shared object store, checkpoints enabled, and a stable worker id.
+4. Start one worker on a dedicated Docker-capable host with
+   `OPEN_COWORK_CLOUD_ROLE=worker`, the pinned isolation image and digest,
+   shared control-plane URL, shared object store, checkpoints enabled, and a
+   stable worker id.
 5. Activate the worker after the first heartbeat is visible and redacted.
 6. Run a bounded smoke prompt, then a scheduled workflow smoke, then a Gateway
    prompt smoke if Gateway is deployed.
@@ -60,6 +68,7 @@ runtime, scheduler, session store, or gateway execution path.
 | Object store | Yes for scaled workers | Shared bucket/container and prefix |
 | Checkpoints | Yes for multiple workers | `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true` |
 | Worker identity | Yes | Stable `OPEN_COWORK_CLOUD_WORKER_ID` per pod/process |
+| Execution isolation | Yes | Verified built-in Docker provider under a non-root service user with Docker daemon access, or an injected external provider |
 | Poll interval | Yes | `OPEN_COWORK_CLOUD_WORKER_POLL_MS` |
 | Shutdown grace | Yes | `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` plus platform termination grace |
 | BYOK/provider keys | Worker reveal only | BYOK secret store and runtime config provider options |
@@ -111,6 +120,7 @@ Before external users depend on the worker path:
 pnpm deploy:validate
 pnpm ops:validate
 pnpm test:cloud-continuation
+pnpm proof:cloud:tenant-isolation
 OPEN_COWORK_TEST_POSTGRES_URL=postgres://USER:PASSWORD@HOST:PORT/DB \
   node --no-warnings --experimental-strip-types --test tests/cloud-postgres-concurrency.test.ts
 ```

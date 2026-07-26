@@ -105,6 +105,35 @@ test('HTTP requests attach auth, CSRF, credentials, JSON body, and normalized UR
   assert.deepEqual(JSON.parse(calls[0]?.init.body || '{}'), { profileName: 'default' })
 })
 
+test('workflow secret rotation uses the canonical Cloud endpoint and returns the one-time reveal', async () => {
+  const calls: FetchCall[] = []
+  const mutation = {
+    workflow: {
+      id: 'workflow/one',
+      webhookUrl: 'https://cowork.example.test/webhooks/workflows/workflow%2Fone',
+    },
+    webhookSecretReveal: {
+      workflowId: 'workflow/one',
+      triggerId: 'webhook',
+      secret: 'one-time-secret',
+    },
+  }
+  const client = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cowork.example.test',
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init })
+      return jsonResponse(mutation)
+    },
+  })
+
+  const result = await client.rotateWorkflowWebhookSecret?.('workflow/one')
+
+  assert.deepEqual(result, mutation)
+  assert.equal(calls[0]?.url, 'https://cowork.example.test/api/workflows/workflow%2Fone/rotate-webhook-secret')
+  assert.equal(calls[0]?.init.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0]?.init.body || '{}'), {})
+})
+
 test('HTTP errors preserve status taxonomy, retry-after, code, and response body', async () => {
   const fetcher: CloudTransportFetch = async () => jsonResponse(
     { error: 'Too many requests', code: 'RATE_LIMITED' },

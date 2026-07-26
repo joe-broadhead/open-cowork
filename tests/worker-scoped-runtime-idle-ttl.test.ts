@@ -32,6 +32,7 @@ test('worker-scoped adapter reaps idle runtimes by TTL (JOE-866)', async () => {
   const store = seededStore()
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-idle-ttl-test-key'))
   const closed: string[] = []
+  const restored: string[] = []
 
   const runtime = createWorkerScopedRuntimeAdapter({
     paths: createCloudPathProvider(root),
@@ -44,6 +45,9 @@ test('worker-scoped adapter reaps idle runtimes by TTL (JOE-866)', async () => {
     byokSecrets,
     maxRuntimeEntries: 10,
     runtimeIdleTtlMs: 50,
+    async prepareProvision(input) {
+      restored.push(input.execution.sessionId)
+    },
     runtimeFactory(input) {
       // No subscribeEvents: synchronous fake adapters own execution for the
       // prompt call and clear executionActive when it returns (idle-TTL reaps).
@@ -85,6 +89,13 @@ test('worker-scoped adapter reaps idle runtimes by TTL (JOE-866)', async () => {
       closed.includes('session-idle'),
       `expected idle session to be reaped, closed=${JSON.stringify(closed)}`,
     )
+    await runtime.promptSession({
+      sessionId: 'runtime-a',
+      parts: [],
+      agent: 'build',
+      context: { tenantId: 'tenant-a', sessionId: 'session-idle' },
+    })
+    assert.deepEqual(restored, ['session-idle', 'session-idle'])
   } finally {
     await runtime.close?.()
     rmSync(root, { recursive: true, force: true })
@@ -143,14 +154,14 @@ test('worker-scoped adapter remaps native session ids onto cowork session contex
     })
 
     assert.ok(innerListener, 'expected inner listener')
-    innerListener!({
+    const delivery = Promise.resolve(innerListener!({
       type: 'assistant.message',
       payload: {
         sessionId: 'native-child-xyz',
         messageId: 'm1',
         content: 'hi',
       },
-    })
+    }))
 
     assert.ok(projected.length >= 1, 'expected projected event')
     const last = projected[projected.length - 1]!
@@ -159,6 +170,9 @@ test('worker-scoped adapter remaps native session ids onto cowork session contex
       'cowork-session-1',
       'native child session id should remap onto cowork session id',
     )
+    // Close deliberately races the still-settling async event callback. The
+    // adapter must observe its active-use drain and must not deadlock.
+    await Promise.all([delivery, runtime.close!()])
   } finally {
     await runtime.close?.()
     rmSync(root, { recursive: true, force: true })

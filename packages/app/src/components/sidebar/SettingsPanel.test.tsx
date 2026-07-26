@@ -1,7 +1,12 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { SMALL_MODEL_USE_MAIN, type EffectiveAppSettings, type PublicAppConfig } from '@open-cowork/shared'
+import {
+  createDisabledRuntimeToolingBridgeConsent,
+  SMALL_MODEL_USE_MAIN,
+  type EffectiveAppSettings,
+  type PublicAppConfig,
+} from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
 import { WORKSPACE_SUPPORT_APIS, useWorkspaceSupportStore } from '../../stores/workspace-support'
@@ -28,7 +33,7 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     notificationSounds: true,
     privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
-    runtimeToolingBridgeEnabled: true,
+    runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     windowZoomFactor: 1,
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
@@ -233,14 +238,11 @@ describe('SettingsPanel', () => {
     await user.click(within(screen.getByRole('radiogroup', { name: 'MCP tools' })).getByRole('radio', { name: 'Off' }))
     expect(screen.getByText('External-send review will be controlled here when Gateway delivery policy enforcement is wired. Existing provider and tool approval policies remain in force.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Advanced/ }))
-    // JOE-876: RuntimeConfigPanel is collapsed by default — expand progressive disclosure first.
-    await user.click(await screen.findByRole('button', { name: 'Show advanced' }))
-    const toolingBridge = await screen.findByRole('switch', { name: 'Developer config bridge' })
-    expect(toolingBridge).toHaveAttribute('aria-checked', 'true')
+    const toolingBridge = await screen.findByRole('switch', { name: 'Allow Git configuration' })
+    expect(toolingBridge).toHaveAttribute('aria-checked', 'false')
 
     await user.click(toolingBridge)
-    expect(toolingBridge).toHaveAttribute('aria-checked', 'false')
+    expect(toolingBridge).toHaveAttribute('aria-checked', 'true')
 
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
@@ -253,7 +255,13 @@ describe('SettingsPanel', () => {
       taskPermission: 'ask',
       externalDirectoryPermission: 'ask',
       mcpPermission: 'deny',
-      runtimeToolingBridgeEnabled: false,
+      runtimeToolingBridge: expect.objectContaining({
+        version: 1,
+        categories: expect.objectContaining({
+          sourceControl: true,
+          ssh: false,
+        }),
+      }),
     })
   })
 

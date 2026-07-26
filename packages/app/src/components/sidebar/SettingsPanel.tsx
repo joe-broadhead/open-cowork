@@ -24,6 +24,7 @@ import { PermissionsPanel, RuntimeConfigPanel } from './SettingsPermissionsPanel
 import { StoragePanel } from './SettingsStoragePanel'
 import { SettingsPairingPanel } from './SettingsPairingPanel'
 import { VoiceAssetsPanel } from './SettingsVoiceAssetsPanel'
+import { RuntimeToolingBridgeConsentPanel } from '../RuntimeToolingBridgeConsent'
 
 type SettingsTab = 'appearance' | 'model' | 'advanced' | 'permissions' | 'notifications' | 'privacy' | 'workflows' | 'storage' | 'pairing'
 type SettingsSearchEntry = {
@@ -83,7 +84,7 @@ function buildSaveGatedSettings(settings: EffectiveAppSettings, isLocal: boolean
         notificationSounds: settings.notificationSounds,
         privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
         runtimeConfigSource: settings.runtimeConfigSource,
-        runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
+        runtimeToolingBridge: settings.runtimeToolingBridge,
         windowZoomFactor: settings.windowZoomFactor,
         workflowLaunchAtLogin: settings.workflowLaunchAtLogin,
         workflowRunInBackground: settings.workflowRunInBackground,
@@ -427,7 +428,7 @@ export function SettingsPanel({
         ...(activeWorkspaceIsLocal ? [{ id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') }] : []),
         { id: 'notifications' as const, label: t('settings.tab.notifications', 'Notifications'), description: t('settings.tab.notificationsDescription', 'Suggestions, digests, and sounds') },
         { id: 'privacy' as const, label: t('settings.tab.privacy', 'Privacy'), description: t('settings.tab.privacyDescription', 'History, data use, and policy links') },
-        { id: 'advanced' as const, label: t('settings.tab.advanced', 'Advanced'), description: t('settings.tab.advancedDescription', 'Small model, OAuth detail, and runtime bridge') },
+        { id: 'advanced' as const, label: t('settings.tab.advanced', 'Advanced'), description: t('settings.tab.advancedDescription', 'Small model, OAuth detail, and runtime source') },
         { id: 'workflows' as const, label: t('settings.tab.workflows', 'Playbooks'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
         ...(activeWorkspaceIsLocal ? [{ id: 'pairing' as const, label: t('settings.tab.pairing', 'Pairing'), description: t('settings.tab.pairingDescription', 'Gateway and mobile access') }] : []),
         ...(activeWorkspaceIsLocal ? [{ id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') }] : []),
@@ -444,6 +445,7 @@ export function SettingsPanel({
       { id: 'settings-advanced-small-model', tab: 'advanced', label: t('settings.search.smallModel', 'Small model'), keywords: 'small model lightweight title sdk' },
       { id: 'settings-advanced-runtime-config', tab: 'advanced', label: t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source'), keywords: 'runtime config bridge opencode machine app isolated developer config bridge' },
       ...(activeWorkspaceIsLocal ? [
+        { id: 'settings-tooling-bridge-consent', tab: 'permissions' as const, label: t('settings.toolingBridge.title', 'Developer tool access'), keywords: 'developer tools credentials git ssh package manager cloud docker kubernetes consent' },
         { id: 'settings-permissions-shell', tab: 'permissions' as const, label: t('settings.permissions.bashTitle', 'Shell commands'), keywords: 'shell terminal bash permission approve deny allow' },
         { id: 'settings-permissions-files', tab: 'permissions' as const, label: t('settings.permissions.fileWriteTitle', 'File editing'), keywords: 'files write edit permission approve deny allow' },
         { id: 'settings-permissions-web', tab: 'permissions' as const, label: t('settings.permissions.webTitle', 'Open web pages'), keywords: 'web fetch code search webfetch codesearch permission approve deny allow' },
@@ -784,7 +786,13 @@ export function SettingsPanel({
                 )
               )}
               {tab === 'permissions' && (
-                <div>
+                <div className="flex flex-col gap-5">
+                  <RuntimeToolingBridgeConsentPanel
+                    id="settings-tooling-bridge-consent"
+                    consent={settings.runtimeToolingBridge}
+                    onChange={(runtimeToolingBridge) => update({ runtimeToolingBridge })}
+                    disabled={settings.runtimeConfigSource === 'machine'}
+                  />
                   <PermissionsPanel permissions={config.permissions} settings={settings} update={update} />
                 </div>
               )}

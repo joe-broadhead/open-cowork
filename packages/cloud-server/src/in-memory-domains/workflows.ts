@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { normalizeWorkflowSteps } from '@open-cowork/shared'
-import type { WorkflowRunStatus, WorkflowStatus } from '@open-cowork/shared'
+import type { WorkflowRunStatus, WorkflowStatus, WorkflowTrigger } from '@open-cowork/shared'
 import { clone, key, nowIso } from './store-helpers.ts'
 import type {
   AttachWorkflowRunSessionInput,
@@ -8,15 +8,19 @@ import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  CloudWorkflowWebhookSecretRecord,
   CompleteWorkflowRunInput,
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   FailWorkflowRunInput,
+  LegacyCloudWorkflowWebhookSecretRecord,
   ListWorkflowRunsForWorkflowsInput,
   ListWorkflowsPageInput,
   ListWorkflowsPageRecord,
   ReapExpiredWorkflowClaimsInput,
   ReapedWorkflowClaimRecord,
+  MigrateLegacyWorkflowWebhookSecretInput,
+  RotateWorkflowWebhookSecretInput,
   UpdateWorkflowStatusInput,
   WorkflowRunQuota,
   WorkReaperAction,
@@ -37,9 +41,16 @@ type WorkflowState = {
   runs: CloudWorkflowRunRecord[]
 }
 
+function publicWorkflowTrigger(value: WorkflowTrigger): WorkflowTrigger {
+  const { webhookSecret: _webhookSecret, ...trigger } = value as unknown as Record<string, unknown>
+  return trigger as unknown as WorkflowTrigger
+}
+
 export type InMemoryWorkflowsSnapshot = {
   workflows: Array<[string, WorkflowState]>
   workflowRuns: Array<[string, CloudWorkflowRunRecord]>
+  workflowWebhookSecrets: Array<[string, CloudWorkflowWebhookSecretRecord]>
+  legacyWorkflowWebhookSecrets: Array<[string, LegacyCloudWorkflowWebhookSecretRecord]>
 }
 
 type InMemoryWorkflowsHost = {
@@ -53,6 +64,8 @@ type InMemoryWorkflowsHost = {
 export class InMemoryWorkflowsDomain {
   private readonly workflows = new Map<string, WorkflowState>()
   private readonly workflowRuns = new Map<string, CloudWorkflowRunRecord>()
+  private readonly workflowWebhookSecrets = new Map<string, CloudWorkflowWebhookSecretRecord>()
+  private readonly legacyWorkflowWebhookSecrets = new Map<string, LegacyCloudWorkflowWebhookSecretRecord>()
   private readonly host: InMemoryWorkflowsHost
 
   constructor(host: InMemoryWorkflowsHost) {
@@ -69,21 +82,30 @@ export class InMemoryWorkflowsDomain {
     return {
       workflows: clone([...this.workflows.entries()]),
       workflowRuns: clone([...this.workflowRuns.entries()]),
+      workflowWebhookSecrets: clone([...this.workflowWebhookSecrets.entries()]),
+      legacyWorkflowWebhookSecrets: clone([...this.legacyWorkflowWebhookSecrets.entries()]),
     }
   }
 
   restore(snapshot: InMemoryWorkflowsSnapshot) {
     this.workflows.clear()
     this.workflowRuns.clear()
+    this.workflowWebhookSecrets.clear()
+    this.legacyWorkflowWebhookSecrets.clear()
     for (const [entryKey, value] of clone(snapshot.workflows)) this.workflows.set(entryKey, value)
     for (const [entryKey, value] of clone(snapshot.workflowRuns)) this.workflowRuns.set(entryKey, value)
+    for (const [entryKey, value] of clone(snapshot.workflowWebhookSecrets || [])) this.workflowWebhookSecrets.set(entryKey, value)
+    for (const [entryKey, value] of clone(snapshot.legacyWorkflowWebhookSecrets || [])) this.legacyWorkflowWebhookSecrets.set(entryKey, value)
   }
 
   createWorkflow(input: CreateWorkflowInput): CloudWorkflowRecord {
     this.host.requireTenantUser(input.tenantId, input.userId)
     const workflowKey = key(input.tenantId, input.workflowId)
     const existing = this.workflows.get(workflowKey)
-    if (existing) return clone(existing.record)
+    if (existing) {
+      if (existing.record.userId !== input.userId) throw new Error(`Unknown workflow ${input.workflowId}.`)
+      return clone(existing.record)
+    }
     const createdAt = nowIso(input.createdAt)
     const draft = clone(input.draft)
     const record: CloudWorkflowRecord = {
@@ -104,7 +126,9 @@ export class InMemoryWorkflowsDomain {
       status: 'active',
       projectDirectory: draft.projectDirectory || null,
       draftSessionId: draft.draftSessionId || null,
-      triggers: clone(draft.triggers),
+      triggers: draft.triggers
+        .map(publicWorkflowTrigger)
+        .map((trigger) => clone(trigger)),
       createdAt,
       updatedAt: createdAt,
       nextRunAt: input.nextRunAt ?? null,
@@ -116,6 +140,19 @@ export class InMemoryWorkflowsDomain {
       webhookUrl: null,
     }
     this.workflows.set(workflowKey, { record, runs: [] })
+    for (const secret of input.webhookSecrets || []) {
+      const secretKey = key(input.tenantId, input.workflowId, secret.triggerId)
+      this.workflowWebhookSecrets.set(secretKey, {
+        tenantId: input.tenantId,
+        workflowId: input.workflowId,
+        triggerId: secret.triggerId,
+        ciphertext: secret.ciphertext,
+        envelopeVersion: secret.envelopeVersion,
+        status: 'active',
+        createdAt,
+        updatedAt: createdAt,
+      })
+    }
     return clone(record)
   }
 
@@ -170,10 +207,135 @@ export class InMemoryWorkflowsDomain {
     this.host.requireTenantUser(input.tenantId, input.userId)
     const workflow = this.workflows.get(key(input.tenantId, input.workflowId))
     if (!workflow || workflow.record.userId !== input.userId) return null
+    const webhookTriggerIds = new Set(
+      workflow.record.triggers
+        .filter((trigger) => trigger.type === 'webhook')
+        .map((trigger) => trigger.id),
+    )
+    if (
+      input.status === 'active'
+      && webhookTriggerIds.size > 0
+      && !Array.from(this.workflowWebhookSecrets.values()).some((secret) => (
+        secret.tenantId === input.tenantId
+        && secret.workflowId === input.workflowId
+        && webhookTriggerIds.has(secret.triggerId)
+        && secret.status === 'active'
+      ))
+    ) return null
+    const updatedAt = nowIso(input.updatedAt)
+    if (input.status === 'archived') {
+      for (const secret of this.workflowWebhookSecrets.values()) {
+        if (
+          secret.tenantId !== input.tenantId
+          || secret.workflowId !== input.workflowId
+          || !webhookTriggerIds.has(secret.triggerId)
+          || secret.status !== 'active'
+        ) continue
+        secret.status = 'revoked'
+        secret.updatedAt = updatedAt
+      }
+      for (const [secretKey, secret] of this.legacyWorkflowWebhookSecrets.entries()) {
+        if (secret.tenantId === input.tenantId && secret.workflowId === input.workflowId) {
+          this.legacyWorkflowWebhookSecrets.delete(secretKey)
+        }
+      }
+    }
     workflow.record.status = input.status
     workflow.record.nextRunAt = input.nextRunAt ?? null
-    workflow.record.updatedAt = nowIso(input.updatedAt)
+    workflow.record.updatedAt = updatedAt
     return clone(workflow.record)
+  }
+
+  getWorkflowWebhookSecret(tenantId: string, workflowId: string, triggerId?: string): CloudWorkflowWebhookSecretRecord | null {
+    const secret = Array.from(this.workflowWebhookSecrets.values())
+      .filter((entry) => (
+        entry.tenantId === tenantId
+        && entry.workflowId === workflowId
+        && (!triggerId || entry.triggerId === triggerId)
+      ))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.triggerId.localeCompare(right.triggerId))[0]
+    return secret ? clone(secret) : null
+  }
+
+  rotateWorkflowWebhookSecret(input: RotateWorkflowWebhookSecretInput): CloudWorkflowWebhookSecretRecord | null {
+    this.host.requireTenantUser(input.tenantId, input.userId)
+    const workflow = this.workflows.get(key(input.tenantId, input.workflowId))
+    if (!workflow || workflow.record.userId !== input.userId) return null
+    if (!workflow.record.triggers.some((trigger) => trigger.id === input.triggerId && trigger.type === 'webhook')) return null
+    const secretKey = key(input.tenantId, input.workflowId, input.triggerId)
+    const existing = this.workflowWebhookSecrets.get(secretKey)
+    const updatedAt = nowIso(input.updatedAt)
+    const next: CloudWorkflowWebhookSecretRecord = {
+      tenantId: input.tenantId,
+      workflowId: input.workflowId,
+      triggerId: input.triggerId,
+      ciphertext: input.ciphertext,
+      envelopeVersion: input.envelopeVersion,
+      status: 'active',
+      createdAt: existing?.createdAt || updatedAt,
+      updatedAt,
+    }
+    this.workflowWebhookSecrets.set(secretKey, next)
+    this.legacyWorkflowWebhookSecrets.delete(secretKey)
+    workflow.record.updatedAt = updatedAt
+    return clone(next)
+  }
+
+  listLegacyWorkflowWebhookSecrets(limit = 100): LegacyCloudWorkflowWebhookSecretRecord[] {
+    return Array.from(this.legacyWorkflowWebhookSecrets.values())
+      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt) || left.workflowId.localeCompare(right.workflowId))
+      .slice(0, Math.max(1, Math.min(1_000, Math.floor(limit))))
+      .map((record) => clone(record))
+  }
+
+  getLegacyWorkflowWebhookSecret(
+    tenantId: string,
+    workflowId: string,
+    triggerId: string,
+  ): LegacyCloudWorkflowWebhookSecretRecord | null {
+    const secret = this.legacyWorkflowWebhookSecrets.get(key(tenantId, workflowId, triggerId))
+    return secret ? clone(secret) : null
+  }
+
+  migrateLegacyWorkflowWebhookSecret(input: MigrateLegacyWorkflowWebhookSecretInput): boolean {
+    const secretKey = key(input.tenantId, input.workflowId, input.triggerId)
+    const legacy = this.legacyWorkflowWebhookSecrets.get(secretKey)
+    if (!legacy) return false
+    if (legacy.plaintext !== input.expectedPlaintext) return false
+    const workflow = this.workflows.get(key(input.tenantId, input.workflowId))
+    if (
+      !workflow
+      || !workflow.record.triggers.some((trigger) => (
+        trigger.id === input.triggerId && trigger.type === 'webhook'
+      ))
+    ) return false
+    const targetStatus = workflow.record.status === 'archived' ? 'revoked' : 'active'
+    const existing = this.workflowWebhookSecrets.get(secretKey)
+    if (input.expectedExistingCiphertext === null) {
+      if (existing) return false
+    } else if (
+      !existing
+      || existing.ciphertext !== input.expectedExistingCiphertext
+      || existing.envelopeVersion !== input.expectedExistingEnvelopeVersion
+      || (targetStatus === 'active' && existing.status !== 'active')
+    ) {
+      return false
+    }
+    const migratedAt = nowIso(input.migratedAt)
+    this.workflowWebhookSecrets.set(secretKey, {
+      tenantId: input.tenantId,
+      workflowId: input.workflowId,
+      triggerId: input.triggerId,
+      ciphertext: input.ciphertext,
+      envelopeVersion: input.envelopeVersion,
+      status: targetStatus,
+      createdAt: existing?.createdAt || migratedAt,
+      updatedAt: migratedAt,
+    })
+    workflow.record.triggers = workflow.record.triggers.map(publicWorkflowTrigger)
+    workflow.record.updatedAt = migratedAt
+    this.legacyWorkflowWebhookSecrets.delete(secretKey)
+    return true
   }
 
   listWorkflowRuns(tenantId: string, workflowId: string, limit = 25): CloudWorkflowRunRecord[] {

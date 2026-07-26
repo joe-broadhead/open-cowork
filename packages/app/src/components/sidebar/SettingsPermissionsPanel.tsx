@@ -57,7 +57,8 @@ export function RuntimeConfigPanel({
   update: (patch: Partial<EffectiveAppSettings>) => void
 }) {
   const runtimeConfigSource = settings.runtimeConfigSource === 'machine' ? 'machine' : 'app'
-  // JOE-876: advanced runtime source/bridge stays collapsed unless the user opts in.
+  // Machine OpenCode remains an advanced escape hatch. Granular developer
+  // tooling consent lives in the normal Permissions surface.
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -80,7 +81,7 @@ export function RuntimeConfigPanel({
         <Card variant="flat" padding="sm" className="text-xs leading-relaxed text-text-muted">
           {t(
             'settings.permissions.advancedCollapsedHint',
-            'OpenCode config source and developer tooling bridge stay hidden by default. Most users should leave the Open Cowork–managed app sandbox as-is.',
+            'Most users should leave the Open Cowork–managed app sandbox as-is.',
           )}
         </Card>
       ) : (
@@ -102,19 +103,6 @@ export function RuntimeConfigPanel({
                 label: t(`settings.permissions.runtimeConfigSource.${option.value}`, option.label),
                 description: t(`settings.permissions.runtimeConfigSourceHint.${option.value}`, option.description),
               }))}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-xs font-semibold text-text">{t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}</div>
-              <div className="text-xs text-text-muted mt-1">{t('settings.permissions.toolingBridgeDescription', 'In app-isolated mode, expose standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config to the managed runtime. OpenCode config, agents, and skills are never bridged by this setting.')}</div>
-              <div className="mt-1 text-xs text-text-muted">{t('settings.permissions.toolingBridgeSingleSource', 'This is the same bridge setting shown during setup.')}</div>
-            </div>
-            <Switch
-              checked={runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled}
-              onCheckedChange={() => update({ runtimeToolingBridgeEnabled: !settings.runtimeToolingBridgeEnabled })}
-              disabled={runtimeConfigSource === 'machine'}
-              aria-label={t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}
             />
           </div>
         </Card>

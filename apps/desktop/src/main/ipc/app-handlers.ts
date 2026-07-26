@@ -53,6 +53,7 @@ import type {
   EffectiveAppSettings,
   WorkspaceOptions,
 } from '@open-cowork/shared'
+import { createDisabledRuntimeToolingBridgeConsent } from '@open-cowork/shared'
 import { LOCAL_WORKSPACE_ID, readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 export {
@@ -93,6 +94,7 @@ const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'requireApprovalBeforeSending',
   'privacyKeepConversationHistory',
   'runtimeConfigSource',
+  'runtimeToolingBridge',
   'runtimeToolingBridgeEnabled',
   'windowZoomFactor',
   'workflowLaunchAtLogin',
@@ -135,7 +137,7 @@ function buildCloudEffectiveSettings(base: EffectiveAppSettings, value: Record<s
     integrationCredentials: {},
     integrationEnabled: {},
     runtimeConfigSource: 'app',
-    runtimeToolingBridgeEnabled: false,
+    runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     workflowDesktopNotifications: typeof value.workflowDesktopNotifications === 'boolean'
       ? value.workflowDesktopNotifications
       : base.workflowDesktopNotifications,
@@ -203,7 +205,7 @@ export function hasRuntimeSensitiveSettingsUpdate(updates: Partial<CoworkSetting
     || updates.externalDirectoryPermission !== undefined
     || updates.mcpPermission !== undefined
     || updates.runtimeConfigSource !== undefined
-    || updates.runtimeToolingBridgeEnabled !== undefined
+    || updates.runtimeToolingBridge !== undefined
   )
 }
 

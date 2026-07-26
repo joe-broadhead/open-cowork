@@ -19,6 +19,7 @@ import type {
   WorkflowDetail,
   WorkflowListPayload,
   WorkflowRun,
+  WorkflowWebhookSecretMutationResult,
 } from './workflow.js'
 import type {
   CapabilitySkill,
@@ -249,6 +250,7 @@ export * from './resource-identity.js'
 export * from './runtime.js'
 export * from './runtime-event-normalizers.js'
 export * from './runtime-event-sanitizer.js'
+export * from './runtime-tooling-bridge.js'
 export * from './semantic-ui.js'
 export * from './session.js'
 export * from './session-import.js'
@@ -281,6 +283,7 @@ export interface CoworkAPI {
     addCloud: (input: AddCloudWorkspaceInput) => Promise<WorkspaceInfo>
     addGateway: (input: AddGatewayWorkspaceInput) => Promise<WorkspaceInfo>
     remove: (workspaceId: string) => Promise<boolean>
+    resetGatewayCredentials: (confirmationToken: string) => Promise<boolean>
     login: (workspaceId: string) => Promise<WorkspaceInfo>
     logout: (workspaceId: string) => Promise<WorkspaceInfo>
     policy: (workspaceId?: string) => Promise<WorkspacePolicy>
@@ -524,7 +527,7 @@ export interface CoworkAPI {
     pause: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
     resume: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
     archive: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
-    regenerateWebhookSecret: (workflowId: string) => Promise<WorkflowDetail | null>
+    regenerateWebhookSecret: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowWebhookSecretMutationResult | null>
   }
   threads: {
     search: (query?: WorkspaceScoped<ThreadSearchQuery>) => Promise<ThreadSearchResult>

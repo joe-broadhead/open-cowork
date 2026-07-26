@@ -44,6 +44,7 @@ import { handleSessionArtifactsApiRoute } from './http-routes/session-artifacts.
 import { handleThreadsApiRoute } from './http-routes/threads.ts'
 import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
 import { CloudByokRuntimeConfigError } from './byok-runtime-config.ts'
+import type { CompiledCloudRuntimeCapabilityPolicy } from './cloud-runtime-capability-policy.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService, type CloudSessionView } from './session-service.ts'
 import {
   firstHeader,
@@ -169,6 +170,8 @@ export type CloudHttpServerOptions = {
    * Same secret the cloud app uses for session cookies / team-invite tokens.
    */
   knowledgeAgentTokenSecret?: string | null
+  /** Effective SDK-native ceiling, rechecked per request and fail-closed when omitted. */
+  runtimeCapabilityPolicy?: CompiledCloudRuntimeCapabilityPolicy | null
 }
 
 export class CloudHttpError extends Error {
@@ -1158,7 +1161,7 @@ async function handleApiRequest(
     if (!workflowId && req.method === 'POST') {
       const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const draft = body as Partial<WorkflowDraft>
-      const workflow = await options.service.domains.workflows.createWorkflow(context.principal, {
+      const created = await options.service.domains.workflows.createWorkflow(context.principal, {
         title: readString(draft.title) || '',
         instructions: readString(draft.instructions) || '',
         agentName: readString(draft.agentName) || 'build',
@@ -1169,7 +1172,7 @@ async function handleApiRequest(
         draftSessionId: readString(draft.draftSessionId),
         triggers: Array.isArray(draft.triggers) ? draft.triggers : [],
       })
-      writeJson(res, 201, { workflow }, options.corsOrigin)
+      writeJson(res, 201, created, options.corsOrigin)
       return
     }
 
@@ -1230,6 +1233,16 @@ async function handleApiRequest(
         run: workflow?.runs.find((run) => run.id === started.run.id) || started.run,
         processed,
       }, options.corsOrigin)
+      return
+    }
+
+    if (workflowAction === 'rotate-webhook-secret' && req.method === 'POST') {
+      const result = await options.service.domains.workflows.rotateWorkflowWebhookSecret(context.principal, workflowId)
+      if (!result) {
+        writeError(res, 404, 'Workflow webhook was not found.', options.corsOrigin)
+        return
+      }
+      writeJson(res, 200, result, options.corsOrigin)
       return
     }
 
@@ -1829,22 +1842,15 @@ export class CloudHttpServer {
         return
       }
 
-      // Public, pre-user-auth: the cloud agent-propose route. A coworker (agent)
-      // in a cloud session proposes a knowledge edit via the knowledge MCP,
-      // which carries a per-session, tenant-scoped signed token as its bearer
-      // credential (NOT the user cookie/principal). The route verifies the token,
-      // derives the workspace from the TOKEN (never the body), forces `by`, and
-      // creates a PENDING proposal. Propose-only; placed like /api/invites/accept
-      // so it bypasses the desktop-API user-principal gate. IP-rate-limited above.
       if (url.pathname === '/api/knowledge/agent/propose') {
-        const knowledgeStore = this.options.knowledgeStore
-          ?? createSqliteKnowledgeStore({ storageDataDir: this.options.knowledgeDataDir })
+        const knowledgeStore = this.options.knowledgeStore ?? createSqliteKnowledgeStore({ storageDataDir: this.options.knowledgeDataDir })
         await handleKnowledgeAgentProposeRoute({
           req,
           res,
           secret: this.options.knowledgeAgentTokenSecret || '',
           store: knowledgeStore,
           knowledgeEnabled: this.options.policy.features.knowledge,
+          runtimeCapabilityPolicy: this.options.runtimeCapabilityPolicy,
           maxBodyBytes: this.options.maxBodyBytes || 1024 * 1024,
           corsOrigin: requestOptions.corsOrigin,
           tools: { readJsonBody, writeJson, writeError, writePolicyError },
