@@ -43,6 +43,13 @@ import { sandboxWorkerOwnerHash } from '../packages/cloud-server/src/sandbox-orp
 
 const IMAGE_DIGEST = `sha256:${'a'.repeat(64)}`
 
+function fakeImageInspection(
+  imageId = IMAGE_DIGEST,
+  repoDigests: string[] | null = [`open-cowork/opencode@${imageId}`],
+) {
+  return JSON.stringify({ Id: imageId, RepoDigests: repoDigests })
+}
+
 function flagValue(args: string[], flag: string) {
   const index = args.indexOf(flag)
   return index >= 0 ? args[index + 1] : undefined
@@ -568,7 +575,7 @@ test('sandbox provider establishes a private runtime boundary and tears it down 
       if (args[0] === 'image') {
         return {
           exitCode: 0,
-          stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}`,
+          stdout: fakeImageInspection(),
         }
       }
       if (args[0] === 'network') {
@@ -871,7 +878,7 @@ test('restricted sandbox capability requires labels and an enforceable internal 
           if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
           if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
           if (args[0] === 'image') {
-            return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+            return { exitCode: 0, stdout: fakeImageInspection() }
           }
           if (args[0] === 'network') {
             return { exitCode: 0, stdout: JSON.stringify(inspection) }
@@ -1098,7 +1105,7 @@ test('sandbox startup reclaims only live boundaries owned by the stable worker h
         }
         if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
         if (args[0] === 'image') {
-          return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+          return { exitCode: 0, stdout: fakeImageInspection() }
         }
         return { exitCode: 1 }
       },
@@ -1204,7 +1211,7 @@ test('a duplicate live sandbox owner cannot sweep its peer boundary', async () =
       }
       if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
       if (args[0] === 'image') {
-        return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+        return { exitCode: 0, stdout: fakeImageInspection() }
       }
       return { exitCode: 1 }
     },
@@ -1276,7 +1283,7 @@ test('sandbox provider rejects launched boundaries whose live Docker state diffe
           if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
           if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
           if (args[0] === 'image') {
-            return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+            return { exitCode: 0, stdout: fakeImageInspection() }
           }
           if (args[0] === 'run') {
             runtimeRunArgs = [...args]
@@ -1360,7 +1367,7 @@ test('sandbox provider owns failed-provision orphan cleanup and stays unavailabl
         if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
         if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
         if (args[0] === 'image') {
-          return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+          return { exitCode: 0, stdout: fakeImageInspection() }
         }
         if (args[0] === 'run') {
           runtimeRunArgs = [...args]
@@ -1446,7 +1453,7 @@ test('sandbox provider owns private-runtime cleanup debt after a stopped failed 
         if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
         if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
         if (args[0] === 'image') {
-          return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+          return { exitCode: 0, stdout: fakeImageInspection() }
         }
         if (args[0] === 'run') return { exitCode: 1, stderr: 'synthetic launch failure' }
         if (args[0] === 'stop' || args[0] === 'rm') return { exitCode: 0 }
@@ -1501,7 +1508,7 @@ test('sandbox capability binds mutable image tags to the declared and inspected 
           inspectedImage = args.at(-1) || ''
           return {
             exitCode: 0,
-            stdout: `sha256:${'b'.repeat(64)}|open-cowork/opencode@sha256:${'b'.repeat(64)}`,
+            stdout: fakeImageInspection(`sha256:${'b'.repeat(64)}`),
           }
         }
         return { exitCode: 1 }
@@ -1534,8 +1541,14 @@ test('sandbox capability accepts an immutable local Docker image id without Repo
         if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
         if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
         if (args[0] === 'image') {
-          assert.equal(args.at(-1), imageId)
-          return { exitCode: 0, stdout: `${imageId}|` }
+          assert.deepEqual(args, [
+            'image',
+            'inspect',
+            '--format',
+            '{{json .}}',
+            imageId,
+          ])
+          return { exitCode: 0, stdout: fakeImageInspection(imageId, null) }
         }
         return { exitCode: 1 }
       },
@@ -1585,7 +1598,7 @@ test('sandbox provisioning removes crash-stale private symlinks before writing f
         if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
         if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
         if (args[0] === 'image') {
-          return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+          return { exitCode: 0, stdout: fakeImageInspection() }
         }
         if (args[0] === 'run') {
           restoredAtLaunch = readFileSync(restoredCheckpoint, 'utf8')
@@ -1655,7 +1668,7 @@ test('sandbox provider close removes abandoned prepared roots without touching w
         if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
         if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
         if (args[0] === 'image') {
-          return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+          return { exitCode: 0, stdout: fakeImageInspection() }
         }
         return { exitCode: 1 }
       },
@@ -1713,7 +1726,7 @@ test('sandbox provisioning failure removes partial runtime and credential artifa
         if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
         if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
         if (args[0] === 'image') {
-          return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+          return { exitCode: 0, stdout: fakeImageInspection() }
         }
         if (args[0] === 'run') return { exitCode: 1, stderr: 'synthetic launch failure' }
         if (args[0] === 'stop' || args[0] === 'rm') return { exitCode: 0 }
@@ -1804,7 +1817,7 @@ test('sandbox teardown failure is redacted, observable, and retryable without de
         if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
         if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
         if (args[0] === 'image') {
-          return { exitCode: 0, stdout: `${IMAGE_DIGEST}|open-cowork/opencode@${IMAGE_DIGEST}` }
+          return { exitCode: 0, stdout: fakeImageInspection() }
         }
         if (args[0] === 'run') {
           runtimeRunArgs = [...args]

@@ -178,16 +178,31 @@ async function inspectPinnedRuntimeImage(
   ) return null
   const result = await runSandboxRuntimeCommand(
     'docker',
-    ['image', 'inspect', '--format', '{{.Id}}|{{join .RepoDigests ","}}', image],
+    ['image', 'inspect', '--format', '{{json .}}', image],
     options.runner,
   )
-  if (result.exitCode !== 0) return null
-  const evidence = result.stdout?.toLowerCase() || ''
-  const imageId = evidence.split('|')[0]?.trim()
+  if (result.exitCode !== 0 || !result.stdout) return null
+  let inspection: {
+    Id?: unknown
+    RepoDigests?: unknown
+  }
+  try {
+    inspection = JSON.parse(result.stdout) as typeof inspection
+  } catch {
+    return null
+  }
+  const imageId = typeof inspection.Id === 'string'
+    ? inspection.Id.toLowerCase().trim()
+    : ''
+  const repoDigests = Array.isArray(inspection.RepoDigests)
+    ? inspection.RepoDigests.filter(
+      (entry): entry is string => typeof entry === 'string',
+    ).map((entry) => entry.toLowerCase())
+    : []
   if (!imageId || !/^sha256:[a-f0-9]{64}$/.test(imageId)) return null
   if (
     imageId !== `sha256:${expectedDigest}`
-    && !evidence.includes(`sha256:${expectedDigest}`)
+    && !repoDigests.some((entry) => entry.endsWith(`@sha256:${expectedDigest}`))
   ) return null
   return { image, imageId }
 }
