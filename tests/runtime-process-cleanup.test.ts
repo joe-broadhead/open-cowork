@@ -73,7 +73,7 @@ test('buildPsSnapshotArgs chooses platform-specific command columns', () => {
   assert.deepEqual(buildPsSnapshotArgs('darwin', false), ['-axo', 'pid=,ppid=,command='])
   assert.deepEqual(buildPsSnapshotArgs('darwin', true), ['eww', '-axo', 'pid=,ppid=,command='])
   assert.deepEqual(buildPsSnapshotArgs('linux', false), ['-axo', 'pid=,ppid=,args='])
-  assert.deepEqual(buildPsSnapshotArgs('linux', true), ['eww', '-axo', 'pid=,ppid=,args='])
+  assert.deepEqual(buildPsSnapshotArgs('linux', true), ['-eww', '-axo', 'pid=,ppid=,args='])
   assert.equal(buildPsSnapshotArgs('win32', false), null)
 })
 

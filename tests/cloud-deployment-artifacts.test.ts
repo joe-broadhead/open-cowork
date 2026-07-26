@@ -890,6 +890,11 @@ test('cloud CLI entrypoint uses the shared config loader and cloud app bootstrap
   assert.doesNotMatch(script, /loadConfig/)
 })
 
+test('cloud bundle import smoke explicitly opts into local development isolation', () => {
+  const script = readRepoFile('scripts/cloud-bundle-import-smoke.mjs')
+  assert.match(script, /'--experimental-sqlite', bundle, '--development-process'/)
+})
+
 test('cloud image builds workspace packages required by package entrypoints', () => {
   const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
   const gatewayDockerfile = readRepoFile('docker/open-cowork-gateway/Dockerfile')

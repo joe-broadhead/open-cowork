@@ -104,7 +104,7 @@ export function buildPsSnapshotArgs(
   if (platform === 'win32') return null
   const commandColumn = platform === 'linux' ? 'args=' : 'command='
   const args = ['-axo', `pid=,ppid=,${commandColumn}`]
-  return includeEnvironment ? ['eww', ...args] : args
+  return includeEnvironment ? [platform === 'linux' ? '-eww' : 'eww', ...args] : args
 }
 
 function loadProcessSnapshot(includeEnvironment = false) {
