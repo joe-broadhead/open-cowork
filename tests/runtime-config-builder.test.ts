@@ -1,7 +1,12 @@
 import { clearSettingsCache, loadSettings, saveSettings } from '@open-cowork/runtime-host/settings'
 import { getMachineSkillsDir, getProjectCoworkAgentsDir, getRuntimeSkillCatalogDir } from '@open-cowork/runtime-host/runtime-paths'
 import { copySkillsAndAgents } from '@open-cowork/runtime-host/runtime-content'
-import { buildProviderRuntimeConfig, buildRuntimeConfig, buildRuntimeConfigForRuntime } from '@open-cowork/runtime-host/runtime-config-builder'
+import {
+  buildOpenRouterProviderRuntimeConfigFromApiKey,
+  buildProviderRuntimeConfig,
+  buildRuntimeConfig,
+  buildRuntimeConfigForRuntime,
+} from '@open-cowork/runtime-host/runtime-config-builder'
 import { removeCustomAgent, removeCustomMcp, removeCustomSkill, saveCustomAgent, saveCustomMcp, saveCustomSkill } from '@open-cowork/runtime-host/native-customizations'
 import { buildCustomAgentCatalog, buildCustomAgentPermissionFromCatalog } from '@open-cowork/runtime-host/custom-agents-utils'
 import test from 'node:test'
@@ -722,9 +727,13 @@ test('buildRuntimeConfig gives the charts agent explicit access to the managed c
   }
 })
 
-test('buildRuntimeConfig delegates to custom agents whose app-owned skills need frontmatter healing', () => {
+test('buildRuntimeConfig delegates to custom agents whose app-owned skills need frontmatter healing', (context) => {
   const tempUserData = testTempDir('open-cowork-runtime-skill-heal-')
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const logLines: string[] = []
+  context.mock.method(console, 'log', (...args) => {
+    logLines.push(String(args[0] || ''))
+  })
 
   process.env.OPEN_COWORK_USER_DATA_DIR = tempUserData
   clearConfigCaches()
@@ -758,6 +767,7 @@ test('buildRuntimeConfig delegates to custom agents whose app-owned skills need 
 
   try {
     const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    buildRuntimeConfig()
 
     assert.equal(runtimeConfig.permission.skill.analyst, 'allow')
     assert.equal(
@@ -767,6 +777,13 @@ test('buildRuntimeConfig delegates to custom agents whose app-owned skills need 
     )
     assert.equal(runtimeConfig.agent.build.permission.task['data-analyst'], 'allow')
     assert.equal(runtimeConfig.agent.plan.permission.task['data-analyst'], 'allow')
+    const permissionReports = logLines.filter((line) => (
+      line.includes('Delegated permission inheritance issues')
+      && line.includes('data-analyst')
+    ))
+    assert.equal(permissionReports.length, 1)
+    assert.match(permissionReports[0] || '', /permission-inheritance\/delegated-agent-missing/)
+    assert.match(permissionReports[0] || '', /agents\["build"\]\.permission\.task\["data-analyst"\]/)
   } finally {
     removeCustomAgent({ scope: 'machine', directory: null, name: 'data-analyst' })
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -1039,6 +1056,29 @@ test('buildRuntimeConfig composes openrouter under runtime id or with openai-com
   } finally {
     saveSettings(originalSettings)
   }
+})
+
+test('OpenRouter composition accepts an explicit adapter base URL for deterministic provider boundaries', () => {
+  assert.deepEqual(
+    buildOpenRouterProviderRuntimeConfigFromApiKey('synthetic-cloud-smoke-key', {
+      baseURL: 'http://127.0.0.1:43123/v1',
+      modelIds: ['cloud-smoke-model'],
+    }),
+    {
+      name: 'OpenRouter',
+      npm: '@ai-sdk/openai-compatible',
+      options: {
+        baseURL: 'http://127.0.0.1:43123/v1',
+        apiKey: 'synthetic-cloud-smoke-key',
+      },
+      models: {
+        'cloud-smoke-model': {
+          name: 'cloud-smoke-model',
+          tools: true,
+        },
+      },
+    },
+  )
 })
 
 test('buildRuntimeConfig uses the user-selected small model for OpenCode lightweight calls', () => {

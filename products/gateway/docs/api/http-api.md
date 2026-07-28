@@ -31,7 +31,7 @@ Routes are currently served unprefixed and are treated as **v1**. A future `/v1`
 | `GET` | `/` | Dashboard HTML. |
 | `GET` | `/dashboard` | Dashboard HTML. |
 | `GET` | `/live` | Minimal live event HTML page. |
-| `GET` | `/live/events` | Server-sent event stream. |
+| `GET` | `/live/events` | Sanitized read-capability server-sent event stream. The bundled loopback browser page uses the local read boundary because native `EventSource` cannot attach a bearer header; exposed/nonlocal clients still require a read-capable bearer token. Admission is bounded globally and per canonical principal; capacity exhaustion returns `503` with `Retry-After` and a retryable body. Heartbeats keep healthy clients active, while credential rotation, idle/lifetime deadlines, and persistent backpressure close the stream for EventSource reconnection. Connect-time replay keeps a stable, configurable session set and is bounded by snapshot count, per-payload bytes, and aggregate bytes. |
 
 ## Service
 
@@ -57,7 +57,7 @@ Routes are currently served unprefixed and are treated as **v1**. A future `/v1`
 | `POST` | `/alerts/evaluate` | Run alert evaluation and persist the resulting alert lifecycle updates. Requires operator capability and daemon writer leadership. |
 | `POST` | `/alerts/:id/action` | Acknowledge, resolve, or suppress an alert. |
 | `GET` | `/observability` | Local metrics, active alerts, redacted trace correlation, and SLO snapshot. |
-| `GET` | `/metrics` | Prometheus-format runtime, scheduler, auth, channel, and alert metrics for local scraping. |
+| `GET` | `/metrics` | Prometheus-format runtime, scheduler, auth, channel, alert, and bounded live-stream metrics for local scraping. |
 | `GET` | `/incident-report?alertId=...` | Generate a local incident report. |
 | `GET` | `/incident-bundle?alertId=...&format=json\|markdown` | Generate a redacted local incident bundle with manifest, trace correlation, SLO state, alert summaries, and nested evidence export. |
 | `GET` | `/logs?lines=100` | Recent daemon logs. |

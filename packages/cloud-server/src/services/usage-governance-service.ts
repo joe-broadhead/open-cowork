@@ -260,7 +260,11 @@ export class CloudUsageGovernanceService {
     workerId: string
     commandId: string
     commandKind: string
-    eventType: 'worker.execution_started' | 'worker.execution_completed' | 'worker.execution_failed'
+    eventType:
+      | 'worker.execution_started'
+      | 'worker.execution_completed'
+      | 'worker.execution_deferred'
+      | 'worker.execution_failed'
     elapsedMs?: number | null
     errorCode?: string | null
   }) {

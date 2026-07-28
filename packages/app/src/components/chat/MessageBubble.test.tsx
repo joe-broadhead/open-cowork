@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Message, SessionInfo } from '@open-cowork/shared'
+import type { CoworkAPI, Message, PublicAppConfig, SessionInfo, VoiceHostStatus } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { installRendererTestCoworkApi } from '../../test/setup'
+import { createTestVoiceApi, createTestVoiceHostStatus } from '../../test/voice-fixtures'
 import { switchToSession } from '../../helpers/switchToSession'
 import { MessageBubble } from './MessageBubble'
 
@@ -206,34 +207,26 @@ describe('MessageBubble', () => {
 
   it('offers private read-aloud for completed assistant messages when voice TTS is ready', async () => {
     const user = userEvent.setup()
-    const speak = vi.fn(async () => ({ phase: 'ready' }))
-    const cancelSpeak = vi.fn(async () => ({ phase: 'ready' }))
+    const readyStatus = createTestVoiceHostStatus()
+    const speak = vi.fn(async (): Promise<VoiceHostStatus> => readyStatus)
+    const cancelSpeak = vi.fn(async (): Promise<VoiceHostStatus> => readyStatus)
     installMessageApi()
-    const baseConfig = window.coworkApi.app.config as () => Promise<Record<string, unknown>>
-    window.coworkApi.app.config = vi.fn(async () => ({
-      ...(await baseConfig()),
-      features: { voice: true },
-    }))
-    // @ts-expect-error extend test double
-    window.coworkApi.voice = {
-      status: vi.fn(async () => ({
-        enabled: true,
-        phase: 'ready',
-        captureMode: 'voice_host',
-        stt: { engine: 'aurum_local', ready: true },
-        tts: { engine: 'system_os', ready: true, detail: 'ok' },
-        permissions: { microphone: 'granted' },
-        reason: null,
-        sessionId: null,
-      })),
-      speak,
-      cancelSpeak,
-    }
-    // @ts-expect-error extend test double
-    window.coworkApi.on = {
-      ...(window.coworkApi.on || {}),
-      voiceEvent: () => () => {},
-    }
+    const baseConfig = window.coworkApi.app.config
+    const voiceEvent: CoworkAPI['on']['voiceEvent'] = () => () => undefined
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async (): Promise<PublicAppConfig> => ({
+          ...(await baseConfig()),
+          features: { voice: true },
+        })),
+      },
+      voice: createTestVoiceApi({
+        status: vi.fn(async (): Promise<VoiceHostStatus> => readyStatus),
+        speak,
+        cancelSpeak,
+      }),
+      on: { voiceEvent },
+    })
 
     render(<MessageBubble message={{
       id: 'assistant-read',

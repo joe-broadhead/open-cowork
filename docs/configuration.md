@@ -691,6 +691,12 @@ It also ships one command-launched bundled MCP (`type: local` with a
   queries, date arithmetic, business days, offline holidays (2000–2030), and
   SQLite timers (bundled native binary; pin in `third_party/time-keep/VERSION`)
 
+The shared config describes the Desktop distribution. Cloud production images
+derive a profile-effective config: package-backed MCPs have a verifiable image
+closure, while bare local commands such as `time-keep` remain disabled and are
+left out by default. A Cloud profile that explicitly enables an unpackaged bare
+command fails closed during image pruning instead of relying on the host PATH.
+
 **Wiki** and durable **Gateway** are not shipped as default MCP entries.
 Wiki is an optional standalone git-backed knowledge product (see
 [Wiki](openwiki.md)); it is not the in-app Knowledge store. Gateway is an

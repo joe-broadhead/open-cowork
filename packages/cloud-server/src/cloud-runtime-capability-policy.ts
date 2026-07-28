@@ -18,6 +18,7 @@ import type { CloudRuntimePolicy } from './cloud-config.ts'
 type CloudRuntimeCapabilityPolicyErrorCode =
   | 'unknown_tool'
   | 'unknown_mcp'
+  | 'unsupported_local_mcp'
 
 export class CloudRuntimeCapabilityPolicyError extends Error {
   readonly capabilityId: string
@@ -27,8 +28,10 @@ export class CloudRuntimeCapabilityPolicyError extends Error {
     capabilityId: string,
     code: CloudRuntimeCapabilityPolicyErrorCode,
   ) {
-    const kind = code === 'unknown_tool' ? 'tool' : 'MCP'
-    super(`Cloud runtime policy references unknown ${kind} capability "${capabilityId}".`)
+    const message = code === 'unsupported_local_mcp'
+      ? `Cloud runtime policy enables bare local MCP "${capabilityId}", but the production image has no package-backed closure for it.`
+      : `Cloud runtime policy references unknown ${code === 'unknown_tool' ? 'tool' : 'MCP'} capability "${capabilityId}".`
+    super(message)
     this.name = 'CloudRuntimeCapabilityPolicyError'
     this.capabilityId = capabilityId
     this.code = code
@@ -112,9 +115,13 @@ function toolPatterns(tool: ConfiguredTool) {
 
 function resolveAllowedMcpNames(
   appConfig: OpenCoworkConfig,
-  policy: Pick<CloudRuntimePolicy, 'allowedMcps'>,
+  policy: Pick<
+    CloudRuntimePolicy,
+    'allowedMcps' | 'allowLocalStdioMcps' | 'allowedLocalMcpNames'
+  >,
 ) {
-  const configuredNames = new Set(appConfig.mcps.map((mcp) => mcp.name))
+  const configuredMcps = new Map(appConfig.mcps.map((mcp) => [mcp.name, mcp]))
+  const configuredNames = new Set(configuredMcps.keys())
   const requested = policy.allowedMcps === null
     ? [...configuredNames]
     : unique(policy.allowedMcps)
@@ -123,7 +130,17 @@ function resolveAllowedMcpNames(
       throw new CloudRuntimeCapabilityPolicyError(name, 'unknown_mcp')
     }
   }
-  return requested
+  return requested.filter((name) => {
+    const mcp = configuredMcps.get(name)
+    const commandLaunchedLocal = mcp?.type === 'local' && Array.isArray(mcp.command)
+    if (!commandLaunchedLocal) return true
+    const explicitlyEnabled = policy.allowLocalStdioMcps
+      || policy.allowedLocalMcpNames.includes(name)
+    if (explicitlyEnabled) {
+      throw new CloudRuntimeCapabilityPolicyError(name, 'unsupported_local_mcp')
+    }
+    return false
+  })
 }
 
 function resolveAllowedTools(
@@ -361,7 +378,13 @@ function clampAgentPermission(
 
 export function compileCloudRuntimeCapabilityPolicy(input: {
   appConfig: OpenCoworkConfig
-  policy: Pick<CloudRuntimePolicy, 'allowedTools' | 'allowedMcps'>
+  policy: Pick<
+    CloudRuntimePolicy,
+    | 'allowedTools'
+    | 'allowedMcps'
+    | 'allowLocalStdioMcps'
+    | 'allowedLocalMcpNames'
+  >
 }): CompiledCloudRuntimeCapabilityPolicy {
   const allowedMcpNames = resolveAllowedMcpNames(input.appConfig, input.policy)
   const allowedMcpSet = new Set(allowedMcpNames)

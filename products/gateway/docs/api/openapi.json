@@ -136,7 +136,7 @@
     },
     "/live/events": {
       "get": {
-        "summary": "Server-sent event stream.",
+        "summary": "Sanitized read-capability server-sent event stream. The bundled loopback browser page uses the local read boundary because native EventSource cannot attach a bearer header; exposed/nonlocal clients still require a read-capable bearer token. Admission is bounded globally and per canonical principal; capacity exhaustion returns 503 with Retry-After and a retryable body. Heartbeats keep healthy clients active, while credential rotation, idle/lifetime deadlines, and persistent backpressure close the stream for EventSource reconnection. Connect-time replay keeps a stable, configurable session set and is bounded by snapshot count, per-payload bytes, and aggregate bytes.",
         "tags": [
           "Dashboard And Live View"
         ],
@@ -145,13 +145,16 @@
             "gatewayBearer": []
           }
         ],
-        "x-required-capability": "admin",
+        "x-required-capability": "read",
         "responses": {
           "200": {
             "description": "Successful response"
           },
           "403": {
             "description": "Forbidden"
+          },
+          "503": {
+            "description": "Service unavailable"
           }
         }
       }
@@ -858,7 +861,7 @@
     },
     "/metrics": {
       "get": {
-        "summary": "Prometheus-format runtime, scheduler, auth, channel, and alert metrics for local scraping.",
+        "summary": "Prometheus-format runtime, scheduler, auth, channel, alert, and bounded live-stream metrics for local scraping.",
         "tags": [
           "Service"
         ],
@@ -1457,7 +1460,7 @@
     },
     "/storage/export": {
       "get": {
-        "summary": "Export durable Gateway state as JSON. Requires admin for non-local requests and localAdmin=true dual-intent (JOE-952; always unredacted; rate-limited).",
+        "summary": "Export durable Gateway state as JSON. Requires admin for non-local requests **and** explicit localAdmin=true dual-intent (JOE-952; always treated as unredacted; rate-limited).",
         "tags": [
           "Service"
         ],
@@ -1475,7 +1478,7 @@
             "description": "JOE-952 dual-intent. Must be true to export unredacted durable state. MCP state_export supplies this automatically because tool invocation is the operator intent.",
             "schema": {
               "type": "boolean",
-              "enum": [true]
+              "const": true
             }
           }
         ],

@@ -9,12 +9,19 @@ Cowork session ids.
 1. **Key** — `tenantId + sessionId` (see `runtimeKey` in
    `packages/cloud-server/src/worker-scoped-runtime-adapter.ts`).
 2. **Create** — first use calls `runtimeFactory` with BYOK-aware runtime config.
-3. **Use counting** — `activeUses` / `executionActive` prevent idle eviction of
-   in-flight work.
-4. **Idle TTL** — default 30 minutes (`DEFAULT_RUNTIME_IDLE_TTL_MS`). A timer
+3. **Admission** — one permit covers every cached, active, or creating runtime.
+   Concurrent misses for the same session share one creation. Distinct sessions
+   wait in a bounded FIFO; queue exhaustion and deadlines return a typed,
+   retryable capacity error.
+4. **Use counting** — a cached runtime is claimed before asynchronous
+   observability work. `activeUses` / `executionActive` prevent eviction while
+   a request owns it.
+5. **Idle TTL** — default 30 minutes (`DEFAULT_RUNTIME_IDLE_TTL_MS`). A timer
    reaps idle entries even without a cache miss.
-5. **Max entries** — default 100; excess closes least-recently-used idle runtimes.
-6. **Unexpected exit** — managed OpenCode death evicts the entry so the next
+6. **Cleanup debt** — a permit remains held until the execution boundary closes.
+   Failed or timed-out teardown stays retryable and cannot make replacement
+   capacity appear.
+7. **Unexpected exit** — managed OpenCode death evicts the entry so the next
    access rebuilds.
 
 ## Session id remapping
@@ -29,9 +36,16 @@ child-scoped idle suppressed for the root.
 | Option | Meaning |
 | --- | --- |
 | `runtimeIdleTtlMs` | Idle close threshold |
-| `maxRuntimeEntries` | Hard cap on concurrent adapters per worker process |
+| `maxRuntimeEntries` | Hard cap across cached, active, and creating boundaries |
+| `maxAdmissionQueueEntries` | Maximum distinct sessions waiting for capacity |
+| `admissionQueueTimeoutMs` | Maximum wait for a runtime permit |
+| `runtimeProvisionTimeoutMs` | End-to-end preparation and provision deadline |
+| `runtimeTeardownTimeoutMs` | Shared deadline for one close/recovery pass |
 
 ## Tests
 
-Regression coverage lives under cloud runtime / worker-scoped adapter tests
-(idle reaping, remapping edge cases). Prefer fake timers over wall-clock sleeps.
+Regression coverage lives under Cloud runtime admission, capacity recovery,
+execution isolation, and worker-scoped adapter tests. It covers saturation,
+FIFO admission, same-session coalescing, cancellation, cleanup debt, idle
+reaping, unexpected exits, and remapping edge cases. Prefer controlled promises
+and fake timers over wall-clock sleeps.

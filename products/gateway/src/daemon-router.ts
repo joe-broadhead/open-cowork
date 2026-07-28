@@ -39,6 +39,7 @@ export interface ApiRouteContract {
   bodySchema?: z.ZodTypeAny
   requestBody?: false
   querySchemas?: Record<string, z.ZodTypeAny>
+  requiredQueryParameters?: readonly string[]
   responses?: readonly number[]
 }
 

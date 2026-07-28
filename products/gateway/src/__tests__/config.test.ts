@@ -94,6 +94,52 @@ describe('gateway config', () => {
     expect(() => updateConfig({ security: { exposedHttp: { trustedProxyCidrs: ['10.0.0.0/99'] } } } as any)).toThrow('security.exposedHttp.trustedProxyCidrs[0]')
   })
 
+  it('defaults and validates bounded live-event capacity and parser limits', () => {
+    expect(getConfig().live).toEqual({
+      maxClients: 128,
+      maxClientsPerPrincipal: 8,
+      retryAfterSeconds: 5,
+      heartbeatMs: 15_000,
+      idleTimeoutMs: 45_000,
+      maxConnectionMs: 60 * 60_000,
+      writeTimeoutMs: 10_000,
+      maxBufferedBytes: 1024 * 1024,
+      replay: {
+        maxSnapshots: 1000,
+        maxPayloadBytes: 64 * 1024,
+        maxTotalBytes: 4 * 1024 * 1024,
+      },
+      upstream: {
+        maxBufferedBytes: 1024 * 1024,
+        maxEventBytes: 256 * 1024,
+      },
+    })
+
+    const updated = updateConfig({
+      live: {
+        maxClients: 32,
+        maxClientsPerPrincipal: 4,
+        replay: { maxSnapshots: 250, maxPayloadBytes: 32 * 1024, maxTotalBytes: 2 * 1024 * 1024 },
+        upstream: { maxBufferedBytes: 512 * 1024, maxEventBytes: 128 * 1024 },
+      },
+    } as any)
+    expect(updated.live).toMatchObject({
+      maxClients: 32,
+      maxClientsPerPrincipal: 4,
+      replay: { maxSnapshots: 250, maxPayloadBytes: 32 * 1024, maxTotalBytes: 2 * 1024 * 1024 },
+      upstream: { maxBufferedBytes: 512 * 1024, maxEventBytes: 128 * 1024 },
+    })
+
+    expect(() => updateConfig({ live: { maxClients: 0 } } as any)).toThrow('live.maxClients')
+    expect(() => updateConfig({ live: { maxClients: 2, maxClientsPerPrincipal: 3 } } as any)).toThrow('live.maxClientsPerPrincipal')
+    expect(() => updateConfig({ live: { writeTimeoutMs: 999 } } as any)).toThrow('live.writeTimeoutMs')
+    expect(() => updateConfig({ live: { heartbeatMs: 10_000, idleTimeoutMs: 15_000 } } as any)).toThrow('live.idleTimeoutMs')
+    expect(() => updateConfig({ live: { idleTimeoutMs: 60_000, maxConnectionMs: 30_000 } } as any)).toThrow('live.maxConnectionMs')
+    expect(() => updateConfig({ live: { replay: { maxSnapshots: 0 } } } as any)).toThrow('live.replay.maxSnapshots')
+    expect(() => updateConfig({ live: { replay: { maxPayloadBytes: 4096, maxTotalBytes: 2048 } } } as any)).toThrow('live.replay.maxPayloadBytes')
+    expect(() => updateConfig({ live: { upstream: { maxBufferedBytes: 2048, maxEventBytes: 4096 } } } as any)).toThrow('live.upstream.maxEventBytes')
+  })
+
   it('validates scheduler bounds and referenced profiles', () => {
     expect(() => updateSchedulerConfig({ maxConcurrent: 0 })).toThrow('scheduler.maxConcurrent')
     expect(() => updateSchedulerConfig({ leaseMs: 999 })).toThrow('scheduler.leaseMs')

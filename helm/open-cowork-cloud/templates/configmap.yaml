@@ -37,6 +37,17 @@ data:
   OPEN_COWORK_CLOUD_OTLP_ENDPOINT: {{ .Values.cloud.observability.otlpEndpoint | quote }}
   OPEN_COWORK_CLOUD_OTLP_FLUSH_INTERVAL_MS: {{ .Values.cloud.observability.otlpFlushIntervalMs | quote }}
   OPEN_COWORK_CLOUD_OTLP_MAX_QUEUE_SIZE: {{ .Values.cloud.observability.otlpMaxQueueSize | quote }}
+  OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES: {{ .Values.roles.worker.runtimeCapacity | quote }}
+  OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_QUEUE_MAX_ENTRIES: {{ .Values.roles.worker.admissionQueueCapacity | quote }}
+  OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_TIMEOUT_MS: {{ .Values.roles.worker.admissionQueueTimeoutMs | quote }}
+  OPEN_COWORK_CLOUD_RUNTIME_PROVISION_TIMEOUT_MS: {{ .Values.roles.worker.runtimeProvisionTimeoutMs | quote }}
+  OPEN_COWORK_CLOUD_RUNTIME_TEARDOWN_TIMEOUT_MS: {{ .Values.roles.worker.runtimeTeardownTimeoutMs | quote }}
+  OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES: {{ .Values.roles.worker.isolationMemoryLimitBytes | quote }}
+  OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT: {{ .Values.roles.worker.isolationCpuLimit | quote }}
+  OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT: {{ .Values.roles.worker.isolationPidsLimit | quote }}
+  OPEN_COWORK_CLOUD_WORKER_SESSION_CONCURRENCY: {{ .Values.roles.worker.sessionConcurrency | quote }}
+  OPEN_COWORK_CLOUD_WORKER_MAX_COMMANDS_PER_SESSION_PER_TICK: {{ .Values.roles.worker.maxCommandsPerSessionPerTick | quote }}
+  OPEN_COWORK_CLOUD_WORKER_MAX_LEASES: {{ .Values.roles.worker.maxLeases | quote }}
   OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: {{ .Values.cloud.objectStore.kind | quote }}
   OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET: {{ .Values.cloud.objectStore.bucket | quote }}
   OPEN_COWORK_CLOUD_OBJECT_STORE_REGION: {{ .Values.cloud.objectStore.region | quote }}

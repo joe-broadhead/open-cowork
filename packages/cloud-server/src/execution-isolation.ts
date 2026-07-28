@@ -11,6 +11,7 @@ import type {
   SandboxComponentManifest,
   SandboxEngine,
   SandboxRuntimeCommandRunner,
+  SandboxRuntimeResourceLimits,
 } from './runtime-portability.ts'
 
 type Env = Record<string, string | undefined>
@@ -70,6 +71,7 @@ export type CloudExecutionProvisionInput = {
   config: OpenCoworkConfig
   execution: CloudRuntimeExecutionContext
   runtimeConfig: OpencodeRuntimeConfig | undefined
+  signal?: AbortSignal
   onUnexpectedExit?: () => void
 }
 
@@ -150,10 +152,62 @@ export type CloudIsolationControlBridge = {
   close(): Promise<void>
 }
 
+export type CloudSandboxResourceLimits = Required<SandboxRuntimeResourceLimits>
+
+export const DEFAULT_CLOUD_SANDBOX_RESOURCE_LIMITS: CloudSandboxResourceLimits = {
+  memoryBytes: 2 * 1024 * 1024 * 1024,
+  cpuCount: 2,
+  pids: 512,
+}
+
+function sandboxResourceLimitValue(env: Env, key: string) {
+  const value = env[key]?.trim()
+  return value ? Number(value) : null
+}
+
+export function resolveCloudSandboxResourceLimits(
+  env: Env,
+): CloudSandboxResourceLimits {
+  const memoryBytes = sandboxResourceLimitValue(
+    env,
+    'OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES',
+  ) ?? DEFAULT_CLOUD_SANDBOX_RESOURCE_LIMITS.memoryBytes
+  const cpuCount = sandboxResourceLimitValue(
+    env,
+    'OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT',
+  ) ?? DEFAULT_CLOUD_SANDBOX_RESOURCE_LIMITS.cpuCount
+  const pids = sandboxResourceLimitValue(
+    env,
+    'OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT',
+  ) ?? DEFAULT_CLOUD_SANDBOX_RESOURCE_LIMITS.pids
+
+  if (!Number.isSafeInteger(memoryBytes) || memoryBytes <= 0) {
+    throw new CloudExecutionIsolationError(
+      'isolation_memory_limit_invalid',
+      'OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES must be a positive safe integer.',
+    )
+  }
+  if (!Number.isFinite(cpuCount) || cpuCount <= 0) {
+    throw new CloudExecutionIsolationError(
+      'isolation_cpu_limit_invalid',
+      'OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT must be a positive number.',
+    )
+  }
+  if (!Number.isSafeInteger(pids) || pids <= 0) {
+    throw new CloudExecutionIsolationError(
+      'isolation_pids_limit_invalid',
+      'OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT must be a positive safe integer.',
+    )
+  }
+
+  return { memoryBytes, cpuCount, pids }
+}
+
 export type CloudSandboxIsolationProviderOptions = {
   policy: CloudExecutionIsolationPolicy
   workerId: string
   runtimeRootPath: string
+  resourceLimits?: CloudSandboxResourceLimits
   observability?: CloudObservabilityAdapter | null
   runtimeAssetPaths?: readonly string[]
   ownerLease?: SandboxWorkerOwnerLease
@@ -182,6 +236,22 @@ export class CloudExecutionIsolationError extends Error {
     super(message)
     this.name = 'CloudExecutionIsolationError'
     this.reasonCode = reasonCode
+  }
+}
+
+/**
+ * A provider throws this only when provisioning failed after allocating an
+ * execution boundary and that boundary could not yet be removed. The cleanup
+ * promise resolves after the provider proves the allocation is gone. Capacity
+ * controllers must retain the failed attempt's permit until then.
+ */
+export class CloudExecutionCleanupDebtError extends CloudExecutionIsolationError {
+  readonly cleanup: Promise<void>
+
+  constructor(reasonCode: string, cleanup: Promise<void>) {
+    super(reasonCode, 'Cloud execution boundary cleanup is pending.')
+    this.name = 'CloudExecutionCleanupDebtError'
+    this.cleanup = cleanup
   }
 }
 
@@ -362,13 +432,44 @@ export function developmentProcessIsolationCapability(): CloudExecutionIsolation
 export function createDevelopmentProcessIsolationProvider(
   runtimeFactory: (input: CloudExecutionProvisionInput) => Promise<CloudRuntimeAdapter> | CloudRuntimeAdapter,
 ): CloudExecutionIsolationProvider {
+  const retryCleanup = (adapter: CloudRuntimeAdapter) => new Promise<void>((resolve) => {
+    const attempt = async () => {
+      try {
+        await adapter.close?.()
+        resolve()
+      } catch {
+        const timer = setTimeout(() => void attempt(), 100)
+        timer.unref?.()
+      }
+    }
+    const timer = setTimeout(() => void attempt(), 100)
+    timer.unref?.()
+  })
+  const throwIfAborted = (input: CloudExecutionProvisionInput) => {
+    if (!input.signal?.aborted) return
+    throw input.signal.reason instanceof Error
+      ? input.signal.reason
+      : new DOMException('Runtime provisioning was aborted.', 'AbortError')
+  }
   return {
     name: 'development-process',
     async capability() {
       return developmentProcessIsolationCapability()
     },
     async provision(input) {
+      throwIfAborted(input)
       const adapter = await runtimeFactory(input)
+      if (input.signal?.aborted) {
+        try {
+          await adapter.close?.()
+        } catch {
+          throw new CloudExecutionCleanupDebtError(
+            'development_runtime_cleanup_pending',
+            retryCleanup(adapter),
+          )
+        }
+        throwIfAborted(input)
+      }
       const capability = developmentProcessIsolationCapability()
       const attestation: CloudExecutionIsolationAttestation = {
         ...capability,
@@ -382,8 +483,8 @@ export function createDevelopmentProcessIsolationProvider(
         attestation,
         async close() {
           if (closed) return
-          closed = true
           await adapter.close?.()
+          closed = true
         },
       }
     },

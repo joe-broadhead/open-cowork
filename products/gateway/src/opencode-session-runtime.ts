@@ -61,7 +61,7 @@ export interface SessionAdmitResult {
 export interface OpenCodeSessionRuntime {
   createSession(input: SessionCreateInput): Promise<{ id: string }>
   getSession(sessionId: string, directory?: string): Promise<{ data?: any; missing: boolean }>
-  listSessions(directory?: string): Promise<any[]>
+  listSessions(directory?: string, options?: { signal?: AbortSignal }): Promise<any[]>
   prompt(input: SessionPromptInput): Promise<unknown>
   abort(sessionId: string, directory?: string): Promise<void>
   deleteSession(sessionId: string, directory?: string): Promise<void>
@@ -140,7 +140,7 @@ export function createOpenCodeSessionRuntime(client?: DurableOpencodeClient): Op
       }
     },
 
-    async listSessions(directory) {
+    async listSessions(directory, options) {
       const c = clientOrThrow(client)
       const v2 = v2Session(c)
       if (v2?.list) {
@@ -148,11 +148,18 @@ export function createOpenCodeSessionRuntime(client?: DurableOpencodeClient): Op
           ...(directory ? { directory } : {}),
           limit: 200,
           order: 'asc',
-        }, { throwOnError: true })
+        }, {
+          throwOnError: true,
+          ...(options?.signal ? { signal: options.signal } : {}),
+        })
         const data = unwrapSessionPayload(response)
         return Array.isArray(data) ? data : (data?.data || [])
       }
-      const response = await (c as any).session.list(directory ? { query: { directory } } : undefined)
+      const request = {
+        ...(directory ? { query: { directory } } : {}),
+        ...(options?.signal ? { signal: options.signal } : {}),
+      }
+      const response = await (c as any).session.list(Object.keys(request).length > 0 ? request : undefined)
       return (response.data as any[]) || []
     },
 

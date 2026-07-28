@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-cowork
+spec:
+  template:
+    metadata:
+      labels:
+        app: open-cowork
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: open-cowork
+          image: ghcr.io/example/open-cowork@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          securityContext:
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 8787
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 4Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          env:
+            - name: OPEN_COWORK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: open-cowork
+                  key: secret
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-cowork
+spec:
+  selector:
+    app: open-cowork
+  ports:
+    - name: https
+      port: 443
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: open-cowork
+spec:
+  tls:
+    - secretName: open-cowork-tls
+      hosts:
+        - cowork.example.com
+  rules:
+    - host: cowork.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: open-cowork
+                port:
+                  name: https

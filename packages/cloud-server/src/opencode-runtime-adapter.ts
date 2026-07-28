@@ -43,6 +43,7 @@ import { dirname, join } from 'node:path'
 import type { PathProvider } from './path-provider.ts'
 import {
   createSdkCloudRuntimeAdapter,
+  parseCloudRuntimeModelRef,
   type CloudRuntimeAdapter,
   type CloudRuntimeDroppedEvent,
   type CloudRuntimeEvent,
@@ -633,7 +634,9 @@ function stableAdmissionEventKey(admissionId: string | null | undefined) {
 }
 
 function isSessionWaitCapabilityUnavailable(error: unknown) {
-  const record = asRecord(error)
+  const direct = asRecord(error)
+  const body = asRecord(asRecord(direct.cause).body)
+  const record = readString(body._tag) ? body : direct
   return readString(record._tag) === 'ServiceUnavailableError'
     && readString(record.service) === 'session.wait'
 }
@@ -1145,15 +1148,96 @@ export function prepareOpencodeCloudRuntimeFiles(
   }
 }
 
-export function createConnectedOpencodeCloudRuntimeAdapter(options: {
+const OPENCODE_MODEL_CATALOG_READY_TIMEOUT_MS = 10_000
+const OPENCODE_MODEL_CATALOG_POLL_MS = 100
+
+class CloudOpencodeModelCatalogTimeoutError extends Error {
+  readonly code = 'CLOUD_OPENCODE_MODEL_CATALOG_TIMEOUT'
+
+  constructor(model: string, timeoutMs: number) {
+    super(
+      `CLOUD_OPENCODE_MODEL_CATALOG_TIMEOUT: selected model "${model}" `
+      + `was not available in OpenCode V2 catalog within ${timeoutMs}ms.`,
+    )
+    this.name = 'CloudOpencodeModelCatalogTimeoutError'
+  }
+}
+
+async function waitForSelectedModelCatalog(
+  client: OpencodeClient,
+  model: string | null,
+  timeoutMs: number,
+) {
+  const selected = parseCloudRuntimeModelRef(model)
+  if (!selected) return
+  const boundedTimeoutMs = Number.isFinite(timeoutMs)
+    ? Math.max(1, Math.floor(timeoutMs))
+    : OPENCODE_MODEL_CATALOG_READY_TIMEOUT_MS
+  const deadline = Date.now() + boundedTimeoutMs
+
+  while (Date.now() < deadline) {
+    const remainingMs = Math.max(1, deadline - Date.now())
+    try {
+      const signal = AbortSignal.timeout(remainingMs)
+      const [providers, models] = await Promise.all([
+        client.v2.provider.list(undefined, { throwOnError: true, signal }),
+        client.v2.model.list(undefined, { throwOnError: true, signal }),
+      ])
+      const providerReady = providers.data.data.some((provider) => provider.id === selected.providerID)
+      const modelReady = models.data.data.some((candidate) => (
+        candidate.providerID === selected.providerID
+        && candidate.id === selected.id
+        && candidate.enabled !== false
+        && candidate.status !== 'deprecated'
+      ))
+      if (providerReady && modelReady) return
+    } catch {
+      // Managed OpenCode can accept HTTP before its V2 catalog is queryable.
+      // Keep probing only inside the single bounded readiness deadline.
+    }
+
+    const delayMs = Math.min(OPENCODE_MODEL_CATALOG_POLL_MS, deadline - Date.now())
+    if (delayMs <= 0) break
+    await new Promise<void>((resolveDelay) => {
+      const timer = setTimeout(resolveDelay, delayMs)
+      timer.unref?.()
+    })
+  }
+
+  throw new CloudOpencodeModelCatalogTimeoutError(
+    `${selected.providerID}/${selected.id}`,
+    boundedTimeoutMs,
+  )
+}
+
+export async function createConnectedOpencodeCloudRuntimeAdapter(options: {
   url: string
   auth: ManagedOpencodeServerAuth
   directory: string
   config?: OpencodeServerOptions['config']
+  modelReadinessTimeoutMs?: number
   closeServer: () => Promise<void> | void
-}): NodeOpencodeCloudRuntimeAdapter {
+}): Promise<NodeOpencodeCloudRuntimeAdapter> {
   const client = createOpencodeV2Client(buildNodeOpencodeCloudRuntimeClientConfig(options.url, options.auth))
   const defaultModel = typeof options.config?.model === 'string' ? options.config.model : null
+  try {
+    await waitForSelectedModelCatalog(
+      client,
+      defaultModel,
+      options.modelReadinessTimeoutMs ?? OPENCODE_MODEL_CATALOG_READY_TIMEOUT_MS,
+    )
+  } catch (readinessError) {
+    try {
+      await options.closeServer()
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [readinessError, cleanupError],
+        'OpenCode model readiness failed and the managed runtime could not be closed.',
+        { cause: cleanupError },
+      )
+    }
+    throw readinessError
+  }
   const adapter = createSdkCloudRuntimeAdapter(client, {
     directory: options.directory,
   }, { defaultModel })
@@ -1281,6 +1365,7 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
     auth,
     directory: options.cwd || options.paths.getRuntimeHomeDir(),
     config: options.config,
+    modelReadinessTimeoutMs: options.timeout ?? OPENCODE_MODEL_CATALOG_READY_TIMEOUT_MS,
     async closeServer() {
       server.close()
       runtimeFiles.cleanup()

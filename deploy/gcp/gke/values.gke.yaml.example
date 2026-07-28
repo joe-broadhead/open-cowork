@@ -113,15 +113,26 @@ roles:
     replicas: 2
     pollMs: 1000
     checkpointsEnabled: true
+    runtimeCapacity: 4
+    admissionQueueCapacity: 16
+    admissionQueueTimeoutMs: 30000
+    isolationMemoryLimitBytes: 1610612736
+    isolationCpuLimit: 0.75
+    isolationPidsLimit: 256
+    sessionConcurrency: 4
+    maxCommandsPerSessionPerTick: 50
+    maxLeases: 4096
     persistence:
       enabled: false
     resources:
       requests:
         cpu: "1"
         memory: 2Gi
+        ephemeral-storage: 2Gi
       limits:
         cpu: "4"
         memory: 8Gi
+        ephemeral-storage: 8Gi
     topologySpreadConstraints:
       - maxSkew: 1
         topologyKey: topology.kubernetes.io/zone

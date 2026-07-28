@@ -3,7 +3,7 @@ const DEFAULT_SESSION_VIEW_NOW_ISO = '1970-01-01T00:00:00.000Z'
 
 export type SessionViewTiming = {
   nowMs?: number
-  nowIso?: string
+  nowIso?: string | (() => string)
   formatTimestamp?: (timestamp: number) => string
   order?: number
   segmentOrder?: number
@@ -44,7 +44,10 @@ export function nowMsFromTiming(timing?: SessionViewTiming) {
 }
 
 export function nowIsoFromTiming(timing?: SessionViewTiming) {
-  return timing?.nowIso || DEFAULT_SESSION_VIEW_NOW_ISO
+  const nowIso = timing?.nowIso
+  return typeof nowIso === 'function'
+    ? nowIso()
+    : nowIso || DEFAULT_SESSION_VIEW_NOW_ISO
 }
 
 export function timestampIsoFromTiming(timestamp: number, timing?: SessionViewTiming) {

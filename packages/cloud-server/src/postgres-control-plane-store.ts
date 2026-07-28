@@ -5,7 +5,11 @@ import {
   nowIso,
   stableJson,
 } from './postgres-store-id-helpers.ts'
-import { reconcilePostgresConcurrencyCounters } from './postgres-store-domains/quotas.ts'
+import {
+  adjustPostgresUsageQuota,
+  lockPostgresQuota,
+  reconcilePostgresConcurrencyCounters,
+} from './postgres-store-domains/quotas.ts'
 import {
   normalizeNonNegativeInteger,
   normalizeNullableText,
@@ -63,6 +67,7 @@ import type {
   CreateThreadSmartFilterInput,
   CreateThreadTagInput,
   DisableByokSecretInput,
+  DeferSessionCommandInput,
   EnqueueCommandInput,
   FailWorkflowRunInput,
   MigrateLegacyWorkflowWebhookSecretInput,
@@ -256,7 +261,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly artifactUploadReservations: PostgresArtifactUploadReservationsRepository
   private readonly workspaceEvents: PostgresWorkspaceEventsRepository
   private readonly quotaDeps = {
-    lockQuota: (executor: PgExecutor, orgId: string, quotaKey: string, now?: Date) => this.lockQuota(executor, orgId, quotaKey, now),
+    lockQuota: lockPostgresQuota,
     consumeUsageQuota: (executor: PgExecutor, input: ConsumeUsageQuotaInput) => this.consumeUsageQuotaWithExecutor(executor, input),
   }
 
@@ -306,6 +311,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       emitSseNotify: (payload) => this.emitSseNotify(payload),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
       quotaDeps: this.quotaDeps,
+      adjustUsageQuota: adjustPostgresUsageQuota,
       completeWorkflowRun: (executor, input) => this.workflows.completeWorkflowRun(input, executor),
       failWorkflowRun: (executor, input) => this.workflows.failWorkflowRun(input, executor),
     })
@@ -337,7 +343,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       pool: this.pool,
       withTransaction: (fn) => this.withTransaction(fn),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
-      lockQuota: (executor, orgId, quotaKey, now) => this.lockQuota(executor, orgId, quotaKey, now),
+      lockQuota: lockPostgresQuota,
     })
     this.headlessAgents = new PostgresHeadlessAgentsRepository({
       pool: this.pool,
@@ -373,7 +379,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       pool: this.pool,
       withTransaction: (fn) => this.withTransaction(fn),
       consumeUsageQuota: (executor, input) => this.consumeUsageQuotaWithExecutor(executor, input),
-      adjustUsageQuota: (executor, input) => this.adjustUsageQuotaWithExecutor(executor, input),
+      adjustUsageQuota: adjustPostgresUsageQuota,
     })
     this.workspaceEvents = new PostgresWorkspaceEventsRepository({
       pool: this.pool,
@@ -1541,6 +1547,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.sessions.checkpointAndAckSessionCommand(lease, commandId, now)
   }
 
+  async deferSessionCommand(lease: WorkerLeaseRecord, commandId: string, input: DeferSessionCommandInput) {
+    return this.sessions.deferSessionCommand(lease, commandId, input)
+  }
+
   async failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string) {
     return this.sessions.failSessionCommand(lease, commandId, error)
   }
@@ -1882,44 +1892,6 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       retryAfterMs: resetMs,
       policyCode: input.policyCode,
     }
-  }
-
-  private async adjustUsageQuotaWithExecutor(
-    executor: PgExecutor,
-    input: {
-      orgId: string
-      quotaKey: string
-      windowStartedAtMs: number
-      quantityDelta: number
-    },
-  ) {
-    if (!Number.isInteger(input.quantityDelta) || input.quantityDelta === 0) return
-    await executor.query(
-      `UPDATE cloud_usage_counters
-       SET quantity = GREATEST(0, quantity + $4)
-       WHERE org_id = $1 AND quota_key = $2 AND window_started_at_ms = $3`,
-      [input.orgId, input.quotaKey, input.windowStartedAtMs, input.quantityDelta],
-    )
-  }
-
-  private async lockQuota(
-    executor: PgExecutor,
-    orgId: string,
-    quotaKey: string,
-    now = new Date(),
-  ) {
-    await executor.query(
-      `INSERT INTO cloud_quota_locks (org_id, quota_key, updated_at)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (org_id, quota_key) DO UPDATE
-       SET updated_at = EXCLUDED.updated_at`,
-      [orgId, quotaKey, now.toISOString()],
-    )
-    await this.one(
-      `SELECT * FROM cloud_quota_locks WHERE org_id = $1 AND quota_key = $2 FOR UPDATE`,
-      [orgId, quotaKey],
-      executor,
-    )
   }
 
   private async requireTenant(tenantId: string, executor: PgExecutor = this.pool) {

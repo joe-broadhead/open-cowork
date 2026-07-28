@@ -13,8 +13,8 @@
   "type": "module",
   "scripts": {
     "build:browser": "vite build --config vite.config.browser.ts",
-    "test:renderer": "vitest run --config vitest.renderer.config.ts",
-    "test:coverage:renderer": "vitest run --config vitest.renderer.config.ts --coverage",
+    "test:renderer": "node ../../scripts/workspace-build-freshness.mjs && vitest run --config vitest.renderer.config.ts",
+    "test:coverage:renderer": "node ../../scripts/workspace-build-freshness.mjs && vitest run --config vitest.renderer.config.ts --coverage",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

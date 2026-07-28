@@ -39,42 +39,64 @@ type SessionEngineOptions = {
   sequence?: SessionViewSequence
 }
 
+const OMIT_SESSION_VIEW_VALUE = Symbol('omit-session-view-value')
+
 /**
- * Deep-freeze a SessionView graph so getSessionView can return the cached object
- * without letting callers mutate engine-owned state (JOE-868).
- *
- * Prefer clone+freeze-once over structuredClone-per-read: the view hot path is
- * measured at hundreds of reads per tick in engine.view.large, and IPC already
- * copies at the transport boundary.
+ * Detach, normalize, and freeze a SessionView in one traversal. Only own,
+ * enumerable data properties cross this read boundary: provider prototypes,
+ * functions, symbols, undefined values, and accessors are not executable
+ * session data. Arrays retain their shape by replacing omitted entries with
+ * null; objects omit those properties, matching JSON serialization semantics.
  */
-function deepFreezeSessionView<T>(value: T, seen: WeakSet<object> = new WeakSet()): T {
-  if (value === null || typeof value !== 'object') return value
-  const objectValue = value as object
-  if (seen.has(objectValue)) return value
-  seen.add(objectValue)
+function cloneAndFreezeSessionView(
+  value: unknown,
+  seen: WeakMap<object, unknown> = new WeakMap(),
+): unknown | typeof OMIT_SESSION_VIEW_VALUE {
+  if (value === null) return null
+  if (typeof value === 'string'
+    || typeof value === 'boolean'
+    || typeof value === 'number') return value
+  if (typeof value === 'bigint') return value.toString()
+  if (typeof value !== 'object') return OMIT_SESSION_VIEW_VALUE
+
+  const existing = seen.get(value)
+  if (existing !== undefined) return existing
 
   if (Array.isArray(value)) {
-    for (const item of value) deepFreezeSessionView(item, seen)
-  } else {
-    for (const key of Object.keys(objectValue)) {
-      deepFreezeSessionView((objectValue as Record<string, unknown>)[key], seen)
+    const clone: unknown[] = []
+    seen.set(value, clone)
+    for (const item of value) {
+      const normalized = cloneAndFreezeSessionView(item, seen)
+      clone.push(normalized === OMIT_SESSION_VIEW_VALUE ? null : normalized)
     }
+    return Object.freeze(clone)
   }
-  return Object.freeze(value)
+
+  const clone: Record<string, unknown> = {}
+  seen.set(value, clone)
+  let descriptors: Record<string, PropertyDescriptor>
+  try {
+    descriptors = Object.getOwnPropertyDescriptors(value)
+  } catch {
+    return Object.freeze(clone)
+  }
+  for (const key of Object.keys(descriptors)) {
+    const descriptor = descriptors[key]
+    if (!descriptor?.enumerable || !Object.hasOwn(descriptor, 'value')) continue
+    const normalized = cloneAndFreezeSessionView(descriptor.value, seen)
+    if (normalized === OMIT_SESSION_VIEW_VALUE) continue
+    Object.defineProperty(clone, key, {
+      value: normalized,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    })
+  }
+  return Object.freeze(clone)
 }
 
-/**
- * Produce a sealed boundary view from a freshly derived patch.
- * Must clone first: deriveVisibleSessionPatch reuses arrays/objects from live
- * session state, so freezing the derived object in place would freeze engine state.
- */
 function sealSessionViewForRead(view: SessionView): SessionView {
-  try {
-    return deepFreezeSessionView(structuredClone(view))
-  } catch {
-    // SessionView is JSON-safe in practice; fall back to a shallow shell.
-    return deepFreezeSessionView({ ...view })
-  }
+  return cloneAndFreezeSessionView(view) as SessionView
 }
 
 function upsertById<T extends { id: string }>(
@@ -159,7 +181,9 @@ export class SessionEngine {
   private sessionViewTiming() {
     return {
       nowMs: this.nowMs(),
-      nowIso: this.nowIso(),
+      // Most stream updates only need sequence/order data. Defer wall-clock
+      // formatting until a new message/task actually needs a timestamp.
+      nowIso: () => this.nowIso(),
       formatTimestamp: (timestamp: number) => new Date(timestamp).toISOString(),
     }
   }

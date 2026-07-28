@@ -133,6 +133,13 @@ cluster overlay where CPU/memory metrics, queue-depth metrics, and operational
 SLOs are owned. Downstream worker autoscaling beyond one replica requires
 `cloud.checkpoints.enabled=true`, `roles.worker.checkpointsEnabled=true`, and
 a shared object store, in addition to a verified execution provider.
+Worker defaults include CPU, memory, and ephemeral-storage requests/limits
+plus a hard runtime capacity and bounded admission queue. Override
+`roles.worker.runtimeCapacity`, `admissionQueueCapacity`,
+`admissionQueueTimeoutMs`, `sessionConcurrency`, the three
+`isolation*Limit` values, and `resources` only from measured load evidence.
+Keep aggregate sandbox CPU/memory ceilings below the worker pod limits with
+headroom; the runtime cap does not expand in response to pressure.
 
 Install Cloud and Gateway as separate releases so Gateway tokens and channel
 credentials can be rotated without changing the Cloud control plane:

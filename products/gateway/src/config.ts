@@ -18,6 +18,7 @@ import {
   deepMerge,
   isForbiddenPeerHost,
   isNonLocalHostname,
+  normalizeLiveConfig,
 } from './config-normalize.js'
 
 export { GatewayConfigSchema } from './config-schema.js'
@@ -274,6 +275,26 @@ export interface SecretLifecycleConfig {
   revokedAtByReferenceId?: Record<string, string>
 }
 
+export interface LiveConfig {
+  maxClients: number
+  maxClientsPerPrincipal: number
+  retryAfterSeconds: number
+  heartbeatMs: number
+  idleTimeoutMs: number
+  maxConnectionMs: number
+  writeTimeoutMs: number
+  maxBufferedBytes: number
+  replay: {
+    maxSnapshots: number
+    maxPayloadBytes: number
+    maxTotalBytes: number
+  }
+  upstream: {
+    maxBufferedBytes: number
+    maxEventBytes: number
+  }
+}
+
 export interface GatewayConfig {
   opencodeConfigDir?: string
   opencodeUrl: string
@@ -289,6 +310,8 @@ export interface GatewayConfig {
   heartbeat: {
     intervalMs: number
   }
+  /** Additive for legacy config literals; normalizeConfig always populates it. */
+  live?: LiveConfig
   channelSync: {
     enabled: boolean
     intervalMs: number
@@ -377,6 +400,25 @@ const DEFAULTS: GatewayConfig = {
   opencodePeers: {},
   httpPort: 4097,
   heartbeat: { intervalMs: 300000 }, // 5min default
+  live: {
+    maxClients: 128,
+    maxClientsPerPrincipal: 8,
+    retryAfterSeconds: 5,
+    heartbeatMs: 15_000,
+    idleTimeoutMs: 45_000,
+    maxConnectionMs: 60 * 60_000,
+    writeTimeoutMs: 10_000,
+    maxBufferedBytes: 1024 * 1024,
+    replay: {
+      maxSnapshots: 1000,
+      maxPayloadBytes: 64 * 1024,
+      maxTotalBytes: 4 * 1024 * 1024,
+    },
+    upstream: {
+      maxBufferedBytes: 1024 * 1024,
+      maxEventBytes: 256 * 1024,
+    },
+  },
   channelSync: { enabled: true, intervalMs: 3000, includeUserMessages: true, providerBackoffMs: 60_000, maxDeliveryAttempts: 10 },
   security: {
     httpHost: '127.0.0.1',
@@ -795,6 +837,7 @@ function normalizeConfig(config: GatewayConfig): GatewayConfig {
     opencodePeers: normalizeOpenCodePeers(config.opencodePeers),
     httpPort: boundedInteger(config.httpPort, 1, 65535, 'httpPort'),
     heartbeat: { intervalMs: boundedInteger(config.heartbeat?.intervalMs, 1000, 24 * 60 * 60 * 1000, 'heartbeat.intervalMs') },
+    live: normalizeLiveConfig(config.live, DEFAULTS.live!),
     channelSync: {
       enabled: config.channelSync?.enabled !== false,
       intervalMs: boundedInteger(config.channelSync?.intervalMs, 1000, 24 * 60 * 60 * 1000, 'channelSync.intervalMs'),

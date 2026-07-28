@@ -50,6 +50,26 @@ describe('central security policy', () => {
     expect(JSON.stringify(decision)).not.toContain('operator-secret-token')
   })
 
+  it('uses an explicit valid token as the canonical identity for a local read stream', () => {
+    process.env['OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN'] = 'local-stream-operator-token'
+
+    const decision = evaluateHttpRequestSecurity({
+      host: '127.0.0.1:4097',
+      origin: undefined,
+      remoteAddress: '127.0.0.1',
+      method: 'GET',
+      pathname: '/live/events',
+      authorization: 'Bearer local-stream-operator-token',
+    }, getConfig().security)
+
+    expect(decision).toMatchObject({
+      allowed: true,
+      actor: 'http-token',
+      requiredCapability: 'read',
+      reasonCode: 'http_token_capability_allowed',
+    })
+  })
+
   it('denies untrusted channel actions without leaking raw provider identifiers', () => {
     const decision = decideSecurityPolicy({
       principal: { actorType: 'channel_actor', trustTier: 'untrusted', ref: 'telegram:private-chat-id:private-thread-id' },

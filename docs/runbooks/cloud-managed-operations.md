@@ -250,6 +250,46 @@ with oldest queued age and claim latency rather than as an exact backlog count.
 7. If one session is poisoning the queue, use session abort/retry controls
    rather than direct database edits.
 
+## Runtime Capacity Pressure
+
+Use this when `OpenCoworkWorkerRuntimeNearCapacity` or
+`OpenCoworkWorkerRuntimeAdmissionRejected` fires.
+
+1. Compare `open_cowork_cloud_runtime_capacity_in_use` with
+   `open_cowork_cloud_runtime_capacity`, then break the held permits down with
+   `open_cowork_cloud_runtime_cached`, `open_cowork_cloud_runtime_active`, and
+   `open_cowork_cloud_runtime_creating`. Treat
+   `open_cowork_cloud_runtime_cleanup_debt` as retained capacity that cannot be
+   reused until teardown is proven. The bounded
+   `open_cowork_cloud_runtime_admission_queue_depth` is waiting work, not
+   admitted runtime capacity.
+2. Group `open_cowork_cloud_runtime_admission_rejections_total` only by its
+   low-cardinality `reason`. `queue_full` means the waiting-work budget is
+   exhausted, `queue_timeout` means capacity did not recover in time, and
+   `provision_timeout` means boundary startup exceeded its deadline,
+   `cleanup_pending` means a failed boundary is retaining capacity until
+   cleanup is proven, and `adapter_closing` is expected briefly during a drain.
+3. Check runtime creation latency, close-failure metrics, BYOK reveal errors,
+   checkpoint/object-store latency, and OpenCode provider errors. A boundary
+   that cannot close retains its permit until cleanup succeeds; do not bypass
+   that fail-closed behavior.
+4. Compare pod/container CPU, memory, ephemeral-storage, and PID telemetry with
+   the Helm worker requests and limits. The worker RSS and CPU metrics describe
+   the Node host process; cgroup/container metrics remain authoritative for the
+   OpenCode subprocess trees.
+5. Abort a genuinely stuck session through the supported session controls.
+   Never evict an active runtime, delete lease rows, or edit runtime state
+   directly to create room.
+6. If the workload is healthy and sustained, add checkpoint-enabled worker
+   replicas before raising `roles.worker.runtimeCapacity`. Confirm shared
+   Postgres/object storage and provider quota have headroom first.
+7. Change `runtimeCapacity`, `admissionQueueCapacity`,
+   `admissionQueueTimeoutMs`, `runtimeProvisionTimeoutMs`,
+   `runtimeTeardownTimeoutMs`, `isolationMemoryLimitBytes`,
+   `isolationCpuLimit`, `isolationPidsLimit`, `sessionConcurrency`, or container
+   resources only through a reviewed Helm overlay. Drain and roll workers;
+   confirm rejection rate returns to zero and capacity stays below 80%.
+
 ## Scheduler Stalled
 
 Use this when scheduled workflows do not start or heartbeat age exceeds the

@@ -165,6 +165,7 @@ import type {
   AppendWorkspaceEventInput,
   CheckpointAndAckSessionCommandResult,
   CommandQueueQuota,
+  DeferSessionCommandInput,
   EnqueueCommandInput,
   WriteProjectionInput,
 } from './control-plane-event-inputs.ts'
@@ -476,6 +477,7 @@ export type ControlPlaneStore = {
   claimNextSessionCommand(lease: WorkerLeaseRecord, now?: Date): MaybePromise<SessionCommandRecord | null>
   ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<SessionCommandRecord>
   checkpointAndAckSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<CheckpointAndAckSessionCommandResult>
+  deferSessionCommand(lease: WorkerLeaseRecord, commandId: string, input: DeferSessionCommandInput): MaybePromise<SessionCommandRecord>
   failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): MaybePromise<SessionCommandRecord>
   recordWorkerHeartbeat(input: {
     workerId: string

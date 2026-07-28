@@ -103,7 +103,7 @@ describe('security', () => {
     expect(httpCapabilityForRequest({ method: 'GET', pathname: '/runs/run_1', search: '?raw=true' })).toBe('admin')
     expect(httpCapabilityForRequest({ method: 'GET', pathname: '/events' })).toBe('read')
     expect(httpCapabilityForRequest({ method: 'GET', pathname: '/events', search: '?raw=true' })).toBe('admin')
-    expect(httpCapabilityForRequest({ method: 'GET', pathname: '/live/events' })).toBe('admin')
+    expect(httpCapabilityForRequest({ method: 'GET', pathname: '/live/events' })).toBe('read')
     expect(httpCapabilityForRequest({ method: 'GET', pathname: '/opencode/sessions' })).toBe('read')
     expect(httpCapabilityForRequest({ method: 'GET', pathname: '/opencode/sessions', search: '?all=true' })).toBe('admin')
     expect(httpCapabilityForRequest({ method: 'GET', pathname: '/opencode/sessions/ses_1' })).toBe('read')

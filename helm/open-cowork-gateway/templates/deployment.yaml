@@ -10,6 +10,12 @@
 {{- if eq .Values.image.tag "latest" }}
 {{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
 {{- end }}
+{{- $resources := default dict .Values.resources }}
+{{- $requests := default dict $resources.requests }}
+{{- $limits := default dict $resources.limits }}
+{{- if not (and (index $requests "cpu") (index $requests "memory") (index $requests "ephemeral-storage") (index $limits "cpu") (index $limits "memory") (index $limits "ephemeral-storage")) }}
+{{- fail "Gateway requires CPU, memory, and ephemeral-storage requests and limits." }}
+{{- end }}
 {{- if and (gt (int .Values.replicaCount) 1) (not .Values.gateway.experimentalDistributedOwnership) }}
 {{- fail "gateway replicaCount > 1 is unsafe while stream/replay state is process-local; run one replica per channel-binding shard or set gateway.experimentalDistributedOwnership=true for explicit experimental deployments." }}
 {{- end }}

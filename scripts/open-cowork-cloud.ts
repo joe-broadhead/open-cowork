@@ -1,5 +1,10 @@
 import { setLogStorage } from '@open-cowork/shared/node'
-import { getAppConfig, getAppDataDir, getLogFilePrefix } from '@open-cowork/runtime-host/config'
+import {
+  assertConfigValid,
+  getAppConfig,
+  getAppDataDir,
+  getLogFilePrefix,
+} from '@open-cowork/runtime-host/config'
 import { startCloudApp } from '../packages/cloud-server/src/app.ts'
 
 const developmentProcessRequested = process.argv.includes('--development-process')
@@ -18,6 +23,7 @@ if (developmentProcessRequested) {
 // logs land beside the cloud root instead of the unconfigured temp-dir fallback.
 setLogStorage(() => ({ directory: getAppDataDir(), filePrefix: getLogFilePrefix() }))
 
+assertConfigValid()
 const app = await startCloudApp({ config: getAppConfig() })
 
 const address = app.url || '(no web listener for this role)'

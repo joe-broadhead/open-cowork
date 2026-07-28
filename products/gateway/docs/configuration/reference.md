@@ -14,6 +14,7 @@ Gateway config lives at:
 | `opencodeUrl` | yes | Local OpenCode API URL. Default: `http://127.0.0.1:4096`. |
 | `httpPort` | yes | Local Gateway daemon port. Default: `4097`. |
 | `heartbeat` | yes | Scheduler wake heartbeat settings. |
+| `live` | yes | Bounded dashboard SSE admission, lifetime, backpressure, and upstream parser settings. |
 | `channelSync` | yes | OpenCode session to channel delivery settings. |
 | `security` | yes | HTTP exposure, webhook mode, and channel trust policy. |
 | `governance` | yes | Cost, token, budget, and runtime policy. |
@@ -33,6 +34,17 @@ Gateway config lives at:
   "opencodeUrl": "http://127.0.0.1:4096",
   "httpPort": 4097,
   "heartbeat": { "intervalMs": 300000 },
+  "live": {
+    "maxClients": 128,
+    "maxClientsPerPrincipal": 8,
+    "retryAfterSeconds": 5,
+    "heartbeatMs": 15000,
+    "idleTimeoutMs": 45000,
+    "maxConnectionMs": 3600000,
+    "writeTimeoutMs": 10000,
+    "maxBufferedBytes": 1048576,
+    "upstream": { "maxBufferedBytes": 1048576, "maxEventBytes": 262144 }
+  },
   "channelSync": { "enabled": true, "intervalMs": 3000, "includeUserMessages": true },
   "security": {
     "httpHost": "127.0.0.1",
@@ -195,6 +207,19 @@ Gateway config lives at:
 | --- | --- |
 | `httpPort` | `1` to `65535` |
 | `heartbeat.intervalMs` | `1000` ms to `24h` |
+| `live.maxClients` | `1` to `10000`; default `128` active SSE clients process-wide |
+| `live.maxClientsPerPrincipal` | `1` to `1000`, and no greater than `maxClients`; default `8`. Authenticated bearer credentials are counted by one-way identity, never by a caller-supplied header |
+| `live.retryAfterSeconds` | `1` to `3600`; default `5`, returned with retryable `503` capacity responses |
+| `live.heartbeatMs` | `1000` ms to `5m`; default `15s` |
+| `live.idleTimeoutMs` | `2000` ms to `1h`, at least twice `heartbeatMs`; default `45s` |
+| `live.maxConnectionMs` | `10s` to `24h`, at least `idleTimeoutMs`; default `1h`. Clients reconnect and reauthenticate after this lifetime |
+| `live.writeTimeoutMs` | `1000` ms to `5m`; default `10s` before a persistently backpressured client is closed |
+| `live.maxBufferedBytes` | `1 KiB` to `16 MiB`; default `1 MiB` maximum queued socket bytes per SSE client |
+| `live.replay.maxSnapshots` | `1` to `10000`; default `1000` stable session identities retained for connect-time replay. New identities are omitted while full rather than evicting the stable set on every poll |
+| `live.replay.maxPayloadBytes` | `1 KiB` to `4 MiB`, no greater than `maxTotalBytes`; default `64 KiB` maximum serialized payload retained for one session snapshot |
+| `live.replay.maxTotalBytes` | `1 KiB` to `64 MiB`; default `4 MiB` aggregate serialized replay payload bytes. Session identities remain bounded even when their payload is omitted |
+| `live.upstream.maxBufferedBytes` | `1 KiB` to `16 MiB`; default `1 MiB` maximum delimiter-free upstream frame bytes |
+| `live.upstream.maxEventBytes` | `1 KiB` to `4 MiB`, no greater than the upstream buffer limit; default `256 KiB` maximum complete event bytes before UTF-8 decode |
 | `channelSync.intervalMs` | `1000` ms to `24h` |
 | `security.httpHost` | Hostname/IP characters only; default `127.0.0.1` |
 | `security.capabilityScopedLoopback` | Default `true`. Loopback write/admin requests must present a capability-scoped bearer token; local read and provider-verified webhook routes remain reachable without a token. `opencode-gateway install` creates a `0600` admin token file and configures the supervised daemon with `OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN_FILE`; the CLI reads the same default token file. Set to `false` only to intentionally restore legacy loopback write trust. Also settable via `OPENCODE_GATEWAY_CAPABILITY_SCOPED_LOOPBACK` |

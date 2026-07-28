@@ -8,7 +8,10 @@ import type {
   WorkspaceEventRecord,
 } from './control-plane-session-records.ts'
 import type { SessionCommandRecord } from './control-plane-worker-records.ts'
-import type { ConsumeUsageQuotaInput } from './control-plane-usage-inputs.ts'
+import type {
+  ConsumeUsageQuotaInput,
+  UsageQuotaReservation,
+} from './control-plane-usage-inputs.ts'
 import type { CompleteWorkflowRunInput, FailWorkflowRunInput } from './control-plane-workflow-inputs.ts'
 
 // The control-plane's event-append / projection / command-enqueue input shapes
@@ -122,4 +125,12 @@ export type EnqueueCommandInput = {
   createdAt?: Date
   quota?: CommandQueueQuota | null
   usageQuotas?: ConsumeUsageQuotaInput[]
+}
+
+export type DeferSessionCommandInput = {
+  retryAfterMs: number
+  errorCode: string
+  errorSummary: string
+  now?: Date
+  quotaReservation?: UsageQuotaReservation | null
 }

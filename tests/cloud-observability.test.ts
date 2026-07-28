@@ -234,12 +234,46 @@ test('cloud Prometheus observability renders low-cardinality product metrics', a
       token: 'secret-token',
     },
   })
+  await adapter.metric({
+    name: 'cloud_explicit_gauge_total',
+    value: 2,
+    kind: 'gauge',
+  })
+  await adapter.metric({
+    name: 'cloud_explicit_gauge_total',
+    value: 3,
+    kind: 'gauge',
+  })
   const text = adapter.renderPrometheus?.() || ''
   assert.match(text, /# TYPE open_cowork_cloud_http_requests_total counter/)
   assert.match(text, /open_cowork_cloud_http_requests_total\{http_request_method="GET",token="\[redacted\]",url_path="\/api\/workspace"\} 2/)
   assert.equal(text.includes('request-1'), false)
   assert.equal(text.includes('session-1'), false)
   assert.equal(text.includes('secret-token'), false)
+  assert.match(text, /# TYPE cloud_explicit_gauge_total gauge/)
+  assert.match(text, /cloud_explicit_gauge_total 3/)
+})
+
+test('cloud Prometheus preserves absolute cumulative CPU counters', async () => {
+  const adapter = createPrometheusCloudObservability()
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_user_seconds_total',
+    value: 0.25,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_user_seconds_total',
+    value: 0.75,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  assert.match(
+    adapter.renderPrometheus?.() || '',
+    /open_cowork_cloud_worker_cpu_user_seconds_total 0\.75/,
+  )
 })
 
 test('cloud OTLP observability exports trace and metric payloads with headers', async () => {
@@ -291,6 +325,127 @@ test('cloud OTLP observability exports trace and metric payloads with headers', 
   assert.equal((metric[0] as Record<string, unknown>).name, 'cloud.http.server.duration_ms')
 })
 
+test('cloud OTLP keeps cumulative counter start time stable across interleaved series', async () => {
+  const requests: Array<{ url: string, init?: { body?: string } }> = []
+  const adapter = createOtlpHttpCloudObservability({
+    endpoint: 'https://otel.example.test',
+    flushIntervalMs: 0,
+    maxQueueSize: 1,
+    fetch: async (url, init) => {
+      requests.push({ url: String(url), init: init as typeof requests[number]['init'] })
+      return new Response('{}', { status: 200 })
+    },
+  })
+
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_user_seconds_total',
+    value: 0.25,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  await adapter.flush?.()
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_system_seconds_total',
+    value: 0.5,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  await adapter.flush?.()
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_user_seconds_total',
+    value: 0.75,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  await adapter.flush?.()
+
+  const metricRequests = requests.filter((request) => request.url.endsWith('/v1/metrics'))
+  assert.equal(metricRequests.length, 3)
+  const exportedSums = metricRequests.map((request) => {
+    const body = JSON.parse(request.init?.body || '{}') as Record<string, unknown>
+    const metrics = ((((body.resourceMetrics as unknown[])[0] as Record<string, unknown>)
+      .scopeMetrics as unknown[])[0] as Record<string, unknown>).metrics as Array<Record<string, unknown>>
+    return metrics[0]?.sum as Record<string, unknown>
+  })
+  assert.deepEqual(exportedSums.map((sum) => sum.aggregationTemporality), [2, 2, 2])
+  const dataPoints = exportedSums.map((sum) => (
+    ((sum.dataPoints as Array<Record<string, unknown>>)[0] || {})
+  ))
+  assert.deepEqual(dataPoints.map((point) => point.asDouble), [0.25, 0.5, 0.75])
+  assert.equal(typeof dataPoints[0]?.startTimeUnixNano, 'string')
+  assert.equal(dataPoints[2]?.startTimeUnixNano, dataPoints[0]?.startTimeUnixNano)
+})
+
+test('cloud OTLP exports runtime state as gauges and totals as sums', async () => {
+  const requests: Array<{ url: string, init?: { body?: string } }> = []
+  const adapter = createOtlpHttpCloudObservability({
+    endpoint: 'https://otel.example.test',
+    flushIntervalMs: 0,
+    fetch: async (url, init) => {
+      requests.push({ url: String(url), init: init as typeof requests[number]['init'] })
+      return new Response('{}', { status: 200 })
+    },
+  })
+
+  await adapter.metric({
+    name: 'open_cowork_cloud_runtime_capacity_in_use',
+    value: 2,
+    kind: 'gauge',
+    unit: '1',
+  })
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_command_duration_ms',
+    value: 125,
+    kind: 'gauge',
+    unit: 'ms',
+  })
+  await adapter.metric({
+    name: 'open_cowork_cloud_runtime_admission_rejections_total',
+    value: 1,
+    kind: 'counter',
+    unit: '1',
+  })
+  await adapter.metric({
+    name: 'cloud_explicit_gauge_total',
+    value: 3,
+    kind: 'gauge',
+  })
+  await adapter.flush?.()
+
+  const request = requests.find((entry) => entry.url.endsWith('/v1/metrics'))
+  const body = JSON.parse(request?.init?.body || '{}') as Record<string, unknown>
+  const metrics = ((((body.resourceMetrics as unknown[])[0] as Record<string, unknown>)
+    .scopeMetrics as unknown[])[0] as Record<string, unknown>).metrics as Array<Record<string, unknown>>
+  const capacity = metrics.find((metric) => metric.name === 'open_cowork_cloud_runtime_capacity_in_use')
+  const duration = metrics.find((metric) => metric.name === 'open_cowork_cloud_worker_command_duration_ms')
+  const rejections = metrics.find((metric) => metric.name === 'open_cowork_cloud_runtime_admission_rejections_total')
+  const explicitGauge = metrics.find((metric) => metric.name === 'cloud_explicit_gauge_total')
+
+  assert.equal(capacity?.sum, undefined)
+  assert.equal(
+    (((capacity?.gauge as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0])
+      ?.asDouble,
+    2,
+  )
+  assert.equal(duration?.sum, undefined)
+  assert.equal(
+    (((duration?.gauge as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0])
+      ?.asDouble,
+    125,
+  )
+  assert.equal(rejections?.gauge, undefined)
+  assert.equal((rejections?.sum as Record<string, unknown>).isMonotonic, true)
+  assert.equal(explicitGauge?.sum, undefined)
+  assert.equal(
+    (((explicitGauge?.gauge as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0])
+      ?.asDouble,
+    3,
+  )
+})
+
 test('cloud OTLP observability bounds queues and exports drop counters', async () => {
   const requests: Array<{ url: string, init?: { body?: string } }> = []
   const adapter = createOtlpHttpCloudObservability({
@@ -335,7 +490,12 @@ test('cloud OTLP observability bounds queues and exports drop counters', async (
     'open_cowork_cloud_otlp_dropped_records_total',
     'open_cowork_cloud_otlp_dropped_records_total',
   ])
-  assert.equal((exportedMetrics[0]?.sum as Record<string, unknown>).isMonotonic, false)
+  assert.equal(exportedMetrics[0]?.sum, undefined)
+  assert.equal(
+    ((((exportedMetrics[0]?.gauge as Record<string, unknown>)
+      .dataPoints as Array<Record<string, unknown>>)[0]) || {}).asDouble,
+    2,
+  )
 
   const droppedMetrics = exportedMetrics.filter((metric) => metric.name === 'open_cowork_cloud_otlp_dropped_records_total')
   const droppedMetricCounter = droppedMetrics.find((metric) => {
@@ -352,10 +512,10 @@ test('cloud OTLP observability bounds queues and exports drop counters', async (
 
   const secondExportedMetrics = exportedMetricsFrom(requests.filter((request) => request.url.endsWith('/v1/metrics'))[1] || {})
   const secondDroppedMetricCounter = secondExportedMetrics.find((metric) => {
+    if (metric.name !== 'open_cowork_cloud_otlp_dropped_records_total') return false
     const dataPoint = (((metric.sum as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0])
     const attributes = dataPoint.attributes as Array<{ key: string, value: Record<string, unknown> }>
-    return metric.name === 'open_cowork_cloud_otlp_dropped_records_total'
-      && attributes.some((entry) => entry.key === 'kind' && entry.value.stringValue === 'metric')
+    return attributes.some((entry) => entry.key === 'kind' && entry.value.stringValue === 'metric')
   })
   assert.equal((((secondDroppedMetricCounter?.sum as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0] || {}).asDouble, 2)
 })

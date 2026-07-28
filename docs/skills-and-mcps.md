@@ -62,6 +62,8 @@ may still refer to the short tool name such as `bar_chart`.
     `time-keep_timer_delete` ask for approval. The tool is bundled into
     desktop builds as `Resources/bin/time-keep` (pin:
     `third_party/time-keep/VERSION`). Fetch with `pnpm binaries:time-keep`.
+    The default Cloud profile excludes this Desktop-native bare command; Cloud
+    images only admit local MCPs whose package-backed closure can be verified.
 
 -   :material-source-branch-sync: **Gateway MCP** <span class="status-badge external">external</span>
 

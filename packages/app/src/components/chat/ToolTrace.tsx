@@ -130,6 +130,7 @@ function statusIconClass(status: ToolCall['status']) {
 interface Props {
   tools: ToolCall[]
   compact?: boolean
+  defaultExpanded?: boolean
 }
 
 function ToolArtifactCard({

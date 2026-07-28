@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -13,6 +14,7 @@ import {
 } from '@open-cowork/cloud-server/runtime-adapter'
 import {
   buildNodeOpencodeCloudRuntimeClientConfig,
+  createConnectedOpencodeCloudRuntimeAdapter,
   createNodeOpencodeCloudRuntimeAdapter,
   subscribeToOpencodeCloudRuntimeEvents,
   translateOpencodeRuntimeEvent,
@@ -45,6 +47,12 @@ function writeExecutable(root: string, name: string, source: string) {
   writeFileSync(path, `#!/bin/sh\n${source}`)
   chmodSync(path, 0o755)
   return path
+}
+
+function closeHttpServer(server: ReturnType<typeof createServer>) {
+  return new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => error ? rejectClose(error) : resolveClose())
+  })
 }
 
 test('cloud SDK runtime adapter only forwards native OpenCode message ids', async () => {
@@ -753,11 +761,16 @@ test('cloud OpenCode runtime subscription retries transient wait failures then d
         async wait() {
           waitCalls += 1
           if (waitCalls === 1) throw new Error('transient wait transport failure')
-          throw {
-            _tag: 'ServiceUnavailableError',
-            service: 'session.wait',
-            message: 'Session wait is not available yet',
-          }
+          throw new Error('Session wait is not available yet', {
+            cause: {
+              body: {
+                _tag: 'ServiceUnavailableError',
+                service: 'session.wait',
+                message: 'Session wait is not available yet',
+              },
+              status: 503,
+            },
+          })
         },
         async active() {
           activeCalls += 1
@@ -966,6 +979,110 @@ test('cloud OpenCode runtime subscription applies listener backpressure', async 
   unsubscribe()
 })
 
+test('connected cloud runtime waits for the selected provider and model before becoming prompt-capable', async () => {
+  let providerCalls = 0
+  let modelCalls = 0
+  let serverClosed = false
+  const server = createServer((request, response) => {
+    const path = new URL(request.url || '/', 'http://127.0.0.1').pathname
+    const body = path === '/api/provider'
+      ? {
+          location: { directory: '/workspace', project: { id: 'global', directory: '/' } },
+          data: ++providerCalls >= 2
+            ? [{ id: 'or', name: 'OpenRouter', api: {}, request: { headers: {}, body: {} } }]
+            : [],
+        }
+      : path === '/api/model'
+        ? {
+            location: { directory: '/workspace', project: { id: 'global', directory: '/' } },
+            data: ++modelCalls >= 2
+              ? [{ id: 'cloud-smoke-model', providerID: 'or' }]
+              : [],
+          }
+        : null
+    response.writeHead(body ? 200 : 404, { 'content-type': 'application/json' })
+    response.end(JSON.stringify(body || { message: 'not found' }))
+  })
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen)
+    server.listen(0, '127.0.0.1', resolveListen)
+  })
+  const address = server.address()
+  assert.ok(address && typeof address !== 'string')
+
+  const adapter = await createConnectedOpencodeCloudRuntimeAdapter({
+    url: `http://127.0.0.1:${address.port}`,
+    auth: {
+      username: 'opencode',
+      password: 'test-password',
+      authorizationHeader: 'Basic test-authorization',
+    },
+    directory: '/workspace',
+    config: { model: 'or/cloud-smoke-model' },
+    modelReadinessTimeoutMs: 1_000,
+    async closeServer() {
+      await closeHttpServer(server)
+      serverClosed = true
+    },
+  })
+
+  try {
+    assert.equal(providerCalls, 2)
+    assert.equal(modelCalls, 2)
+  } finally {
+    await adapter.close?.()
+    if (!serverClosed) await closeHttpServer(server)
+  }
+})
+
+test('connected cloud runtime fails closed with a stable diagnostic when its selected model never becomes available', async () => {
+  let serverClosed = false
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(JSON.stringify({
+      location: { directory: '/workspace', project: { id: 'global', directory: '/' } },
+      data: [],
+    }))
+  })
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen)
+    server.listen(0, '127.0.0.1', resolveListen)
+  })
+  const address = server.address()
+  assert.ok(address && typeof address !== 'string')
+
+  try {
+    await assert.rejects(
+      createConnectedOpencodeCloudRuntimeAdapter({
+        url: `http://127.0.0.1:${address.port}`,
+        auth: {
+          username: 'opencode',
+          password: 'test-password',
+          authorizationHeader: 'Basic test-authorization',
+        },
+        directory: '/workspace',
+        config: { model: 'or/missing-model' },
+        modelReadinessTimeoutMs: 120,
+        async closeServer() {
+          await closeHttpServer(server)
+          serverClosed = true
+        },
+      }),
+      (error: unknown) => {
+        assert.equal((error as Error).name, 'CloudOpencodeModelCatalogTimeoutError')
+        assert.match(
+          String(error),
+          /CLOUD_OPENCODE_MODEL_CATALOG_TIMEOUT: selected model "or\/missing-model" was not available in OpenCode V2 catalog within 120ms/,
+        )
+        return true
+      },
+    )
+    assert.equal(serverClosed, true)
+  } finally {
+    if (!serverClosed) await closeHttpServer(server)
+  }
+})
+
 test('cloud Node OpenCode runtime adapter starts with managed env and client auth', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-cloud-node-runtime-'))
   const pidFile = join(root, 'pid')
@@ -1038,7 +1155,6 @@ while true; do sleep 1; done
     timeout: MANAGED_RUNTIME_START_TIMEOUT_MS,
     configDelivery: 'ephemeral-file',
     config: {
-      model: 'openrouter/test-model',
       provider: {
         openrouter: {
           name: 'OpenRouter',

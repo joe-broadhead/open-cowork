@@ -33,7 +33,13 @@ export type CloudByokRuntimeConfigInput = {
   appConfig: OpenCoworkConfig
   byokSecrets: ByokSecretStore
   context: CloudRuntimeExecutionContext
-  runtimePolicy: Pick<CloudRuntimePolicy, 'allowedTools' | 'allowedMcps'>
+  runtimePolicy: Pick<
+    CloudRuntimePolicy,
+    | 'allowedTools'
+    | 'allowedMcps'
+    | 'allowLocalStdioMcps'
+    | 'allowedLocalMcpNames'
+  >
   allowKmsRef?: boolean
   byokPolicy?: CloudByokRuntimeProviderPolicy | null
 }
@@ -182,6 +188,9 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
       const providerConfig = buildOpenRouterProviderRuntimeConfigFromApiKey(plaintext, {
         name: descriptor.name,
         modelIds: [defaultModelId, ...featuredIds],
+        baseURL: typeof descriptor.options?.baseURL === 'string'
+          ? descriptor.options.baseURL
+          : null,
       })
       providerEntries[OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID] = providerConfig
       log(

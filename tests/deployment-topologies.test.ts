@@ -56,6 +56,7 @@ test('deployment topology docs and validators expose the profile contract', () =
   const docs = read('docs/deployment-topologies.md')
   const readiness = read('docs/deployment-readiness.md')
   const validator = read('scripts/validate-deployment-configs.mjs')
+  const topologyValidator = read('scripts/deployment-validation/topology.mjs')
   const mkdocs = read('mkdocs.yml')
 
   for (const profile of [
@@ -88,6 +89,6 @@ test('deployment topology docs and validators expose the profile contract', () =
   }
 
   assert.match(validator, /validateTopologyProfiles/)
-  assert.match(validator, /references missing package script/)
+  assert.match(topologyValidator, /DEPLOY_TOPOLOGY_SCRIPT_MISSING/)
   assert.match(mkdocs, /deployment-topologies\.md/)
 })

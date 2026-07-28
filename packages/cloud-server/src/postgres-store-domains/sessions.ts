@@ -24,6 +24,11 @@ import {
   replayOrRejectPostgresWorkspaceEvent,
 } from './workspace-events.ts'
 import { applyPostgresProjectedEventEffects } from './session-projection-effects.ts'
+import {
+  deferredCommandSchedule,
+  deferPostgresSessionCommand,
+  recoverPostgresSessionLease,
+} from './session-command-recovery.ts'
 import { encodeSsePgNotifyPayload } from '../sse-pg-notify.ts'
 import type {
   AppendProjectedSessionEventInput,
@@ -32,6 +37,7 @@ import type {
   CommandQueueQuota,
   ControlPlaneSessionStatus,
   CompleteWorkflowRunInput,
+  DeferSessionCommandInput,
   EnqueueCommandInput,
   FailWorkflowRunInput,
   ListSessionsPageInput,
@@ -65,6 +71,12 @@ type PostgresSessionsRepositoryOptions = {
   emitSseNotify(payload: Parameters<typeof encodeSsePgNotifyPayload>[0]): void
   recordAuditEvent(executor: PgExecutor, input: RecordAuditEventInput): Promise<AuditEventRecord>
   quotaDeps: PostgresQuotaDomainDeps
+  adjustUsageQuota(executor: PgExecutor, input: {
+    orgId: string
+    quotaKey: string
+    windowStartedAtMs: number
+    quantityDelta: number
+  }): Promise<void>
   completeWorkflowRun(executor: PgExecutor, input: CompleteWorkflowRunInput): Promise<unknown>
   failWorkflowRun(executor: PgExecutor, input: FailWorkflowRunInput): Promise<unknown>
 }
@@ -727,7 +739,7 @@ export class PostgresSessionsRepository {
       const reaped: ReapedSessionLeaseRecord[] = []
       for (const row of expired.rows) {
         const lease = leaseFromRow(row)
-        reaped.push(await this.recoverSessionLeaseWithClient(client, lease, now, maxAttempts))
+        reaped.push(await recoverPostgresSessionLease(client, lease, now, maxAttempts, this.options.recordAuditEvent))
       }
       return reaped
     })
@@ -739,7 +751,7 @@ export class PostgresSessionsRepository {
     return this.options.withTransaction(async (client) => {
       const current = await this.getLease(lease.tenantId, lease.sessionId, client, true)
       if (!current || current.leaseToken !== lease.leaseToken) return null
-      return this.recoverSessionLeaseWithClient(client, current, now, maxAttempts)
+      return recoverPostgresSessionLease(client, current, now, maxAttempts, this.options.recordAuditEvent)
     })
   }
 
@@ -818,17 +830,21 @@ export class PostgresSessionsRepository {
            AND session_id = $2
            AND (
              (status = 'pending'
-                AND (available_at IS NULL OR available_at <= $4)
                 AND (target_lease_token IS NULL OR target_lease_token = $3))
              OR (status = 'running' AND claimed_lease_token <> $3 AND target_lease_token IS NULL)
-           )
+         )
          ORDER BY created_sequence
          FOR UPDATE SKIP LOCKED
          LIMIT 1`,
-        [lease.tenantId, lease.sessionId, lease.leaseToken, now.toISOString()],
+        [lease.tenantId, lease.sessionId, lease.leaseToken],
         client,
       )
       if (!selected) return null
+      if (
+        selected.status === 'pending'
+        && selected.available_at
+        && new Date(String(selected.available_at)).getTime() > now.getTime()
+      ) return null
       const result = await client.query(
         `UPDATE cloud_session_commands
          SET status = 'running',
@@ -914,6 +930,22 @@ export class PostgresSessionsRepository {
     })
   }
 
+  async deferSessionCommand(
+    lease: WorkerLeaseRecord,
+    commandId: string,
+    input: DeferSessionCommandInput,
+  ) {
+    const schedule = deferredCommandSchedule(input)
+    return this.options.withTransaction((client) => deferPostgresSessionCommand(
+      client,
+      lease,
+      commandId,
+      input,
+      schedule,
+      this.options.adjustUsageQuota,
+    ))
+  }
+
   async failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string) {
     return this.options.withTransaction(async (client) => {
       await this.assertCurrentLease(lease, client)
@@ -985,114 +1017,6 @@ export class PostgresSessionsRepository {
       throw new Error('Worker lease is stale.')
     }
     return current
-  }
-
-  private async recoverSessionLeaseWithClient(
-    client: PgExecutor,
-    lease: WorkerLeaseRecord,
-    now: Date,
-    maxAttempts: number,
-  ): Promise<ReapedSessionLeaseRecord> {
-    const nowIsoValue = now.toISOString()
-    const commands = await client.query(
-      `SELECT *
-       FROM cloud_session_commands
-       WHERE tenant_id = $1
-         AND session_id = $2
-         AND status = 'running'
-         AND claimed_lease_token = $3
-       ORDER BY created_sequence
-       FOR UPDATE`,
-      [lease.tenantId, lease.sessionId, lease.leaseToken],
-    )
-    const retriedCommandIds: string[] = []
-    const failedCommandIds: string[] = []
-    for (const commandRow of commands.rows) {
-      const command = commandFromRow(commandRow)
-      if (command.attemptCount >= maxAttempts) {
-        const summary = 'Worker lease expired after the maximum retry attempts.'
-        await client.query(
-          `UPDATE cloud_session_commands
-           SET status = 'failed',
-               error = $2,
-               last_error_code = 'lease_expired_max_attempts',
-               last_error_summary = $2
-           WHERE command_id = $1`,
-          [command.commandId, summary],
-        )
-        failedCommandIds.push(command.commandId)
-      } else {
-        await client.query(
-          `UPDATE cloud_session_commands
-           SET status = 'pending',
-               claimed_by = NULL,
-               claimed_lease_token = NULL,
-               available_at = $2,
-               error = NULL,
-               last_error_code = 'lease_expired',
-               last_error_summary = 'Worker lease expired before command completion.'
-           WHERE command_id = $1`,
-          [command.commandId, nowIsoValue],
-        )
-        retriedCommandIds.push(command.commandId)
-      }
-    }
-    await client.query(
-      `DELETE FROM cloud_worker_leases
-       WHERE tenant_id = $1 AND session_id = $2 AND lease_token = $3`,
-      [lease.tenantId, lease.sessionId, lease.leaseToken],
-    )
-    const action: ReapedSessionLeaseRecord['action'] = failedCommandIds.length > 0 && retriedCommandIds.length === 0
-      ? 'failed'
-      : retriedCommandIds.length > 0
-        ? 'retried'
-        : 'released'
-    await client.query(
-      `UPDATE cloud_sessions
-       SET status = $3, updated_at = $4
-       WHERE tenant_id = $1 AND session_id = $2`,
-      [
-        lease.tenantId,
-        lease.sessionId,
-        action === 'failed' ? 'errored' : 'idle',
-        nowIsoValue,
-      ],
-    )
-    // lease.tenantId is unambiguously a tenant id, so resolve the org by the tenant
-    // relationship only. The prior `OR org_id = $1` could match a different org whose org_id
-    // coincided with this tenant id, mis-attributing the audit event (#924).
-    const org = await this.maybeOne(
-      `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1 LIMIT 1`,
-      [lease.tenantId],
-      client,
-    )
-    if (org) {
-      await this.options.recordAuditEvent(client, {
-        orgId: String(org.org_id),
-        actorType: 'system',
-        actorId: 'managed-work-reaper',
-        eventType: 'managed_work.session_lease_reaped',
-        targetType: 'session',
-        targetId: lease.sessionId,
-        metadata: {
-          action,
-          leasedBy: lease.leasedBy,
-          retriedCommandIds,
-          failedCommandIds,
-        },
-        createdAt: now,
-      })
-    }
-    return {
-      tenantId: lease.tenantId,
-      sessionId: lease.sessionId,
-      leaseToken: lease.leaseToken,
-      leasedBy: lease.leasedBy,
-      action,
-      retriedCommandIds,
-      failedCommandIds,
-      reapedAt: nowIsoValue,
-    }
   }
 
   async assertLeaseTokenIfPresent(

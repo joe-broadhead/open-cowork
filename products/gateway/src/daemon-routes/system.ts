@@ -94,6 +94,13 @@ export const SYSTEM_API_ROUTE_CONTRACTS = defineApiRouteContracts([
   { method: 'POST', path: '/alerts/{id}/action', bodySchema: zAlertActionBody, responses: [200, 400, 404] },
   { method: 'PATCH', path: '/config', bodySchema: zConfigPatchBody, responses: [200, 400, 428] },
   { method: 'GET', path: '/storage/doctor', responses: [200, 503] },
+  {
+    method: 'GET',
+    path: '/storage/export',
+    querySchemas: { localAdmin: z.literal(true) },
+    requiredQueryParameters: ['localAdmin'],
+    responses: [200, 403, 429],
+  },
   { method: 'POST', path: '/storage/backups', bodySchema: zStorageBackupCreateBody, responses: [200, 400] },
   { method: 'POST', path: '/storage/backups/verify', bodySchema: zStorageBackupVerifyBody, responses: [200, 400, 422] },
   { method: 'POST', path: '/storage/recovery-drills', bodySchema: zStorageRecoveryDrillBody, responses: [200, 400, 422] },

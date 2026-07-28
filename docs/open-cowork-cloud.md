@@ -1100,6 +1100,7 @@ Role-specific knobs:
 | `OPEN_COWORK_CLOUD_WORKER_POLL_MS` | `worker`, `all-in-one` | Durable command polling interval. |
 | `OPEN_COWORK_CLOUD_WORKER_SESSION_CONCURRENCY` | `worker`, `all-in-one` | How many distinct sessions one worker tick processes concurrently (default `4`, clamped `1`–`32`). Sessions are independent, so this stops one long-running command from head-of-line-blocking other tenants on the worker; set to `1` for the previous strictly-serial behaviour. Each concurrent session can run its own runtime, so size it against the worker's CPU/memory and the per-org worker entitlement. |
 | `OPEN_COWORK_CLOUD_WORKER_MAX_COMMANDS_PER_SESSION_PER_TICK` | `worker`, `all-in-one` | How many commands a single session drains before yielding its lane back to the pool (default `50`, clamped `1`–`10000`). Bounds a session with a large backlog from monopolising a lane; the session is re-surveyed on the next pass while it still has pending commands. |
+| `OPEN_COWORK_CLOUD_WORKER_MAX_LEASES` | `worker`, `all-in-one` | Maximum worker lease records retained in the in-process LRU (default `4096`). This is a memory budget, not an execution-capacity override. |
 | `OPEN_COWORK_CLOUD_EXECUTION_ISOLATION_MODE` | `worker`, `all-in-one` | `sandbox`, `external-provider`, or `development-process`. An omitted value always defaults to the fail-closed sandbox, including for local deployments. Unsafe shared-process execution therefore requires the explicit `development-process` value and is still rejected outside the local tier. `external-provider` requires an explicitly injected provider and does not impose Docker image settings, but its live capability and per-boundary attestations must satisfy the same verified process/user/mount/runtime-home/network/cleanup contract. A missing provider fails closed. |
 | `OPEN_COWORK_CLOUD_ISOLATION_ENGINE` | `worker`, `all-in-one` | Sandbox engine. The built-in long-lived Cloud provider currently supports `docker`; unknown engines and `apple-container` fail closed for Cloud admission. A host may inject a separately attested provider through the server API. |
 | `OPEN_COWORK_CLOUD_ISOLATION_IMAGE` | `worker`, `all-in-one` | Immutable OpenCode runtime image reference used for one execution boundary. Required outside local development. |
@@ -1128,8 +1129,15 @@ Postgres safety timeouts per deployment.
 | `OPEN_COWORK_CLOUD_RUNTIME_DATABASE_PRINCIPAL` | Migrator-only PostgreSQL login/IAM principal that receives membership in `OPEN_COWORK_CLOUD_RUNTIME_DATABASE_ROLE`. The principal must already exist; the migration job validates that neither identity is privileged before granting runtime access. |
 | `OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE` | Explicit operator acknowledgement that non-durable control-plane/object storage is acceptable. Required to start a `public_production` tier on ephemeral storage; keep unset so accidental ephemeral storage fails closed. |
 | `OPEN_COWORK_CLOUD_LIVENESS_PORT` | Optional dedicated port for a minimal liveness server (separate from the main HTTP port). `0`/unset disables it; the main `/livez` route remains available. |
-| `OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES` | Maximum cached OpenCode runtimes a worker keeps warm (default `100`). Bounds worker memory under many concurrent sessions. |
+| `OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES` | Hard maximum for idle cached, active, and creating OpenCode runtime boundaries on one worker (default `100`; the conservative Helm worker default is `2`). The permit stays held through teardown, so cleanup debt cannot silently admit a replacement. |
 | `OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS` | Idle eviction window for cached worker runtimes (default `1800000`, 30 minutes). |
+| `OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_QUEUE_MAX_ENTRIES` | Maximum distinct session creations waiting for a runtime permit (default `100`; the Helm worker default is `8`). Concurrent misses for one session share one queue/provision attempt. A full queue returns a typed retryable capacity error. |
+| `OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_TIMEOUT_MS` | Maximum time a runtime creation waits for capacity (default `30000`). Expiry returns a typed retryable capacity error and removes the waiter. |
+| `OPEN_COWORK_CLOUD_RUNTIME_PROVISION_TIMEOUT_MS` | End-to-end deadline for preparing and creating one runtime boundary (default `120000`). Expiry aborts the provider contract and returns retryable backpressure; the permit remains held until any late boundary is closed. |
+| `OPEN_COWORK_CLOUD_RUNTIME_TEARDOWN_TIMEOUT_MS` | Maximum time one adapter-close pass waits for active work, provisioning, and provider cleanup (default `30000`). A timed-out pass fails closed without discarding capacity debt and can be retried. |
+| `OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES` | Per-sandbox memory ceiling in bytes (default `2147483648`). Must be a positive safe integer. |
+| `OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT` | Per-sandbox Docker CPU ceiling (default `2`; fractional CPU values such as `0.75` are supported). |
+| `OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT` | Per-sandbox process-tree ceiling (default `512`). This bounds OpenCode and all descendant tools together. |
 | `OPEN_COWORK_CLOUD_PG_LOCK_TIMEOUT_MS` | Postgres `lock_timeout` per connection (default `0`, disabled). Set a non-zero value to bound how long a statement waits on a row/table lock before failing fast. |
 | `OPEN_COWORK_CLOUD_MAX_CONNECTIONS` | Maximum simultaneous TCP connections accepted by the cloud HTTP server (default `10000`). A connection-exhaustion guard above the Node default of unbounded. |
 | `OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG` | Maximum concurrent browser/desktop SSE streams **per org per web pod** (default `200`). Enforced by the SSE stream registry on every session, workspace, and channel-delivery stream; excess subscriptions for one org receive an SSE error and are dropped so a single tenant cannot exhaust stream slots. Size this to concurrent interactive users × open tabs, not historical sessions. |
@@ -1137,6 +1145,21 @@ Postgres safety timeouts per deployment.
 | `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` | Postgres `LISTEN`/`NOTIFY` accelerator for SSE delivery (default `false`, Postgres control plane only). **Production multi-web-pod topologies should set this to `true`.** When enabled, the worker write path emits a best-effort `NOTIFY` (identifiers only, no event bodies) after each session/workspace event commit, and each web pod opens one dedicated `LISTEN` connection that wakes the matching SSE topic for an immediate read instead of waiting for the next poll. The poll loop always keeps running as the guaranteed backstop, so a missed or duplicate notification is harmless and a listener failure degrades to pure polling. Leave unset (the default) only for single-process demos that want byte-for-byte poll-only delivery. |
 | `OPEN_COWORK_CLOUD_SSE_NOTIFY_BACKSTOP_POLL_MS` | Backstop read-poll cadence (default `15000`, 15 seconds) applied **only** to NOTIFY-addressable SSE topics when `OPEN_COWORK_CLOUD_SSE_PG_NOTIFY` is enabled. With the accelerator on, `LISTEN`/`NOTIFY` drives low-latency delivery, so the per-topic poll relaxes to this longer backstop cadence (bounded by `max(OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS, this)`), cutting steady-state control-plane queries. Has no effect when the accelerator is off — poll cadence stays at `OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS`. |
 | `OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS` | Hard ceiling on a single SSE stream's lifetime (default `1800000`, 30 minutes). A wedged/half-open stream cannot pin a slot indefinitely; `EventSource` clients reconnect transparently. |
+
+The Helm worker values `runtimeCapacity`, `admissionQueueCapacity`,
+`admissionQueueTimeoutMs`, `runtimeProvisionTimeoutMs`,
+`runtimeTeardownTimeoutMs`, `isolationMemoryLimitBytes`,
+`isolationCpuLimit`, `isolationPidsLimit`, `sessionConcurrency`,
+`maxCommandsPerSessionPerTick`, and `maxLeases` map to these worker budgets.
+The chart also supplies nonzero CPU,
+memory, and ephemeral-storage requests and limits for workers. Override them
+together from measured workload evidence. At minimum,
+`runtimeCapacity × isolationMemoryLimitBytes` and
+`runtimeCapacity × isolationCpuLimit` must fit inside the worker pod limits
+with headroom for the worker process and checkpoint I/O. The hard runtime cap
+is never raised automatically in response to memory, CPU, event-loop, or queue
+pressure, and sandbox plus pod/container cgroup limits remain the enforcement
+boundaries for OpenCode descendants.
 
 The sandbox provider sets `OPENCODE_DISABLE_PROJECT_CONFIG=1` and masks tenant
 workspace `opencode.json`, `opencode.jsonc`, and `.opencode` paths with

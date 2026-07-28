@@ -1,9 +1,16 @@
-import type { ControlPlaneStore, ReapedSessionLeaseRecord, SessionCommandRecord, WorkerLeaseRecord } from './control-plane-store.ts'
+import type {
+  ControlPlaneStore,
+  ReapedSessionLeaseRecord,
+  SessionCommandRecord,
+  UsageQuotaReservation,
+  WorkerLeaseRecord,
+} from './control-plane-store.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import { recordCloudWorkerMetric } from './observability.ts'
 import type { CloudRuntimeEvent } from './runtime-adapter.ts'
 import type { CloudSessionService } from './session-service.ts'
 import type { CloudAbuseConfig } from '@open-cowork/shared'
+import { isDeferrableRuntimeCapacityError } from './runtime-capacity.ts'
 
 export type CloudWorkerCheckpointHooks = {
   /**
@@ -118,8 +125,9 @@ export class CloudWorker {
       if (this.shutdownStarted) break
       const command = await this.store.claimNextSessionCommand(lease)
       if (!command) break
+      let quotaReservation: UsageQuotaReservation | null
       try {
-        await this.service.reserveWorkerExecutionCapacity(tenantId)
+        quotaReservation = await this.service.reserveWorkerExecutionCapacity(tenantId)
       } catch (error) {
         if (this.isQuotaOrEntitlementDenial(error)) {
           await this.recordLeaseDenial(tenantId, sessionId, error)
@@ -137,8 +145,9 @@ export class CloudWorker {
         commandKind: command.kind,
         eventType: 'worker.execution_started',
       })
+      let capacityDeferred = false
+      const commandLease: WorkerLeaseRecord = lease
       try {
-        const commandLease: WorkerLeaseRecord = lease
         const controller = new AbortController()
         const activeCommand = this.trackActiveCommand(commandLease, command, controller)
         try {
@@ -150,7 +159,10 @@ export class CloudWorker {
                 commandLease,
                 controller,
                 activeCommand,
-                (signal) => this.service.executeCommand(commandLease, command, { signal, deferAck: true }),
+                (signal) => this.service.executeCommand(commandLease, command, {
+                  signal,
+                  deferAck: true,
+                }),
               )
               return this.checkpointAndAckCommand(executedLease, command.commandId)
             },
@@ -184,22 +196,39 @@ export class CloudWorker {
           status: 'ok',
         })
       } catch (error) {
+        const capacityError = isDeferrableRuntimeCapacityError(error) ? error : null
+        if (capacityError) {
+          await this.store.deferSessionCommand(commandLease, command.commandId, {
+            retryAfterMs: capacityError.retryAfterMs,
+            errorCode: `runtime_capacity_${capacityError.reason}`,
+            errorSummary: capacityError.message,
+            quotaReservation,
+          })
+          capacityDeferred = true
+          this.leases.delete(this.leaseKey(tenantId, sessionId))
+        }
         await this.service.recordManagedExecutionEvent({
           tenantId,
           sessionId,
           workerId: this.workerId,
           commandId: command.commandId,
           commandKind: command.kind,
-          eventType: 'worker.execution_failed',
+          eventType: capacityDeferred
+            ? 'worker.execution_deferred'
+            : 'worker.execution_failed',
           elapsedMs: Date.now() - startedAt,
-          errorCode: error instanceof Error ? error.name || 'Error' : 'unknown',
+          errorCode: capacityError
+            ? `runtime_capacity_${capacityError.reason}`
+            : error instanceof Error
+              ? error.name || 'Error'
+              : 'unknown',
         })
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_commands_processed_total',
           workerId: this.workerId,
           tenantId,
           sessionId,
-          status: 'error',
+          status: capacityDeferred ? 'backpressure' : 'error',
         })
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_command_duration_ms',
@@ -207,17 +236,20 @@ export class CloudWorker {
           workerId: this.workerId,
           tenantId,
           sessionId,
-          status: 'error',
+          status: capacityDeferred ? 'backpressure' : 'error',
         })
+        if (capacityDeferred) return processed
         throw error
       } finally {
-        await this.service.recordWorkerMinutes({
-          tenantId,
-          sessionId,
-          workerId: this.workerId,
-          elapsedMs: Date.now() - startedAt,
-          reservedMinutes: 1,
-        })
+        if (!capacityDeferred) {
+          await this.service.recordWorkerMinutes({
+            tenantId,
+            sessionId,
+            workerId: this.workerId,
+            elapsedMs: Date.now() - startedAt,
+            reservedMinutes: 1,
+          })
+        }
       }
       this.touchLease(this.leaseKey(tenantId, sessionId), lease)
       processed += 1

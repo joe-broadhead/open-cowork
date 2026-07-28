@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
+import { rendererWorkspaceSourceAliases } from './vite.workspace-source-aliases'
+
+const repoRoot = resolve(__dirname, '../..')
 
 // Browser build of the unified renderer: the same renderer as the Electron build,
 // minus the electron/preload/main plugin and the chart-frame asset-protocol
@@ -53,9 +56,10 @@ export default defineConfig({
   },
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-    },
+    alias: [
+      ...rendererWorkspaceSourceAliases(repoRoot),
+      { find: '@', replacement: resolve(__dirname, 'src') },
+    ],
   },
   // Local verification only: serve the browser build same-origin and proxy the
   // backend routes to a running `pnpm cloud:dev` (:8787), so the renderer boots

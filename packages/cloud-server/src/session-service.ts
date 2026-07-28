@@ -21,6 +21,7 @@ import type {
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
+  UsageQuotaReservation,
   UpsertCloudArtifactIndexInput,
   ListSessionsPageInput,
   ListSessionsPageRecord,
@@ -70,7 +71,10 @@ import type { SecretAdapter } from './secret-adapter.ts'
 import type { SsoProtocol } from './control-plane-sso.ts'
 import { CloudSessionImportService } from './services/session-import-service.ts'
 import { CloudCoordinationDispatchService } from './session-coordination-dispatch.ts'
-import { CloudSessionExecutionService } from './session-execution-operations.ts'
+import {
+  CloudSessionExecutionService,
+  type CloudSessionCommandExecutionOptions,
+} from './session-execution-operations.ts'
 import { CloudCapabilityService } from './services/capability-service.ts'
 import { CloudSettingMetadataService } from './services/setting-metadata-service.ts'
 import { CloudOverviewService } from './services/overview-service.ts'
@@ -834,7 +838,11 @@ export class CloudSessionService {
     workerId: string
     commandId: string
     commandKind: string
-    eventType: 'worker.execution_started' | 'worker.execution_completed' | 'worker.execution_failed'
+    eventType:
+      | 'worker.execution_started'
+      | 'worker.execution_completed'
+      | 'worker.execution_deferred'
+      | 'worker.execution_failed'
     elapsedMs?: number | null
     errorCode?: string | null
   }) {
@@ -952,7 +960,7 @@ export class CloudSessionService {
   async executeCommand(
     lease: WorkerLeaseRecord,
     command: SessionCommandRecord,
-    options: { signal?: AbortSignal, deferAck?: boolean } = {},
+    options: CloudSessionCommandExecutionOptions = {},
   ): Promise<void> {
     return this.sessionExecution.executeCommand(lease, command, options)
   }
@@ -1071,7 +1079,9 @@ export class CloudSessionService {
     })
   }
 
-  async reserveWorkerExecutionCapacity(tenantId: string) {
+  async reserveWorkerExecutionCapacity(
+    tenantId: string,
+  ): Promise<UsageQuotaReservation | null> {
     const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
     await this.assertBillingAllowed({
       orgId: org.orgId,
@@ -1101,7 +1111,13 @@ export class CloudSessionService {
           result.retryAfterMs,
         )
       }
+      return {
+        quotaKey: 'worker_minutes:hour',
+        windowStartedAtMs: Math.floor(now.getTime() / HOUR_MS) * HOUR_MS,
+        quantity: 1,
+      }
     }
+    return null
   }
 
   async assertWorkerExecutionAllowed(tenantId: string) {

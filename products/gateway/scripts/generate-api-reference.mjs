@@ -175,7 +175,7 @@ function generateOpenApi(routes, runtime) {
       ...[...queryNames].map(name => ({
         name,
         in: 'query',
-        required: queryParameterRequired(route, name),
+        required: queryParameterRequired(route, descriptor, name),
         ...(queryParameterDescription(route, name) ? { description: queryParameterDescription(route, name) } : {}),
         schema: descriptor?.querySchemas?.[name]
           ? runtime.toJsonSchema(descriptor.querySchemas[name])
@@ -269,7 +269,17 @@ function responseStatusesForRoute(route, descriptor, runtime) {
   if (route.path === '/webhooks/discord' && route.method === 'post') statuses.add(401)
   if (route.path === '/webhooks/whatsapp' && route.method === 'post') statuses.add(503)
   const sorted = [...statuses].sort((a, b) => Number(a) - Number(b))
-  return Object.fromEntries(sorted.map(status => [status, { description: RESPONSE_DESCRIPTIONS[status] || `HTTP ${status}` }]))
+  return Object.fromEntries(sorted.map(status => [status, {
+    description: responseDescription(route, status),
+  }]))
+}
+
+function responseDescription(route, status) {
+  if (route.method === 'get' && route.path === '/storage/export') {
+    if (status === 403) return 'Forbidden — missing admin capability or localAdmin dual-intent'
+    if (status === 429) return 'Rate limited (unredacted storage export budget)'
+  }
+  return RESPONSE_DESCRIPTIONS[status] || `HTTP ${status}`
 }
 
 function capabilityForRoute(route, runtime) {
@@ -292,10 +302,11 @@ function securityForRoute(route, capability) {
   return [{ gatewayBearer: [] }]
 }
 
-function queryParameterRequired(route, name) {
-  return route.method === 'get'
+function queryParameterRequired(route, descriptor, name) {
+  return descriptor?.requiredQueryParameters?.includes(name)
+    || (route.method === 'get'
     && route.path === '/webhooks/whatsapp'
-    && ['hub.mode', 'hub.verify_token', 'hub.challenge'].includes(name)
+    && ['hub.mode', 'hub.verify_token', 'hub.challenge'].includes(name))
 }
 
 function queryParameterDescription(route, name) {
@@ -313,6 +324,9 @@ function queryParameterDescription(route, name) {
   }
   if (route.method === 'get' && route.path === '/opencode/sessions' && name === 'gatewayOnly') {
     return 'Defaults to true. Setting gatewayOnly=false broadens the result to all OpenCode sessions and requires an admin bearer token.'
+  }
+  if (route.method === 'get' && route.path === '/storage/export' && name === 'localAdmin') {
+    return 'JOE-952 dual-intent. Must be true to export unredacted durable state. MCP state_export supplies this automatically because tool invocation is the operator intent.'
   }
   if (route.method === 'get' && route.path === '/webhooks/whatsapp') {
     if (name === 'hub.mode') return 'Meta verification mode; must be subscribe.'

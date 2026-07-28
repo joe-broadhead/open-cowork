@@ -230,9 +230,14 @@ export function getAppConfig(): OpenCoworkConfig {
     configErrorCache = null
   } catch (err) {
     configCache = normalizeAppConfig(DEFAULT_CONFIG)
-    configErrorCache = err instanceof Error
+    const message = err instanceof Error
       ? err.message
       : 'Invalid app config'
+    const resource = err && typeof err === 'object' && 'resource' in err
+      && typeof (err as { resource?: unknown }).resource === 'string'
+      ? (err as { resource: string }).resource
+      : null
+    configErrorCache = resource ? `${message} (${resource})` : message
   }
   return configCache
 }

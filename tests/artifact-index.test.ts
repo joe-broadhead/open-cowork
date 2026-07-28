@@ -3,7 +3,7 @@ import { clearCoordinationStoreCache, createCoordinationProject, createCoordinat
 import { artifactLifecycleStorageKey, clearArtifactLifecycleStoreCache, getArtifactLifecycleTransactionCountForTests, indexLocalSessionArtifactsFromView, isLocalArtifactFilePath, listLocalArtifactIndex, localArtifactFilename, normalizeArtifactLifecycleEntry, rebuildLocalArtifactIndexForSession, setArtifactLifecycleDatabaseForTests, setArtifactIndexRuntimeDepsForTests, type ArtifactLifecycleRecord } from '@open-cowork/runtime-host/artifact-index'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -320,6 +320,7 @@ test('local artifact indexing batches lifecycle, provenance, and index writes', 
   const db = new DatabaseSync(':memory:')
   const sessionId = 'artifact-batch-session'
   const artifactCount = 40
+  const indexedAt = new Date('2026-05-27T10:20:00.000Z')
   try {
     setArtifactLifecycleDatabaseForTests(db)
     const artifacts: SessionArtifact[] = Array.from({ length: artifactCount }, (_, index) => ({
@@ -337,7 +338,8 @@ test('local artifact indexing batches lifecycle, provenance, and index writes', 
         project_id, task_id, status_updated_by, status_updated_at, created_at, updated_at
       ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    for (const artifact of artifacts) {
+    for (const [index, artifact] of artifacts.entries()) {
+      if (index % 2 === 1) continue
       insertLifecycle.run(
         'local',
         sessionId,
@@ -385,6 +387,7 @@ test('local artifact indexing batches lifecycle, provenance, and index writes', 
       sessionTitle: 'Batch artifact session',
       view: sessionViewWithArtifacts(artifacts),
       tasks: tasks as NonNullable<Parameters<typeof indexLocalSessionArtifactsFromView>[0]['tasks']>,
+      now: indexedAt,
     })
     const afterTransactions = getArtifactLifecycleTransactionCountForTests()
 
@@ -392,15 +395,134 @@ test('local artifact indexing batches lifecycle, provenance, and index writes', 
     assert.equal(runIdReads, artifactCount)
     assert.equal(sessionIdReads, artifactCount)
     assert.equal(entries.length, artifactCount)
-    const sampledEntry = entries.find((entry) => entry.id === 'artifact-17')
+    assert.equal(entries.filter((entry) => entry.order % 2 === 1).every(
+      (entry) => entry.createdAt === indexedAt.toISOString() && entry.updatedAt === indexedAt.toISOString(),
+    ), true)
+    assert.equal(entries.filter((entry) => entry.order % 2 === 0).every(
+      (entry) => entry.createdAt === '2026-05-27T10:00:00.000Z' && entry.updatedAt === '2026-05-27T10:10:00.000Z',
+    ), true)
+    const sampledEntry = entries.find((entry) => entry.id === 'artifact-16')
     assert.equal(sampledEntry?.status, 'in-review')
-    assert.equal(sampledEntry?.taskId, 'task-17')
-    assert.equal(sampledEntry?.projectId, 'project-17')
+    assert.equal(sampledEntry?.taskId, 'task-16')
+    assert.equal(sampledEntry?.projectId, 'project-16')
     const indexed = await listLocalArtifactIndex({ sessionId, limit: artifactCount })
     assert.equal(indexed.artifacts.length, artifactCount)
   } finally {
     setArtifactLifecycleDatabaseForTests(null)
     db.close()
+  }
+})
+
+test('local artifact indexing skips durable rewrites for an identical repeated view', async () => {
+  const db = new DatabaseSync(':memory:')
+  const input = {
+    sessionId: 'artifact-repeat-session',
+    sessionTitle: 'Repeated artifact session',
+    tasks: [],
+    now: new Date('2026-05-27T11:00:00.000Z'),
+    view: sessionViewWithArtifacts([{
+      id: 'artifact-repeat',
+      toolId: 'tool-repeat',
+      toolName: 'write',
+      filePath: '/tmp/repeated-report.md',
+      filename: 'repeated-report.md',
+      order: 1,
+    }]),
+  }
+  try {
+    setArtifactLifecycleDatabaseForTests(db)
+    indexLocalSessionArtifactsFromView(input)
+    const before = db.prepare('select total_changes() as count').get() as { count: number }
+    indexLocalSessionArtifactsFromView(input)
+
+    const after = db.prepare('select total_changes() as count').get() as { count: number }
+    assert.equal(after.count, before.count)
+    const indexed = db.prepare('select count(*) as count from artifact_index').get() as { count: number }
+    assert.equal(indexed.count, 1)
+    const listed = await listLocalArtifactIndex({ sessionId: input.sessionId, limit: 10 })
+    assert.equal(listed.artifacts[0]?.size, undefined)
+  } finally {
+    setArtifactLifecycleDatabaseForTests(null)
+    db.close()
+  }
+})
+
+test('local artifact indexing rolls back stale deletion when an upsert fails', async () => {
+  const db = new DatabaseSync(':memory:')
+  try {
+    setArtifactLifecycleDatabaseForTests(db)
+    indexLocalSessionArtifactsFromView({
+      sessionId: 'artifact-rollback-session',
+      tasks: [],
+      now: new Date('2026-05-27T11:10:00.000Z'),
+      view: sessionViewWithArtifacts([{
+        id: 'artifact-stable',
+        toolId: 'tool-stable',
+        toolName: 'write',
+        filePath: '/tmp/stable-report.md',
+        filename: 'stable-report.md',
+        order: 1,
+      }]),
+    })
+
+    assert.throws(() => indexLocalSessionArtifactsFromView({
+      sessionId: 'artifact-rollback-session',
+      tasks: [],
+      now: new Date('2026-05-27T11:11:00.000Z'),
+      view: sessionViewWithArtifacts([{
+        id: 'artifact-invalid',
+        toolId: 'tool-invalid',
+        toolName: 'write',
+        filePath: '/tmp/invalid-report.md',
+        filename: null,
+        order: 2,
+      } as unknown as SessionArtifact]),
+    }))
+
+    const index = await listLocalArtifactIndex({
+      sessionId: 'artifact-rollback-session',
+      limit: 10,
+    })
+    assert.deepEqual(index.artifacts.map((artifact) => artifact.id), ['artifact-stable'])
+  } finally {
+    setArtifactLifecycleDatabaseForTests(null)
+    db.close()
+  }
+})
+
+test('local artifact index keeps its database and WAL sidecars private', {
+  skip: process.platform === 'win32',
+}, () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-artifact-modes-'))
+  const dbPath = join(userDataDir, 'artifact-lifecycle.sqlite')
+  try {
+    process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+    clearConfigCaches()
+    clearArtifactLifecycleStoreCache()
+    indexLocalSessionArtifactsFromView({
+      sessionId: 'artifact-mode-session',
+      tasks: [],
+      view: sessionViewWithArtifacts([{
+        id: 'artifact-mode',
+        toolId: 'tool-mode',
+        toolName: 'write',
+        filePath: '/tmp/mode-report.md',
+        filename: 'mode-report.md',
+        order: 1,
+      }]),
+    })
+
+    assert.equal(statSync(dbPath).mode & 0o777, 0o600)
+    for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
+      if (existsSync(sidecar)) assert.equal(statSync(sidecar).mode & 0o777, 0o600)
+    }
+  } finally {
+    clearArtifactLifecycleStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
   }
 })
 

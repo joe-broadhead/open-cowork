@@ -8,6 +8,7 @@ export type CloudLogLevel = 'debug' | 'info' | 'warn' | 'error'
 export type CloudObservabilityAttributeValue = string | number | boolean | null | undefined
 
 export type CloudObservabilityAttributes = Record<string, CloudObservabilityAttributeValue>
+export type CloudMetricKind = 'counter' | 'gauge'
 
 export type CloudLogRecord = {
   level: CloudLogLevel
@@ -20,7 +21,9 @@ export type CloudLogRecord = {
 export type CloudMetricRecord = {
   name: string
   value: number
+  kind?: CloudMetricKind
   unit?: string
+  aggregationTemporality?: 'delta' | 'cumulative'
   attributes?: CloudObservabilityAttributes
   timestamp?: Date
 }
@@ -416,12 +419,14 @@ export function createPrometheusCloudObservability(): CloudObservabilityAdapter 
       const name = prometheusMetricName(record.name)
       const labels = metricLabels(record.attributes)
       const key = metricKey(name, labels)
-      const kind = name.endsWith('_total') ? 'counter' : 'gauge'
+      const kind = record.kind || (name.endsWith('_total') ? 'counter' : 'gauge')
       const existing = points.get(key)
       points.set(key, {
         kind,
         help: `${name} emitted by Open Cowork Cloud.`,
-        value: kind === 'counter' ? (existing?.value || 0) + record.value : record.value,
+        value: kind === 'counter' && record.aggregationTemporality !== 'cumulative'
+          ? (existing?.value || 0) + record.value
+          : record.value,
         labels,
       })
     },
@@ -465,6 +470,7 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
   let droppedSpansTotal = 0
   let droppedMetricsTotal = 0
   let flushing: Promise<void> | null = null
+  const cumulativeMetricStartTime = new Date(Date.now() - process.uptime() * 1_000)
 
   function enqueue<T>(queue: T[], record: T, onDrop: () => void) {
     if (queue.length >= maxQueueSize) {
@@ -518,7 +524,9 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
       pending.push({
         name: 'open_cowork_cloud_otlp_dropped_records_total',
         value: droppedSpansTotal,
+        kind: 'counter',
         unit: '1',
+        aggregationTemporality: 'cumulative',
         attributes: { kind: 'span' },
       })
     }
@@ -526,7 +534,9 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
       pending.push({
         name: 'open_cowork_cloud_otlp_dropped_records_total',
         value: droppedMetricsTotal,
+        kind: 'counter',
         unit: '1',
+        aggregationTemporality: 'cumulative',
         attributes: { kind: 'metric' },
       })
     }
@@ -537,19 +547,36 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
         },
         scopeMetrics: [{
           scope: { name: 'open-cowork-cloud' },
-          metrics: pending.map((metric) => ({
-            name: metric.name,
-            unit: metric.unit || '',
-            sum: {
-              aggregationTemporality: 2,
-              isMonotonic: metric.name.endsWith('_total'),
-              dataPoints: [{
-                timeUnixNano: timeUnixNano(metric.timestamp || new Date()),
-                asDouble: metric.value,
-                attributes: otlpAttributes(metric.attributes),
-              }],
-            },
-          })),
+          metrics: pending.map((metric) => {
+            const cumulative = metric.aggregationTemporality === 'cumulative'
+            const counter = (
+              metric.kind || (metric.name.endsWith('_total') ? 'counter' : 'gauge')
+            ) === 'counter'
+            const startTime = counter && cumulative ? cumulativeMetricStartTime : null
+            const dataPoint = {
+              ...(startTime ? { startTimeUnixNano: timeUnixNano(startTime) } : {}),
+              timeUnixNano: timeUnixNano(metric.timestamp || new Date()),
+              asDouble: metric.value,
+              attributes: otlpAttributes(metric.attributes),
+            }
+            return {
+              name: metric.name,
+              unit: metric.unit || '',
+              ...(counter
+                ? {
+                    sum: {
+                      aggregationTemporality: cumulative ? 2 : 1,
+                      isMonotonic: true,
+                      dataPoints: [dataPoint],
+                    },
+                  }
+                : {
+                    gauge: {
+                      dataPoints: [dataPoint],
+                    },
+                  }),
+            }
+          }),
         }],
       }],
     })

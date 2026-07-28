@@ -877,6 +877,163 @@ function runControlPlaneDomainContracts(
       const staleRecovered = await store.checkpointAndAckSessionCommand(advancedLease, `${prefix}-command-stale-checkpoint`)
       assert.equal(staleRecovered.command.status, 'acked')
 
+      const deferredSessionId = `${prefix}-page-a`
+      await store.enqueueSessionCommand({
+        commandId: `${prefix}-command-capacity-deferred`,
+        tenantId,
+        userId,
+        sessionId: deferredSessionId,
+        kind: 'prompt',
+        payload: { text: 'retry after capacity recovers' },
+      })
+      await store.enqueueSessionCommand({
+        commandId: `${prefix}-command-after-capacity-deferred`,
+        tenantId,
+        userId,
+        sessionId: deferredSessionId,
+        kind: 'abort',
+      })
+      const deferredLease = await store.claimSessionLease(
+        tenantId,
+        deferredSessionId,
+        `${prefix}-capacity-worker`,
+        new Date('2030-01-01T00:00:09.000Z'),
+        30_000,
+      )
+      assert.ok(deferredLease)
+      const capacityClaim = await store.claimNextSessionCommand(
+        deferredLease!,
+        new Date('2030-01-01T00:00:09.000Z'),
+      )
+      assert.equal(capacityClaim?.commandId, `${prefix}-command-capacity-deferred`)
+      const workerMinuteWindowMs = 60 * 60 * 1000
+      const workerMinuteReservationTime = new Date('2030-01-01T00:00:09.000Z')
+      const workerMinuteWindowStartedAtMs = Math.floor(
+        workerMinuteReservationTime.getTime() / workerMinuteWindowMs,
+      ) * workerMinuteWindowMs
+      const workerMinuteReservation = await store.consumeUsageQuota({
+        orgId: org.orgId,
+        quotaKey: 'worker_minutes:hour',
+        limit: 10,
+        quantity: 1,
+        windowMs: workerMinuteWindowMs,
+        now: workerMinuteReservationTime,
+      })
+      assert.equal(workerMinuteReservation.allowed, true)
+      const deferredCommand = await store.deferSessionCommand(
+        deferredLease!,
+        `${prefix}-command-capacity-deferred`,
+        {
+          retryAfterMs: 5_000,
+          errorCode: 'runtime_capacity_queue_full',
+          errorSummary: 'Cloud worker runtime capacity is temporarily exhausted.',
+          now: new Date('2030-01-01T00:00:10.000Z'),
+          quotaReservation: {
+            quotaKey: 'worker_minutes:hour',
+            windowStartedAtMs: workerMinuteWindowStartedAtMs,
+            quantity: 1,
+          },
+        },
+      )
+      assert.equal(deferredCommand.status, 'pending')
+      assert.equal(deferredCommand.availableAt, '2030-01-01T00:00:15.000Z')
+      assert.equal(deferredCommand.lastErrorCode, 'runtime_capacity_queue_full')
+      assert.equal(
+        (await store.listUsageQuotaCounters(org.orgId))
+          .find((counter) => counter.quotaKey === 'worker_minutes:hour')
+          ?.quantity,
+        0,
+      )
+      await assert.rejects(
+        Promise.resolve().then(() => store.deferSessionCommand(
+          deferredLease!,
+          `${prefix}-command-capacity-deferred`,
+          {
+            retryAfterMs: 5_000,
+            errorCode: 'runtime_capacity_queue_full',
+            errorSummary: 'Duplicate capacity deferral.',
+            now: new Date('2030-01-01T00:00:10.000Z'),
+            quotaReservation: {
+              quotaKey: 'worker_minutes:hour',
+              windowStartedAtMs: workerMinuteWindowStartedAtMs,
+              quantity: 1,
+            },
+          },
+        )),
+      )
+      assert.equal(
+        (await store.listUsageQuotaCounters(org.orgId))
+          .find((counter) => counter.quotaKey === 'worker_minutes:hour')
+          ?.quantity,
+        0,
+      )
+      assert.equal(
+        (await store.listRunnableSessions({
+          limit: 10,
+          now: new Date('2030-01-01T00:00:14.999Z'),
+        })).sessions.some((session) => session.sessionId === deferredSessionId),
+        false,
+      )
+      const earlyRetryLease = await store.claimSessionLease(
+        tenantId,
+        deferredSessionId,
+        `${prefix}-capacity-early-retry-worker`,
+        new Date('2030-01-01T00:00:14.999Z'),
+        30_000,
+      )
+      assert.ok(earlyRetryLease)
+      assert.equal(
+        await store.claimNextSessionCommand(
+          earlyRetryLease!,
+          new Date('2030-01-01T00:00:14.999Z'),
+        ),
+        null,
+      )
+      await store.releaseSessionLease(
+        earlyRetryLease!,
+        new Date('2030-01-01T00:00:14.999Z'),
+      )
+      assert.equal(
+        (await store.listRunnableSessions({
+          limit: 10,
+          now: new Date('2030-01-01T00:00:15.000Z'),
+        })).sessions.some((session) => session.sessionId === deferredSessionId),
+        true,
+      )
+      const retryLease = await store.claimSessionLease(
+        tenantId,
+        deferredSessionId,
+        `${prefix}-capacity-retry-worker`,
+        new Date('2030-01-01T00:00:15.000Z'),
+        30_000,
+      )
+      assert.ok(retryLease)
+      const retriedCapacityCommand = await store.claimNextSessionCommand(
+        retryLease!,
+        new Date('2030-01-01T00:00:15.000Z'),
+      )
+      assert.equal(retriedCapacityCommand?.commandId, `${prefix}-command-capacity-deferred`)
+      assert.equal(retriedCapacityCommand?.attemptCount, 2)
+      await store.ackSessionCommand(
+        retryLease!,
+        `${prefix}-command-capacity-deferred`,
+        new Date('2030-01-01T00:00:16.000Z'),
+      )
+      const commandAfterCapacityRetry = await store.claimNextSessionCommand(
+        retryLease!,
+        new Date('2030-01-01T00:00:16.001Z'),
+      )
+      assert.equal(
+        commandAfterCapacityRetry?.commandId,
+        `${prefix}-command-after-capacity-deferred`,
+      )
+      await store.ackSessionCommand(
+        retryLease!,
+        `${prefix}-command-after-capacity-deferred`,
+        new Date('2030-01-01T00:00:16.002Z'),
+      )
+      await store.releaseSessionLease(retryLease!, new Date('2030-01-01T00:00:16.003Z'))
+
       // listRunnableSessions (previously untested anywhere) returns the same well-formed shape on both.
       const runnableList = await store.listRunnableSessions({ limit: 10, now: new Date('2030-01-01T00:00:05.000Z') })
       assert.equal(Array.isArray(runnableList.sessions), true)

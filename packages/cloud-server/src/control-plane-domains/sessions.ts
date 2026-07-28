@@ -29,6 +29,7 @@ export type SessionControlPlaneStore = Pick<ControlPlaneStore,
   | 'claimNextSessionCommand'
   | 'ackSessionCommand'
   | 'checkpointAndAckSessionCommand'
+  | 'deferSessionCommand'
   | 'failSessionCommand'
   | 'recordWorkerHeartbeat'
   | 'listWorkerHeartbeats'

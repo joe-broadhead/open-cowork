@@ -16,6 +16,7 @@ The observability snapshot includes:
 - Channel binding count and recent channel failure count.
 - OpenCode reachability when checked by HTTP routes.
 - Active alert count by severity.
+- Live SSE active clients plus fixed-label rejected-admission, lifetime timeout, slow-consumer, and rejected-upstream-frame counters. Principal IDs and malformed frame contents are never metric labels.
 - Roadmap supervisor health, due/leased/stale counts, pending completion proposals, and recent supervisor audit events.
 - Trace correlation root plus task, run, channel, evidence, alert, and audit-ledger trace IDs.
 - SLO-style local budgets for scheduler latency, run dispatch, channel delivery, progress freshness, Mission Control render time, and recovery time.
@@ -25,9 +26,10 @@ HTTP:
 
 ```text
 GET /observability
+GET /metrics
 ```
 
-The route returns `trace`, `slo`, and `support` objects alongside metrics, alerts, supervisors, and environments. Trace IDs are deterministic correlation IDs such as `trace_task_*` and `trace_run_*`; raw channel targets, session IDs, local private paths, and token-like evidence refs are hashed or redacted.
+`/observability` returns `trace`, `slo`, and `support` objects alongside metrics, alerts, supervisors, and environments. `/metrics` exposes the local Prometheus registry, including `gateway_live_sse_active`, `gateway_live_sse_rejected_total`, `gateway_live_sse_timeouts_total`, `gateway_live_sse_slow_consumers_total`, `gateway_live_upstream_frames_rejected_total`, `gateway_live_sse_replay_snapshots`, `gateway_live_sse_replay_bytes`, and `gateway_live_sse_replay_dropped_total`. Replay-drop reasons are the bounded labels `snapshot_limit`, `payload_limit`, and `total_bytes_limit`. Trace IDs are deterministic correlation IDs such as `trace_task_*` and `trace_run_*`; raw channel targets, authenticated principal IDs, malformed upstream frames, session IDs, local private paths, and token-like evidence refs are hashed, omitted, or redacted.
 
 MCP:
 
