@@ -362,7 +362,7 @@ export function resolveCloudExecutionIsolationPolicy(input: {
     engine = parseEngine(envValue(env, 'OPEN_COWORK_CLOUD_ISOLATION_ENGINE'))
     if (engine !== 'docker') blockers.push('sandbox_engine_not_supported_for_cloud_runtime')
     opencodeCommand = envValue(env, 'OPEN_COWORK_CLOUD_ISOLATION_OPENCODE_BIN')
-      || '/app/node_modules/.pnpm/node_modules/.bin/opencode'
+      || '/app/node_modules/.bin/opencode'
     if (!validContainerCommand(opencodeCommand)) {
       blockers.push('sandbox_opencode_command_invalid')
     }

@@ -873,7 +873,7 @@ test('sandbox provider establishes a private runtime boundary and tears it down 
     assert.equal(run.args.includes('open-cowork-egress'), true)
     assert.equal(
       run.args[run.args.indexOf('--entrypoint') + 1],
-      '/app/node_modules/.pnpm/node_modules/.bin/opencode',
+      '/app/node_modules/.bin/opencode',
     )
     assert.equal(
       run.args.some((arg) => arg === `type=bind,src=${root},dst=${CONTAINER_ROOT_SENTINEL}`),
