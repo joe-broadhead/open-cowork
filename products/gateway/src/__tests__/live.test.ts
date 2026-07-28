@@ -725,6 +725,55 @@ describe('opencode live events', () => {
     expect(metrics).not.toContain(oversizedTitle)
   })
 
+  it('accounts a fixed-size identity for an oversized replay tombstone without exposing the raw session id', () => {
+    const privatePrefix = 'private-oversized-session-identity-'
+    const oversizedId = `${privatePrefix}${'x'.repeat(70 * 1024)}`
+    primeSessionUpdatePayloadForTest(oversizedId, {
+      type: 'session_update',
+      id: oversizedId,
+    })
+
+    const fresh = fakeSseResponse(0)
+    addLiveClient('oversized-identity-replay-client', fresh)
+
+    const metrics = renderPrometheusMetrics()
+    const replayBytes = Number(metrics.match(/^gateway_live_sse_replay_bytes (\d+)$/m)?.[1])
+    expect(liveSessionSnapshotCountForTest()).toBe(1)
+    expect(replayBytes).toBe(64)
+    expect(metrics).not.toContain(privatePrefix)
+    expect(fresh.writes).toHaveLength(1)
+    expect(fresh.writes.join('')).not.toContain(privatePrefix)
+  })
+
+  it('bounds huge session-id tombstones by aggregate bytes during replay-cache churn', () => {
+    const limits = {
+      maxSnapshots: 100,
+      maxPayloadBytes: 1024,
+      maxTotalBytes: 1024,
+    }
+    const privatePrefix = 'private-tombstone-churn-'
+    for (let index = 0; index < limits.maxSnapshots; index++) {
+      const oversizedId = `${privatePrefix}${index}-${'x'.repeat(2 * 1024)}`
+      primeSessionUpdatePayloadForTest(oversizedId, {
+        type: 'session_update',
+        id: oversizedId,
+      }, limits)
+    }
+
+    const fresh = fakeSseResponse(0)
+    addLiveClient('tombstone-churn-replay-client', fresh, undefined, undefined, {
+      limits: { replay: limits },
+    })
+
+    const metrics = renderPrometheusMetrics()
+    expect(liveSessionSnapshotCountForTest()).toBe(16)
+    expect(metrics).toContain('gateway_live_sse_replay_bytes 1024')
+    expect(metrics).toContain('gateway_live_sse_replay_dropped_total{reason="total_bytes_limit"}')
+    expect(metrics).not.toContain(privatePrefix)
+    expect(fresh.writes).toHaveLength(1)
+    expect(fresh.writes.join('')).not.toContain(privatePrefix)
+  })
+
   it('bounds aggregate replay payload bytes while retaining a stable session identity set', () => {
     for (let index = 0; index < 80; index++) {
       primeSessionUpdatePayloadForTest(`aggregate-${index}`, {

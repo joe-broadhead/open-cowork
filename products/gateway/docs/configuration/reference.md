@@ -217,7 +217,7 @@ Gateway config lives at:
 | `live.maxBufferedBytes` | `1 KiB` to `16 MiB`; default `1 MiB` maximum queued socket bytes per SSE client |
 | `live.replay.maxSnapshots` | `1` to `10000`; default `1000` stable session identities retained for connect-time replay. New identities are omitted while full rather than evicting the stable set on every poll |
 | `live.replay.maxPayloadBytes` | `1 KiB` to `4 MiB`, no greater than `maxTotalBytes`; default `64 KiB` maximum serialized payload retained for one session snapshot |
-| `live.replay.maxTotalBytes` | `1 KiB` to `64 MiB`; default `4 MiB` aggregate serialized replay payload bytes. Session identities remain bounded even when their payload is omitted |
+| `live.replay.maxTotalBytes` | `1 KiB` to `64 MiB`; default `4 MiB` aggregate identity-fingerprint and serialized replay payload bytes. Raw session IDs are not retained as cache keys, and identities remain bounded even when their payload is omitted |
 | `live.upstream.maxBufferedBytes` | `1 KiB` to `16 MiB`; default `1 MiB` maximum delimiter-free upstream frame bytes |
 | `live.upstream.maxEventBytes` | `1 KiB` to `4 MiB`, no greater than the upstream buffer limit; default `256 KiB` maximum complete event bytes before UTF-8 decode |
 | `channelSync.intervalMs` | `1000` ms to `24h` |

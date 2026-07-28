@@ -909,10 +909,9 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
         await recordRuntimeCacheMetric('open_cowork_cloud_isolation_cleanup_retries_total', 1, {
           status: 'ok',
         })
-      } catch (error) {
+      } catch {
         await recordRuntimeCacheMetric('open_cowork_cloud_isolation_cleanup_retries_total', 1, {
           status: 'failed',
-          error: error instanceof Error ? error.name : 'unknown',
         })
       }
     }
@@ -961,12 +960,11 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
         releaseBoundaryCapacity(entry.boundary)
         settleRuntimeClosure(entry)
         await recordRuntimeCacheMetric('open_cowork_cloud_runtime_cache_evictions_total', 1, { reason })
-      } catch (error) {
+      } catch {
         cleanupFailed = true
         retainPendingBoundaryCleanup(entry.boundary)
         await recordRuntimeCacheMetric('open_cowork_cloud_runtime_cache_close_failures_total', 1, {
           reason,
-          error: error instanceof Error ? error.name : 'unknown',
         })
       } finally {
         deferredRuntimeClosures.delete(entry)
@@ -1051,7 +1049,6 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
             value: 1,
             unit: '1',
             attributes: {
-              provider_id: error.providerId,
               reason: error.code,
             },
           })

@@ -17,7 +17,7 @@
       "type": "timeseries",
       "title": "Cloud request latency",
       "targets": [
-        { "expr": "max(open_cowork_cloud_http_request_duration_ms) by (cloud_role, url_path)" }
+        { "expr": "max(open_cowork_cloud_http_request_duration_ms) by (cloud_role, http_request_method, http_response_status_code)" }
       ]
     },
     {

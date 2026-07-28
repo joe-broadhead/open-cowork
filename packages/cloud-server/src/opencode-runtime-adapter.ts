@@ -50,6 +50,7 @@ import {
   type CloudRuntimeEventListener,
   type CloudRuntimeSubscribeOptions,
 } from './runtime-adapter.ts'
+import { CloudExecutionCleanupDebtError } from './execution-isolation.ts'
 
 export type NodeOpencodeCloudRuntimeAdapter = CloudRuntimeAdapter & {
   url: string
@@ -1230,6 +1231,9 @@ export async function createConnectedOpencodeCloudRuntimeAdapter(options: {
     try {
       await options.closeServer()
     } catch (cleanupError) {
+      if (cleanupError instanceof CloudExecutionCleanupDebtError) {
+        throw cleanupError
+      }
       throw new AggregateError(
         [readinessError, cleanupError],
         'OpenCode model readiness failed and the managed runtime could not be closed.',

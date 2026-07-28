@@ -6,7 +6,7 @@
       "name": "open_cowork_cloud_http_requests_total",
       "type": "counter",
       "owner": "cloud-web",
-      "description": "HTTP request rate and error basis by role, route, method, and status."
+      "description": "HTTP request rate and error basis by bounded role, method, and status dimensions. Raw routes are never metric labels."
     },
     {
       "name": "open_cowork_cloud_http_request_duration_ms",
@@ -150,7 +150,7 @@
       "name": "open_cowork_cloud_quota_rejections_total",
       "type": "counter",
       "owner": "cloud-control-plane",
-      "description": "Quota or rate-limit denials by policy code."
+      "description": "Aggregate quota or rate-limit denials without tenant or policy identifiers."
     },
     {
       "name": "open_cowork_cloud_auth_failures_total",

@@ -5,6 +5,7 @@
  * Events: session.created, session.updated, message.updated, tool calls, etc.
  */
 
+import { createHash } from 'node:crypto'
 import type { DurableOpencodeClient as OpencodeClient } from './opencode-session-runtime.js'
 import { queueEvent } from './wakeup.js'
 import { getConfig, type LiveConfig } from './config.js'
@@ -67,11 +68,13 @@ const UPSTREAM_RECONNECT_DELAY_MS = 3_000
 // session is not re-broadcast to every client on every 5s poll.
 interface SessionReplaySnapshot {
   payload?: string
-  bytes: number
+  payloadBytes: number
 }
 
+// Keys are fixed-size fingerprints: raw upstream session IDs are not retained
+// outside replay payloads that are intentionally delivered to authenticated clients.
 const lastSessionUpdatePayloads = new Map<string, SessionReplaySnapshot>()
-let lastSessionUpdatePayloadBytes = 0
+let lastSessionReplayBytes = 0
 export function subscribeToOpenCodeEvents(client: OpencodeClient, onEvent?: (event: any) => void) {
   if (subscribed) return
   subscribed = true
@@ -166,9 +169,11 @@ async function pollOpenCodeSessions(client: OpencodeClient, signal: AbortSignal)
   const replayLimits = config.live!.replay
   enforceReplayCacheLimits(replayLimits)
   const gw = sessions.filter((s: any) => (s.title || '').startsWith('GW:'))
-  const seenIds = new Set<string>()
+  const seenIdentities = new Set<string>()
   for (const s of gw) {
     if (signal.aborted) return
+    const sessionId = String(s.id)
+    const identity = sessionReplayIdentity(sessionId)
     const event = {
       type: 'session_update',
       id: s.id,
@@ -178,11 +183,11 @@ async function pollOpenCodeSessions(client: OpencodeClient, signal: AbortSignal)
       updated: s.time?.updated || 0,
     }
     const payload = JSON.stringify(event)
-    seenIds.add(String(s.id))
-    if (rememberSessionUpdatePayload(String(s.id), payload, replayLimits)) broadcast(event, payload)
+    seenIdentities.add(identity)
+    if (rememberSessionUpdatePayloadByIdentity(identity, payload, replayLimits)) broadcast(event, payload)
   }
-  for (const id of lastSessionUpdatePayloads.keys()) {
-    if (!seenIds.has(id)) forgetSessionUpdatePayload(id)
+  for (const identity of lastSessionUpdatePayloads.keys()) {
+    if (!seenIdentities.has(identity)) forgetSessionUpdatePayloadByIdentity(identity)
   }
 }
 
@@ -392,12 +397,16 @@ export function clearLiveClientsForTest(): void {
   for (const id of [...liveClients.keys()]) removeLiveClient(id)
   stopLiveMaintenanceTimer()
   lastSessionUpdatePayloads.clear()
-  lastSessionUpdatePayloadBytes = 0
+  lastSessionReplayBytes = 0
   setLiveSseReplayCache(0, 0)
 }
 
-export function primeSessionUpdatePayloadForTest(id: string, event: any): void {
-  rememberSessionUpdatePayload(id, JSON.stringify(event))
+export function primeSessionUpdatePayloadForTest(
+  id: string,
+  event: any,
+  limits: LiveConfig['replay'] = getConfig().live!.replay,
+): void {
+  rememberSessionUpdatePayload(id, JSON.stringify(event), limits)
 }
 
 export function liveSessionSnapshotCountForTest(): number {
@@ -581,75 +590,113 @@ function rememberSessionUpdatePayload(
   payload: string,
   limits: LiveConfig['replay'] = getConfig().live!.replay,
 ): boolean {
-  const existing = lastSessionUpdatePayloads.get(id)
+  return rememberSessionUpdatePayloadByIdentity(sessionReplayIdentity(id), payload, limits)
+}
+
+function rememberSessionUpdatePayloadByIdentity(
+  identity: string,
+  payload: string,
+  limits: LiveConfig['replay'],
+): boolean {
+  const existing = lastSessionUpdatePayloads.get(identity)
   if (!existing && lastSessionUpdatePayloads.size >= limits.maxSnapshots) {
     recordLiveSseReplayDropped('snapshot_limit')
     return false
   }
-  const bytes = Buffer.byteLength(payload)
-  if (existing?.payload === payload && existing.bytes === bytes) return false
-  const retainedWithoutExisting = lastSessionUpdatePayloadBytes - (existing?.bytes || 0)
-  if (bytes > limits.maxPayloadBytes) {
-    retainSessionIdentityWithoutPayload(id, retainedWithoutExisting)
+  const identityBytes = Buffer.byteLength(identity)
+  const existingBytes = existing ? identityBytes + existing.payloadBytes : 0
+  const retainedWithoutExisting = Math.max(0, lastSessionReplayBytes - existingBytes)
+  const retainedIdentityBytes = retainedWithoutExisting + identityBytes
+  if (retainedIdentityBytes > limits.maxTotalBytes) {
+    if (existing) lastSessionUpdatePayloads.delete(identity)
+    lastSessionReplayBytes = retainedWithoutExisting
+    setLiveSseReplayCache(lastSessionUpdatePayloads.size, lastSessionReplayBytes)
+    recordLiveSseReplayDropped('total_bytes_limit')
+    return false
+  }
+  const payloadBytes = Buffer.byteLength(payload)
+  if (
+    existing?.payload === payload
+    && existing.payloadBytes === payloadBytes
+    && payloadBytes <= limits.maxPayloadBytes
+    && retainedIdentityBytes + payloadBytes <= limits.maxTotalBytes
+  ) return false
+  if (payloadBytes > limits.maxPayloadBytes) {
+    retainSessionIdentityWithoutPayload(identity, retainedIdentityBytes)
     recordLiveSseReplayDropped('payload_limit')
     return false
   }
-  if (retainedWithoutExisting + bytes > limits.maxTotalBytes) {
-    retainSessionIdentityWithoutPayload(id, retainedWithoutExisting)
+  if (retainedIdentityBytes + payloadBytes > limits.maxTotalBytes) {
+    retainSessionIdentityWithoutPayload(identity, retainedIdentityBytes)
     recordLiveSseReplayDropped('total_bytes_limit')
     return false
   }
   // Updating an existing Map key preserves insertion order. Keeping a stable
   // admitted set prevents an over-capacity poll from evicting and then
   // re-admitting every session on the next pass.
-  lastSessionUpdatePayloads.set(id, { payload, bytes })
-  lastSessionUpdatePayloadBytes = retainedWithoutExisting + bytes
-  setLiveSseReplayCache(lastSessionUpdatePayloads.size, lastSessionUpdatePayloadBytes)
+  lastSessionUpdatePayloads.set(identity, { payload, payloadBytes })
+  lastSessionReplayBytes = retainedIdentityBytes + payloadBytes
+  setLiveSseReplayCache(lastSessionUpdatePayloads.size, lastSessionReplayBytes)
   return true
 }
 
 function enforceReplayCacheLimits(limits: LiveConfig['replay']): void {
   let retainedBytes = 0
   let retainedSnapshots = 0
-  for (const [id, snapshot] of lastSessionUpdatePayloads) {
+  for (const [identity, snapshot] of lastSessionUpdatePayloads) {
     if (retainedSnapshots >= limits.maxSnapshots) {
-      lastSessionUpdatePayloads.delete(id)
+      lastSessionUpdatePayloads.delete(identity)
       recordLiveSseReplayDropped('snapshot_limit')
       continue
     }
-    retainedSnapshots++
-    if (snapshot.payload === undefined) continue
-    if (snapshot.bytes > limits.maxPayloadBytes) {
-      lastSessionUpdatePayloads.set(id, { bytes: 0 })
-      recordLiveSseReplayDropped('payload_limit')
-      continue
-    }
-    if (retainedBytes + snapshot.bytes > limits.maxTotalBytes) {
-      lastSessionUpdatePayloads.set(id, { bytes: 0 })
+    const identityBytes = Buffer.byteLength(identity)
+    if (retainedBytes + identityBytes > limits.maxTotalBytes) {
+      lastSessionUpdatePayloads.delete(identity)
       recordLiveSseReplayDropped('total_bytes_limit')
       continue
     }
-    retainedBytes += snapshot.bytes
+    retainedSnapshots++
+    retainedBytes += identityBytes
+    if (snapshot.payload === undefined) continue
+    if (snapshot.payloadBytes > limits.maxPayloadBytes) {
+      lastSessionUpdatePayloads.set(identity, { payloadBytes: 0 })
+      recordLiveSseReplayDropped('payload_limit')
+      continue
+    }
+    if (retainedBytes + snapshot.payloadBytes > limits.maxTotalBytes) {
+      lastSessionUpdatePayloads.set(identity, { payloadBytes: 0 })
+      recordLiveSseReplayDropped('total_bytes_limit')
+      continue
+    }
+    retainedBytes += snapshot.payloadBytes
   }
-  lastSessionUpdatePayloadBytes = retainedBytes
+  lastSessionReplayBytes = retainedBytes
   setLiveSseReplayCache(lastSessionUpdatePayloads.size, retainedBytes)
 }
 
 function retainSessionIdentityWithoutPayload(
-  id: string,
+  identity: string,
   retainedBytes: number,
 ): void {
-  lastSessionUpdatePayloads.set(id, { bytes: 0 })
-  lastSessionUpdatePayloadBytes = retainedBytes
-  setLiveSseReplayCache(lastSessionUpdatePayloads.size, lastSessionUpdatePayloadBytes)
+  lastSessionUpdatePayloads.set(identity, { payloadBytes: 0 })
+  lastSessionReplayBytes = retainedBytes
+  setLiveSseReplayCache(lastSessionUpdatePayloads.size, lastSessionReplayBytes)
 }
 
-function forgetSessionUpdatePayload(id: string): void {
-  const snapshot = lastSessionUpdatePayloads.get(id)
+function forgetSessionUpdatePayloadByIdentity(identity: string): void {
+  const snapshot = lastSessionUpdatePayloads.get(identity)
   if (!snapshot) return
-  lastSessionUpdatePayloads.delete(id)
-  lastSessionUpdatePayloadBytes = Math.max(0, lastSessionUpdatePayloadBytes - snapshot.bytes)
-  setLiveSseReplayCache(lastSessionUpdatePayloads.size, lastSessionUpdatePayloadBytes)
+  lastSessionUpdatePayloads.delete(identity)
+  const entryBytes = Buffer.byteLength(identity) + snapshot.payloadBytes
+  lastSessionReplayBytes = Math.max(0, lastSessionReplayBytes - entryBytes)
+  setLiveSseReplayCache(lastSessionUpdatePayloads.size, lastSessionReplayBytes)
+}
+
+function sessionReplayIdentity(id: string): string {
+  return createHash('sha256')
+    .update('gateway-live-session-replay:v1\0')
+    .update(id)
+    .digest('hex')
 }
 
 function attachLifecycle(client: LiveClient, source: LiveLifecycle | undefined, events: string[], listener: () => void): void {

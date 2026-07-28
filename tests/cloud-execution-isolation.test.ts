@@ -1583,6 +1583,139 @@ test('sandbox provider owns failed-provision orphan cleanup and stays unavailabl
   rmSync(root, { recursive: true, force: true })
 })
 
+test('model-catalog timeout retains one cleanup debt until the sandbox provider retry succeeds', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-model-readiness-cleanup-debt-'))
+  const context = { tenantId: 'tenant-a', sessionId: 'session-model-readiness-cleanup-debt' }
+  const paths = createCloudSessionPathProvider(
+    createCloudPathProvider(root),
+    context.tenantId,
+    context.sessionId,
+  )
+  let runtimeRunArgs: string[] = []
+  let bridgeCloseAttempts = 0
+  let stopAttempts = 0
+  let removeAttempts = 0
+  const readinessServer = createServer((req, res) => {
+    if (respondToSandboxReadinessProbe(req, res)) return
+    const path = new URL(req.url || '/', 'http://127.0.0.1').pathname
+    if (req.method === 'GET' && (path === '/api/provider' || path === '/api/model')) {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        location: { directory: '/workspace', project: { id: 'global', directory: '/' } },
+        data: [],
+      }))
+      return
+    }
+    res.writeHead(404)
+    res.end()
+  })
+  await new Promise<void>((resolveListen) => readinessServer.listen(0, '127.0.0.1', resolveListen))
+  const address = readinessServer.address()
+  assert.ok(address && typeof address !== 'string')
+
+  const provider = createSandboxCloudExecutionIsolationProvider({
+    policy: sandboxPolicy(),
+    workerId: 'sandbox-model-readiness-cleanup-debt-test-worker',
+    runtimeRootPath: root,
+    startupTimeoutMs: 80,
+    orphanCleanupRetryMs: 200,
+    async controlBridgeFactory() {
+      return {
+        url: `http://127.0.0.1:${address.port}`,
+        async close() {
+          bridgeCloseAttempts += 1
+          if (bridgeCloseAttempts === 1) {
+            throw new Error('synthetic transient bridge close failure')
+          }
+        },
+      }
+    },
+    runner: {
+      async run(_command, args) {
+        if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
+        if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
+        if (args[0] === 'image') {
+          return { exitCode: 0, stdout: fakeImageInspection() }
+        }
+        if (args[0] === 'run') {
+          runtimeRunArgs = [...args]
+          return { exitCode: 0, stdout: 'container-id' }
+        }
+        if (args[0] === 'inspect' && args[2] === '{{json .}}') {
+          return {
+            exitCode: 0,
+            stdout: JSON.stringify(fakeBoundaryInspection(runtimeRunArgs, args.at(-1) || '')),
+          }
+        }
+        if (args[0] === 'stop') {
+          stopAttempts += 1
+          return { exitCode: 0 }
+        }
+        if (args[0] === 'rm') {
+          removeAttempts += 1
+          return { exitCode: 0 }
+        }
+        return { exitCode: 1 }
+      },
+    },
+  })
+
+  let cleanupCompletion: Promise<void> | null = null
+  try {
+    await assert.rejects(() => provider.provision({
+      paths,
+      policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+        OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+      }),
+      env: {},
+      config: DEFAULT_CONFIG,
+      execution: context,
+      runtimeConfig: {
+        model: 'or/missing-model',
+        permission: { '*': 'deny' },
+      },
+    }), (error: unknown) => {
+      if (
+        !(error instanceof CloudExecutionCleanupDebtError)
+        || error.reasonCode !== 'sandbox_runtime_teardown_failed'
+      ) return false
+      cleanupCompletion = error.cleanup
+      return true
+    })
+
+    let cleanupResolved = false
+    void cleanupCompletion!.then(() => {
+      cleanupResolved = true
+    })
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 30))
+    assert.equal(bridgeCloseAttempts, 1)
+    assert.equal(stopAttempts, 1)
+    assert.equal(removeAttempts, 1)
+    assert.equal(cleanupResolved, false)
+    assert.equal((await provider.capability()).reasonCode, 'sandbox_orphan_cleanup_pending')
+    assert.doesNotThrow(() => statSync(paths.getRuntimeHomeDir()))
+
+    const cleanupDeadline = Date.now() + 2_000
+    while (!cleanupResolved && Date.now() < cleanupDeadline) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 20))
+    }
+    await cleanupCompletion
+    assert.equal(cleanupResolved, true)
+    assert.equal(bridgeCloseAttempts, 2)
+    assert.equal(stopAttempts, 1)
+    assert.equal(removeAttempts, 1)
+    assert.equal((await provider.capability()).available, true)
+    assert.throws(() => statSync(paths.getRuntimeHomeDir()))
+  } finally {
+    await provider.close?.()
+    await new Promise<void>((resolveClose, reject) => {
+      readinessServer.close((error) => error ? reject(error) : resolveClose())
+    })
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('sandbox provider owns private-runtime cleanup debt after a stopped failed launch', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-boundary-cleanup-debt-'))
   const context = { tenantId: 'tenant-a', sessionId: 'session-cleanup-debt' }

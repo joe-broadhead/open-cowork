@@ -173,7 +173,7 @@ const gauges = {
   alertsActive: new Gauge('gateway_alerts_active', 'Open alerts by severity.'),
   liveSseActive: new Gauge('gateway_live_sse_active', 'Current admitted live SSE clients.'),
   liveSseReplaySnapshots: new Gauge('gateway_live_sse_replay_snapshots', 'Current session identities retained by the bounded live SSE replay cache.'),
-  liveSseReplayBytes: new Gauge('gateway_live_sse_replay_bytes', 'Current serialized payload bytes retained by the bounded live SSE replay cache.'),
+  liveSseReplayBytes: new Gauge('gateway_live_sse_replay_bytes', 'Current identity-fingerprint and serialized payload bytes retained by the bounded live SSE replay cache.'),
 }
 
 const sloLatency = new Histogram('gateway_slo_latency_ms', 'Observed SLO latency observations in milliseconds, labeled by budget id.', LATENCY_BUCKETS_MS)

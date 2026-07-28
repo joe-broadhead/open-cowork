@@ -602,15 +602,23 @@ test('pinned OpenCode V2 enforces the final Cloud policy used by native sessions
     mode: string
     permissions: EffectivePermissionRule[]
   }> = []
+  const expectedAgentNames = ['build', 'plan', 'general', 'explore']
+  const agentCatalogUrl = new URL('/api/agent', server.url)
+  // OpenCode scopes V2 state by Location. On macOS the process cwd may be
+  // canonicalized through /private while the session retains the lexical temp
+  // path, so an unscoped catalog can prove a different, cold Location instance.
+  agentCatalogUrl.searchParams.set('location[directory]', project)
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    const response = await fetch(`${server.url}/api/agent`)
+    const response = await fetch(agentCatalogUrl)
     assert.equal(response.ok, true)
     const payload = await response.json() as { data?: typeof agents }
     agents = payload.data || []
-    if (agents.length) break
+    if (expectedAgentNames.every((name) => agents.some((agent) => agent.id === name))) {
+      break
+    }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 100))
   }
-  for (const name of ['build', 'plan', 'general', 'explore']) {
+  for (const name of expectedAgentNames) {
     const agent = agents.find((candidate) => candidate.id === name)
     assert.ok(agent, `expected OpenCode V2 agent ${name}`)
     assert.equal(

@@ -98,14 +98,12 @@ export class CloudScheduler {
       await recordCloudSchedulerMetric(this.observability, {
         name: 'open_cowork_cloud_scheduler_expired_claims_reaped_total',
         value: reapedCount,
-        schedulerId: this.schedulerId,
         status: 'ok',
       })
     }
     if (drainCapHit) {
       await recordCloudSchedulerMetric(this.observability, {
         name: 'open_cowork_cloud_scheduler_expired_claim_reaper_drain_cap_hits_total',
-        schedulerId: this.schedulerId,
         status: 'cap_hit',
       })
     }
@@ -125,7 +123,6 @@ export class CloudScheduler {
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_claims_total',
       value: claimed,
-      schedulerId: this.schedulerId,
       status: 'ok',
     })
     await this.maybeProcessRetention(now)
@@ -135,7 +132,6 @@ export class CloudScheduler {
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_loop_duration_ms',
       value: Date.now() - startedAt,
-      schedulerId: this.schedulerId,
       status: 'ok',
     })
     return claimed
@@ -150,7 +146,6 @@ export class CloudScheduler {
       await recordCloudSchedulerMetric(this.observability, {
         name: 'open_cowork_cloud_scheduler_scim_sync_processed_total',
         value: result.processed,
-        schedulerId: this.schedulerId,
         status: result.failed > 0 ? 'partial' : 'ok',
       })
     }
@@ -202,7 +197,6 @@ export class CloudScheduler {
       await recordCloudSchedulerMetric(this.observability, {
         name: 'open_cowork_cloud_scheduler_retention_pruned_total',
         value: pruned,
-        schedulerId: this.schedulerId,
         status: 'ok',
       })
     }
@@ -217,7 +211,6 @@ export class CloudScheduler {
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_concurrency_reconciled_total',
       value: touched,
-      schedulerId: this.schedulerId,
       status: 'ok',
     })
   }
@@ -232,7 +225,6 @@ export class CloudScheduler {
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_projection_lag_events',
       value: lag,
-      schedulerId: this.schedulerId,
       status: 'ok',
     })
   }

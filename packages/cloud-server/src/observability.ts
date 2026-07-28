@@ -93,18 +93,74 @@ const LOCAL_PATH_PATTERNS = [
   /\/home\/[^\s"'`:]+/g,
   /[A-Z]:\\Users\\[^\s"'`:]+/gi,
 ]
-const PROMETHEUS_HIGH_CARDINALITY_KEYS = new Set([
-  'duration_ms',
-  'error_message',
-  'request_id',
-  'session_id',
-  'user_id',
-  'account_id',
-  'run_id',
-  'command_id',
-  'delivery_id',
-  'gateway_binding_id',
+// Metric dimensions are fail-closed by key and value. Unknown values collapse
+// to one bounded bucket rather than creating attacker- or tenant-controlled
+// series. New labels require an explicit cardinality and privacy review.
+const METRIC_ATTRIBUTE_ENUM_VALUES = new Map<string, ReadonlySet<string>>([
+  ['cloud_auth_accounting_operation', new Set(['check_backoff', 'record_failure'])],
+  ['cloud_object_store_kind', new Set([
+    'filesystem',
+    's3',
+    'gcs',
+    'azure-blob',
+    'digitalocean-spaces',
+    'minio',
+    'unavailable',
+  ])],
+  ['cloud_role', new Set(['all-in-one', 'web', 'worker', 'scheduler'])],
+  ['http_request_method', new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'])],
+  ['kind', new Set(['metric', 'span'])],
+  ['operation', new Set(['put', 'get', 'head', 'delete', 'legacy_migration_batch'])],
+  ['provider', new Set(['sandbox'])],
+  ['reason', new Set([
+    'queue_full',
+    'queue_timeout',
+    'provision_timeout',
+    'cleanup_pending',
+    'adapter_closing',
+    'invalid-envelope',
+    'unknown-event-type',
+    'no-projected-events',
+    'missing_required_byok',
+    'kms_not_supported',
+    'provider_not_allowed',
+    'provider_not_entitled',
+    'idle_ttl',
+    'max_entries',
+    'shutdown',
+    'unexpected_exit',
+    'sandbox_runtime_teardown_failed',
+    'sandbox_workspace_mask_cleanup_failed',
+    'sandbox_private_runtime_cleanup_failed',
+    'unknown',
+  ])],
+  ['state', new Set(['provisioning'])],
+  ['status', new Set([
+    'ok',
+    'error',
+    'failed',
+    'partial',
+    'started',
+    'ready',
+    'saturated',
+    'backpressure',
+    'cap_hit',
+    'empty',
+    'aborted',
+    'forced',
+    'graceful',
+    'released',
+    'retried',
+    'retry',
+    'save_failed',
+    'stale',
+    'claimed',
+    'denied',
+    'quota_denied',
+    'entitlement_denied',
+  ])],
 ])
+const METRIC_BUILT_IN_PROFILES = new Set(['full', 'focused-agent', 'custom'])
 
 function serviceAttributes(serviceName: string, serviceVersion: string | null | undefined) {
   return {
@@ -165,6 +221,37 @@ export function sanitizeCloudObservabilityAttributes(attributes: CloudObservabil
   return sanitized
 }
 
+export function sanitizeCloudMetricAttributes(attributes: CloudObservabilityAttributes = {}) {
+  const sanitized = sanitizeCloudObservabilityAttributes(attributes)
+  const bounded: Record<string, string | number> = {}
+  for (const [key, value] of Object.entries(sanitized)) {
+    const normalizedKey = key
+      .trim()
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+    if (normalizedKey === 'http_response_status_code') {
+      const statusCode = typeof value === 'number' ? value : Number(value)
+      bounded[normalizedKey] = Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599
+        ? statusCode
+        : 'other'
+      continue
+    }
+    if (normalizedKey === 'cloud_profile') {
+      const profile = String(value).trim().toLowerCase()
+      bounded[normalizedKey] = METRIC_BUILT_IN_PROFILES.has(profile) ? profile : 'custom'
+      continue
+    }
+    const allowedValues = METRIC_ATTRIBUTE_ENUM_VALUES.get(normalizedKey)
+    if (!allowedValues) continue
+    const candidate = normalizedKey === 'http_request_method'
+      ? String(value).trim().toUpperCase()
+      : String(value).trim().toLowerCase()
+    bounded[normalizedKey] = allowedValues.has(candidate) ? candidate : 'other'
+  }
+  return bounded
+}
+
 function sanitizeObservabilityName(value: string, fallback: string) {
   const cleaned = redactCloudAttributeString(value || fallback).slice(0, MAX_STRING_LENGTH)
   return cleaned || fallback
@@ -188,7 +275,7 @@ function sanitizeCloudMetricRecord(record: CloudMetricRecord): CloudMetricRecord
     unit: record.unit === undefined
       ? undefined
       : redactCloudAttributeString(record.unit).slice(0, 64),
-    attributes: sanitizeCloudObservabilityAttributes(record.attributes),
+    attributes: sanitizeCloudMetricAttributes(record.attributes),
   }
 }
 
@@ -219,10 +306,9 @@ function prometheusEscape(value: string) {
 
 function metricLabels(attributes: CloudObservabilityAttributes = {}) {
   const labels: Record<string, string> = {}
-  const sanitized = sanitizeCloudObservabilityAttributes(attributes)
+  const sanitized = sanitizeCloudMetricAttributes(attributes)
   for (const [key, value] of Object.entries(sanitized)) {
     const label = prometheusLabelName(key)
-    if (PROMETHEUS_HIGH_CARDINALITY_KEYS.has(label)) continue
     if (value === null) continue
     labels[label] = String(value).slice(0, 128)
   }
@@ -379,17 +465,18 @@ export function createConsoleCloudObservability(options: ConsoleCloudObservabili
       write(record)
     },
     metric(record) {
+      const metric = sanitizeCloudMetricRecord(record)
       write({
         level: 'debug',
         name: 'cloud.metric',
-        message: record.name,
+        message: metric.name,
         attributes: {
-          ...(record.attributes || {}),
-          metric: record.name,
-          value: record.value,
-          unit: record.unit || '',
+          ...(metric.attributes || {}),
+          metric: metric.name,
+          value: metric.value,
+          unit: metric.unit || '',
         },
-        timestamp: record.timestamp,
+        timestamp: metric.timestamp,
       })
     },
     span(record) {
@@ -415,18 +502,19 @@ export function createPrometheusCloudObservability(): CloudObservabilityAdapter 
   return {
     log() {},
     metric(record) {
-      if (!Number.isFinite(record.value)) return
-      const name = prometheusMetricName(record.name)
-      const labels = metricLabels(record.attributes)
+      const metric = sanitizeCloudMetricRecord(record)
+      if (!Number.isFinite(metric.value)) return
+      const name = prometheusMetricName(metric.name)
+      const labels = metricLabels(metric.attributes)
       const key = metricKey(name, labels)
-      const kind = record.kind || (name.endsWith('_total') ? 'counter' : 'gauge')
+      const kind = metric.kind || (name.endsWith('_total') ? 'counter' : 'gauge')
       const existing = points.get(key)
       points.set(key, {
         kind,
         help: `${name} emitted by Open Cowork Cloud.`,
-        value: kind === 'counter' && record.aggregationTemporality !== 'cumulative'
-          ? (existing?.value || 0) + record.value
-          : record.value,
+        value: kind === 'counter' && metric.aggregationTemporality !== 'cumulative'
+          ? (existing?.value || 0) + metric.value
+          : metric.value,
         labels,
       })
     },
@@ -607,8 +695,9 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
   return {
     log() {},
     metric(record) {
-      if (!Number.isFinite(record.value)) return
-      enqueue(metrics, record, () => {
+      const metric = sanitizeCloudMetricRecord(record)
+      if (!Number.isFinite(metric.value)) return
+      enqueue(metrics, metric, () => {
         droppedMetricsTotal += 1
       })
     },
@@ -634,13 +723,16 @@ export async function recordCloudHttpRequest(
   if (!observability) return
   const timestamp = input.timestamp || new Date()
   const status = input.statusCode >= 500 ? 'error' : 'ok'
-  const attributes = {
-    request_id: input.requestId,
+  const metricAttributes = {
     'http.request.method': input.method,
-    'url.path': input.path,
     'http.response.status_code': input.statusCode,
     'cloud.role': input.role,
     'cloud.profile': input.profileName,
+  }
+  const attributes = {
+    request_id: input.requestId,
+    'url.path': input.path,
+    ...metricAttributes,
   }
   await recordCloudLog(observability, {
     level: input.statusCode >= 500 ? 'error' : input.statusCode >= 400 ? 'warn' : 'info',
@@ -656,33 +748,21 @@ export async function recordCloudHttpRequest(
     name: 'cloud.http.server.duration_ms',
     value: input.durationMs,
     unit: 'ms',
-    attributes,
+    attributes: metricAttributes,
     timestamp,
   })
   await recordCloudMetric(observability, {
     name: 'open_cowork_cloud_http_requests_total',
     value: 1,
     unit: '1',
-    attributes: {
-      'http.request.method': input.method,
-      'url.path': input.path,
-      'http.response.status_code': input.statusCode,
-      'cloud.role': input.role,
-      'cloud.profile': input.profileName,
-    },
+    attributes: metricAttributes,
     timestamp,
   })
   await recordCloudMetric(observability, {
     name: 'open_cowork_cloud_http_request_duration_ms',
     value: input.durationMs,
     unit: 'ms',
-    attributes: {
-      'http.request.method': input.method,
-      'url.path': input.path,
-      'http.response.status_code': input.statusCode,
-      'cloud.role': input.role,
-      'cloud.profile': input.profileName,
-    },
+    attributes: metricAttributes,
     timestamp,
   })
   await observeBestEffort(() => observability.span(sanitizeCloudSpanRecord({
@@ -702,11 +782,7 @@ export async function recordCloudWorkerMetric(
   input: {
     name: string
     value?: number
-    workerId: string
-    tenantId?: string | null
-    sessionId?: string | null
     status?: string | null
-    durationMs?: number | null
     timestamp?: Date
   },
 ) {
@@ -716,9 +792,6 @@ export async function recordCloudWorkerMetric(
     value: input.value ?? 1,
     unit: input.name.endsWith('_ms') ? 'ms' : '1',
     attributes: {
-      worker_id: input.workerId,
-      tenant_id: input.tenantId || undefined,
-      session_id: input.sessionId || undefined,
       status: input.status || undefined,
     },
     timestamp,
@@ -730,9 +803,7 @@ export async function recordCloudSchedulerMetric(
   input: {
     name: string
     value?: number
-    schedulerId: string
     status?: string | null
-    durationMs?: number | null
     timestamp?: Date
   },
 ) {
@@ -742,7 +813,6 @@ export async function recordCloudSchedulerMetric(
     value: input.value ?? 1,
     unit: input.name.endsWith('_ms') ? 'ms' : '1',
     attributes: {
-      scheduler_id: input.schedulerId,
       status: input.status || undefined,
     },
     timestamp,

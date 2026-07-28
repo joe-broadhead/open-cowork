@@ -20,6 +20,7 @@ import {
   translateOpencodeRuntimeEvent,
   translateOpencodeRuntimeEventWithDiagnostics,
 } from '@open-cowork/cloud-server/opencode-runtime-adapter'
+import { CloudExecutionCleanupDebtError } from '@open-cowork/cloud-server/execution-isolation'
 import {
   CLOUD_SESSION_SSE_MAX_BUFFERED_BYTES,
   RUNTIME_EVENT_MAX_DEPTH,
@@ -1080,6 +1081,52 @@ test('connected cloud runtime fails closed with a stable diagnostic when its sel
     assert.equal(serverClosed, true)
   } finally {
     if (!serverClosed) await closeHttpServer(server)
+  }
+})
+
+test('connected cloud runtime preserves typed cleanup debt when model readiness teardown is pending', async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(JSON.stringify({
+      location: { directory: '/workspace', project: { id: 'global', directory: '/' } },
+      data: [],
+    }))
+  })
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen)
+    server.listen(0, '127.0.0.1', resolveListen)
+  })
+  const address = server.address()
+  assert.ok(address && typeof address !== 'string')
+  const cleanup = Promise.resolve()
+  const cleanupDebt = new CloudExecutionCleanupDebtError(
+    'sandbox_runtime_teardown_failed',
+    cleanup,
+  )
+  let closeCalls = 0
+
+  try {
+    await assert.rejects(
+      createConnectedOpencodeCloudRuntimeAdapter({
+        url: `http://127.0.0.1:${address.port}`,
+        auth: {
+          username: 'opencode',
+          password: 'test-password',
+          authorizationHeader: 'Basic test-authorization',
+        },
+        directory: '/workspace',
+        config: { model: 'or/missing-model' },
+        modelReadinessTimeoutMs: 30,
+        closeServer() {
+          closeCalls += 1
+          throw cleanupDebt
+        },
+      }),
+      (error: unknown) => error === cleanupDebt,
+    )
+    assert.equal(closeCalls, 1)
+  } finally {
+    await closeHttpServer(server)
   }
 })
 

@@ -1049,8 +1049,14 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   // pinned Node 22.x (stable/flag-free only on 23.4+).
   assert.match(dockerfile, /CMD \["node", "--experimental-sqlite", "apps\/desktop\/dist\/cloud\/open-cowork-cloud\.mjs"\]/)
 
-  assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/channel-gateway build/)
-  assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/shared build/)
+  assert.match(
+    gatewayDockerfile,
+    /pnpm --filter "@open-cowork\/channel-gateway\.\.\." run build/,
+  )
+  assert.doesNotMatch(
+    gatewayDockerfile,
+    /pnpm --filter @open-cowork\/shared build/,
+  )
   assert.match(gatewayDockerfile, /COPY open-cowork\.config\.json open-cowork\.config\.schema\.json/)
   assert.match(gatewayDockerfile, /COPY scripts \.\/scripts/)
   assert.match(gatewayDockerfile, /prune-gateway-runtime\.mjs \/runtime/)
@@ -1251,6 +1257,8 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   assert.match(packageJson, /"release:gates:validate": "node scripts\/validate-release-gates\.mjs"/)
   assert.match(validator, /open_cowork_cloud_http_requests_total/)
   assert.match(validator, /open_cowork_gateway_delivery_dead_letters_total/)
+  assert.doesNotMatch(dashboard, /url_path/)
+  assert.match(catalog, /Raw routes are never metric labels/)
 
   for (const metric of [
     'open_cowork_cloud_http_requests_total',

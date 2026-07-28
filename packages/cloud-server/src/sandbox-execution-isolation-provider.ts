@@ -208,7 +208,7 @@ export function createSandboxCloudExecutionIsolationProvider(
           if (!ownerClaim.owned) {
             throw new CloudExecutionIsolationError(ownerClaim.reasonCode)
           }
-          const cleaned = await sweepSandboxWorkerOrphans({
+          await sweepSandboxWorkerOrphans({
             options,
             workerOwner,
             leaseId,
@@ -217,7 +217,7 @@ export function createSandboxCloudExecutionIsolationProvider(
           await recordBoundaryMetric(
             options,
             'open_cowork_cloud_isolation_startup_orphan_cleanup_total',
-            { status: 'ok', cleaned },
+            { status: 'ok' },
           )
           return {
             ok: true,
@@ -624,6 +624,7 @@ export function createSandboxCloudExecutionIsolationProvider(
         let monitor: NodeJS.Timeout | null = null
         let closed = false
         let boundaryClosePromise: Promise<void> | null = null
+        let cleanupState: PendingCleanup | null = null
         try {
         await recordBoundaryMetric(options, 'open_cowork_cloud_isolation_provision_total', {
           status: 'started',
@@ -720,7 +721,7 @@ export function createSandboxCloudExecutionIsolationProvider(
         })
         throwIfProvisionAborted(provisionInput)
 
-        const cleanupState: PendingCleanup = {
+        cleanupState = {
           plan,
           provisionInput,
           privateRuntimeScope,
@@ -731,6 +732,7 @@ export function createSandboxCloudExecutionIsolationProvider(
           cleaned: false,
           cleanupPromise: null,
         }
+        const ownedCleanupState = cleanupState
         const adapter = await createConnectedOpencodeCloudRuntimeAdapter({
           url,
           auth,
@@ -742,18 +744,18 @@ export function createSandboxCloudExecutionIsolationProvider(
               clearInterval(monitor)
               monitor = null
             }
-            const failure = await attemptCleanup(cleanupState)
+            const failure = await attemptCleanup(ownedCleanupState)
             if (failure) {
-              pendingCleanup.add(cleanupState)
+              pendingCleanup.add(ownedCleanupState)
               scheduleOrphanCleanup()
               throw new CloudExecutionCleanupDebtError(
                 failure,
-                cleanupCompletion(cleanupState).promise,
+                cleanupCompletion(ownedCleanupState).promise,
               )
             }
-            activeBoundaries.delete(cleanupState)
-            pendingCleanup.delete(cleanupState)
-            resolveCleanupCompletion(cleanupState)
+            activeBoundaries.delete(ownedCleanupState)
+            pendingCleanup.delete(ownedCleanupState)
+            resolveCleanupCompletion(ownedCleanupState)
           },
         })
         throwIfProvisionAborted(provisionInput)
@@ -774,7 +776,7 @@ export function createSandboxCloudExecutionIsolationProvider(
           })
         }, 2_000)
         monitor.unref?.()
-        cleanupState.monitor = monitor
+        ownedCleanupState.monitor = monitor
 
         const attestation: CloudExecutionIsolationAttestation = {
           ...providerCapability,
@@ -791,7 +793,7 @@ export function createSandboxCloudExecutionIsolationProvider(
           throw redactedFailure('sandbox_orphan_cleanup_pending')
         }
         if (providerClosing) throw redactedFailure('sandbox_provider_closing')
-        activeBoundaries.add(cleanupState)
+        activeBoundaries.add(ownedCleanupState)
         return {
           adapter,
           attestation,
@@ -827,7 +829,14 @@ export function createSandboxCloudExecutionIsolationProvider(
         } catch (error) {
         if (monitor) clearInterval(monitor)
         if (envFile) rmSync(envFile, { force: true })
-        const cleanupState: PendingCleanup = {
+        if (error instanceof CloudExecutionCleanupDebtError) {
+          await recordBoundaryMetric(options, 'open_cowork_cloud_isolation_provision_total', {
+            status: 'failed',
+            reason: error.reasonCode,
+          })
+          throw error
+        }
+        const failedCleanupState = cleanupState || {
           plan,
           provisionInput,
           privateRuntimeScope,
@@ -838,13 +847,17 @@ export function createSandboxCloudExecutionIsolationProvider(
           cleaned: false,
           cleanupPromise: null,
         }
-        const cleanupFailure = await attemptCleanup(cleanupState)
+        const cleanupFailure = await attemptCleanup(failedCleanupState)
         const cleanupDebt = cleanupFailure
-          ? cleanupCompletion(cleanupState)
+          ? cleanupCompletion(failedCleanupState)
           : null
         if (cleanupFailure) {
-          pendingCleanup.add(cleanupState)
+          pendingCleanup.add(failedCleanupState)
           scheduleOrphanCleanup()
+        } else {
+          activeBoundaries.delete(failedCleanupState)
+          pendingCleanup.delete(failedCleanupState)
+          resolveCleanupCompletion(failedCleanupState)
         }
         await recordBoundaryMetric(options, 'open_cowork_cloud_isolation_provision_total', {
           status: 'failed',

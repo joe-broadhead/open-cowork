@@ -61,6 +61,7 @@ const docsWorkflow = readFileSync(new URL('../.github/workflows/docs.yml', impor
 const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
 const monthlyMaintenanceWorkflow = readFileSync(new URL('../.github/workflows/monthly-maintenance.yml', import.meta.url), 'utf8')
 const weeklyGatewayWorkflow = readFileSync(new URL('../.github/workflows/weekly-gateway.yml', import.meta.url), 'utf8')
+const gatewayWorkflow = readFileSync(new URL('../.github/workflows/ci-gateway.yml', import.meta.url), 'utf8')
 const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', import.meta.url), 'utf8')
 const npmrc = readFileSync(new URL('../.npmrc', import.meta.url), 'utf8')
 const readmeDocs = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
@@ -80,6 +81,21 @@ const linuxNode22PerfBaseline = JSON.parse(readFileSync(new URL('../benchmarks/p
 const nvmrc = readFileSync(new URL('../.nvmrc', import.meta.url), 'utf8').trim()
 const packagingDocs = readFileSync(new URL('../docs/packaging-and-releases.md', import.meta.url), 'utf8')
 const smokeHelpers = readFileSync(new URL('../apps/desktop/tests/smoke-helpers.ts', import.meta.url), 'utf8')
+// Knip inventories the entire monorepo. Loaded coverage runners can make a
+// healthy inventory exceed the narrow local budget without changing its output.
+const DEAD_CODE_REPORT_TIMEOUT_MS = 60_000
+
+function uninstrumentedChildEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = {
+    ...process.env,
+    ...overrides,
+  }
+  // The test runner restores its coverage directory when this key is absent.
+  // An explicit empty value keeps nested package-manager processes out of the
+  // repository coverage denominator.
+  env.NODE_V8_COVERAGE = ''
+  return env
+}
 
 function requireScript(name: string, source: PackageJson = packageJson): string {
   const script = source.scripts?.[name]
@@ -306,11 +322,10 @@ test('pnpm topological execution invokes each dependency once and fails determin
       ['--dir', fixtureRoot, '--recursive', 'run', 'build'],
       {
         encoding: 'utf8',
-        env: {
-          ...process.env,
+        env: uninstrumentedChildEnv({
           OPEN_COWORK_BUILD_INVOCATIONS: invocationLog,
           OPEN_COWORK_FAIL_BUILD: failPackage,
-        },
+        }),
         timeout: 10_000,
       },
     )
@@ -330,6 +345,7 @@ test('pnpm topological execution invokes each dependency once and fails determin
       join(fixtureRoot, 'record-build.mjs'),
       [
         "import { appendFileSync } from 'node:fs'",
+        "if (process.env.NODE_V8_COVERAGE) throw new Error('Topology fixtures must not inherit repository coverage instrumentation.')",
         'const name = process.argv[2]',
         "appendFileSync(process.env.OPEN_COWORK_BUILD_INVOCATIONS, `${name}\\n`)",
         'if (process.env.OPEN_COWORK_FAIL_BUILD === name) process.exit(17)',
@@ -407,11 +423,10 @@ test('root build selection follows the real workspace DAG exactly once in a seri
     ],
     {
       encoding: 'utf8',
-      env: {
-        ...process.env,
+      env: uninstrumentedChildEnv({
         OPEN_COWORK_BUILD_INVOCATIONS: invocationLog,
         OPEN_COWORK_FAIL_BUILD: failPackage,
-      },
+      }),
       timeout: 20_000,
     },
   )
@@ -424,6 +439,7 @@ test('root build selection follows the real workspace DAG exactly once in a seri
       recorderPath,
       [
         "import { appendFileSync, readFileSync } from 'node:fs'",
+        "if (process.env.NODE_V8_COVERAGE) throw new Error('Topology fixtures must not inherit repository coverage instrumentation.')",
         "const manifest = JSON.parse(readFileSync('package.json', 'utf8'))",
         "if (typeof manifest.scripts?.build !== 'string') process.exit(0)",
         'const name = manifest.name',
@@ -607,7 +623,7 @@ test('dead-code report detects an intentionally unused file and emits JSON direc
     {
       cwd: fileURLToPath(repoRoot),
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: DEAD_CODE_REPORT_TIMEOUT_MS,
     },
   )
 
@@ -626,7 +642,7 @@ test('dead-code report is byte-stable across repeated full inventories', () => {
       cwd: fileURLToPath(repoRoot),
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
-      timeout: 15_000,
+      timeout: DEAD_CODE_REPORT_TIMEOUT_MS,
     },
   )
   const first = runReport()
@@ -673,6 +689,13 @@ test('contributor setup docs and dependency update governance match enforced eng
   ]) {
     assert.match(dependabotConfig, new RegExp(`package-ecosystem: "docker"[\\s\\S]*directory: "${directory}"`))
   }
+})
+
+test('Gateway CI builds its complete dist-only workspace dependency closure once', () => {
+  const closureBuild = 'pnpm --filter "cowork-gateway..." run build'
+  assert.equal(gatewayWorkflow.split(closureBuild).length - 1, 1)
+  assert.doesNotMatch(gatewayWorkflow, /pnpm --filter @open-cowork\/gateway-provider-\S+ build/)
+  assert.doesNotMatch(gatewayWorkflow, /pnpm --filter cowork-gateway build/)
 })
 
 test('pnpm audit policy is explicit and wired through repository scripts', () => {

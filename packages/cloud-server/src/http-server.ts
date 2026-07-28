@@ -198,10 +198,6 @@ function isRequestPolicyError(error: unknown): error is CloudHttpError | CloudSe
   return error instanceof CloudHttpError || error instanceof CloudServiceError
 }
 
-function authAccountingErrorType(error: unknown) {
-  return error instanceof Error && error.name ? error.name : typeof error
-}
-
 type RouteContext = {
   principal: CloudPrincipal
   authSource: 'cookie' | 'resolver'
@@ -1593,14 +1589,13 @@ export class CloudHttpServer {
     }
   }
 
-  private async recordAuthAccountingError(operation: AuthAccountingOperation, error: unknown) {
+  private async recordAuthAccountingError(operation: AuthAccountingOperation) {
     await recordCloudMetric(this.options.observability, {
       name: 'open_cowork_cloud_auth_accounting_errors_total',
       value: 1,
       unit: '1',
       attributes: {
         'cloud.auth.accounting.operation': operation,
-        'error.type': authAccountingErrorType(error),
       },
     })
   }
@@ -1616,7 +1611,7 @@ export class CloudHttpServer {
     }
     for (const result of results) {
       if (result.status === 'rejected') {
-        await this.recordAuthAccountingError('check_backoff', result.reason)
+        await this.recordAuthAccountingError('check_backoff')
       }
     }
   }
@@ -1627,7 +1622,7 @@ export class CloudHttpServer {
     )))
     for (const result of results) {
       if (result.status === 'rejected') {
-        await this.recordAuthAccountingError('record_failure', result.reason)
+        await this.recordAuthAccountingError('record_failure')
       }
     }
   }
@@ -1651,7 +1646,7 @@ export class CloudHttpServer {
     }
   }
 
-  private async recordPolicyErrorMetric(error: CloudHttpError | CloudServiceError, req: IncomingMessage, url: URL) {
+  private async recordPolicyErrorMetric(error: CloudHttpError | CloudServiceError, req: IncomingMessage) {
     const policyCode = error.policyCode || ''
     const isQuotaRejection = error.status === 429 || policyCode.startsWith('quota.') || policyCode.startsWith('rate_limit.')
     const isAuthFailure = error.status === 401 || policyCode.startsWith('auth.')
@@ -1667,11 +1662,9 @@ export class CloudHttpServer {
       unit: '1',
       attributes: {
         'http.request.method': req.method || 'GET',
-        'url.path': url.pathname,
         'http.response.status_code': error.status,
         'cloud.role': this.options.policy.role,
         'cloud.profile': this.options.policy.profileName,
-        policy_code: policyCode || undefined,
       },
     })
   }
@@ -1898,7 +1891,7 @@ export class CloudHttpServer {
       })
     } catch (error) {
       if (error instanceof CloudHttpError) {
-        await this.recordPolicyErrorMetric(error, req, url)
+        await this.recordPolicyErrorMetric(error, req)
         writeError(res, error.status, error.publicMessage, requestOptions.corsOrigin, {
           policyCode: error.policyCode,
           retryAfterMs: error.retryAfterMs,
@@ -1906,7 +1899,7 @@ export class CloudHttpServer {
         return
       }
       if (error instanceof CloudServiceError) {
-        await this.recordPolicyErrorMetric(error, req, url)
+        await this.recordPolicyErrorMetric(error, req)
         writeError(res, error.status, error.publicMessage, requestOptions.corsOrigin, {
           policyCode: error.policyCode,
           retryAfterMs: error.retryAfterMs,

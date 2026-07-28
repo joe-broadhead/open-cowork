@@ -900,11 +900,6 @@ async function recordLoopError(
     name: 'open_cowork_cloud_loop_errors_total',
     value: 1,
     unit: '1',
-    attributes: {
-      loop: name,
-      ...attributes,
-      error_name: error instanceof Error ? error.name : 'Error',
-    },
   })
   await recordCloudLog(observability, {
     level: 'error',
@@ -1010,7 +1005,6 @@ function startWorkerLoop(
       .catch(async (error) => {
         await recordCloudWorkerMetric(observability, {
           name: 'open_cowork_cloud_worker_loop_failures_total',
-          workerId: 'loop',
           status: 'error',
         })
         await recordLoopError(observability, 'cloud.worker.loop.error', error)
@@ -1046,7 +1040,6 @@ function startSchedulerLoop(
       .catch(async (error) => {
         await recordCloudSchedulerMetric(observability, {
           name: 'open_cowork_cloud_scheduler_failures_total',
-          schedulerId: 'loop',
           status: 'error',
         })
         await recordLoopError(observability, 'cloud.scheduler.loop.error', error)
@@ -1623,7 +1616,6 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
             value: 1,
             unit: '1',
             attributes: {
-              sdk_event_type: event.sdkEventType || 'unknown',
               reason: event.reason,
           },
         })
