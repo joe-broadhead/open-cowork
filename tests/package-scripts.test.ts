@@ -141,19 +141,19 @@ function knipConfigForWorkspace(workspace: string): KnipJson['workspaces'][strin
 test('root node test scripts prepare generated shared artifacts before tests run', () => {
   assert.deepEqual(splitScriptSteps(requireScript('test:prepare')), [
     'pnpm design-tokens:build',
-    "pnpm --recursive --filter './packages/*' --filter './mcps/*' --filter @open-cowork/channel-gateway --filter @open-cowork/standalone-gateway run build",
+    'pnpm --recursive --filter "./packages/*" --filter "./mcps/*" --filter @open-cowork/channel-gateway --filter @open-cowork/standalone-gateway run build',
     'node scripts/ensure-electron-binary.mjs',
   ])
 
   assert.deepEqual(splitScriptSteps(requireScript('test')), [
     'pnpm test:prepare',
-    "pnpm --recursive --filter './packages/*' --filter './mcps/*' --filter @open-cowork/channel-gateway --filter @open-cowork/standalone-gateway run test",
+    'pnpm --recursive --filter "./packages/*" --filter "./mcps/*" --filter @open-cowork/channel-gateway --filter @open-cowork/standalone-gateway run test',
     'node scripts/run-node-tests.mjs',
   ])
 
   assert.deepEqual(splitScriptSteps(requireScript('test:coverage:node')), [
     'pnpm test:prepare',
-    "pnpm --recursive --filter './packages/*' --filter './mcps/*' --filter @open-cowork/channel-gateway --filter @open-cowork/standalone-gateway run test",
+    'pnpm --recursive --filter "./packages/*" --filter "./mcps/*" --filter @open-cowork/channel-gateway --filter @open-cowork/standalone-gateway run test',
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/run-workspace-node-tests.mjs --coverage',
     'node scripts/coverage-summary.mjs --check --node-only --no-write',
@@ -257,18 +257,28 @@ test('scoped tests reject missing or stale workspace distribution artifacts', ()
 test('root build, typecheck, and test preparation each use one topological build pass', () => {
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
     'pnpm design-tokens:build',
-    "pnpm --recursive --filter './packages/*' --filter './mcps/*' --filter './apps/*' run build",
+    'pnpm --recursive --filter "./packages/*" --filter "./mcps/*" --filter "./apps/*" run build',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
     'pnpm design-tokens:build',
-    "pnpm --recursive --filter './packages/*' run build",
-    "pnpm --recursive --filter @open-cowork/app --filter @open-cowork/cloud-server --filter './mcps/*' --filter './apps/*' run typecheck",
+    'pnpm --recursive --filter "./packages/*" run build',
+    'pnpm --recursive --filter @open-cowork/app --filter @open-cowork/cloud-server --filter "./mcps/*" --filter "./apps/*" run typecheck',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('test:prepare')), [
     'pnpm design-tokens:build',
-    "pnpm --recursive --filter './packages/*' --filter './mcps/*' --filter @open-cowork/channel-gateway --filter @open-cowork/standalone-gateway run build",
+    'pnpm --recursive --filter "./packages/*" --filter "./mcps/*" --filter @open-cowork/channel-gateway --filter @open-cowork/standalone-gateway run build',
     'node scripts/ensure-electron-binary.mjs',
   ])
+})
+
+test('root pnpm filters are portable across POSIX and Windows script shells', () => {
+  for (const [name, script] of Object.entries(packageJson.scripts || {})) {
+    assert.doesNotMatch(
+      script,
+      /--filter\s+'[^']+'/,
+      `${name} must not use POSIX-only single-quoted pnpm filters`,
+    )
+  }
 })
 
 test('pnpm topological execution invokes each dependency once and fails deterministically', (t) => {
@@ -824,28 +834,28 @@ test('desktop Electron development resolves workspace packages from source witho
 test('root build and dist scripts preserve release build prerequisites', () => {
   assert.equal(
     requireScript('build:desktop'),
-    "pnpm design-tokens:build && pnpm --filter '@open-cowork/desktop...' run build",
+    'pnpm design-tokens:build && pnpm --filter "@open-cowork/desktop..." run build',
   )
   assert.equal(
     requireScript('build:mcps'),
-    "pnpm --recursive --filter '@open-cowork/mcp-*...' run build",
+    'pnpm --recursive --filter "@open-cowork/mcp-*..." run build',
   )
   assert.equal(
     requireScript('build:packages'),
-    "pnpm --recursive --filter './packages/*' run build",
+    'pnpm --recursive --filter "./packages/*" run build',
   )
   assert.equal(
     requireScript('build:gateway'),
-    "pnpm --filter '@open-cowork/channel-gateway...' run build",
+    'pnpm --filter "@open-cowork/channel-gateway..." run build',
   )
   assert.equal(
     requireScript('build:standalone-gateway'),
-    "pnpm --filter '@open-cowork/standalone-gateway...' run build",
+    'pnpm --filter "@open-cowork/standalone-gateway..." run build',
   )
 
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
     'pnpm design-tokens:build',
-    "pnpm --recursive --filter './packages/*' --filter './mcps/*' --filter './apps/*' run build",
+    'pnpm --recursive --filter "./packages/*" --filter "./mcps/*" --filter "./apps/*" run build',
   ])
 
   assert.deepEqual(splitScriptSteps(requireScript('dist')), [
@@ -892,25 +902,25 @@ test('shared renderer package owns the renderer test + browser build scripts', (
 test('root typecheck script covers package, MCP, gateway, and desktop surfaces', () => {
   assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
     'pnpm design-tokens:build',
-    "pnpm --recursive --filter './packages/*' run build",
-    "pnpm --recursive --filter @open-cowork/app --filter @open-cowork/cloud-server --filter './mcps/*' --filter './apps/*' run typecheck",
+    'pnpm --recursive --filter "./packages/*" run build',
+    'pnpm --recursive --filter @open-cowork/app --filter @open-cowork/cloud-server --filter "./mcps/*" --filter "./apps/*" run typecheck',
   ])
 
   assert.equal(
     requireScript('typecheck:cloud-server'),
-    "pnpm --filter '@open-cowork/cloud-server^...' run build && pnpm --filter @open-cowork/cloud-server run typecheck",
+    'pnpm --filter "@open-cowork/cloud-server^..." run build && pnpm --filter @open-cowork/cloud-server run typecheck',
   )
   assert.equal(
     requireScript('typecheck:mcps'),
-    "pnpm --filter '@open-cowork/mcp-*^...' run build && pnpm --recursive --filter './mcps/*' run typecheck",
+    'pnpm --filter "@open-cowork/mcp-*^..." run build && pnpm --recursive --filter "./mcps/*" run typecheck',
   )
   assert.equal(
     requireScript('typecheck:gateway'),
-    "pnpm --filter '@open-cowork/channel-gateway^...' run build && pnpm --filter @open-cowork/channel-gateway run typecheck",
+    'pnpm --filter "@open-cowork/channel-gateway^..." run build && pnpm --filter @open-cowork/channel-gateway run typecheck',
   )
   assert.equal(
     requireScript('typecheck:standalone-gateway'),
-    "pnpm --filter '@open-cowork/standalone-gateway^...' run build && pnpm --filter @open-cowork/standalone-gateway run typecheck",
+    'pnpm --filter "@open-cowork/standalone-gateway^..." run build && pnpm --filter @open-cowork/standalone-gateway run typecheck',
   )
 })
 
