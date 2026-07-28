@@ -124,6 +124,97 @@ test('getSessionView does not invoke provider accessors or retain shared source 
   }, TypeError)
 })
 
+test('getSessionView safely detaches arrays without invoking their accessors or iterators', () => {
+  const engine = createSessionEngine()
+  const sessionId = 'ses_provider_array_accessors'
+  const shared = { path: 'before.md' }
+  let indexAccessorReads = 0
+  let iteratorReads = 0
+  const values: unknown[] = []
+  Object.defineProperty(values, '0', {
+    enumerable: true,
+    get() {
+      indexAccessorReads += 1
+      throw new Error('provider array accessor must not execute')
+    },
+  })
+  Object.defineProperty(values, Symbol.iterator, {
+    get() {
+      iteratorReads += 1
+      throw new Error('provider array iterator must not execute')
+    },
+  })
+  values.length = 6
+  values[1] = shared
+  values[2] = undefined
+  values[3] = () => 'not cloneable'
+  values[5] = shared
+  Object.defineProperty(values, 'extra', {
+    value: shared,
+    enumerable: true,
+  })
+  Object.defineProperty(values, '__proto__', {
+    value: { spoofed: 'inherited' },
+    enumerable: true,
+  })
+  const sparse: unknown[] = []
+  sparse.length = 0xffff_ffff
+  Object.defineProperty(sparse, 'extra', {
+    value: shared,
+    enumerable: true,
+  })
+  const input = { sparse, values }
+
+  engine.activateSession(sessionId)
+  engine.applyStreamEvent({
+    type: 'tool_call',
+    sessionId,
+    data: {
+      type: 'tool_call',
+      id: 'tool-array-accessor',
+      name: 'provider-tool',
+      input,
+      status: 'complete',
+    },
+  } as never)
+  indexAccessorReads = 0
+  iteratorReads = 0
+
+  const projectedInput = (engine.getSessionView(sessionId).toolCalls[0]?.input as {
+    sparse: unknown[] & { extra: { path: string } }
+    values: unknown[] & { extra: { path: string } }
+  })
+  const projectedSparse = projectedInput.sparse
+  const projectedArray = projectedInput.values
+  assert.equal(indexAccessorReads, 0)
+  assert.equal(iteratorReads, 0)
+  assert.equal(projectedArray.length, 6)
+  assert.equal(projectedArray[0], undefined)
+  assert.equal(Object.hasOwn(projectedArray, '0'), false)
+  assert.notEqual(projectedArray[1], values[1])
+  assert.deepEqual(projectedArray[1], { path: 'before.md' })
+  assert.equal(Object.hasOwn(projectedArray, '2'), false)
+  assert.equal(Object.hasOwn(projectedArray, '3'), false)
+  assert.equal(Object.hasOwn(projectedArray, '4'), false)
+  assert.equal(projectedArray[5], projectedArray[1])
+  assert.equal(projectedArray.extra, projectedArray[1])
+  assert.equal(Object.getPrototypeOf(projectedArray), Array.prototype)
+  assert.equal(Object.hasOwn(projectedArray, Symbol.iterator), false)
+  assert.equal(Object.hasOwn(projectedArray, '__proto__'), true)
+  assert.deepEqual(Reflect.get(projectedArray, '__proto__'), { spoofed: 'inherited' })
+  assert.equal(Reflect.get(projectedArray, 'spoofed'), undefined)
+  assert.equal(
+    JSON.stringify(projectedArray),
+    '[null,{"path":"before.md"},null,null,null,{"path":"before.md"}]',
+  )
+  assert.equal(Object.isFrozen(projectedArray), true)
+  assert.equal(Object.isFrozen(projectedArray[1]), true)
+  assert.equal(projectedSparse.length, 0xffff_ffff)
+  assert.deepEqual(Object.keys(projectedSparse), ['extra'])
+  assert.equal(projectedSparse.extra, projectedArray[1])
+  assert.equal(Object.isFrozen(projectedSparse), true)
+})
+
 test('getSessionView preserves arbitrary provider keys without changing the clone prototype', () => {
   const engine = createSessionEngine()
   const sessionId = 'ses_provider_proto_key'

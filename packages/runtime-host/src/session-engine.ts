@@ -45,8 +45,8 @@ const OMIT_SESSION_VIEW_VALUE = Symbol('omit-session-view-value')
  * Detach, normalize, and freeze a SessionView in one traversal. Only own,
  * enumerable data properties cross this read boundary: provider prototypes,
  * functions, symbols, undefined values, and accessors are not executable
- * session data. Arrays retain their shape by replacing omitted entries with
- * null; objects omit those properties, matching JSON serialization semantics.
+ * session data. Arrays preserve their length and leave unsupported entries
+ * empty (serialized as null); objects omit unsupported properties.
  */
 function cloneAndFreezeSessionView(
   value: unknown,
@@ -65,32 +65,80 @@ function cloneAndFreezeSessionView(
   if (Array.isArray(value)) {
     const clone: unknown[] = []
     seen.set(value, clone)
-    for (const item of value) {
-      const normalized = cloneAndFreezeSessionView(item, seen)
-      clone.push(normalized === OMIT_SESSION_VIEW_VALUE ? null : normalized)
+    let length = 0
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(value, 'length')
+      if (descriptor
+        && Object.hasOwn(descriptor, 'value')
+        && typeof descriptor.value === 'number'
+        && Number.isInteger(descriptor.value)
+        && descriptor.value >= 0
+        && descriptor.value <= 0xffff_ffff) {
+        length = descriptor.value
+      }
+    } catch {
+      return Object.freeze(clone)
+    }
+    clone.length = length
+    let keys: string[]
+    try {
+      keys = Object.keys(value)
+    } catch {
+      return Object.freeze(clone)
+    }
+    const cloneRecord = clone as unknown as Record<string, unknown>
+    for (const key of keys) {
+      let descriptor: PropertyDescriptor | undefined
+      try {
+        descriptor = Object.getOwnPropertyDescriptor(value, key)
+      } catch {
+        continue
+      }
+      if (!descriptor?.enumerable || !Object.hasOwn(descriptor, 'value')) continue
+      const normalized = cloneAndFreezeSessionView(descriptor.value, seen)
+      if (normalized === OMIT_SESSION_VIEW_VALUE) continue
+      if (key === '__proto__') {
+        Object.defineProperty(clone, key, {
+          value: normalized,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        })
+      } else {
+        cloneRecord[key] = normalized
+      }
     }
     return Object.freeze(clone)
   }
 
   const clone: Record<string, unknown> = {}
   seen.set(value, clone)
-  let descriptors: Record<string, PropertyDescriptor>
+  let keys: string[]
   try {
-    descriptors = Object.getOwnPropertyDescriptors(value)
+    keys = Object.keys(value)
   } catch {
     return Object.freeze(clone)
   }
-  for (const key of Object.keys(descriptors)) {
-    const descriptor = descriptors[key]
+  for (const key of keys) {
+    let descriptor: PropertyDescriptor | undefined
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key)
+    } catch {
+      continue
+    }
     if (!descriptor?.enumerable || !Object.hasOwn(descriptor, 'value')) continue
     const normalized = cloneAndFreezeSessionView(descriptor.value, seen)
     if (normalized === OMIT_SESSION_VIEW_VALUE) continue
-    Object.defineProperty(clone, key, {
-      value: normalized,
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    })
+    if (key === '__proto__') {
+      Object.defineProperty(clone, key, {
+        value: normalized,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      })
+    } else {
+      clone[key] = normalized
+    }
   }
   return Object.freeze(clone)
 }
