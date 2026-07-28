@@ -24,6 +24,7 @@ import {
   buildSmokeProviderOverride,
   invokeStdioMcpTool,
 } from './cloud-bundle-smoke-core.mjs'
+import { resolveEffectiveCloudRuntimeConfig } from './cloud-runtime-prune-core.mjs'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const runtimeRootIndex = process.argv.indexOf('--runtime-root')
@@ -133,15 +134,15 @@ async function assertSmokeConfigLoaded(input) {
       resolve(runtimeRoot, 'packages/runtime-host/dist/config.js'),
     ).href
     const configModule = await import(`${configModuleUrl}?cloud-smoke=${Date.now()}`)
-    const config = configModule.getAppConfig()
+    const effectiveConfig = resolveEffectiveCloudRuntimeConfig(configModule.getAppConfig())
     const error = configModule.getConfigError()
     if (error) {
       throw new Error(`Cloud smoke config was rejected: ${error}`)
     }
-    if (!config.cloud.profiles['cloud-smoke']?.agents?.includes('build')) {
+    if (!effectiveConfig.cloud.profiles['cloud-smoke']?.agents?.includes('build')) {
       throw new Error('Cloud smoke config did not enable the build agent')
     }
-    const unsupportedBareMcp = config.mcps.find((mcp) => (
+    const unsupportedBareMcp = effectiveConfig.mcps.find((mcp) => (
       mcp.type === 'local'
       && Array.isArray(mcp.command)
       && !mcp.packageName
@@ -151,11 +152,11 @@ async function assertSmokeConfigLoaded(input) {
         `Cloud smoke config advertises unsupported bare local MCP ${unsupportedBareMcp.name}`,
       )
     }
-    const configuredBaseURL = config.providers.descriptors.openrouter?.options?.baseURL
+    const configuredBaseURL = effectiveConfig.providers.descriptors.openrouter?.options?.baseURL
     if (configuredBaseURL !== input.providerBaseURL) {
       throw new Error('Cloud smoke config did not preserve the loopback provider adapter URL')
     }
-    if (config.providers.defaultModel !== 'cloud-smoke-model') {
+    if (effectiveConfig.providers.defaultModel !== 'cloud-smoke-model') {
       throw new Error('Cloud smoke config did not preserve the deterministic default model')
     }
   } finally {

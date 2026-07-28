@@ -939,12 +939,16 @@ test('cloud bundle import smoke explicitly opts into local development isolation
   assert.match(script, /assertRuntimeExternalResolutionsContained/)
   assert.match(script, /buildSmokeProviderOverride/)
   assert.match(script, /invokeStdioMcpTool/)
+  assert.match(
+    script,
+    /effectiveConfig = resolveEffectiveCloudRuntimeConfig\(configModule\.getAppConfig\(\)\)/,
+  )
   assert.match(script, /Cloud smoke config advertises unsupported bare local MCP/)
   assert.doesNotMatch(script, /\.\.\.process\.env/)
   assert.match(script, /\/api\/sessions/)
   assert.match(script, /\/prompt/)
   assert.match(script, /mcps\/charts\/dist\/index\.js/)
-  assert.match(script, /config\.providers\.defaultModel !== 'cloud-smoke-model'/)
+  assert.match(script, /effectiveConfig\.providers\.defaultModel !== 'cloud-smoke-model'/)
   const providerValidation = script.indexOf('/api/byok/openrouter/validate')
   const evidenceReset = script.indexOf('provider.resetEvidence()', providerValidation)
   const sessionPrompt = script.indexOf('/prompt', evidenceReset)
