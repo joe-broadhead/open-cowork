@@ -4,12 +4,11 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-# .npmrc carries public-hoist-pattern[]=ajv — without it the frozen install leaves
-# ajv nested in the .pnpm store and the externalized cloud bundle can't resolve it.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps ./apps
 COPY packages ./packages
 COPY mcps ./mcps
+COPY skills ./skills
 COPY scripts ./scripts
 COPY open-cowork.config.json open-cowork.config.schema.json ./
 COPY tsconfig.base.json ./
@@ -31,10 +30,11 @@ WORKDIR /app
 
 RUN npm install --global corepack@0.35.0 && corepack enable
 
-# The pruned runtime tree carries the root manifests (.npmrc's public-hoist
-# patterns must reach the --prod install or the externalized cloud bundle can't
-# resolve ajv/pg), the per-package package.json + dist pairs, config + schema,
-# and the MIT license + curated third-party attribution set (LIC-03).
+# The pruned runtime tree carries the root production manifest and lockfile, the
+# per-package package.json + dist pairs, config + schema, and the MIT license +
+# curated third-party attribution set (LIC-03). Every generated bundle external
+# is a direct root production dependency, so the isolated --prod install owns
+# the complete resolution boundary without workspace-root hoisting exceptions.
 #
 # The bundle's workspace externals (@open-cowork/shared, @open-cowork/
 # runtime-host) resolve because the ROOT package.json declares them as PROD

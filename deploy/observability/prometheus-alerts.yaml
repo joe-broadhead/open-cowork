@@ -19,6 +19,24 @@ groups:
         annotations:
           summary: Worker command backlog is large or old.
           runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
+      - alert: OpenCoworkWorkerRuntimeNearCapacity
+        expr: max by (cloud_role, cloud_profile) (open_cowork_cloud_runtime_capacity_in_use / clamp_min(open_cowork_cloud_runtime_capacity, 1)) >= 0.8
+        for: 15m
+        labels:
+          severity: ticket
+          surface: worker
+        annotations:
+          summary: A worker has held at least 80% of its hard runtime capacity for 15 minutes.
+          runbook: docs/runbooks/cloud-managed-operations.md#runtime-capacity-pressure
+      - alert: OpenCoworkWorkerRuntimeAdmissionRejected
+        expr: sum by (cloud_role, cloud_profile, reason) (rate(open_cowork_cloud_runtime_admission_rejections_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          surface: worker
+        annotations:
+          summary: Runtime admission is rejecting work because the bounded worker capacity queue cannot recover.
+          runbook: docs/runbooks/cloud-managed-operations.md#runtime-capacity-pressure
       - alert: OpenCoworkWorkerClaimLatency
         expr: max(open_cowork_cloud_runnable_session_claim_duration_ms) > 5000
         for: 10m

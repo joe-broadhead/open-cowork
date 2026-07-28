@@ -1,5 +1,10 @@
 import type { OpenCoworkConfig } from '@open-cowork/shared'
 import type { OpencodeRuntimeConfig } from '@open-cowork/runtime-host/runtime-config-builder'
+import {
+  resolveBundledOpencodeBinaryPath,
+  resolveBundledOpencodeCliEnvironment,
+  resolveBundledOpencodeWrapperPath,
+} from '@open-cowork/runtime-host/runtime-opencode-cli'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
@@ -36,6 +41,31 @@ export type KnowledgeAgentSpawnOptions = {
   secret: string | null
   publicUrl: string | null
   mcpScriptPath: string | null
+}
+
+export function resolveCloudOpencodeCliLaunch(input: {
+  binary?: string | null
+  currentPath?: string
+  wrapper?: string | null
+} = {}) {
+  const binary = input.binary === undefined
+    ? resolveBundledOpencodeBinaryPath()
+    : input.binary
+  const wrapper = input.wrapper === undefined
+    ? resolveBundledOpencodeWrapperPath()
+    : input.wrapper
+  const launch = resolveBundledOpencodeCliEnvironment({
+    binary,
+    wrapper,
+    currentPath: input.currentPath || '',
+    isPackaged: false,
+  })
+  if (!launch.opencodeBinPath && !launch.path) {
+    throw new Error(
+      'Pinned OpenCode CLI is unavailable for Cloud execution; refusing ambient PATH fallback.',
+    )
+  }
+  return launch
 }
 
 // The cloud bundle places this asset next to its entrypoint. A deployment may
@@ -134,6 +164,9 @@ export function createDefaultCloudRuntimeFactory(
 ): CloudRuntimeFactory {
   return (input) => {
     const prepared = prepareDefaultCloudRuntimeFactoryInput(input, knowledgeAgent)
+    const opencodeCli = resolveCloudOpencodeCliLaunch({
+      currentPath: prepared.env.PATH,
+    })
     const workspace = input.paths.resolveWorkspacePath(
       input.execution.tenantId,
       input.execution.sessionId,
@@ -149,10 +182,14 @@ export function createDefaultCloudRuntimeFactory(
     }
     return createNodeOpencodeCloudRuntimeAdapter({
       paths: input.paths,
-      env: prepared.env as NodeJS.ProcessEnv,
+      env: {
+        ...prepared.env,
+        ...(opencodeCli.path ? { PATH: opencodeCli.path } : {}),
+      } as NodeJS.ProcessEnv,
       config: runtimeConfig,
       configDelivery: 'ephemeral-file',
       cwd: workspace,
+      opencodeBinPath: opencodeCli.opencodeBinPath,
       onUnexpectedExit: input.onUnexpectedExit,
     })
   }

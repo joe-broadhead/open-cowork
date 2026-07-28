@@ -1,0 +1,125 @@
+[
+  {
+    "name": "mutable image",
+    "operation": "set",
+    "path": [0, "spec", "template", "spec", "containers", 0, "image"],
+    "value": "ghcr.io/example/open-cowork:latest",
+    "code": "DEPLOY_IMAGE_IMMUTABLE_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.containers[0].image"
+  },
+  {
+    "name": "root pod",
+    "operation": "set",
+    "path": [0, "spec", "template", "spec", "securityContext", "runAsNonRoot"],
+    "value": false,
+    "code": "DEPLOY_POD_NON_ROOT_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.securityContext.runAsNonRoot"
+  },
+  {
+    "name": "writable root",
+    "operation": "set",
+    "path": [0, "spec", "template", "spec", "containers", 0, "securityContext", "readOnlyRootFilesystem"],
+    "value": false,
+    "code": "DEPLOY_CONTAINER_READ_ONLY_ROOT_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem"
+  },
+  {
+    "name": "unconfined seccomp",
+    "operation": "set",
+    "path": [0, "spec", "template", "spec", "securityContext", "seccompProfile", "type"],
+    "value": "Unconfined",
+    "code": "DEPLOY_SECCOMP_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.securityContext.seccompProfile.type"
+  },
+  {
+    "name": "capabilities not dropped",
+    "operation": "set",
+    "path": [0, "spec", "template", "spec", "containers", 0, "securityContext", "capabilities", "drop"],
+    "value": [],
+    "code": "DEPLOY_CAPABILITIES_DROP_ALL_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.containers[0].securityContext.capabilities.drop"
+  },
+  {
+    "name": "missing tmp mount",
+    "operation": "set",
+    "path": [0, "spec", "template", "spec", "containers", 0, "volumeMounts"],
+    "value": [],
+    "code": "DEPLOY_TMP_MOUNT_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.containers[0].volumeMounts"
+  },
+  {
+    "name": "missing liveness",
+    "operation": "delete",
+    "path": [0, "spec", "template", "spec", "containers", 0, "livenessProbe"],
+    "code": "DEPLOY_LIVENESS_PROBE_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.containers[0].livenessProbe"
+  },
+  {
+    "name": "missing readiness",
+    "operation": "delete",
+    "path": [0, "spec", "template", "spec", "containers", 0, "readinessProbe"],
+    "code": "DEPLOY_READINESS_PROBE_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.containers[0].readinessProbe"
+  },
+  {
+    "name": "probe port conflict",
+    "operation": "set",
+    "path": [0, "spec", "template", "spec", "containers", 0, "livenessProbe", "httpGet", "port"],
+    "value": "missing",
+    "code": "DEPLOY_PROBE_PORT_INVALID",
+    "findingPath": "$[0].spec.template.spec.containers[0].livenessProbe.httpGet.port"
+  },
+  {
+    "name": "missing resource",
+    "operation": "delete",
+    "path": [0, "spec", "template", "spec", "containers", 0, "resources", "limits", "memory"],
+    "code": "DEPLOY_RESOURCES_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.containers[0].resources.limits.memory"
+  },
+  {
+    "name": "service port conflict",
+    "operation": "set",
+    "path": [1, "spec", "ports", 0, "targetPort"],
+    "value": "missing",
+    "code": "DEPLOY_SERVICE_TARGET_PORT_REQUIRED",
+    "findingPath": "$[1].spec.ports[0].targetPort"
+  },
+  {
+    "name": "service selects no workload",
+    "operation": "set",
+    "path": [1, "spec", "selector", "app"],
+    "value": "does-not-exist",
+    "code": "DEPLOY_SERVICE_WORKLOAD_REQUIRED",
+    "findingPath": "$[1].spec.selector"
+  },
+  {
+    "name": "ingress without tls",
+    "operation": "set",
+    "path": [2, "spec", "tls"],
+    "value": [],
+    "code": "DEPLOY_INGRESS_TLS_REQUIRED",
+    "findingPath": "$[2].spec.tls"
+  },
+  {
+    "name": "inline secret env",
+    "operation": "set",
+    "path": [0, "spec", "template", "spec", "containers", 0, "env", 0, "value"],
+    "value": "not-a-real-secret",
+    "code": "DEPLOY_SECRET_ENV_REF_REQUIRED",
+    "findingPath": "$[0].spec.template.spec.containers[0].env[0].value"
+  },
+  {
+    "name": "duplicate env",
+    "operation": "duplicate",
+    "path": [0, "spec", "template", "spec", "containers", 0, "env", 0],
+    "code": "DEPLOY_DUPLICATE_ENV_NAME",
+    "findingPath": "$[0].spec.template.spec.containers[0].env[1].name"
+  },
+  {
+    "name": "duplicate object",
+    "operation": "duplicate",
+    "path": [1],
+    "code": "DEPLOY_DUPLICATE_OBJECT_IDENTITY",
+    "findingPath": "$[3].metadata.name"
+  }
+]

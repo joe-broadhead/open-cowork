@@ -30,6 +30,7 @@ export type UsageEventType =
   | 'work.claimed'
   | 'worker.execution_started'
   | 'worker.execution_completed'
+  | 'worker.execution_deferred'
   | 'worker.execution_failed'
   | 'worker.minute'
   | 'artifact.uploaded'

@@ -23,5 +23,8 @@
     "@openwiki/static-export": "workspace:*",
     "@openwiki/validation": "workspace:*",
     "@openwiki/workflows": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
   }
 }

@@ -33,6 +33,12 @@ export type ConsumeUsageQuotaInput = {
   policyCode?: QuotaPolicyCode | string
 }
 
+export type UsageQuotaReservation = {
+  quotaKey: string
+  windowStartedAtMs: number
+  quantity: number
+}
+
 export type CreateArtifactUploadReservationInput = {
   orgId: string
   tenantId: string

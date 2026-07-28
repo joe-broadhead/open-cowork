@@ -85,12 +85,11 @@ export function instrumentObjectStore(
   observability: CloudObservabilityAdapter | null | undefined,
 ): ObjectStoreAdapter {
   if (!observability) return adapter
-  const emit = async (operation: string, status: 'ok' | 'error', startedAtMs: number, error?: unknown) => {
+  const emit = async (operation: string, status: 'ok' | 'error', startedAtMs: number) => {
     const attributes = {
       cloud_object_store_kind: adapter.kind,
       operation,
       status,
-      ...(status === 'error' ? { error: error instanceof Error ? error.name : 'unknown' } : {}),
     }
     await recordCloudMetric(observability, { name: 'open_cowork_cloud_object_store_operations_total', value: 1, unit: '1', attributes })
     await recordCloudMetric(observability, { name: 'open_cowork_cloud_object_store_operation_duration_ms', value: Math.max(0, Date.now() - startedAtMs), unit: 'ms', attributes })
@@ -102,7 +101,7 @@ export function instrumentObjectStore(
       await emit(operation, 'ok', startedAtMs)
       return result
     } catch (error) {
-      await emit(operation, 'error', startedAtMs, error)
+      await emit(operation, 'error', startedAtMs)
       throw error
     }
   }

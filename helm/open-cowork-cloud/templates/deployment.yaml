@@ -30,6 +30,44 @@
 {{- fail "cloudSqlProxy.healthCheck.port must be distinct from cloudSqlProxy.port so the proxy database listener and startup health server do not conflict." }}
 {{- end }}
 {{- end }}
+{{- $workerRole := default dict $.Values.roles.worker }}
+{{- $workerResources := default dict $workerRole.resources }}
+{{- $workerRequests := default dict $workerResources.requests }}
+{{- $workerLimits := default dict $workerResources.limits }}
+{{- if and $workerRole.enabled (lt (int (default 0 $workerRole.runtimeCapacity)) 1) }}
+{{- fail "roles.worker.runtimeCapacity must be greater than zero." }}
+{{- end }}
+{{- if and $workerRole.enabled (lt (int (default 0 $workerRole.admissionQueueCapacity)) 1) }}
+{{- fail "roles.worker.admissionQueueCapacity must be greater than zero." }}
+{{- end }}
+{{- if and $workerRole.enabled (lt (int (default 0 $workerRole.admissionQueueTimeoutMs)) 1) }}
+{{- fail "roles.worker.admissionQueueTimeoutMs must be greater than zero." }}
+{{- end }}
+{{- if and $workerRole.enabled (lt (int (default 0 $workerRole.runtimeProvisionTimeoutMs)) 1) }}
+{{- fail "roles.worker.runtimeProvisionTimeoutMs must be greater than zero." }}
+{{- end }}
+{{- if and $workerRole.enabled (lt (int (default 0 $workerRole.runtimeTeardownTimeoutMs)) 1) }}
+{{- fail "roles.worker.runtimeTeardownTimeoutMs must be greater than zero." }}
+{{- end }}
+{{- if and $workerRole.enabled (lt (int64 (default 0 $workerRole.isolationMemoryLimitBytes)) 1) }}
+{{- fail "roles.worker.isolationMemoryLimitBytes must be greater than zero." }}
+{{- end }}
+{{- if and $workerRole.enabled (le (float64 (default 0 $workerRole.isolationCpuLimit)) 0.0) }}
+{{- fail "roles.worker.isolationCpuLimit must be greater than zero." }}
+{{- end }}
+{{- if and $workerRole.enabled (lt (int (default 0 $workerRole.isolationPidsLimit)) 1) }}
+{{- fail "roles.worker.isolationPidsLimit must be greater than zero." }}
+{{- end }}
+{{- range $roleName, $role := .Values.roles }}
+{{- if $role.enabled }}
+{{- $resources := default dict $role.resources }}
+{{- $requests := default dict $resources.requests }}
+{{- $limits := default dict $resources.limits }}
+{{- if not (and (index $requests "cpu") (index $requests "memory") (index $requests "ephemeral-storage") (index $limits "cpu") (index $limits "memory") (index $limits "ephemeral-storage")) }}
+{{- fail (printf "roles.%s requires CPU, memory, and ephemeral-storage requests and limits." $roleName) }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- if eq $.Values.cloud.deploymentTier "public_production" }}
 {{- if $.Values.cloud.runMigrations }}
 {{- fail "cloud.deploymentTier=public_production requires cloud.runMigrations=false; run cloud:migrate:start as a separately credentialed one-shot job before deploying long-running roles." }}
@@ -57,6 +95,9 @@
 {{- end }}
 {{- if not $.Values.roles.worker.enabled }}
 {{- fail "cloud.deploymentTier=public_production requires roles.worker.enabled=true." }}
+{{- end }}
+{{- if not (and (index $workerRequests "cpu") (index $workerRequests "memory") (index $workerRequests "ephemeral-storage") (index $workerLimits "cpu") (index $workerLimits "memory") (index $workerLimits "ephemeral-storage")) }}
+{{- fail "cloud.deploymentTier=public_production requires worker CPU, memory, and ephemeral-storage requests and limits." }}
 {{- end }}
 {{- if not $.Values.roles.scheduler.enabled }}
 {{- fail "cloud.deploymentTier=public_production requires roles.scheduler.enabled=true." }}
@@ -303,6 +344,13 @@ spec:
             - name: livez
               containerPort: {{ $role.livenessPort | default 8788 }}
           livenessProbe:
+            httpGet:
+              path: /livez
+              port: livez
+            periodSeconds: {{ $livenessProbe.periodSeconds | default 15 }}
+            timeoutSeconds: {{ $livenessProbe.timeoutSeconds | default 3 }}
+            failureThreshold: {{ $livenessProbe.failureThreshold | default 4 }}
+          readinessProbe:
             httpGet:
               path: /livez
               port: livez

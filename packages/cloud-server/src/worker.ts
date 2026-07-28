@@ -1,9 +1,16 @@
-import type { ControlPlaneStore, ReapedSessionLeaseRecord, SessionCommandRecord, WorkerLeaseRecord } from './control-plane-store.ts'
+import type {
+  ControlPlaneStore,
+  ReapedSessionLeaseRecord,
+  SessionCommandRecord,
+  UsageQuotaReservation,
+  WorkerLeaseRecord,
+} from './control-plane-store.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import { recordCloudWorkerMetric } from './observability.ts'
 import type { CloudRuntimeEvent } from './runtime-adapter.ts'
 import type { CloudSessionService } from './session-service.ts'
 import type { CloudAbuseConfig } from '@open-cowork/shared'
+import { isDeferrableRuntimeCapacityError } from './runtime-capacity.ts'
 
 export type CloudWorkerCheckpointHooks = {
   /**
@@ -118,11 +125,12 @@ export class CloudWorker {
       if (this.shutdownStarted) break
       const command = await this.store.claimNextSessionCommand(lease)
       if (!command) break
+      let quotaReservation: UsageQuotaReservation | null
       try {
-        await this.service.reserveWorkerExecutionCapacity(tenantId)
+        quotaReservation = await this.service.reserveWorkerExecutionCapacity(tenantId)
       } catch (error) {
         if (this.isQuotaOrEntitlementDenial(error)) {
-          await this.recordLeaseDenial(tenantId, sessionId, error)
+          await this.recordLeaseDenial(error)
           this.leases.delete(this.leaseKey(tenantId, sessionId))
           return processed
         }
@@ -137,8 +145,9 @@ export class CloudWorker {
         commandKind: command.kind,
         eventType: 'worker.execution_started',
       })
+      let capacityDeferred = false
+      const commandLease: WorkerLeaseRecord = lease
       try {
-        const commandLease: WorkerLeaseRecord = lease
         const controller = new AbortController()
         const activeCommand = this.trackActiveCommand(commandLease, command, controller)
         try {
@@ -150,7 +159,10 @@ export class CloudWorker {
                 commandLease,
                 controller,
                 activeCommand,
-                (signal) => this.service.executeCommand(commandLease, command, { signal, deferAck: true }),
+                (signal) => this.service.executeCommand(commandLease, command, {
+                  signal,
+                  deferAck: true,
+                }),
               )
               return this.checkpointAndAckCommand(executedLease, command.commandId)
             },
@@ -169,55 +181,62 @@ export class CloudWorker {
         })
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_commands_processed_total',
-          workerId: this.workerId,
-          tenantId,
-          sessionId,
           status: 'ok',
-          durationMs: Date.now() - startedAt,
         })
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_command_duration_ms',
           value: Date.now() - startedAt,
-          workerId: this.workerId,
-          tenantId,
-          sessionId,
           status: 'ok',
         })
       } catch (error) {
+        const capacityError = isDeferrableRuntimeCapacityError(error) ? error : null
+        if (capacityError) {
+          await this.store.deferSessionCommand(commandLease, command.commandId, {
+            retryAfterMs: capacityError.retryAfterMs,
+            errorCode: `runtime_capacity_${capacityError.reason}`,
+            errorSummary: capacityError.message,
+            quotaReservation,
+          })
+          capacityDeferred = true
+          this.leases.delete(this.leaseKey(tenantId, sessionId))
+        }
         await this.service.recordManagedExecutionEvent({
           tenantId,
           sessionId,
           workerId: this.workerId,
           commandId: command.commandId,
           commandKind: command.kind,
-          eventType: 'worker.execution_failed',
+          eventType: capacityDeferred
+            ? 'worker.execution_deferred'
+            : 'worker.execution_failed',
           elapsedMs: Date.now() - startedAt,
-          errorCode: error instanceof Error ? error.name || 'Error' : 'unknown',
+          errorCode: capacityError
+            ? `runtime_capacity_${capacityError.reason}`
+            : error instanceof Error
+              ? error.name || 'Error'
+              : 'unknown',
         })
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_commands_processed_total',
-          workerId: this.workerId,
-          tenantId,
-          sessionId,
-          status: 'error',
+          status: capacityDeferred ? 'backpressure' : 'error',
         })
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_command_duration_ms',
           value: Date.now() - startedAt,
-          workerId: this.workerId,
-          tenantId,
-          sessionId,
-          status: 'error',
+          status: capacityDeferred ? 'backpressure' : 'error',
         })
+        if (capacityDeferred) return processed
         throw error
       } finally {
-        await this.service.recordWorkerMinutes({
-          tenantId,
-          sessionId,
-          workerId: this.workerId,
-          elapsedMs: Date.now() - startedAt,
-          reservedMinutes: 1,
-        })
+        if (!capacityDeferred) {
+          await this.service.recordWorkerMinutes({
+            tenantId,
+            sessionId,
+            workerId: this.workerId,
+            elapsedMs: Date.now() - startedAt,
+            reservedMinutes: 1,
+          })
+        }
       }
       this.touchLease(this.leaseKey(tenantId, sessionId), lease)
       processed += 1
@@ -238,14 +257,12 @@ export class CloudWorker {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_expired_leases_reaped_total',
         value: reapedCount,
-        workerId: this.workerId,
         status: 'ok',
       })
     }
     if (drainCapHit) {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_expired_lease_reaper_drain_cap_hits_total',
-        workerId: this.workerId,
         status: 'cap_hit',
       })
     }
@@ -260,14 +277,12 @@ export class CloudWorker {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_runnable_session_claim_duration_ms',
         value: Date.now() - claimStartedAt,
-        workerId: this.workerId,
         status: 'ok',
       })
       if (runnable.sessions.length === 0) {
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_runnable_sessions_claimed_total',
           value: 0,
-          workerId: this.workerId,
           status: 'empty',
         })
         break
@@ -276,7 +291,6 @@ export class CloudWorker {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_runnable_sessions_claimed_total',
         value: processedThisBatch,
-        workerId: this.workerId,
         status: processedThisBatch > 0 ? 'claimed' : 'denied',
       })
       processed += processedThisBatch
@@ -285,12 +299,10 @@ export class CloudWorker {
     await recordCloudWorkerMetric(this.observability, {
       name: 'open_cowork_cloud_command_queue_depth_estimate',
       value: pendingSessionCountEstimate,
-      workerId: this.workerId,
     })
     await recordCloudWorkerMetric(this.observability, {
       name: 'open_cowork_cloud_worker_loop_duration_ms',
       value: Date.now() - startedAt,
-      workerId: this.workerId,
       status: 'ok',
     })
     return processed
@@ -379,7 +391,6 @@ export class CloudWorker {
     const forced = !input.drained || active.length > 0
     await recordCloudWorkerMetric(this.observability, {
       name: 'open_cowork_cloud_worker_shutdown_drains_total',
-      workerId: this.workerId,
       status: forced ? 'forced' : 'graceful',
     })
 
@@ -396,7 +407,6 @@ export class CloudWorker {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_shutdown_forced_aborts_total',
         value: activeAbortCount,
-        workerId: this.workerId,
         status: 'aborted',
       })
       recoveredLeases = await this.recoverShutdownLeases(active, now)
@@ -455,9 +465,6 @@ export class CloudWorker {
       } catch (error) {
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_shutdown_lease_recovery_failures_total',
-          workerId: this.workerId,
-          tenantId: command.lease.tenantId,
-          sessionId: command.lease.sessionId,
           status: error instanceof Error ? error.name || 'error' : 'error',
         })
       }
@@ -489,9 +496,6 @@ export class CloudWorker {
     for (const lease of recoveredLeases) {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_shutdown_leases_recovered_total',
-        workerId: this.workerId,
-        tenantId: lease.tenantId,
-        sessionId: lease.sessionId,
         status: lease.action,
       })
     }
@@ -499,7 +503,6 @@ export class CloudWorker {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_shutdown_leases_recovered_total',
         value: releasedLeaseCount,
-        workerId: this.workerId,
         status: 'released',
       })
     }
@@ -531,7 +534,6 @@ export class CloudWorker {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_command_recoveries_total',
         value: retriedCommandCount,
-        workerId: this.workerId,
         status: 'retried',
       })
     }
@@ -539,7 +541,6 @@ export class CloudWorker {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_command_recoveries_total',
         value: failedCommandCount,
-        workerId: this.workerId,
         status: 'failed',
       })
     }
@@ -556,9 +557,6 @@ export class CloudWorker {
         }
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_checkpoint_stale_retries_total',
-          workerId: this.workerId,
-          tenantId: current.tenantId,
-          sessionId: current.sessionId,
           status: 'retry',
         })
         current = await this.store.renewSessionLease(current, new Date(), this.leaseTtlMs)
@@ -584,9 +582,6 @@ export class CloudWorker {
         }
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_checkpoint_stale_retries_total',
-          workerId: this.workerId,
-          tenantId: current.tenantId,
-          sessionId: current.sessionId,
           status: 'retry',
         })
         current = await this.store.renewSessionLease(current, new Date(), this.leaseTtlMs)
@@ -601,9 +596,6 @@ export class CloudWorker {
     } catch (error) {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_checkpoint_pending_command_failures_total',
-        workerId: this.workerId,
-        tenantId: lease.tenantId,
-        sessionId: lease.sessionId,
         status: 'save_failed',
       })
       throw error
@@ -616,7 +608,7 @@ export class CloudWorker {
       await this.service.assertWorkerLeaseAllowed(tenantId)
     } catch (error) {
       if (this.isQuotaOrEntitlementDenial(error)) {
-        await this.recordLeaseDenial(tenantId, sessionId, error)
+        await this.recordLeaseDenial(error)
         return null
       }
       throw error
@@ -626,15 +618,12 @@ export class CloudWorker {
       try {
         const renewed = await this.store.renewSessionLease(existing, new Date(), this.leaseTtlMs)
         this.touchLease(leaseKey, renewed)
-        void this.recordRenewalMetric(tenantId, sessionId, 'ok')
+        void this.recordRenewalMetric('ok')
         return renewed
       } catch {
         this.leases.delete(leaseKey)
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_stale_owner_rejections_total',
-          workerId: this.workerId,
-          tenantId,
-          sessionId,
           status: 'stale',
         })
       }
@@ -664,17 +653,11 @@ export class CloudWorker {
       })
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_lease_claims_total',
-        workerId: this.workerId,
-        tenantId,
-        sessionId,
         status: 'claimed',
       })
     } else {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_lease_claims_total',
-        workerId: this.workerId,
-        tenantId,
-        sessionId,
         status: 'denied',
       })
     }
@@ -688,15 +671,12 @@ export class CloudWorker {
     return status === 402 || status === 429
   }
 
-  private async recordLeaseDenial(tenantId: string, sessionId: string, error: unknown) {
+  private async recordLeaseDenial(error: unknown) {
     const status = error && typeof error === 'object' && 'status' in error
       ? (error as { status?: unknown }).status
       : null
     await recordCloudWorkerMetric(this.observability, {
       name: 'open_cowork_cloud_worker_lease_denials_total',
-      workerId: this.workerId,
-      tenantId,
-      sessionId,
       status: status === 402 ? 'entitlement_denied' : 'quota_denied',
     })
   }
@@ -728,12 +708,12 @@ export class CloudWorker {
           current = renewed
           activeCommand.lease = renewed
           this.touchLease(this.leaseKey(renewed.tenantId, renewed.sessionId), renewed)
-          void this.recordRenewalMetric(renewed.tenantId, renewed.sessionId, 'ok')
+          void this.recordRenewalMetric('ok')
         })
         .catch((error: unknown) => {
           void error
           markLeaseLost()
-          void this.recordRenewalMetric(lease.tenantId, lease.sessionId, 'failed')
+          void this.recordRenewalMetric('failed')
         })
         .finally(() => {
           renewing = false
@@ -770,13 +750,10 @@ export class CloudWorker {
     }
   }
 
-  private async recordRenewalMetric(tenantId: string, sessionId: string, status: 'ok' | 'failed') {
+  private async recordRenewalMetric(status: 'ok' | 'failed') {
     try {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_lease_renewals_total',
-        workerId: this.workerId,
-        tenantId,
-        sessionId,
         status,
       })
     } catch {

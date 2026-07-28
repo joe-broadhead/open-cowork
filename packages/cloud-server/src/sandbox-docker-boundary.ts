@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import type { Readable, Writable } from 'node:stream'
 import {
   CloudExecutionIsolationError,
+  DEFAULT_CLOUD_SANDBOX_RESOURCE_LIMITS,
   type CloudExecutionIsolationCapability,
   type CloudIsolationControlBridge,
   type CloudSandboxIsolationProviderOptions,
@@ -314,6 +315,8 @@ async function inspectStartedBoundary(input: {
     ? (host.Tmpfs as Record<string, unknown>)['/tmp']
     : null
   const tmpfsOptions = typeof tmpfs === 'string' ? new Set(tmpfs.split(',')) : new Set<string>()
+  const resourceLimits = input.options.resourceLimits
+    || DEFAULT_CLOUD_SANDBOX_RESOURCE_LIMITS
   return (
     typeof inspection.Id === 'string'
     && /^[a-f0-9]{64}$/.test(inspection.Id)
@@ -344,9 +347,9 @@ async function inspectStartedBoundary(input: {
     && stringArray(host.CapDrop).map((entry) => entry.toUpperCase()).includes('ALL')
     && stringArray(host.SecurityOpt).includes('no-new-privileges')
     && host.Init === true
-    && host.Memory === 2 * 1024 * 1024 * 1024
-    && host.NanoCpus === 2_000_000_000
-    && host.PidsLimit === 512
+    && host.Memory === resourceLimits.memoryBytes
+    && host.NanoCpus === resourceLimits.cpuCount * 1_000_000_000
+    && host.PidsLimit === resourceLimits.pids
     && host.RestartPolicy?.Name === 'no'
     && tmpfsOptions.has('rw')
     && tmpfsOptions.has('nosuid')

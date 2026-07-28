@@ -5,8 +5,10 @@ import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
 import {
   prepareDefaultCloudRuntimeFactoryInput,
+  resolveCloudOpencodeCliLaunch,
   type CloudRoleRuntimeFactoryInput,
 } from '../packages/cloud-server/src/cloud-runtime-composition.ts'
+import { delimiter, dirname } from 'node:path'
 import {
   KNOWLEDGE_AGENT_TOKEN_TTL_MS,
   signKnowledgeAgentToken,
@@ -25,6 +27,29 @@ const ALLOW_KNOWLEDGE_POLICY = {
   allowedTools: null,
   allowedMcps: null,
 }
+
+test('Cloud execution resolves the pinned OpenCode CLI instead of ambient PATH', () => {
+  const binary = '/runtime/components/opencode'
+  assert.deepEqual(
+    resolveCloudOpencodeCliLaunch({
+      binary,
+      wrapper: null,
+      currentPath: '/ambient/bin',
+    }),
+    {
+      opencodeBinPath: binary,
+      path: [dirname(binary), '/ambient/bin'].join(delimiter),
+    },
+  )
+  assert.throws(
+    () => resolveCloudOpencodeCliLaunch({
+      binary: null,
+      wrapper: null,
+      currentPath: '/ambient/bin',
+    }),
+    /refusing ambient PATH fallback/,
+  )
+})
 
 test('knowledge agent token round-trips a tenant+session-bound payload before expiry', () => {
   const token = signKnowledgeAgentToken(SIGNING_KEY, {

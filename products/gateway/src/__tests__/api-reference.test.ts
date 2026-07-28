@@ -33,6 +33,7 @@ describe('generated HTTP API reference', () => {
     expect(openapi.paths['/gateway/leadership/recover'].post.responses).toHaveProperty('409')
     expect(openapi.paths['/storage/doctor'].get.responses).toHaveProperty('503')
     expect(openapi.paths['/readiness'].get.responses).toHaveProperty('503')
+    expect(openapi.paths['/live/events'].get.responses).toHaveProperty('503')
     expect(openapi.paths['/personas'].post.responses).toHaveProperty('422')
   })
 
@@ -119,6 +120,18 @@ describe('generated HTTP API reference', () => {
         name: 'gatewayOnly',
         schema: { type: 'boolean' },
         description: expect.stringContaining('requires an admin bearer token'),
+      }),
+    ]))
+
+    const storageExport = openapi.paths['/storage/export'].get
+    expect(storageExport['x-required-capability']).toBe('admin')
+    expect(storageExport.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: 'localAdmin',
+        in: 'query',
+        required: true,
+        description: expect.stringContaining('dual-intent'),
+        schema: { type: 'boolean', const: true },
       }),
     ]))
   })

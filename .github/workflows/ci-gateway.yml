@@ -52,15 +52,9 @@ jobs:
       - name: Product boundaries
         run: pnpm boundaries:check
 
-      # products/gateway depends on dist-only workspace channel packages (JOE-994).
-      - name: Build workspace channel packages
-        run: |
-          pnpm --filter @open-cowork/gateway-provider-telegram build
-          pnpm --filter @open-cowork/gateway-provider-discord build
-          pnpm --filter @open-cowork/gateway-provider-whatsapp build
-
-      - name: Build Gateway
-        run: pnpm --filter cowork-gateway build
+      # products/gateway consumes dist-only workspace package exports.
+      - name: Build Gateway dependency closure
+        run: pnpm --filter "cowork-gateway..." run build
 
       - name: Typecheck Gateway
         run: pnpm --filter cowork-gateway typecheck

@@ -37,6 +37,9 @@ const BYOK_TEST_CONFIG: OpenCoworkConfig = {
         runtime: 'builtin',
         name: 'OpenRouter',
         description: 'OpenRouter test provider',
+        options: {
+          baseURL: 'http://127.0.0.1:43123/v1',
+        },
         credentials: [{
           key: 'apiKey',
           label: 'API key',
@@ -67,6 +70,7 @@ function principal(tenantId: string, userId: string) {
 class ConfigBackedRuntime implements CloudRuntimeAdapter {
   readonly context: CloudRuntimeExecutionContext
   readonly apiKey: string
+  readonly baseURL: string
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
 
   constructor(input: WorkerScopedRuntimeFactoryInput) {
@@ -76,6 +80,11 @@ class ConfigBackedRuntime implements CloudRuntimeAdapter {
     this.apiKey = String(
       provider?.or?.options?.apiKey
       || provider?.openrouter?.options?.apiKey
+      || '',
+    )
+    this.baseURL = String(
+      provider?.or?.options?.baseURL
+      || provider?.openrouter?.options?.baseURL
       || '',
     )
   }
@@ -205,6 +214,7 @@ test('worker-scoped BYOK runtime injects provider options for the correct tenant
     assert.equal(runtimePermission?.read, 'allow')
     assert.deepEqual(captures[0]?.runtimeConfig?.mcp, {})
     assert.equal(runtimes[0]?.apiKey, KEY_A)
+    assert.equal(runtimes[0]?.baseURL, 'http://127.0.0.1:43123/v1')
     assert.equal(captures[1]?.execution.tenantId, 'tenant-b')
     assert.equal(captures[1]?.execution.sessionId, sessionB.session.sessionId)
     assert.equal(runtimes[1]?.apiKey, KEY_B)
@@ -357,13 +367,19 @@ test('worker-scoped runtime preserves admitted V2 runs and awaits terminal event
       agent: 'build',
       context: { tenantId: 'tenant-a', sessionId: 'session-a' },
     })
-    await runtime.promptSession({
+    const queuedSessionB = runtime.promptSession({
       sessionId: 'runtime-b',
       parts: [],
       agent: 'build',
       context: { tenantId: 'tenant-a', sessionId: 'session-b' },
     })
-    assert.deepEqual(closed, [], 'over-limit eviction must not terminate admitted background runs')
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(
+      innerListeners.has('session-b'),
+      false,
+      'a new runtime must wait while the hard cap is held by an admitted background run',
+    )
+    assert.deepEqual(closed, [], 'capacity pressure must not terminate admitted background runs')
 
     const terminalListener = innerListeners.get('session-a')
     assert.ok(terminalListener)
@@ -389,6 +405,7 @@ test('worker-scoped runtime preserves admitted V2 runs and awaits terminal event
 
     releaseTerminal()
     await terminalDelivery
+    await queuedSessionB
     assert.equal(terminalPersisted, true)
     assert.deepEqual(closed, ['session-a'], 'settled runs become eligible for over-limit eviction')
   } finally {

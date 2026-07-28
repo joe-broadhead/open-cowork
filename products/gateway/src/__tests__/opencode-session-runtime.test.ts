@@ -42,6 +42,41 @@ describe('OpenCode session runtime', () => {
     expect(listed.some((row: any) => row.id === session.id)).toBe(true)
   })
 
+  it('propagates cancellation to classic and V2 session listing transports', async () => {
+    const signal = new AbortController().signal
+    let classicRequest: any
+    const classic = createOpenCodeSessionRuntime({
+      session: {
+        async list(request: any) {
+          classicRequest = request
+          return { data: [] }
+        },
+      },
+    } as any)
+    await classic.listSessions('/tmp/gateway-project', { signal })
+    expect(classicRequest).toMatchObject({
+      query: { directory: '/tmp/gateway-project' },
+      signal,
+    })
+
+    let v2Request: any
+    let v2Options: any
+    const v2 = createOpenCodeSessionRuntime({
+      v2: {
+        session: {
+          async list(request: any, options: any) {
+            v2Request = request
+            v2Options = options
+            return { data: [] }
+          },
+        },
+      },
+    } as any)
+    await v2.listSessions(undefined, { signal })
+    expect(v2Request).toMatchObject({ limit: 200, order: 'asc' })
+    expect(v2Options).toMatchObject({ throwOnError: true, signal })
+  })
+
   it('deletes sessions through the runtime port and verifies absence', async () => {
     const fake = createFakeOpencodeClient()
     setDaemonClient(fake.client)

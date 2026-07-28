@@ -299,6 +299,10 @@ test('cloud bootstrap parses env options and role helpers', () => {
     OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: '2500',
     OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES: '42',
     OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS: '1234',
+    OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_QUEUE_MAX_ENTRIES: '17',
+    OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_TIMEOUT_MS: '4321',
+    OPEN_COWORK_CLOUD_RUNTIME_PROVISION_TIMEOUT_MS: '9876',
+    OPEN_COWORK_CLOUD_RUNTIME_TEARDOWN_TIMEOUT_MS: '6789',
     OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG: '321',
     OPEN_COWORK_CLOUD_MAX_CONNECTIONS: '4096',
     OPEN_COWORK_CLOUD_SSE_POLL_INTERVAL_MS: '250',
@@ -323,6 +327,10 @@ test('cloud bootstrap parses env options and role helpers', () => {
     shutdownGraceMs: 2500,
     runtimeCacheMaxEntries: 42,
     runtimeCacheIdleTtlMs: 1234,
+    runtimeAdmissionQueueMaxEntries: 17,
+    runtimeAdmissionQueueTimeoutMs: 4321,
+    runtimeProvisionTimeoutMs: 9876,
+    runtimeTeardownTimeoutMs: 6789,
     maxSseConnectionsPerOrg: 321,
     maxConnections: 4096,
     ssePollIntervalMs: 250,
@@ -1224,6 +1232,25 @@ test('cloud all-in-one app starts web and worker and routes runtime events into 
     }))
     const messages = asArray(asRecord(asRecord(view.projection).view).messages)
     assert.equal(asRecord(messages.at(-1)).content, 'external event')
+
+    const appendProjectedSessionEvent = app.store.appendProjectedSessionEvent
+    app.store.appendProjectedSessionEvent = () => {
+      throw new Error('synthetic durable runtime event failure')
+    }
+    try {
+      await assert.rejects(
+        () => runtime.emit({
+          type: 'runtime.error',
+          payload: {
+            sessionId: 'session-1',
+            message: 'unpersisted event',
+          },
+        }),
+        /synthetic durable runtime event failure/,
+      )
+    } finally {
+      app.store.appendProjectedSessionEvent = appendProjectedSessionEvent
+    }
   } finally {
     await app.close()
   }

@@ -17,6 +17,76 @@ export function boundedNumber(value: unknown, min: number, max: number, label: s
   return number
 }
 
+export interface BoundedLiveConfig {
+  maxClients: number
+  maxClientsPerPrincipal: number
+  retryAfterSeconds: number
+  heartbeatMs: number
+  idleTimeoutMs: number
+  maxConnectionMs: number
+  writeTimeoutMs: number
+  maxBufferedBytes: number
+  replay: {
+    maxSnapshots: number
+    maxPayloadBytes: number
+    maxTotalBytes: number
+  }
+  upstream: {
+    maxBufferedBytes: number
+    maxEventBytes: number
+  }
+}
+
+type PartialLiveConfig = Partial<Omit<BoundedLiveConfig, 'replay' | 'upstream'>> & {
+  replay?: Partial<BoundedLiveConfig['replay']>
+  upstream?: Partial<BoundedLiveConfig['upstream']>
+}
+
+export function normalizeLiveConfig(input: PartialLiveConfig | undefined, defaults: BoundedLiveConfig): BoundedLiveConfig {
+  const maxClients = boundedInteger(input?.maxClients ?? defaults.maxClients, 1, 10_000, 'live.maxClients')
+  const maxClientsPerPrincipal = boundedInteger(input?.maxClientsPerPrincipal ?? defaults.maxClientsPerPrincipal, 1, 1000, 'live.maxClientsPerPrincipal')
+  if (maxClientsPerPrincipal > maxClients) throw new Error('live.maxClientsPerPrincipal must not exceed live.maxClients')
+
+  const heartbeatMs = boundedInteger(input?.heartbeatMs ?? defaults.heartbeatMs, 1000, 5 * 60_000, 'live.heartbeatMs')
+  const idleTimeoutMs = boundedInteger(input?.idleTimeoutMs ?? defaults.idleTimeoutMs, 2000, 60 * 60_000, 'live.idleTimeoutMs')
+  if (idleTimeoutMs < heartbeatMs * 2) throw new Error('live.idleTimeoutMs must be at least twice live.heartbeatMs')
+
+  const maxConnectionMs = boundedInteger(input?.maxConnectionMs ?? defaults.maxConnectionMs, 10_000, 24 * 60 * 60_000, 'live.maxConnectionMs')
+  if (maxConnectionMs < idleTimeoutMs) throw new Error('live.maxConnectionMs must be at least live.idleTimeoutMs')
+
+  const replayMaxPayloadBytes = boundedInteger(input?.replay?.maxPayloadBytes ?? defaults.replay.maxPayloadBytes, 1024, 4 * 1024 * 1024, 'live.replay.maxPayloadBytes')
+  const replayMaxTotalBytes = boundedInteger(input?.replay?.maxTotalBytes ?? defaults.replay.maxTotalBytes, 1024, 64 * 1024 * 1024, 'live.replay.maxTotalBytes')
+  if (replayMaxPayloadBytes > replayMaxTotalBytes) {
+    throw new Error('live.replay.maxPayloadBytes must not exceed live.replay.maxTotalBytes')
+  }
+
+  const upstreamMaxBufferedBytes = boundedInteger(input?.upstream?.maxBufferedBytes ?? defaults.upstream.maxBufferedBytes, 1024, 16 * 1024 * 1024, 'live.upstream.maxBufferedBytes')
+  const upstreamMaxEventBytes = boundedInteger(input?.upstream?.maxEventBytes ?? defaults.upstream.maxEventBytes, 1024, 4 * 1024 * 1024, 'live.upstream.maxEventBytes')
+  if (upstreamMaxEventBytes > upstreamMaxBufferedBytes) {
+    throw new Error('live.upstream.maxEventBytes must not exceed live.upstream.maxBufferedBytes')
+  }
+
+  return {
+    maxClients,
+    maxClientsPerPrincipal,
+    retryAfterSeconds: boundedInteger(input?.retryAfterSeconds ?? defaults.retryAfterSeconds, 1, 3600, 'live.retryAfterSeconds'),
+    heartbeatMs,
+    idleTimeoutMs,
+    maxConnectionMs,
+    writeTimeoutMs: boundedInteger(input?.writeTimeoutMs ?? defaults.writeTimeoutMs, 1000, 5 * 60_000, 'live.writeTimeoutMs'),
+    maxBufferedBytes: boundedInteger(input?.maxBufferedBytes ?? defaults.maxBufferedBytes, 1024, 16 * 1024 * 1024, 'live.maxBufferedBytes'),
+    replay: {
+      maxSnapshots: boundedInteger(input?.replay?.maxSnapshots ?? defaults.replay.maxSnapshots, 1, 10_000, 'live.replay.maxSnapshots'),
+      maxPayloadBytes: replayMaxPayloadBytes,
+      maxTotalBytes: replayMaxTotalBytes,
+    },
+    upstream: {
+      maxBufferedBytes: upstreamMaxBufferedBytes,
+      maxEventBytes: upstreamMaxEventBytes,
+    },
+  }
+}
+
 export function assertProfileName(name: string): void {
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('profile name must be 1-64 letters, numbers, underscores, or dashes')
 }

@@ -12,6 +12,7 @@ const scriptLog = (...args) => { process.stdout.write(args.map(String).join(' ')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 const AUTHORITY_PACKAGE_JSONS = [
+  'package.json',
   'apps/desktop/package.json',
   'apps/standalone-gateway/package.json',
   'packages/cloud-server/package.json',

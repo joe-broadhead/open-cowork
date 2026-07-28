@@ -2998,7 +2998,7 @@ test('cloud HTTP server preserves auth failures when auth accounting storage fai
       log() {},
       metric(record) {
         if (record.name === 'open_cowork_cloud_auth_accounting_errors_total') {
-          accountingMetrics.push(String(record.attributes?.['cloud.auth.accounting.operation'] || ''))
+          accountingMetrics.push(String(record.attributes?.cloud_auth_accounting_operation || ''))
         }
       },
       span() {},

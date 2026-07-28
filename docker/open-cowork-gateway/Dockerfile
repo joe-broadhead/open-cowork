@@ -16,8 +16,9 @@ COPY LICENSE THIRD_PARTY_NOTICES.md ./
 COPY THIRD_PARTY_LICENSES ./THIRD_PARTY_LICENSES
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @open-cowork/shared build
-RUN pnpm --filter @open-cowork/channel-gateway build
+# Package builds own only their workspace. Select the Gateway dependency closure
+# once so pnpm emits every dist-only workspace export in topological order.
+RUN pnpm --filter "@open-cowork/channel-gateway..." run build
 # Prune to the runtime tree: root manifests/config/license material plus the
 # Gateway app and runtime package package.json + dist pairs. No source trees,
 # tests, MCPs, desktop artifacts, or release scripts ship in the public image.

@@ -167,8 +167,7 @@ test('audit service: emitDataPlaneEvent records the event and fans out a telemet
   const counter = observability.metrics.find((metric) => metric.name === 'open_cowork_cloud_audit_events_total')
   assert.ok(counter, 'audit counter emitted to telemetry')
   assert.equal(counter?.value, 1)
-  assert.equal(counter?.attributes?.event_type, 'session.created')
-  assert.equal(counter?.attributes?.result, 'success')
+  assert.deepEqual(counter?.attributes, {})
 })
 
 test('audit service: emit never throws on a bad write but still records telemetry', async () => {

@@ -106,6 +106,9 @@ Start conservatively:
 - one worker replica per org/profile until checkpoint restore and provider
   quota behavior is proven
 - worker `maxConcurrentWork` lower than provider/model concurrency limits
+- Helm `runtimeCapacity` sized below the pod's measured CPU, memory,
+  ephemeral-storage, and subprocess headroom, with per-boundary memory, CPU,
+  and PID ceilings plus a bounded admission queue
 - queue depth and queue age alerts before autoscaling actions
 
 Scale workers from durable backlog age and claim latency rather than only CPU.

@@ -555,6 +555,7 @@ async function runIsolationProof(input: {
   const capabilityPolicy = compileCloudRuntimeCapabilityPolicy({
     appConfig: DEFAULT_CONFIG,
     policy: {
+      ...runtimePolicy,
       allowedTools: ['read'],
       allowedMcps: [],
     },

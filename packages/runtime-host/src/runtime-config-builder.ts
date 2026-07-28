@@ -37,6 +37,11 @@ import {
   isManagedPolicyExtensionClassEnabled,
 } from './managed-policy.js'
 import { getRuntimeSkillCatalogDir } from './runtime-paths.js'
+import {
+  createPermissionInheritanceReporter,
+  validatePermissionInheritance,
+  type PermissionInheritanceReport,
+} from './permission-inheritance.js'
 
 type PlaceholderResolveOptions = {
   overrides?: Readonly<Record<string, string>>
@@ -53,14 +58,37 @@ type PlaceholderResolveOptions = {
   credentialEnvNames?: ReadonlySet<string>
 }
 
-type RuntimeConfigBuildDiagnostic = {
-  scope: 'runtime' | 'mcp'
-  message: string
+type RuntimeConfigBuildDiagnostic =
+  | {
+      scope: 'runtime' | 'mcp'
+      message: string
+    }
+  | {
+      scope: 'agent'
+      permissionInheritance: ReturnType<typeof validatePermissionInheritance>
+    }
+
+function formatPermissionInheritanceReport(report: PermissionInheritanceReport) {
+  const details = report.issues.map((issue) => {
+    if (issue.reasonCode === 'delegated-agent-missing') {
+      return `- ${issue.code} at ${issue.path}: ${issue.parentAgent} delegates to missing agent ${issue.childAgent}.`
+    }
+    return `- ${issue.code} at ${issue.path}: ${issue.childAgent} is ${issue.childAction} while ${issue.parentAgent} allows ${issue.parentAction}.`
+  })
+  return [report.summary, ...details].join('\n')
 }
+
+const permissionInheritanceReporter = createPermissionInheritanceReporter((report) => {
+  log('agent', formatPermissionInheritanceReport(report))
+})
 
 function emitRuntimeConfigBuildDiagnostics(diagnostics: readonly RuntimeConfigBuildDiagnostic[]) {
   for (const diagnostic of diagnostics) {
-    log(diagnostic.scope, diagnostic.message)
+    if (diagnostic.scope === 'agent') {
+      permissionInheritanceReporter.report(diagnostic.permissionInheritance)
+    } else {
+      log(diagnostic.scope, diagnostic.message)
+    }
   }
 }
 
@@ -340,6 +368,7 @@ export function buildOpenRouterProviderRuntimeConfigFromApiKey(
   options?: {
     name?: string
     modelIds?: readonly string[] | null
+    baseURL?: string | null
   },
 ): ProviderConfig {
   const modelIds = Array.from(new Set(
@@ -358,7 +387,7 @@ export function buildOpenRouterProviderRuntimeConfigFromApiKey(
     name: options?.name || 'OpenRouter',
     npm: '@ai-sdk/openai-compatible',
     options: {
-      baseURL: 'https://openrouter.ai/api/v1',
+      baseURL: options?.baseURL?.trim() || 'https://openrouter.ai/api/v1',
       apiKey,
     },
     ...(models ? { models } : {}),
@@ -760,7 +789,7 @@ function buildRuntimeConfigWithCustomMcpsResult(
   })
 
   config.permission = permission
-  config.agent = buildOpenCoworkAgentConfig({
+  const agents = buildOpenCoworkAgentConfig({
     allToolPatterns,
     allowToolPatterns: allowedPatterns,
     askToolPatterns: askPatterns,
@@ -775,6 +804,21 @@ function buildRuntimeConfigWithCustomMcpsResult(
     externalDirectory: externalDirectoryPolicy,
     projectDirectory,
     customDelegationAgents,
+  })
+  config.agent = agents
+  diagnostics.push({
+    scope: 'agent',
+    permissionInheritance: validatePermissionInheritance(Object.fromEntries(
+      Object.entries(agents).map(([name, agent]) => [
+        name,
+        {
+          mode: agent.mode,
+          permission: agent.permission && typeof agent.permission === 'object' && !Array.isArray(agent.permission)
+            ? agent.permission as Record<string, unknown>
+            : undefined,
+        },
+      ]),
+    )),
   })
 
   // If the user supplied compaction-agent overrides (model / prompt /

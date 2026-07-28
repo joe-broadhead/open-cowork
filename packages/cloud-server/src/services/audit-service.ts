@@ -143,11 +143,6 @@ export class CloudAuditService {
       name: 'open_cowork_cloud_audit_events_total',
       value: 1,
       unit: '1',
-      attributes: {
-        event_type: input.eventType,
-        actor_type: input.actor.actorType,
-        result: input.result || 'success',
-      },
     })
   }
 

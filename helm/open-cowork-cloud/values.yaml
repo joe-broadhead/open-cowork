@@ -157,7 +157,15 @@ roles:
       rollingUpdate:
         maxUnavailable: 0
         maxSurge: 1
-    resources: {}
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+        ephemeral-storage: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+        ephemeral-storage: 2Gi
     topologySpreadConstraints: []
     podDisruptionBudget:
       enabled: false
@@ -168,6 +176,22 @@ roles:
     replicas: 1
     pollMs: 1000
     checkpointsEnabled: true
+    # Aggregate worker budgets. runtimeCapacity bounds cached, active, and
+    # creating OpenCode runtime boundaries together; additional requests wait
+    # in the bounded admission queue and then fail with a retryable error.
+    runtimeCapacity: 2
+    admissionQueueCapacity: 8
+    admissionQueueTimeoutMs: 30000
+    runtimeProvisionTimeoutMs: 120000
+    runtimeTeardownTimeoutMs: 30000
+    # Per-boundary limits must fit runtimeCapacity times inside the worker pod
+    # limits with headroom for the worker process and checkpoint I/O.
+    isolationMemoryLimitBytes: 1610612736
+    isolationCpuLimit: 0.75
+    isolationPidsLimit: 256
+    sessionConcurrency: 2
+    maxCommandsPerSessionPerTick: 50
+    maxLeases: 4096
     # The app serves /livez on this port so a wedged-event-loop worker is restarted.
     livenessPort: 8788
     livenessProbe:
@@ -180,7 +204,15 @@ roles:
       rollingUpdate:
         maxUnavailable: 0
         maxSurge: 1
-    resources: {}
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+        ephemeral-storage: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+        ephemeral-storage: 8Gi
     topologySpreadConstraints: []
     podDisruptionBudget:
       enabled: false
@@ -205,7 +237,15 @@ roles:
       rollingUpdate:
         maxUnavailable: 0
         maxSurge: 1
-    resources: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+        ephemeral-storage: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+        ephemeral-storage: 1Gi
     topologySpreadConstraints: []
     podDisruptionBudget:
       enabled: false

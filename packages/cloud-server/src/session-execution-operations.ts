@@ -36,6 +36,7 @@ import {
 import { type RemoteInteractionPolicyInput } from './services/remote-approval-policy.ts'
 import { runOnAbort, throwIfAborted } from './cloud-abort-helpers.ts'
 import { asRecord, includesAllowed, readString } from './session-input-validation.ts'
+import { isDeferrableRuntimeCapacityError } from './runtime-capacity.ts'
 import {
   HOUR_MS,
   promptParts,
@@ -62,6 +63,11 @@ export type CloudSessionExecutionServiceOptions = {
     providerId?: string | null
   }) => Promise<void>
   assertRemoteInteractionAllowed: (principal: CloudPrincipal, input: RemoteInteractionPolicyInput) => Promise<unknown>
+}
+
+export type CloudSessionCommandExecutionOptions = {
+  signal?: AbortSignal
+  deferAck?: boolean
 }
 
 export class CloudSessionExecutionService {
@@ -245,7 +251,7 @@ export class CloudSessionExecutionService {
   async executeCommand(
     lease: WorkerLeaseRecord,
     command: SessionCommandRecord,
-    options: { signal?: AbortSignal, deferAck?: boolean } = {},
+    options: CloudSessionCommandExecutionOptions = {},
   ): Promise<void> {
     try {
       throwIfAborted(options.signal)
@@ -274,6 +280,7 @@ export class CloudSessionExecutionService {
       if (!options.deferAck) await this.store.ackSessionCommand(lease, command.commandId)
     } catch (error) {
       if (options.signal?.aborted) throw error
+      if (isDeferrableRuntimeCapacityError(error)) throw error
       const message = error instanceof Error ? error.message : String(error)
       await this.appendRuntimeFailure({
         tenantId: command.tenantId,
@@ -426,16 +433,20 @@ export class CloudSessionExecutionService {
     const runtimeSessionId = await this.ensureRuntimeSessionBound(lease)
     const context = this.runtimeContext(session)
     throwIfAborted(signal)
-    await this.store.updateSessionStatus({
+    await this.appendProjectedEvent({
       tenantId: command.tenantId,
       sessionId: command.sessionId,
-      status: 'running',
+      type: 'session.status',
+      eventId: `${command.sessionId}:command:${command.commandId}:attempt:${command.attemptCount}:running`,
+      payload: { statusType: 'running' },
       leaseToken: lease.leaseToken,
+      sessionStatus: 'running',
     })
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
       sessionId: command.sessionId,
       type: 'prompt.submitted',
+      eventId: `${command.sessionId}:command:${command.commandId}:prompt-submitted`,
       payload: {
         commandId: command.commandId,
         messageId: `${command.commandId}:user`,
@@ -458,6 +469,22 @@ export class CloudSessionExecutionService {
         messageId: command.commandId,
         signal,
       })
+    } catch (error) {
+      if (isDeferrableRuntimeCapacityError(error)) {
+        await this.appendProjectedEvent({
+          tenantId: command.tenantId,
+          sessionId: command.sessionId,
+          type: 'session.status',
+          eventId: `${command.sessionId}:command:${command.commandId}:attempt:${command.attemptCount}:capacity-deferred`,
+          payload: {
+            statusType: 'idle',
+            reason: error.reason,
+          },
+          leaseToken: lease.leaseToken,
+          sessionStatus: 'idle',
+        })
+      }
+      throw error
     } finally {
       stopAbortHandler()
     }

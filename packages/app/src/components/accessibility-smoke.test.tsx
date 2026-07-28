@@ -99,9 +99,11 @@ describe('focused accessibility smoke', () => {
       supportByWorkspace: {
         local: WORKSPACE_SUPPORT_APIS.map((api) => ({
           api,
-          supported: true,
-          reason: null,
-          policyCode: null,
+          status: 'supported',
+          verdict: {
+            allowed: true,
+            reason: null,
+          },
         })),
       },
       loadedByWorkspace: { local: true },

@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { VoiceHostStatus, VoiceTtsSpeakInput } from '@open-cowork/shared'
+import { installRendererTestCoworkApi } from '../test/setup'
+import { createTestVoiceApi, createTestVoiceHostStatus } from '../test/voice-fixtures'
 import {
   enqueueReadAloud,
   getVoiceReadAloudState,
@@ -35,17 +38,15 @@ describe('voice read-aloud queue', () => {
   afterEach(async () => {
     await stopReadAloud()
     resetVoiceReadAloudForTests()
-    // @ts-expect-error test cleanup
-    delete window.coworkApi
   })
 
   it('speaks plain text via host TTS and clears on stop', async () => {
-    const speak = vi.fn(async () => ({ phase: 'ready' }))
-    const cancelSpeak = vi.fn(async () => ({ phase: 'ready' }))
-    // @ts-expect-error test double
-    window.coworkApi = {
-      voice: { speak, cancelSpeak },
-    }
+    const readyStatus = createTestVoiceHostStatus()
+    const speak = vi.fn(async (): Promise<VoiceHostStatus> => readyStatus)
+    const cancelSpeak = vi.fn(async (): Promise<VoiceHostStatus> => readyStatus)
+    installRendererTestCoworkApi({
+      voice: createTestVoiceApi({ speak, cancelSpeak }),
+    })
 
     enqueueReadAloud('m1', 'Hello **assistant** reply')
     await vi.waitFor(() => expect(speak).toHaveBeenCalled())
@@ -62,22 +63,22 @@ describe('voice read-aloud queue', () => {
 
   it('append queues a second segment and skip advances', async () => {
     let releaseFirst: (() => void) | null = null
-    const speak = vi.fn(async (input: { text: string }) => {
+    const readyStatus = createTestVoiceHostStatus()
+    const speak = vi.fn(async (input: VoiceTtsSpeakInput): Promise<VoiceHostStatus> => {
       if (input.text === 'First segment') {
         await new Promise<void>((resolve) => {
           releaseFirst = resolve
         })
       }
-      return { phase: 'ready' }
+      return readyStatus
     })
-    const cancelSpeak = vi.fn(async () => {
+    const cancelSpeak = vi.fn(async (): Promise<VoiceHostStatus> => {
       releaseFirst?.()
-      return { phase: 'ready' }
+      return readyStatus
     })
-    // @ts-expect-error test double
-    window.coworkApi = {
-      voice: { speak, cancelSpeak },
-    }
+    installRendererTestCoworkApi({
+      voice: createTestVoiceApi({ speak, cancelSpeak }),
+    })
 
     enqueueReadAloud('m1', 'First segment')
     await vi.waitFor(() => expect(speak).toHaveBeenCalledWith({ text: 'First segment' }))

@@ -1,5 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Owner: Build & Release. Generated, vendored, coverage, and packaged output
+  // is validated by its producing gate and must never masquerade as source.
   "ignore": [
     "coverage/**",
     "dist/**",
@@ -7,21 +9,24 @@
     "apps/desktop/dist/**",
     "apps/desktop/out/**",
     "apps/desktop/release/**",
-    "THIRD_PARTY_LICENSES/**",
-    "products/gateway/**",
-    "products/wiki/**"
+    "THIRD_PARTY_LICENSES/**"
   ],
+  // Owner: Runtime. OpenCode is intentionally launched as a packaged binary;
+  // static imports cannot represent that runtime edge.
   "ignoreDependencies": [
     "opencode-ai"
   ],
   "workspaces": {
     ".": {
       "entry": [
-        "eslint.config.mjs",
-        "eslint.a11y.config.mjs",
-        "scripts/*.mjs",
-        "scripts/**/*.ts",
         ".github/scripts/*.mjs",
+        // Owner: Build & Release. Docker build stages and the desktop signing
+        // hook invoke these files outside package.json, so Knip cannot infer
+        // their execution edges.
+        "scripts/compose-config-schema.mjs",
+        "scripts/desktop-after-sign.mjs",
+        "scripts/prune-cloud-runtime.mjs",
+        "scripts/prune-gateway-runtime.mjs",
         "tests/**/*.{ts,mjs}"
       ],
       "project": [
@@ -29,12 +34,29 @@
         ".github/scripts/*.mjs",
         "*.config.{js,mjs,ts}",
         "tests/**/*.{ts,mjs}"
+      ],
+      // Owner: Build, Release & Test. These are explicit host-tool probes and
+      // platform commands; they are not package-manager binaries.
+      "ignoreBinaries": [
+        "codesign",
+        "gcloud",
+        "gh",
+        "mkfifo",
+        "ps"
+      ],
+      // Owner: Cloud Runtime. The pruned production closure installs generated
+      // bundle externals from this root manifest; their source imports live in
+      // workspace packages, so Knip cannot infer the required root declarations.
+      "ignoreDependencies": [
+        "@aws-sdk/client-s3",
+        "google-auth-library"
       ]
     },
     "apps/desktop": {
       "entry": [
         "src/main/index.ts",
         "src/preload/index.ts",
+        "src/**/*.test.ts",
         "tests/*.smoke.test.ts",
         "tests/*.packaged.test.ts",
         "tests/*.eval.test.ts",
@@ -45,10 +67,14 @@
         "tests/**/*.{ts,tsx}"
       ],
       "ignore": [],
-      "ignoreBinaries": [
-        "electron"
-      ],
+      // Owner: Desktop Runtime. The shared renderer is composed through Vite's
+      // source alias, electron-builder is invoked by the dist script, Google
+      // auth stays external in the packaged main process, and OpenCode is
+      // loaded/launched through the packaged runtime boundary.
       "ignoreDependencies": [
+        "@open-cowork/app",
+        "electron-builder",
+        "google-auth-library",
         "opencode-ai"
       ]
     },
@@ -62,9 +88,12 @@
       "project": [
         "src/**/*.{ts,tsx}"
       ],
+      // Owner: Design System. Font packages are side-effect CSS entrypoints
+      // selected by the browser bundle.
       "ignoreDependencies": [
         "@fontsource-variable/mona-sans",
-        "@fontsource-variable/schibsted-grotesk"
+        "@fontsource-variable/schibsted-grotesk",
+        "tailwindcss"
       ]
     },
     "apps/channel-gateway": {
@@ -103,6 +132,8 @@
       "project": [
         "src/**/*.ts"
       ],
+      // Owner: Runtime. These are operating-system commands and Electron's
+      // packaged process API, not JavaScript dependencies.
       "ignoreBinaries": [
         "ps",
         "lsof",
@@ -227,6 +258,59 @@
       ],
       "project": [
         "src/**/*.ts"
+      ]
+    },
+    "products/gateway": {
+      "entry": [
+        "src/cli.ts",
+        "src/daemon.ts",
+        "src/mcp.ts",
+        "src/__tests__/**/*.test.ts",
+        "src/__tests__/helpers/*.ts",
+        // Owner: Durable Gateway. Release artifact validation reads and ships
+        // these Docker smoke programs by filename; that edge is not an import.
+        "scripts/docker-auth-smoke.mjs",
+        "scripts/docker-compose-auth-smoke.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "scripts/**/*.mjs"
+      ],
+      "ignoreExportsUsedInFile": true,
+      "includeEntryExports": false,
+      // Owner: Durable Gateway. OpenCode and process inspection are explicit
+      // subprocess boundaries exercised by integration tests.
+      "ignoreBinaries": [
+        "opencode",
+        "ps"
+      ]
+    },
+    "products/wiki": {
+      "entry": [
+        "package.json",
+        "tests/*.test.ts",
+        // Owner: Wiki Release. The package tarball smoke is invoked after the
+        // artifact filename is resolved dynamically.
+        "scripts/openwiki-packaged-cli-smoke.mjs"
+      ],
+      "project": [
+        "scripts/*.mjs",
+        "tests/**/*.ts"
+      ],
+      // Owner: Wiki. The static-export verification invokes the host Python
+      // interpreter; it is not a JavaScript package dependency.
+      "ignoreBinaries": [
+        "python3"
+      ]
+    },
+    "products/wiki/packages/*": {
+      "entry": [
+        "src/index.ts",
+        "src/main.ts",
+        "test/**/*.test.ts"
+      ],
+      "project": [
+        "**/*.{ts,mjs}"
       ]
     },
     "mcps/charts": {

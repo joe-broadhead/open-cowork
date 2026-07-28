@@ -232,6 +232,18 @@ export function decideHttpSecurityPolicy(input: HttpSecurityPolicyInput): HttpSe
     capability: input.requiredCapability,
   }
 
+  // Prefer an explicitly supplied, capability-satisfying credential over
+  // ambient loopback trust. This gives long-lived local streams a stable
+  // credential identity that can be revalidated and revoked.
+  const tokenTierEnabled = input.allowNonLocalHttp || input.capabilityScopedLoopback
+  if (
+    tokenTierEnabled &&
+    input.grantCapabilities?.length &&
+    httpCapabilitiesSatisfy(input.grantCapabilities, input.requiredCapability)
+  ) {
+    return httpDecision(base, input, true, 'allow', 'http_token_capability_allowed', `valid bearer token with ${input.requiredCapability} capability`, 'http-token')
+  }
+
   // Capability-scoped loopback suppresses the local mutation/admin auto-trust:
   // loopback write/admin callers must satisfy the bearer-token tier below.
   if (input.isLocalRequest && !input.capabilityScopedLoopback) {
@@ -243,11 +255,7 @@ export function decideHttpSecurityPolicy(input: HttpSecurityPolicyInput): HttpSe
   if (input.publicWebhookAllowed) {
     return httpDecision(base, input, true, 'allow', 'http_public_webhook', 'public webhook mode', 'webhook')
   }
-  const tokenTierEnabled = input.allowNonLocalHttp || input.capabilityScopedLoopback
   if (tokenTierEnabled && input.grantCapabilities?.length) {
-    if (httpCapabilitiesSatisfy(input.grantCapabilities, input.requiredCapability)) {
-      return httpDecision(base, input, true, 'allow', 'http_token_capability_allowed', `valid bearer token with ${input.requiredCapability} capability`, 'http-token')
-    }
     return httpDecision(base, input, false, 'deny', 'http_token_capability_denied', `bearer token lacks required capability: ${input.requiredCapability}`, 'rejected')
   }
   if (input.allowNonLocalHttp && input.unsafeAllowNoAuth) {

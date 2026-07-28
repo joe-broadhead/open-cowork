@@ -12,6 +12,7 @@ import {
   recordCloudSchedulerMetric,
   recordCloudWorkerMetric,
   sanitizeCloudObservabilityAttributes,
+  sanitizeCloudMetricAttributes,
   type CloudObservabilityAdapter,
 } from '@open-cowork/cloud-server/observability'
 
@@ -45,6 +46,47 @@ test('cloud observability sanitizes secret-bearing attributes', () => {
   })
 })
 
+test('cloud metric attributes reject identifiers, content, paths, and credentials', () => {
+  assert.deepEqual(sanitizeCloudMetricAttributes({
+    tenant_id: 'tenant-1',
+    sessionId: 'session-1',
+    worker_id: 'worker-1',
+    request_id: 'request-1',
+    'url.path': '/api/sessions/session-1',
+    prompt: 'customer prompt',
+    error_message: 'private failure',
+    authorization: 'Bearer private-token',
+    undeclared_dimension: 'unbounded-value',
+    status: 'saturated',
+    reason: 'queue_full',
+    'cloud.role': 'worker',
+  }), {
+    status: 'saturated',
+    reason: 'queue_full',
+    cloud_role: 'worker',
+  })
+  assert.deepEqual(sanitizeCloudMetricAttributes({
+    status: 'status-per-customer-123',
+    reason: 'reason-per-session-456',
+    'http.request.method': 'X-TENANT-789',
+    'http.response.status_code': 60_000,
+    'cloud.profile': 'tenant-private-profile',
+  }), {
+    status: 'other',
+    reason: 'other',
+    http_request_method: 'other',
+    http_response_status_code: 'other',
+    cloud_profile: 'custom',
+  })
+  assert.deepEqual(sanitizeCloudMetricAttributes({
+    'cloud.role': 'worker',
+    'cloud-role': 'scheduler',
+    cloud___role: 'web',
+  }), {
+    cloud_role: 'web',
+  })
+})
+
 test('cloud console observability writes structured JSON records', async () => {
   const lines: string[] = []
   const adapter = createConsoleCloudObservability({
@@ -63,6 +105,19 @@ test('cloud console observability writes structured JSON records', async () => {
       token: 'private-token',
     },
   })
+  await adapter.metric({
+    name: 'open_cowork_cloud_runtime_capacity_in_use',
+    value: 1,
+    attributes: {
+      tenant_id: 'tenant-1',
+      session_id: 'session-1',
+      worker_id: 'worker-1',
+      'url.path': '/private/session-1',
+      prompt: 'private prompt',
+      token: 'private-token',
+      status: 'saturated',
+    },
+  })
 
   const parsed = JSON.parse(lines[0] || '{}') as Record<string, unknown>
   assert.equal(parsed.ts, '2026-01-01T00:00:00.000Z')
@@ -72,6 +127,18 @@ test('cloud console observability writes structured JSON records', async () => {
   assert.equal((parsed.attributes as Record<string, unknown>)['service.name'], 'open-cowork-cloud-test')
   assert.equal((parsed.attributes as Record<string, unknown>)['service.version'], '1.2.3')
   assert.equal((parsed.attributes as Record<string, unknown>).token, '[redacted]')
+  const metric = JSON.parse(lines[1] || '{}') as Record<string, unknown>
+  assert.deepEqual(metric.attributes, {
+    'service.name': 'open-cowork-cloud-test',
+    'service.version': '1.2.3',
+    status: 'saturated',
+    metric: 'open_cowork_cloud_runtime_capacity_in_use',
+    value: 1,
+    unit: '',
+  })
+  assert.equal(JSON.stringify(metric).includes('tenant-1'), false)
+  assert.equal(JSON.stringify(metric).includes('session-1'), false)
+  assert.equal(JSON.stringify(metric).includes('private prompt'), false)
 })
 
 test('cloud HTTP request observation emits log, metric, and span records', async () => {
@@ -98,6 +165,12 @@ test('cloud HTTP request observation emits log, metric, and span records', async
   assert.equal((logs[0] as Record<string, unknown>).name, 'cloud.http.request')
   assert.equal((metrics[0] as Record<string, unknown>).name, 'cloud.http.server.duration_ms')
   assert.equal((metrics[0] as Record<string, unknown>).value, 42)
+  assert.deepEqual((metrics[0] as Record<string, unknown>).attributes, {
+    http_request_method: 'POST',
+    http_response_status_code: 201,
+    cloud_role: 'web',
+    cloud_profile: 'full',
+  })
   assert.equal((spans[0] as Record<string, unknown>).name, 'cloud.http.request')
   assert.equal((spans[0] as Record<string, unknown>).status, 'ok')
 })
@@ -136,14 +209,10 @@ test('cloud observability helpers sanitize records before custom adapters receiv
   })
   await recordCloudWorkerMetric(adapter, {
     name: `open_cowork_cloud_worker_${workerCredential}_total`,
-    workerId: workerCredential,
-    tenantId: workerCredential,
-    sessionId: workerCredential,
     status: `failed ${workerCredential}`,
   })
   await recordCloudSchedulerMetric(adapter, {
     name: `open_cowork_cloud_scheduler_${workerCredential}_total`,
-    schedulerId: workerCredential,
     status: `failed ${workerCredential}`,
   })
 
@@ -176,12 +245,10 @@ test('cloud observability record helpers isolate telemetry sink failures', async
   }))
   await assert.doesNotReject(() => recordCloudWorkerMetric(adapter, {
     name: 'open_cowork_cloud_worker_commands_processed_total',
-    workerId: 'worker-1',
     status: 'ok',
   }))
   await assert.doesNotReject(() => recordCloudSchedulerMetric(adapter, {
     name: 'open_cowork_cloud_scheduler_claims_total',
-    schedulerId: 'scheduler-1',
     status: 'ok',
   }))
 })
@@ -217,6 +284,7 @@ test('cloud Prometheus observability renders low-cardinality product metrics', a
     value: 1,
     attributes: {
       request_id: 'request-1',
+      tenant_id: 'tenant-1',
       session_id: 'session-1',
       'http.request.method': 'GET',
       'url.path': '/api/workspace',
@@ -228,18 +296,54 @@ test('cloud Prometheus observability renders low-cardinality product metrics', a
     value: 1,
     attributes: {
       request_id: 'request-2',
+      tenant_id: 'tenant-2',
       session_id: 'session-2',
       'http.request.method': 'GET',
       'url.path': '/api/workspace',
       token: 'secret-token',
     },
   })
+  await adapter.metric({
+    name: 'cloud_explicit_gauge_total',
+    value: 2,
+    kind: 'gauge',
+  })
+  await adapter.metric({
+    name: 'cloud_explicit_gauge_total',
+    value: 3,
+    kind: 'gauge',
+  })
   const text = adapter.renderPrometheus?.() || ''
   assert.match(text, /# TYPE open_cowork_cloud_http_requests_total counter/)
-  assert.match(text, /open_cowork_cloud_http_requests_total\{http_request_method="GET",token="\[redacted\]",url_path="\/api\/workspace"\} 2/)
+  assert.match(text, /open_cowork_cloud_http_requests_total\{http_request_method="GET"\} 2/)
   assert.equal(text.includes('request-1'), false)
+  assert.equal(text.includes('tenant-1'), false)
   assert.equal(text.includes('session-1'), false)
   assert.equal(text.includes('secret-token'), false)
+  assert.match(text, /# TYPE cloud_explicit_gauge_total gauge/)
+  assert.match(text, /cloud_explicit_gauge_total 3/)
+})
+
+test('cloud Prometheus preserves absolute cumulative CPU counters', async () => {
+  const adapter = createPrometheusCloudObservability()
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_user_seconds_total',
+    value: 0.25,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_user_seconds_total',
+    value: 0.75,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  assert.match(
+    adapter.renderPrometheus?.() || '',
+    /open_cowork_cloud_worker_cpu_user_seconds_total 0\.75/,
+  )
 })
 
 test('cloud OTLP observability exports trace and metric payloads with headers', async () => {
@@ -268,7 +372,15 @@ test('cloud OTLP observability exports trace and metric payloads with headers', 
     name: 'cloud.http.server.duration_ms',
     value: 42,
     unit: 'ms',
-    attributes: { request_id: 'req-1' },
+    attributes: {
+      request_id: 'req-1',
+      tenant_id: 'tenant-1',
+      session_id: 'session-1',
+      'url.path': '/api/sessions/session-1',
+      prompt: 'private prompt',
+      token: 'private-token',
+      status: 'saturated',
+    },
     timestamp: new Date('2026-01-01T00:00:00.042Z'),
   })
   await adapter.flush?.()
@@ -289,6 +401,136 @@ test('cloud OTLP observability exports trace and metric payloads with headers', 
   const metric = ((((metricBody.resourceMetrics as unknown[])[0] as Record<string, unknown>)
     .scopeMetrics as unknown[])[0] as Record<string, unknown>).metrics as unknown[]
   assert.equal((metric[0] as Record<string, unknown>).name, 'cloud.http.server.duration_ms')
+  const metricPoint = ((((metric[0] as Record<string, unknown>).gauge as Record<string, unknown>)
+    .dataPoints as Array<Record<string, unknown>>)[0] || {})
+  const metricAttributeKeys = (
+    metricPoint.attributes as Array<{ key: string }>
+  ).map((entry) => entry.key)
+  assert.deepEqual(metricAttributeKeys, ['status'])
+  assert.equal(JSON.stringify(metricBody).includes('tenant-1'), false)
+  assert.equal(JSON.stringify(metricBody).includes('session-1'), false)
+  assert.equal(JSON.stringify(metricBody).includes('private prompt'), false)
+})
+
+test('cloud OTLP keeps cumulative counter start time stable across interleaved series', async () => {
+  const requests: Array<{ url: string, init?: { body?: string } }> = []
+  const adapter = createOtlpHttpCloudObservability({
+    endpoint: 'https://otel.example.test',
+    flushIntervalMs: 0,
+    maxQueueSize: 1,
+    fetch: async (url, init) => {
+      requests.push({ url: String(url), init: init as typeof requests[number]['init'] })
+      return new Response('{}', { status: 200 })
+    },
+  })
+
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_user_seconds_total',
+    value: 0.25,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  await adapter.flush?.()
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_system_seconds_total',
+    value: 0.5,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  await adapter.flush?.()
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_cpu_user_seconds_total',
+    value: 0.75,
+    kind: 'counter',
+    unit: 's',
+    aggregationTemporality: 'cumulative',
+  })
+  await adapter.flush?.()
+
+  const metricRequests = requests.filter((request) => request.url.endsWith('/v1/metrics'))
+  assert.equal(metricRequests.length, 3)
+  const exportedSums = metricRequests.map((request) => {
+    const body = JSON.parse(request.init?.body || '{}') as Record<string, unknown>
+    const metrics = ((((body.resourceMetrics as unknown[])[0] as Record<string, unknown>)
+      .scopeMetrics as unknown[])[0] as Record<string, unknown>).metrics as Array<Record<string, unknown>>
+    return metrics[0]?.sum as Record<string, unknown>
+  })
+  assert.deepEqual(exportedSums.map((sum) => sum.aggregationTemporality), [2, 2, 2])
+  const dataPoints = exportedSums.map((sum) => (
+    ((sum.dataPoints as Array<Record<string, unknown>>)[0] || {})
+  ))
+  assert.deepEqual(dataPoints.map((point) => point.asDouble), [0.25, 0.5, 0.75])
+  assert.equal(typeof dataPoints[0]?.startTimeUnixNano, 'string')
+  assert.equal(dataPoints[2]?.startTimeUnixNano, dataPoints[0]?.startTimeUnixNano)
+})
+
+test('cloud OTLP exports runtime state as gauges and totals as sums', async () => {
+  const requests: Array<{ url: string, init?: { body?: string } }> = []
+  const adapter = createOtlpHttpCloudObservability({
+    endpoint: 'https://otel.example.test',
+    flushIntervalMs: 0,
+    fetch: async (url, init) => {
+      requests.push({ url: String(url), init: init as typeof requests[number]['init'] })
+      return new Response('{}', { status: 200 })
+    },
+  })
+
+  await adapter.metric({
+    name: 'open_cowork_cloud_runtime_capacity_in_use',
+    value: 2,
+    kind: 'gauge',
+    unit: '1',
+  })
+  await adapter.metric({
+    name: 'open_cowork_cloud_worker_command_duration_ms',
+    value: 125,
+    kind: 'gauge',
+    unit: 'ms',
+  })
+  await adapter.metric({
+    name: 'open_cowork_cloud_runtime_admission_rejections_total',
+    value: 1,
+    kind: 'counter',
+    unit: '1',
+  })
+  await adapter.metric({
+    name: 'cloud_explicit_gauge_total',
+    value: 3,
+    kind: 'gauge',
+  })
+  await adapter.flush?.()
+
+  const request = requests.find((entry) => entry.url.endsWith('/v1/metrics'))
+  const body = JSON.parse(request?.init?.body || '{}') as Record<string, unknown>
+  const metrics = ((((body.resourceMetrics as unknown[])[0] as Record<string, unknown>)
+    .scopeMetrics as unknown[])[0] as Record<string, unknown>).metrics as Array<Record<string, unknown>>
+  const capacity = metrics.find((metric) => metric.name === 'open_cowork_cloud_runtime_capacity_in_use')
+  const duration = metrics.find((metric) => metric.name === 'open_cowork_cloud_worker_command_duration_ms')
+  const rejections = metrics.find((metric) => metric.name === 'open_cowork_cloud_runtime_admission_rejections_total')
+  const explicitGauge = metrics.find((metric) => metric.name === 'cloud_explicit_gauge_total')
+
+  assert.equal(capacity?.sum, undefined)
+  assert.equal(
+    (((capacity?.gauge as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0])
+      ?.asDouble,
+    2,
+  )
+  assert.equal(duration?.sum, undefined)
+  assert.equal(
+    (((duration?.gauge as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0])
+      ?.asDouble,
+    125,
+  )
+  assert.equal(rejections?.gauge, undefined)
+  assert.equal((rejections?.sum as Record<string, unknown>).isMonotonic, true)
+  assert.equal(explicitGauge?.sum, undefined)
+  assert.equal(
+    (((explicitGauge?.gauge as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0])
+      ?.asDouble,
+    3,
+  )
 })
 
 test('cloud OTLP observability bounds queues and exports drop counters', async () => {
@@ -335,7 +577,12 @@ test('cloud OTLP observability bounds queues and exports drop counters', async (
     'open_cowork_cloud_otlp_dropped_records_total',
     'open_cowork_cloud_otlp_dropped_records_total',
   ])
-  assert.equal((exportedMetrics[0]?.sum as Record<string, unknown>).isMonotonic, false)
+  assert.equal(exportedMetrics[0]?.sum, undefined)
+  assert.equal(
+    ((((exportedMetrics[0]?.gauge as Record<string, unknown>)
+      .dataPoints as Array<Record<string, unknown>>)[0]) || {}).asDouble,
+    2,
+  )
 
   const droppedMetrics = exportedMetrics.filter((metric) => metric.name === 'open_cowork_cloud_otlp_dropped_records_total')
   const droppedMetricCounter = droppedMetrics.find((metric) => {
@@ -352,10 +599,10 @@ test('cloud OTLP observability bounds queues and exports drop counters', async (
 
   const secondExportedMetrics = exportedMetricsFrom(requests.filter((request) => request.url.endsWith('/v1/metrics'))[1] || {})
   const secondDroppedMetricCounter = secondExportedMetrics.find((metric) => {
+    if (metric.name !== 'open_cowork_cloud_otlp_dropped_records_total') return false
     const dataPoint = (((metric.sum as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0])
     const attributes = dataPoint.attributes as Array<{ key: string, value: Record<string, unknown> }>
-    return metric.name === 'open_cowork_cloud_otlp_dropped_records_total'
-      && attributes.some((entry) => entry.key === 'kind' && entry.value.stringValue === 'metric')
+    return attributes.some((entry) => entry.key === 'kind' && entry.value.stringValue === 'metric')
   })
   assert.equal((((secondDroppedMetricCounter?.sum as Record<string, unknown>).dataPoints as Array<Record<string, unknown>>)[0] || {}).asDouble, 2)
 })

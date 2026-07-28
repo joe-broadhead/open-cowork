@@ -25,12 +25,14 @@ import { initializeLocalSqliteSchema } from './local-sqlite-schema.js'
 import { sessionEngine } from './session-engine.js'
 import { getSessionRecord, type SessionRecord } from './session-registry.js'
 import { setSessionHistoryViewIndexHandler, syncSessionView } from './session-history-loader.js'
+import { setBoundedMapEntry } from './bounded-map.js'
 
 const ARTIFACT_LIFECYCLE_DB_SCHEMA_VERSION = 1
 const ARTIFACT_LIFECYCLE_SCHEMA_VERSION_KEY = 'schema_version'
 const LOCAL_WORKSPACE_ID = 'local'
 const DEFAULT_INDEX_LIMIT = 100
 const MAX_INDEX_LIMIT = 500
+const MAX_PREPARED_STATEMENT_SHAPES = 32
 
 const ARTIFACT_LIFECYCLE_BASELINE_SQL = `
   create table artifact_lifecycle_meta (
@@ -99,6 +101,15 @@ const ARTIFACT_LIFECYCLE_BASELINE_SQL = `
 let lifecycleDb: DatabaseSync | null = null
 let lifecycleDbForTests: DatabaseSync | null = null
 let transactionCounter = 0
+type PreparedStatement = ReturnType<DatabaseSync['prepare']>
+type ArtifactIndexStatementCache = {
+  lifecycleByKeyCount: Map<number, PreparedStatement>
+  deleteStaleByKeyCount: Map<number, PreparedStatement>
+  deleteSession: PreparedStatement | null
+  indexSession: PreparedStatement | null
+  upsert: PreparedStatement | null
+}
+const artifactIndexStatementCaches = new WeakMap<DatabaseSync, ArtifactIndexStatementCache>()
 
 type ArtifactIndexRuntimeDeps = {
   isHydrated: (sessionId: string) => boolean
@@ -252,6 +263,7 @@ function rowString(row: Record<string, unknown>, key: string) {
 
 function rowNumber(row: Record<string, unknown>, key: string) {
   const value = row[key]
+  if (value === null || value === undefined || value === '') return null
   const number = Number(value)
   return Number.isFinite(number) ? number : null
 }
@@ -368,20 +380,68 @@ function findLifecycleForArtifactFromMap(lifecycles: Map<string, ArtifactLifecyc
   return null
 }
 
+function artifactIndexStatementCache(db: DatabaseSync) {
+  let cache = artifactIndexStatementCaches.get(db)
+  if (!cache) {
+    cache = {
+      lifecycleByKeyCount: new Map(),
+      deleteStaleByKeyCount: new Map(),
+      deleteSession: null,
+      indexSession: null,
+      upsert: null,
+    }
+    artifactIndexStatementCaches.set(db, cache)
+  }
+  return cache
+}
+
 function loadLifecyclesForArtifacts(workspace: string, sessionId: string, artifacts: SessionArtifact[]) {
   const keys = [...new Set(artifacts.flatMap(lifecycleKeysForArtifact))]
   const lifecycles = new Map<string, ArtifactLifecycleRecord>()
   if (keys.length === 0) return lifecycles
-  const rows = getArtifactLifecycleDb().prepare(`
-    select *
-    from artifact_lifecycle
-    where workspace_id = ? and session_id = ? and artifact_id in (${keys.map(() => '?').join(', ')})
-  `).all(workspace, sessionId, ...keys)
+  const db = getArtifactLifecycleDb()
+  const cache = artifactIndexStatementCache(db)
+  let statement = cache.lifecycleByKeyCount.get(keys.length)
+  if (!statement) {
+    statement = db.prepare(`
+      select *
+      from artifact_lifecycle
+      where workspace_id = ? and session_id = ? and artifact_id in (${keys.map(() => '?').join(', ')})
+    `)
+    setBoundedMapEntry(
+      cache.lifecycleByKeyCount,
+      keys.length,
+      statement,
+      MAX_PREPARED_STATEMENT_SHAPES,
+    )
+  }
+  const rows = statement.all(workspace, sessionId, ...keys)
   for (const row of rows) {
     const lifecycle = lifecycleFromRow(row)
     if (lifecycle) lifecycles.set(lifecycle.artifactId, lifecycle)
   }
   return lifecycles
+}
+
+function loadArtifactIndexEntriesForSession(workspace: string, sessionId: string) {
+  const db = getArtifactLifecycleDb()
+  const cache = artifactIndexStatementCache(db)
+  if (!cache.indexSession) {
+    cache.indexSession = db.prepare(`
+      select *
+      from artifact_index
+      where workspace_id = ? and session_id = ?
+    `)
+  }
+  const entries = new Map<string, ArtifactIndexEntry>()
+  for (const row of cache.indexSession.all(workspace, sessionId)) {
+    const entry = artifactIndexEntryFromRow(row)
+    const storageKey = row && typeof row === 'object' && !Array.isArray(row)
+      ? rowString(row as Record<string, unknown>, 'artifact_id')
+      : null
+    if (entry && storageKey) entries.set(storageKey, entry)
+  }
+  return entries
 }
 
 function upsertLifecycle(record: ArtifactLifecycleRecord) {
@@ -432,7 +492,9 @@ function artifactIndexStorageKey(artifact: Pick<SessionArtifact, 'id' | 'filePat
 }
 
 function artifactIndexUpsertStatement(db: DatabaseSync) {
-  return db.prepare(`
+  const cache = artifactIndexStatementCache(db)
+  if (cache.upsert) return cache.upsert
+  cache.upsert = db.prepare(`
       insert into artifact_index (
         workspace_id,
         session_id,
@@ -483,6 +545,37 @@ function artifactIndexUpsertStatement(db: DatabaseSync) {
         status_updated_at = excluded.status_updated_at,
         updated_at = excluded.updated_at
     `)
+  return cache.upsert
+}
+
+function artifactIndexDeleteSessionStatement(db: DatabaseSync) {
+  const cache = artifactIndexStatementCache(db)
+  if (!cache.deleteSession) {
+    cache.deleteSession = db.prepare(
+      'delete from artifact_index where workspace_id = ? and session_id = ?',
+    )
+  }
+  return cache.deleteSession
+}
+
+function artifactIndexDeleteStaleStatement(db: DatabaseSync, keyCount: number) {
+  const cache = artifactIndexStatementCache(db)
+  let statement = cache.deleteStaleByKeyCount.get(keyCount)
+  if (!statement) {
+    statement = db.prepare(`
+      delete from artifact_index
+      where workspace_id = ?
+        and session_id = ?
+        and artifact_id not in (${Array.from({ length: keyCount }, () => '?').join(', ')})
+    `)
+    setBoundedMapEntry(
+      cache.deleteStaleByKeyCount,
+      keyCount,
+      statement,
+      MAX_PREPARED_STATEMENT_SHAPES,
+    )
+  }
+  return statement
 }
 
 function runArtifactIndexEntryUpsert(statement: ReturnType<DatabaseSync['prepare']>, entry: ArtifactIndexEntry) {
@@ -614,21 +707,33 @@ export function normalizeArtifactLifecycleEntry(input: {
   sessionTitle?: string | null
   artifact: SessionArtifact
   lifecycle?: ArtifactLifecycleRecord | null
+  existing?: ArtifactIndexEntry | null
   provenance?: TaskProvenance | null
   now?: Date
 }): ArtifactIndexEntry {
   const artifact = input.artifact
   const kind = input.lifecycle?.kind
     || artifact.kind
+    || input.existing?.kind
     || inferArtifactKind({
       kind: artifact.kind,
       filename: artifact.filename,
       mime: artifact.mime,
       chart: artifact.chart,
     })
-  const status = input.lifecycle?.status || artifact.status || defaultArtifactStatusForKind(kind)
-  const createdAt = artifact.createdAt || input.lifecycle?.createdAt || input.now?.toISOString() || new Date().toISOString()
-  const updatedAt = input.lifecycle?.updatedAt || artifact.updatedAt || createdAt
+  const status = input.lifecycle?.status
+    || artifact.status
+    || input.existing?.status
+    || defaultArtifactStatusForKind(kind)
+  const createdAt = artifact.createdAt
+    || input.lifecycle?.createdAt
+    || input.existing?.createdAt
+    || input.now?.toISOString()
+    || new Date().toISOString()
+  const updatedAt = input.lifecycle?.updatedAt
+    || artifact.updatedAt
+    || input.existing?.updatedAt
+    || createdAt
   return {
     ...artifact,
     sessionId: input.sessionId,
@@ -644,6 +749,42 @@ export function normalizeArtifactLifecycleEntry(input: {
     statusUpdatedBy: input.lifecycle?.statusUpdatedBy ?? artifact.statusUpdatedBy ?? null,
     statusUpdatedAt: input.lifecycle?.statusUpdatedAt ?? artifact.statusUpdatedAt ?? null,
   }
+}
+
+function artifactIndexEntryValuesEqual(
+  left: ArtifactIndexEntry,
+  right: ArtifactIndexEntry,
+  includeUpdatedAt: boolean,
+) {
+  return workspaceId(left.workspaceId) === workspaceId(right.workspaceId)
+    && left.sessionId === right.sessionId
+    && artifactIndexStorageKey(left) === artifactIndexStorageKey(right)
+    && left.id === right.id
+    && left.toolId === right.toolId
+    && left.toolName === right.toolName
+    && left.filePath === right.filePath
+    && left.filename === right.filename
+    && left.order === right.order
+    && (left.source || null) === (right.source || null)
+    && (left.cloudArtifactId || null) === (right.cloudArtifactId || null)
+    && (left.taskRunId || null) === (right.taskRunId || null)
+    && (left.mime || null) === (right.mime || null)
+    && (left.size ?? null) === (right.size ?? null)
+    && JSON.stringify(left.chart || null) === JSON.stringify(right.chart || null)
+    && (left.sessionTitle || null) === (right.sessionTitle || null)
+    && left.kind === right.kind
+    && left.status === right.status
+    && (left.authorAgentId || null) === (right.authorAgentId || null)
+    && (left.projectId || null) === (right.projectId || null)
+    && (left.taskId || null) === (right.taskId || null)
+    && (left.statusUpdatedBy || null) === (right.statusUpdatedBy || null)
+    && (left.statusUpdatedAt || null) === (right.statusUpdatedAt || null)
+    && left.createdAt === right.createdAt
+    && (!includeUpdatedAt || left.updatedAt === right.updatedAt)
+}
+
+function artifactIndexEntriesEqual(left: ArtifactIndexEntry, right: ArtifactIndexEntry) {
+  return artifactIndexEntryValuesEqual(left, right, true)
 }
 
 function indexLimit(request: ArtifactIndexRequest) {
@@ -680,35 +821,59 @@ export function indexLocalSessionArtifactsFromView(input: {
   sessionTitle?: string | null
   view: SessionView
   tasks?: CoordinationTaskCandidate[]
+  now?: Date
 }): ArtifactIndexEntry[] {
   const workspace = workspaceId(input.workspaceId)
   const tasks = input.tasks || listCoordinationTasks({ workspaceId: workspace, limit: 1000 })
   const taskIndex = buildTaskProvenanceIndex(tasks)
   const artifacts = artifactsFromView(input.view)
   const lifecycles = loadLifecyclesForArtifacts(workspace, input.sessionId, artifacts)
-  const entries = artifacts.map((artifact) => normalizeArtifactLifecycleEntry({
+  const existingEntries = loadArtifactIndexEntriesForSession(workspace, input.sessionId)
+  const now = input.now || new Date()
+  const entries = artifacts.map((artifact) => {
+    const storageKey = artifactIndexStorageKey(artifact)
+    const lifecycle = findLifecycleForArtifactFromMap(lifecycles, artifact)
+    const existing = existingEntries.get(storageKey) || null
+    const normalized = normalizeArtifactLifecycleEntry({
       workspaceId: workspace,
       sessionId: input.sessionId,
       sessionTitle: input.sessionTitle || null,
       artifact,
-      lifecycle: findLifecycleForArtifactFromMap(lifecycles, artifact),
+      lifecycle,
+      existing,
       provenance: taskProvenanceForArtifact(taskIndex, input.sessionId, artifact),
-    }))
+      now,
+    })
+    if (
+      existing
+      && !artifact.updatedAt
+      && !lifecycle?.updatedAt
+      && !artifactIndexEntryValuesEqual(normalized, existing, false)
+    ) {
+      return {
+        ...normalized,
+        updatedAt: now.toISOString(),
+      }
+    }
+    return normalized
+  })
   const keys = entries.map(artifactIndexStorageKey)
+  const keySet = new Set(keys)
+  const staleEntriesExist = Array.from(existingEntries.keys()).some((key) => !keySet.has(key))
+  const entriesToUpsert = entries.filter((entry) => {
+    const existing = existingEntries.get(artifactIndexStorageKey(entry))
+    return !existing || !artifactIndexEntriesEqual(existing, entry)
+  })
+  if (!staleEntriesExist && entriesToUpsert.length === 0) return entries
+
   withTransaction((db) => {
     if (keys.length === 0) {
-      db.prepare(`delete from artifact_index where workspace_id = ? and session_id = ?`).run(workspace, input.sessionId)
-      return
+      artifactIndexDeleteSessionStatement(db).run(workspace, input.sessionId)
+    } else if (staleEntriesExist) {
+      artifactIndexDeleteStaleStatement(db, keys.length).run(workspace, input.sessionId, ...keys)
     }
-    const placeholders = keys.map(() => '?').join(', ')
-    db.prepare(`
-      delete from artifact_index
-      where workspace_id = ?
-        and session_id = ?
-        and artifact_id not in (${placeholders})
-    `).run(workspace, input.sessionId, ...keys)
     const upsert = artifactIndexUpsertStatement(db)
-    for (const entry of entries) runArtifactIndexEntryUpsert(upsert, entry)
+    for (const entry of entriesToUpsert) runArtifactIndexEntryUpsert(upsert, entry)
   })
   return entries
 }

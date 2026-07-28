@@ -23,6 +23,7 @@ import type {
   ControlPlaneSessionStatus,
   CompleteWorkflowRunInput,
   CreateSessionInput,
+  DeferSessionCommandInput,
   EnqueueCommandInput,
   FailWorkflowRunInput,
   ListCloudArtifactIndexInput,
@@ -82,6 +83,12 @@ type InMemorySessionsHost = {
   failWorkflowRun(input: FailWorkflowRunInput): unknown
   assertCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }): void
   consumeUsageQuota(input: ConsumeUsageQuotaInput): QuotaConsumptionRecord
+  adjustUsageQuota(input: {
+    orgId: string
+    quotaKey: string
+    windowStartedAtMs: number
+    quantityDelta: number
+  }): void
   snapshotUsageQuotaCounters(): unknown
   restoreUsageQuotaCounters(snapshot: unknown): void
   recordAuditEvent(input: RecordAuditEventInput): void
@@ -714,13 +721,17 @@ export class InMemorySessionsDomain {
     this.assertCurrentLease(session, lease, nowMs)
     const command = session.commands.find((entry) => (
       (entry.status === 'pending'
-        && (!entry.availableAt || Date.parse(entry.availableAt) <= nowMs)
         && (entry.targetLeaseToken === null || entry.targetLeaseToken === lease.leaseToken))
       || (entry.status === 'running'
         && entry.claimedLeaseToken !== lease.leaseToken
         && entry.targetLeaseToken === null)
     ))
     if (!command) return null
+    if (
+      command.status === 'pending'
+      && command.availableAt
+      && Date.parse(command.availableAt) > nowMs
+    ) return null
     command.status = 'running'
     command.claimedBy = lease.leasedBy
     command.claimedLeaseToken = lease.leaseToken
@@ -784,6 +795,45 @@ export class InMemorySessionsDomain {
     }
   }
 
+  deferSessionCommand(
+    lease: WorkerLeaseRecord,
+    commandId: string,
+    input: DeferSessionCommandInput,
+  ): SessionCommandRecord {
+    const now = input.now || new Date()
+    if (!Number.isFinite(input.retryAfterMs) || input.retryAfterMs <= 0) {
+      throw new Error('Deferred command retryAfterMs must be a positive finite number.')
+    }
+    const session = this.requireSession(lease.tenantId, lease.sessionId)
+    this.assertCurrentLease(session, lease, now.getTime())
+    const command = this.requireCommand(session, commandId)
+    if (command.status !== 'running' || command.claimedLeaseToken !== lease.leaseToken) {
+      throw new Error(`Command ${commandId} is not owned by this worker.`)
+    }
+    const availableAt = new Date(now.getTime() + Math.floor(input.retryAfterMs)).toISOString()
+    const errorSummary = redactOperationalText(input.errorSummary, 512, 'Command deferred')
+    if (input.quotaReservation) {
+      this.host.adjustUsageQuota({
+        orgId: this.host.resolveOrgId(lease.tenantId),
+        quotaKey: input.quotaReservation.quotaKey,
+        windowStartedAtMs: input.quotaReservation.windowStartedAtMs,
+        quantityDelta: -input.quotaReservation.quantity,
+      })
+    }
+    command.status = 'pending'
+    command.claimedBy = null
+    command.claimedLeaseToken = null
+    command.availableAt = availableAt
+    command.ackedAt = null
+    command.error = null
+    command.lastErrorCode = input.errorCode
+    command.lastErrorSummary = errorSummary
+    session.lease = null
+    session.record.status = 'idle'
+    session.record.updatedAt = now.toISOString()
+    return clone(command)
+  }
+
   failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): SessionCommandRecord {
     const session = this.requireSession(lease.tenantId, lease.sessionId)
     this.assertCurrentLease(session, lease)
@@ -838,8 +888,12 @@ export class InMemorySessionsDomain {
         const runnable = session.commands
           .filter((command) => command.targetLeaseToken === null)
           .filter((command) => command.status === 'pending' || command.status === 'running')
-          .filter((command) => command.status !== 'pending' || !command.availableAt || Date.parse(command.availableAt) <= nowMs)
           .sort((a, b) => a.createdSequence - b.createdSequence)[0]
+        if (
+          runnable?.status === 'pending'
+          && runnable.availableAt
+          && Date.parse(runnable.availableAt) > nowMs
+        ) return null
         return runnable ? { session, firstSequence: runnable.createdSequence } : null
       })
       .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)

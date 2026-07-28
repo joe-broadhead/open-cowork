@@ -349,7 +349,7 @@ function normalizeExposedHttpGuardKeys(input: string | ExposedHttpGuardKeys): Ex
  */
 export function exposedHttpGuardKeys(clientAddress: string, authorization?: string | string[]): ExposedHttpGuardKeys {
   const address = normalizeIpAddress(clientAddress) || 'unknown'
-  const token = Array.isArray(authorization) && authorization.length !== 1 ? '' : bearerToken(authorization)
+  const token = Array.isArray(authorization) && authorization.length !== 1 ? '' : extractBearerToken(authorization)
   const credential = token && findHttpTokenGrant(token)
     ? `valid:${createHash('sha256').update(token).digest('hex').slice(0, 24)}`
     : 'invalid'
@@ -467,7 +467,7 @@ export function evaluateHttpRequestSecurity(input: {
 }, security: GatewayConfig['security']): HttpSecurityDecision {
   const requiredCapability = httpCapabilityForRequest(input)
   const pathname = input.pathname || '/'
-  const grant = findHttpTokenGrant(bearerToken(input.authorization))
+  const grant = findHttpTokenGrant(extractBearerToken(input.authorization))
   const policy = decideHttpSecurityPolicy({
     requiredCapability,
     isLocalRequest: !security.allowNonLocalHttp && isLocalHttpHost(input.host) && isLocalOrigin(input.origin) && isLocalRemoteAddress(input.remoteAddress),
@@ -520,7 +520,9 @@ export function httpCapabilityForRequest(input: { method?: string; pathname?: st
     const params = new URLSearchParams(search)
     if (params.get('redact') === 'false' || params.get('unredacted') === 'true') return 'admin'
   }
-  if (pathname === '/live/events' && method === 'GET') return 'admin'
+  // The live stream is sanitized before delivery and is consumed by the bundled
+  // browser page, whose native EventSource cannot attach a bearer header.
+  if (pathname === '/live/events' && method === 'GET') return 'read'
   if (/^\/runs\/[^/]+$/.test(pathname) && method === 'GET') {
     const params = new URLSearchParams(search)
     if (params.get('raw') === 'true' || params.get('unredacted') === 'true') return 'admin'
@@ -788,7 +790,7 @@ function isOpenCodeAssetMutation(method: string, pathname: string): boolean {
   return /^\/opencode\/(mcp|tools|agents|skills)\/[^/]+$/.test(pathname)
 }
 
-function bearerToken(header: string | string[] | undefined): string {
+export function extractBearerToken(header: string | string[] | undefined): string {
   const value = Array.isArray(header) ? header[0] : header
   const match = String(value || '').match(/^Bearer\s+(.+)$/i)
   return match ? match[1]!.trim() : ''

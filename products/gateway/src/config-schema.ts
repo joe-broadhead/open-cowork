@@ -267,6 +267,25 @@ export const GatewayConfigSchema = z.object({
   })).optional(),
   httpPort: zBoundedInt(1, 65535),
   heartbeat: z.object({ intervalMs: zBoundedInt(1000, 24 * 60 * 60 * 1000) }),
+  live: z.object({
+    maxClients: zBoundedInt(1, 10_000),
+    maxClientsPerPrincipal: zBoundedInt(1, 1000),
+    retryAfterSeconds: zBoundedInt(1, 3600),
+    heartbeatMs: zBoundedInt(1000, 5 * 60 * 1000),
+    idleTimeoutMs: zBoundedInt(2000, 60 * 60 * 1000),
+    maxConnectionMs: zBoundedInt(10_000, 24 * 60 * 60 * 1000),
+    writeTimeoutMs: zBoundedInt(1000, 5 * 60 * 1000),
+    maxBufferedBytes: zBoundedInt(1024, 16 * 1024 * 1024),
+    replay: z.object({
+      maxSnapshots: zBoundedInt(1, 10_000),
+      maxPayloadBytes: zBoundedInt(1024, 4 * 1024 * 1024),
+      maxTotalBytes: zBoundedInt(1024, 64 * 1024 * 1024),
+    }),
+    upstream: z.object({
+      maxBufferedBytes: zBoundedInt(1024, 16 * 1024 * 1024),
+      maxEventBytes: zBoundedInt(1024, 4 * 1024 * 1024),
+    }),
+  }),
   channelSync: z.object({
     enabled: zBoolean,
     intervalMs: zBoundedInt(1000, 24 * 60 * 60 * 1000),

@@ -33,7 +33,7 @@ import { InMemorySchemaMigrationsDomain } from './in-memory-domains/schema-migra
 import { InMemoryWorkerHeartbeatsDomain } from './in-memory-domains/worker-heartbeats.ts'
 import { InMemoryAuthBackoffDomain } from './in-memory-domains/auth-backoff.ts'
 import { InMemoryRateLimitsDomain } from './in-memory-domains/rate-limits.ts'
-import { InMemoryUsageQuotaDomain } from './in-memory-domains/usage-quota.ts'
+import { InMemoryUsageQuotaDomain, quotaWindowStart } from './in-memory-domains/usage-quota.ts'
 import { InMemoryWorkspaceEventsDomain } from './in-memory-domains/workspace-events.ts'
 import { InMemoryAuditDomain } from './in-memory-domains/audit.ts'
 import { InMemoryChannelBindingsDomain } from './in-memory-domains/channel-bindings.ts'
@@ -199,6 +199,7 @@ import type {
   AppendWorkspaceEventInput,
   CheckpointAndAckSessionCommandResult,
   CommandQueueQuota,
+  DeferSessionCommandInput,
   EnqueueCommandInput,
   WriteProjectionInput,
 } from './control-plane-event-inputs.ts'
@@ -285,10 +286,6 @@ function normalizeIdList(values: readonly unknown[], label: string, maxLength: n
 
 function artifactUploadReservationKey(orgId: string, tenantId: string, sessionId: string, artifactId: string) {
   return key(orgId, tenantId, sessionId, artifactId)
-}
-
-function quotaWindowStart(nowMs: number, windowMs: number) {
-  return Math.floor(nowMs / windowMs) * windowMs
 }
 
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
@@ -401,6 +398,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     failWorkflowRun: (input) => this.workflowsDomain.failWorkflowRun(input),
     assertCommandQueueQuota: (input) => { this.quotaDomain.assertCommandQueueQuota(input) },
     consumeUsageQuota: (input) => this.consumeUsageQuota(input),
+    adjustUsageQuota: (input) => { this.usageQuotaDomain.adjustUsageQuota(input) },
     snapshotUsageQuotaCounters: () => this.usageQuotaDomain.snapshotCounters(),
     restoreUsageQuotaCounters: (snapshot) => {
       this.usageQuotaDomain.restoreCounters(snapshot as Parameters<InMemoryUsageQuotaDomain['restoreCounters']>[0])
@@ -1398,9 +1396,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.sessionsDomain.checkpointAndAckSessionCommand(lease, commandId, now)
   }
 
-  failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): SessionCommandRecord {
-    return this.sessionsDomain.failSessionCommand(lease, commandId, error)
-  }
+  deferSessionCommand(lease: WorkerLeaseRecord, commandId: string, input: DeferSessionCommandInput): SessionCommandRecord { return this.sessionsDomain.deferSessionCommand(lease, commandId, input) }
+
+  failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): SessionCommandRecord { return this.sessionsDomain.failSessionCommand(lease, commandId, error) }
 
   recordWorkerHeartbeat(input: {
     workerId: string

@@ -123,6 +123,9 @@ test('only runtime authority packages declare OpenCode runtime dependencies', ()
   assert.deepEqual(opencodeManifests.sort(), [
     'apps/desktop/package.json',
     'apps/standalone-gateway/package.json',
+    // The root manifest is the production install boundary for the pruned
+    // Cloud runtime and therefore owns both the external SDK and pinned CLI.
+    'package.json',
     'packages/cloud-server/package.json',
     'packages/runtime-host/package.json',
     // Durable Gateway product partition coordinates OpenCode sessions via MCP/CLI
@@ -239,9 +242,11 @@ test('JOE-845: classic gap residual runway is documented and pin-gated', () => {
   }
 
   // Runtime authority packages must stay on the residual pin until a real bump.
-  // Only desktop + runtime-host ship the opencode-ai binary package; cloud and
-  // standalone depend on the SDK client alone.
+  // Desktop and runtime-host ship the OpenCode binary directly. The root also
+  // owns it because the pruned Cloud production install resolves bundled
+  // runtime-host code from that root boundary.
   for (const manifestPath of [
+    'package.json',
     'apps/desktop/package.json',
     'apps/standalone-gateway/package.json',
     'packages/cloud-server/package.json',
@@ -256,7 +261,11 @@ test('JOE-845: classic gap residual runway is documented and pin-gated', () => {
       `${manifestPath} @opencode-ai/sdk must match classic-gap pin ${OPENCODE_CLASSIC_GAP_PIN}`,
     )
   }
-  for (const manifestPath of ['apps/desktop/package.json', 'packages/runtime-host/package.json']) {
+  for (const manifestPath of [
+    'package.json',
+    'apps/desktop/package.json',
+    'packages/runtime-host/package.json',
+  ]) {
     const manifest = JSON.parse(readFileSync(join(root, manifestPath), 'utf8')) as {
       dependencies?: Record<string, string>
     }

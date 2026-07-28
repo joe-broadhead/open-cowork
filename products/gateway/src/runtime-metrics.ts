@@ -154,6 +154,11 @@ const counters = {
   channelMessagesOut: new Counter('gateway_channel_messages_out_total', 'Total outbound channel messages sent.'),
   schedulerCycles: new Counter('gateway_scheduler_cycles_total', 'Total scheduler cycles executed by this daemon.'),
   authFailures: new Counter('gateway_auth_failures_total', 'Total denied HTTP requests (auth/capability failures).'),
+  liveSseRejected: new Counter('gateway_live_sse_rejected_total', 'Total live SSE admissions rejected by bounded scope.'),
+  liveSseTimeouts: new Counter('gateway_live_sse_timeouts_total', 'Total live SSE clients closed by a bounded lifetime policy.'),
+  liveSseSlowConsumers: new Counter('gateway_live_sse_slow_consumers_total', 'Total live SSE clients closed by bounded backpressure policy.'),
+  liveUpstreamFramesRejected: new Counter('gateway_live_upstream_frames_rejected_total', 'Total upstream SSE frames rejected before payload processing.'),
+  liveSseReplayDropped: new Counter('gateway_live_sse_replay_dropped_total', 'Total live SSE session snapshots omitted from replay by a bounded cache policy.'),
 }
 
 const gauges = {
@@ -166,6 +171,9 @@ const gauges = {
   eventLoopLagMs: new Gauge('gateway_event_loop_lag_ms', 'Recent event-loop delay (mean) in milliseconds.'),
   uptimeSeconds: new Gauge('gateway_process_uptime_seconds', 'Daemon process uptime in seconds.'),
   alertsActive: new Gauge('gateway_alerts_active', 'Open alerts by severity.'),
+  liveSseActive: new Gauge('gateway_live_sse_active', 'Current admitted live SSE clients.'),
+  liveSseReplaySnapshots: new Gauge('gateway_live_sse_replay_snapshots', 'Current session identities retained by the bounded live SSE replay cache.'),
+  liveSseReplayBytes: new Gauge('gateway_live_sse_replay_bytes', 'Current identity-fingerprint and serialized payload bytes retained by the bounded live SSE replay cache.'),
 }
 
 const sloLatency = new Histogram('gateway_slo_latency_ms', 'Observed SLO latency observations in milliseconds, labeled by budget id.', LATENCY_BUCKETS_MS)
@@ -180,6 +188,20 @@ export function recordSchedulerCycle(): void { counters.schedulerCycles.inc() }
 export function recordChannelMessageIn(provider?: string): void { counters.channelMessagesIn.inc(provider ? { provider } : {}) }
 export function recordChannelMessageOut(provider?: string): void { counters.channelMessagesOut.inc(provider ? { provider } : {}) }
 export function recordAuthFailure(): void { counters.authFailures.inc() }
+export function setLiveSseActive(value: number): void { gauges.liveSseActive.set(Math.max(0, value)) }
+export function recordLiveSseRejected(scope: 'global' | 'principal'): void { counters.liveSseRejected.inc({ scope }) }
+export function recordLiveSseTimeout(reason: 'idle' | 'lifetime' | 'authentication'): void { counters.liveSseTimeouts.inc({ reason }) }
+export function recordLiveSseSlowConsumer(reason: 'buffer_limit' | 'write_timeout'): void { counters.liveSseSlowConsumers.inc({ reason }) }
+export function recordLiveUpstreamFrameRejected(reason: 'buffer_limit' | 'event_limit' | 'invalid_encoding'): void {
+  counters.liveUpstreamFramesRejected.inc({ reason })
+}
+export function recordLiveSseReplayDropped(reason: 'snapshot_limit' | 'payload_limit' | 'total_bytes_limit'): void {
+  counters.liveSseReplayDropped.inc({ reason })
+}
+export function setLiveSseReplayCache(snapshots: number, bytes: number): void {
+  gauges.liveSseReplaySnapshots.set(Math.max(0, snapshots))
+  gauges.liveSseReplayBytes.set(Math.max(0, bytes))
+}
 
 /** Record SLO latency observations into histograms for retained trend answers. */
 export function observeSloResults(results: ObservabilitySloResult[] = []): void {
@@ -388,6 +410,11 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
     counters.channelMessagesOut.render(),
     counters.schedulerCycles.render(),
     counters.authFailures.render(),
+    counters.liveSseRejected.render(),
+    counters.liveSseTimeouts.render(),
+    counters.liveSseSlowConsumers.render(),
+    counters.liveUpstreamFramesRejected.render(),
+    counters.liveSseReplayDropped.render(),
     gauges.queueDepth.render(),
     gauges.activeRuns.render(),
     gauges.leadershipWriter.render(),
@@ -397,6 +424,9 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
     gauges.eventLoopLagMs.render(),
     gauges.uptimeSeconds.render(),
     gauges.alertsActive.render(),
+    gauges.liveSseActive.render(),
+    gauges.liveSseReplaySnapshots.render(),
+    gauges.liveSseReplayBytes.render(),
     sloLatency.render(),
   ]
   return blocks.map(block => block.join('\n')).join('\n') + '\n'

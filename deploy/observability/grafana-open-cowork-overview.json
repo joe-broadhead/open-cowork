@@ -17,7 +17,7 @@
       "type": "timeseries",
       "title": "Cloud request latency",
       "targets": [
-        { "expr": "max(open_cowork_cloud_http_request_duration_ms) by (cloud_role, url_path)" }
+        { "expr": "max(open_cowork_cloud_http_request_duration_ms) by (cloud_role, http_request_method, http_response_status_code)" }
       ]
     },
     {
@@ -39,6 +39,31 @@
         { "expr": "sum(rate(open_cowork_cloud_worker_expired_leases_reaped_total[5m])) by (status)" },
         { "expr": "sum(rate(open_cowork_cloud_worker_expired_lease_reaper_drain_cap_hits_total[5m])) by (status)" },
         { "expr": "sum(rate(open_cowork_cloud_worker_stale_owner_rejections_total[5m]))" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker runtime capacity",
+      "targets": [
+        { "expr": "max(open_cowork_cloud_runtime_capacity) by (cloud_role, cloud_profile)" },
+        { "expr": "max(open_cowork_cloud_runtime_capacity_in_use) by (cloud_role, cloud_profile)" },
+        { "expr": "max(open_cowork_cloud_runtime_cached) by (cloud_role, cloud_profile)" },
+        { "expr": "max(open_cowork_cloud_runtime_active) by (cloud_role, cloud_profile)" },
+        { "expr": "max(open_cowork_cloud_runtime_creating) by (cloud_role, cloud_profile)" },
+        { "expr": "max(open_cowork_cloud_runtime_cleanup_debt) by (cloud_role, cloud_profile)" },
+        { "expr": "max(open_cowork_cloud_runtime_admission_queue_depth) by (cloud_role, cloud_profile)" },
+        { "expr": "sum(rate(open_cowork_cloud_runtime_admission_rejections_total[5m])) by (cloud_role, cloud_profile, reason)" },
+        { "expr": "max(open_cowork_cloud_runtime_creation_duration_ms) by (cloud_role, cloud_profile, status)" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker process pressure",
+      "targets": [
+        { "expr": "max(open_cowork_cloud_worker_rss_bytes) by (cloud_role, cloud_profile)" },
+        { "expr": "sum(rate(open_cowork_cloud_worker_cpu_user_seconds_total[5m])) by (cloud_role, cloud_profile)" },
+        { "expr": "sum(rate(open_cowork_cloud_worker_cpu_system_seconds_total[5m])) by (cloud_role, cloud_profile)" },
+        { "expr": "max(open_cowork_cloud_worker_event_loop_utilization_ratio) by (cloud_role, cloud_profile)" }
       ]
     },
     {

@@ -6,6 +6,44 @@ type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
 }
 
+export async function adjustPostgresUsageQuota(
+  executor: PgExecutor,
+  input: {
+    orgId: string
+    quotaKey: string
+    windowStartedAtMs: number
+    quantityDelta: number
+  },
+): Promise<void> {
+  if (!Number.isInteger(input.quantityDelta) || input.quantityDelta === 0) return
+  await executor.query(
+    `UPDATE cloud_usage_counters
+     SET quantity = GREATEST(0, quantity + $4)
+     WHERE org_id = $1 AND quota_key = $2 AND window_started_at_ms = $3`,
+    [input.orgId, input.quotaKey, input.windowStartedAtMs, input.quantityDelta],
+  )
+}
+
+export async function lockPostgresQuota(
+  executor: PgExecutor,
+  orgId: string,
+  quotaKey: string,
+  now = new Date(),
+): Promise<void> {
+  await executor.query(
+    `INSERT INTO cloud_quota_locks (org_id, quota_key, updated_at)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (org_id, quota_key) DO UPDATE
+     SET updated_at = EXCLUDED.updated_at`,
+    [orgId, quotaKey, now.toISOString()],
+  )
+  const result = await executor.query(
+    `SELECT * FROM cloud_quota_locks WHERE org_id = $1 AND quota_key = $2 FOR UPDATE`,
+    [orgId, quotaKey],
+  )
+  if (!result.rows[0]) throw new Error('Expected query to return a row.')
+}
+
 // Recompute every maintained concurrency gauge from its source table (resetting idle scopes to
 // 0). Each statement returns its touched scope_ids so operators can observe the reconciliation.
 export async function reconcilePostgresConcurrencyCounters(executor: PgExecutor): Promise<number> {
@@ -309,6 +347,15 @@ export async function listPostgresRunnableSessions(
      WHERE commands.target_lease_token IS NULL
        AND commands.status IN ('pending', 'running')
        AND (commands.status <> 'pending' OR commands.available_at IS NULL OR commands.available_at <= $2)
+       AND NOT EXISTS (
+         SELECT 1
+         FROM cloud_session_commands earlier
+         WHERE earlier.tenant_id = commands.tenant_id
+           AND earlier.session_id = commands.session_id
+           AND earlier.target_lease_token IS NULL
+           AND earlier.status IN ('pending', 'running')
+           AND earlier.created_sequence < commands.created_sequence
+       )
        AND (leases.lease_expires_at_ms IS NULL OR leases.lease_expires_at_ms <= $1)
      GROUP BY commands.tenant_id, commands.session_id
      ORDER BY first_sequence, commands.tenant_id, commands.session_id

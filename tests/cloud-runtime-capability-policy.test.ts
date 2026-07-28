@@ -49,12 +49,14 @@ const CAPABILITY_CONFIG: OpenCoworkConfig = {
       type: 'local',
       description: 'Knowledge MCP',
       authMode: 'none',
+      packageName: 'knowledge',
     },
     {
       name: 'charts',
       type: 'local',
       description: 'Charts MCP',
       authMode: 'none',
+      packageName: 'charts',
     },
   ],
 }
@@ -151,6 +153,61 @@ test('Cloud runtime capability policy compiles the unrestricted profile into an 
   assert.equal(compiled.permission['charts_*'], 'allow')
   assert.equal(compiled.permission['mcp__knowledge__propose_knowledge_edit'], 'ask')
   assert.deepEqual(compiled.allowedMcpNames, ['knowledge', 'charts'])
+})
+
+test('Cloud runtime capability policy excludes disabled bare commands while retaining package-backed MCPs', () => {
+  for (const packageName of [undefined, '   ', 'time-keep']) {
+    const appConfig: OpenCoworkConfig = {
+      ...CAPABILITY_CONFIG,
+      tools: [
+        ...CAPABILITY_CONFIG.tools,
+        {
+          id: 'time-keep',
+          name: 'Time Keep',
+          description: 'Desktop clock',
+          kind: 'built-in',
+          namespace: 'time-keep',
+          patterns: ['mcp__time-keep__*'],
+        },
+      ],
+      mcps: [
+        ...CAPABILITY_CONFIG.mcps,
+        {
+          name: 'time-keep',
+          type: 'local',
+          description: 'Desktop clock',
+          authMode: 'none',
+          ...(packageName === undefined ? {} : { packageName }),
+          command: ['time-keep', 'server', 'start', '--transport', 'stdio'],
+        },
+      ],
+    }
+    const defaultPolicy = resolveCloudRuntimePolicy(appConfig)
+    const compiled = compileCloudRuntimeCapabilityPolicy({
+      appConfig,
+      policy: defaultPolicy,
+    })
+
+    assert.deepEqual(compiled.allowedMcpNames, ['knowledge', 'charts'])
+    assert.equal(compiled.allowedToolIds.includes('time-keep'), false)
+    assert.equal(compiled.permission['mcp__time-keep__*'], 'deny')
+
+    assert.throws(
+      () => compileCloudRuntimeCapabilityPolicy({
+        appConfig,
+        policy: {
+          ...defaultPolicy,
+          allowedMcps: ['time-keep'],
+          allowedLocalMcpNames: ['time-keep'],
+        },
+      }),
+      (error: unknown) => (
+        error instanceof CloudRuntimeCapabilityPolicyError
+        && error.code === 'unsupported_local_mcp'
+        && error.capabilityId === 'time-keep'
+      ),
+    )
+  }
 })
 
 test('Cloud runtime capability policy preserves explicit empty allowlists and denies every tool and MCP', () => {
@@ -545,15 +602,23 @@ test('pinned OpenCode V2 enforces the final Cloud policy used by native sessions
     mode: string
     permissions: EffectivePermissionRule[]
   }> = []
+  const expectedAgentNames = ['build', 'plan', 'general', 'explore']
+  const agentCatalogUrl = new URL('/api/agent', server.url)
+  // OpenCode scopes V2 state by Location. On macOS the process cwd may be
+  // canonicalized through /private while the session retains the lexical temp
+  // path, so an unscoped catalog can prove a different, cold Location instance.
+  agentCatalogUrl.searchParams.set('location[directory]', project)
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    const response = await fetch(`${server.url}/api/agent`)
+    const response = await fetch(agentCatalogUrl)
     assert.equal(response.ok, true)
     const payload = await response.json() as { data?: typeof agents }
     agents = payload.data || []
-    if (agents.length) break
+    if (expectedAgentNames.every((name) => agents.some((agent) => agent.id === name))) {
+      break
+    }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 100))
   }
-  for (const name of ['build', 'plan', 'general', 'explore']) {
+  for (const name of expectedAgentNames) {
     const agent = agents.find((candidate) => candidate.id === name)
     assert.ok(agent, `expected OpenCode V2 agent ${name}`)
     assert.equal(

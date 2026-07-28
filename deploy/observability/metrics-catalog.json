@@ -6,7 +6,7 @@
       "name": "open_cowork_cloud_http_requests_total",
       "type": "counter",
       "owner": "cloud-web",
-      "description": "HTTP request rate and error basis by role, route, method, and status."
+      "description": "HTTP request rate and error basis by bounded role, method, and status dimensions. Raw routes are never metric labels."
     },
     {
       "name": "open_cowork_cloud_http_request_duration_ms",
@@ -150,7 +150,7 @@
       "name": "open_cowork_cloud_quota_rejections_total",
       "type": "counter",
       "owner": "cloud-control-plane",
-      "description": "Quota or rate-limit denials by policy code."
+      "description": "Aggregate quota or rate-limit denials without tenant or policy identifiers."
     },
     {
       "name": "open_cowork_cloud_auth_failures_total",
@@ -175,6 +175,84 @@
       "type": "counter",
       "owner": "cloud-worker",
       "description": "Worker runtime-cache evictions that failed to close a runtime (leaked OpenCode child/workspace)."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_capacity",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Configured hard ceiling for cached, active, and creating runtime boundaries on one worker."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_capacity_in_use",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Runtime permits held by cached, active, creating, or closing boundaries on one worker."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_cached",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Idle cached runtime boundaries that may be evicted for admission."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_active",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Runtime boundaries pinned by calls, durable execution scopes, or background OpenCode execution."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_creating",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Runtime boundaries holding a permit while creation is in progress."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_cleanup_debt",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Runtime permits retained after teardown failure until the isolation provider proves cleanup."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_admission_queue_depth",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Runtime creation requests waiting in the worker's bounded FIFO admission queue."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_admission_rejections_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Retryable runtime admission rejections by bounded reason: queue_full, queue_timeout, provision_timeout, cleanup_pending, or adapter_closing."
+    },
+    {
+      "name": "open_cowork_cloud_runtime_creation_duration_ms",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Runtime boundary creation latency by success or error status."
+    },
+    {
+      "name": "open_cowork_cloud_worker_rss_bytes",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Resident memory held by the worker process; container memory remains the enforcement boundary."
+    },
+    {
+      "name": "open_cowork_cloud_worker_cpu_user_seconds_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Cumulative user CPU seconds consumed by the worker process."
+    },
+    {
+      "name": "open_cowork_cloud_worker_cpu_system_seconds_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Cumulative system CPU seconds consumed by the worker process."
+    },
+    {
+      "name": "open_cowork_cloud_worker_event_loop_utilization_ratio",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Node event-loop utilization ratio from zero to one, sampled with runtime admission state."
     },
     {
       "name": "open_cowork_cloud_otlp_dropped_records_total",

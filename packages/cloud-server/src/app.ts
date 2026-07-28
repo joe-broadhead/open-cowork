@@ -86,6 +86,7 @@ import {
   createDevelopmentProcessIsolationProvider,
   developmentProcessIsolationCapability,
   resolveCloudExecutionIsolationPolicy,
+  resolveCloudSandboxResourceLimits,
   resolveCloudExecutionWorkerId,
   type CloudExecutionIsolationCapability,
   type CloudExecutionIsolationPolicy,
@@ -206,6 +207,10 @@ export type CloudAppOptions = {
   shutdownGraceMs?: number
   runtimeCacheMaxEntries?: number
   runtimeCacheIdleTtlMs?: number
+  runtimeAdmissionQueueMaxEntries?: number
+  runtimeAdmissionQueueTimeoutMs?: number
+  runtimeProvisionTimeoutMs?: number
+  runtimeTeardownTimeoutMs?: number
   corsOrigin?: string | null
   autoProcessCommands?: boolean
 }
@@ -380,6 +385,22 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     shutdownGraceMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS'), 30_000),
     runtimeCacheMaxEntries: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES'), 100),
     runtimeCacheIdleTtlMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS'), 30 * 60 * 1000),
+    runtimeAdmissionQueueMaxEntries: parsePositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_QUEUE_MAX_ENTRIES'),
+      100,
+    ),
+    runtimeAdmissionQueueTimeoutMs: parsePositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_TIMEOUT_MS'),
+      30_000,
+    ),
+    runtimeProvisionTimeoutMs: parsePositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_PROVISION_TIMEOUT_MS'),
+      120_000,
+    ),
+    runtimeTeardownTimeoutMs: parsePositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_TEARDOWN_TIMEOUT_MS'),
+      30_000,
+    ),
     // HTTP connection caps resolved/validated here (instead of read from process.env
     // inside the HTTP server) so they travel through CloudHttpServerOptions like every
     // other knob. Defaults preserve the previous in-server behaviour (200 / 10000).
@@ -879,11 +900,6 @@ async function recordLoopError(
     name: 'open_cowork_cloud_loop_errors_total',
     value: 1,
     unit: '1',
-    attributes: {
-      loop: name,
-      ...attributes,
-      error_name: error instanceof Error ? error.name : 'Error',
-    },
   })
   await recordCloudLog(observability, {
     level: 'error',
@@ -989,7 +1005,6 @@ function startWorkerLoop(
       .catch(async (error) => {
         await recordCloudWorkerMetric(observability, {
           name: 'open_cowork_cloud_worker_loop_failures_total',
-          workerId: 'loop',
           status: 'error',
         })
         await recordLoopError(observability, 'cloud.worker.loop.error', error)
@@ -1025,7 +1040,6 @@ function startSchedulerLoop(
       .catch(async (error) => {
         await recordCloudSchedulerMetric(observability, {
           name: 'open_cowork_cloud_scheduler_failures_total',
-          schedulerId: 'loop',
           status: 'error',
         })
         await recordLoopError(observability, 'cloud.scheduler.loop.error', error)
@@ -1144,6 +1158,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         policy: executionIsolationPolicy,
         workerId: cloudWorkerId,
         runtimeRootPath: envOptions.root,
+        resourceLimits: resolveCloudSandboxResourceLimits(env),
         observability,
         runtimeAssetPaths: knowledgeRuntime.runtimeAssetPaths,
         prepareInput(input) {
@@ -1394,6 +1409,18 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           prepareProvision: prepareWorkerRuntimeProvision,
           maxRuntimeEntries: options.runtimeCacheMaxEntries ?? envOptions.runtimeCacheMaxEntries,
           runtimeIdleTtlMs: options.runtimeCacheIdleTtlMs ?? envOptions.runtimeCacheIdleTtlMs,
+          maxAdmissionQueueEntries:
+            options.runtimeAdmissionQueueMaxEntries
+            ?? envOptions.runtimeAdmissionQueueMaxEntries,
+          admissionQueueTimeoutMs:
+            options.runtimeAdmissionQueueTimeoutMs
+            ?? envOptions.runtimeAdmissionQueueTimeoutMs,
+          runtimeProvisionTimeoutMs:
+            options.runtimeProvisionTimeoutMs
+            ?? envOptions.runtimeProvisionTimeoutMs,
+          runtimeTeardownTimeoutMs:
+            options.runtimeTeardownTimeoutMs
+            ?? envOptions.runtimeTeardownTimeoutMs,
         })
       : createUnavailableRuntimeAdapter()
   )
@@ -1519,6 +1546,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         {
           sessionConcurrency: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_WORKER_SESSION_CONCURRENCY'), 4),
           maxCommandsPerSessionPerTick: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_WORKER_MAX_COMMANDS_PER_SESSION_PER_TICK'), 50),
+          maxLeases: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_WORKER_MAX_LEASES'), 4096),
         },
       )
     : null
@@ -1560,12 +1588,19 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         // Serialized per session (issue #855): the coalescer issues route() calls
         // synchronously in transcript order (flushed delta, then boundary); the wrapper
         // guarantees those appends persist in exactly that order.
-        route: ((serializedRoute) => (event: CloudRuntimeEvent) => serializedRoute(event).catch((error) => recordLoopError(
-          observability,
-          'cloud.worker.runtime_event.error',
-          error,
-          { event_type: event.type },
-        )))(createSessionSerializedRuntimeEventRouter(createRetryingRuntimeEventRouter({
+        route: ((serializedRoute) => async (event: CloudRuntimeEvent) => {
+          try {
+            await serializedRoute(event)
+          } catch (error) {
+            await recordLoopError(
+              observability,
+              'cloud.worker.runtime_event.error',
+              error,
+              { event_type: event.type },
+            )
+            throw error
+          }
+        })(createSessionSerializedRuntimeEventRouter(createRetryingRuntimeEventRouter({
           route: (event) => routeRuntimeEvent(store, worker, event),
         }))),
       })
@@ -1581,7 +1616,6 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
             value: 1,
             unit: '1',
             attributes: {
-              sdk_event_type: event.sdkEventType || 'unknown',
               reason: event.reason,
           },
         })

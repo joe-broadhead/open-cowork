@@ -18,10 +18,13 @@ import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import {
   assertCloudExecutionIsolationCapability,
   CLOUD_EXECUTION_ISOLATION_ATTESTATION_FORMAT,
+  CloudExecutionCleanupDebtError,
   CloudExecutionIsolationError,
+  createDevelopmentProcessIsolationProvider,
   developmentProcessIsolationCapability,
   evaluateCloudExecutionIsolationCapability,
   resolveCloudExecutionIsolationPolicy,
+  resolveCloudSandboxResourceLimits,
   resolveCloudExecutionWorkerId,
 } from '@open-cowork/cloud-server/execution-isolation'
 import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
@@ -37,7 +40,10 @@ import {
 } from '@open-cowork/cloud-server/path-provider'
 import { createSandboxCloudExecutionIsolationProvider } from '@open-cowork/cloud-server/sandbox-execution-isolation-provider'
 import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
-import { createWorkerScopedRuntimeAdapter } from '@open-cowork/cloud-server/worker-scoped-runtime-adapter'
+import {
+  CloudRuntimeCapacityError,
+  createWorkerScopedRuntimeAdapter,
+} from '@open-cowork/cloud-server/worker-scoped-runtime-adapter'
 import type { SandboxRuntimeCommandRunner } from '@open-cowork/cloud-server/runtime-portability'
 import { sandboxWorkerOwnerHash } from '../packages/cloud-server/src/sandbox-orphan-cleanup.ts'
 
@@ -104,9 +110,9 @@ function fakeBoundaryInspection(
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
       Init: true,
-      Memory: 2 * 1024 * 1024 * 1024,
-      NanoCpus: 2_000_000_000,
-      PidsLimit: 512,
+      Memory: Number(flagValue(runArgs, '--memory')),
+      NanoCpus: Number(flagValue(runArgs, '--cpus')) * 1_000_000_000,
+      PidsLimit: Number(flagValue(runArgs, '--pids-limit')),
       RestartPolicy: { Name: 'no' },
       Tmpfs: { '/tmp': 'rw,nosuid,nodev,size=268435456' },
     },
@@ -126,6 +132,36 @@ function sandboxPolicy(overrides: Record<string, string | undefined> = {}) {
       ...overrides,
     },
   })
+}
+
+function abortAtPreparedReservationHandoff(
+  runtimeHomeDir: string,
+  onPrepared?: () => void,
+) {
+  let preparedChecks = 0
+  const reason = new DOMException('Provision preparation cancelled.', 'AbortError')
+  const signal = {
+    get aborted() {
+      try {
+        statSync(runtimeHomeDir)
+      } catch {
+        return false
+      }
+      preparedChecks += 1
+      if (preparedChecks === 1) {
+        onPrepared?.()
+        return false
+      }
+      return true
+    },
+    get reason() {
+      return reason
+    },
+  } as AbortSignal
+  return {
+    signal,
+    preparedChecks: () => preparedChecks,
+  }
 }
 
 function respondToSandboxReadinessProbe(
@@ -200,6 +236,85 @@ test('Cloud execution isolation requires local workers to opt into the warned de
   ).ok, true)
 })
 
+test('development isolation retries a failed boundary close before declaring it closed', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-development-close-retry-'))
+  let closeAttempts = 0
+  const provider = createDevelopmentProcessIsolationProvider(() => ({
+    async promptSession() {},
+    async abortSession() {},
+    async close() {
+      closeAttempts += 1
+      if (closeAttempts === 1) throw new Error('synthetic close failure')
+    },
+  }))
+  const boundary = await provider.provision({
+    paths: createCloudSessionPathProvider(
+      createCloudPathProvider(root),
+      'tenant-a',
+      'session-a',
+    ),
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+    }),
+    env: {},
+    config: DEFAULT_CONFIG,
+    execution: { tenantId: 'tenant-a', sessionId: 'session-a' },
+    runtimeConfig: {},
+  })
+
+  await assert.rejects(() => boundary.close(), /synthetic close failure/)
+  await boundary.close()
+  assert.equal(closeAttempts, 2)
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('development isolation retains cleanup debt when late-abort teardown fails', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-development-abort-cleanup-'))
+  const controller = new AbortController()
+  let closeAttempts = 0
+  const provider = createDevelopmentProcessIsolationProvider(() => {
+    controller.abort(new Error('synthetic provision timeout'))
+    return {
+      async promptSession() {},
+      async abortSession() {},
+      async close() {
+        closeAttempts += 1
+        if (closeAttempts === 1) throw new Error('synthetic close failure')
+      },
+    }
+  })
+  let cleanup: Promise<void> | null = null
+
+  await assert.rejects(() => provider.provision({
+    paths: createCloudSessionPathProvider(
+      createCloudPathProvider(root),
+      'tenant-a',
+      'session-a',
+    ),
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+    }),
+    env: {},
+    config: DEFAULT_CONFIG,
+    execution: { tenantId: 'tenant-a', sessionId: 'session-a' },
+    runtimeConfig: {},
+    signal: controller.signal,
+  }), (error: unknown) => {
+    if (
+      !(error instanceof CloudExecutionCleanupDebtError)
+      || error.reasonCode !== 'development_runtime_cleanup_pending'
+    ) return false
+    cleanup = error.cleanup
+    return true
+  })
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 150))
+  await cleanup
+  assert.equal(closeAttempts, 2)
+  rmSync(root, { recursive: true, force: true })
+})
+
 test('Cloud execution isolation defaults non-local workers to fail-closed sandbox admission', () => {
   const policy = resolveCloudExecutionIsolationPolicy({
     deploymentTier: 'private_beta',
@@ -219,6 +334,42 @@ test('Cloud execution isolation defaults non-local workers to fail-closed sandbo
       error instanceof CloudExecutionIsolationError
       && error.code === 'cloud_execution_isolation_unavailable'
     ),
+  )
+})
+
+test('sandbox resource budgets are explicit, configurable, and reject unsafe values', () => {
+  assert.deepEqual(resolveCloudSandboxResourceLimits({}), {
+    memoryBytes: 2 * 1024 * 1024 * 1024,
+    cpuCount: 2,
+    pids: 512,
+  })
+  assert.deepEqual(resolveCloudSandboxResourceLimits({
+    OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES: '1073741824',
+    OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT: '1.5',
+    OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT: '256',
+  }), {
+    memoryBytes: 1024 * 1024 * 1024,
+    cpuCount: 1.5,
+    pids: 256,
+  })
+
+  assert.throws(
+    () => resolveCloudSandboxResourceLimits({
+      OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES: '0',
+    }),
+    /OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES/,
+  )
+  assert.throws(
+    () => resolveCloudSandboxResourceLimits({
+      OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT: 'not-a-number',
+    }),
+    /OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT/,
+  )
+  assert.throws(
+    () => resolveCloudSandboxResourceLimits({
+      OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT: '4.5',
+    }),
+    /OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT/,
   )
 })
 
@@ -636,6 +787,11 @@ test('sandbox provider establishes a private runtime boundary and tears it down 
     }),
     workerId: 'sandbox-boundary-test-worker',
     runtimeRootPath: root,
+    resourceLimits: {
+      memoryBytes: 1024 * 1024 * 1024,
+      cpuCount: 1.5,
+      pids: 256,
+    },
     runner,
     startupTimeoutMs: 2_000,
     async controlBridgeFactory() {
@@ -711,11 +867,13 @@ test('sandbox provider establishes a private runtime boundary and tears it down 
     assert.ok(run)
     assert.equal(run.args.includes('--read-only'), true)
     assert.equal(run.args.includes('--init'), true)
-    assert.equal(run.args.includes('--pids-limit'), true)
+    assert.equal(flagValue(run.args, '--memory'), String(1024 * 1024 * 1024))
+    assert.equal(flagValue(run.args, '--cpus'), '1.5')
+    assert.equal(flagValue(run.args, '--pids-limit'), '256')
     assert.equal(run.args.includes('open-cowork-egress'), true)
     assert.equal(
       run.args[run.args.indexOf('--entrypoint') + 1],
-      '/app/node_modules/.pnpm/node_modules/.bin/opencode',
+      '/app/node_modules/.bin/opencode',
     )
     assert.equal(
       run.args.some((arg) => arg === `type=bind,src=${root},dst=${CONTAINER_ROOT_SENTINEL}`),
@@ -1388,6 +1546,7 @@ test('sandbox provider owns failed-provision orphan cleanup and stays unavailabl
     },
   })
 
+  let cleanupCompletion: Promise<void> | null = null
   await assert.rejects(() => provider.provision({
     paths,
     policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
@@ -1398,10 +1557,14 @@ test('sandbox provider owns failed-provision orphan cleanup and stays unavailabl
     config: DEFAULT_CONFIG,
     execution: context,
     runtimeConfig: {},
-  }), (error: unknown) => (
-    error instanceof CloudExecutionIsolationError
-    && error.reasonCode === 'sandbox_runtime_teardown_failed'
-  ))
+  }), (error: unknown) => {
+    if (
+      !(error instanceof CloudExecutionCleanupDebtError)
+      || error.reasonCode !== 'sandbox_runtime_teardown_failed'
+    ) return false
+    cleanupCompletion = error.cleanup
+    return true
+  })
   assert.doesNotThrow(() => statSync(paths.getRuntimeHomeDir()))
   assert.equal((await provider.capability()).reasonCode, 'sandbox_orphan_cleanup_pending')
 
@@ -1414,9 +1577,143 @@ test('sandbox provider owns failed-provision orphan cleanup and stays unavailabl
   while (!(await provider.capability()).available && Date.now() < deadline) {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 20))
   }
+  await cleanupCompletion
   assert.equal((await provider.capability()).available, true)
   assert.throws(() => statSync(paths.getRuntimeHomeDir()))
   rmSync(root, { recursive: true, force: true })
+})
+
+test('model-catalog timeout retains one cleanup debt until the sandbox provider retry succeeds', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-model-readiness-cleanup-debt-'))
+  const context = { tenantId: 'tenant-a', sessionId: 'session-model-readiness-cleanup-debt' }
+  const paths = createCloudSessionPathProvider(
+    createCloudPathProvider(root),
+    context.tenantId,
+    context.sessionId,
+  )
+  let runtimeRunArgs: string[] = []
+  let bridgeCloseAttempts = 0
+  let stopAttempts = 0
+  let removeAttempts = 0
+  const readinessServer = createServer((req, res) => {
+    if (respondToSandboxReadinessProbe(req, res)) return
+    const path = new URL(req.url || '/', 'http://127.0.0.1').pathname
+    if (req.method === 'GET' && (path === '/api/provider' || path === '/api/model')) {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({
+        location: { directory: '/workspace', project: { id: 'global', directory: '/' } },
+        data: [],
+      }))
+      return
+    }
+    res.writeHead(404)
+    res.end()
+  })
+  await new Promise<void>((resolveListen) => readinessServer.listen(0, '127.0.0.1', resolveListen))
+  const address = readinessServer.address()
+  assert.ok(address && typeof address !== 'string')
+
+  const provider = createSandboxCloudExecutionIsolationProvider({
+    policy: sandboxPolicy(),
+    workerId: 'sandbox-model-readiness-cleanup-debt-test-worker',
+    runtimeRootPath: root,
+    startupTimeoutMs: 80,
+    orphanCleanupRetryMs: 200,
+    async controlBridgeFactory() {
+      return {
+        url: `http://127.0.0.1:${address.port}`,
+        async close() {
+          bridgeCloseAttempts += 1
+          if (bridgeCloseAttempts === 1) {
+            throw new Error('synthetic transient bridge close failure')
+          }
+        },
+      }
+    },
+    runner: {
+      async run(_command, args) {
+        if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
+        if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
+        if (args[0] === 'image') {
+          return { exitCode: 0, stdout: fakeImageInspection() }
+        }
+        if (args[0] === 'run') {
+          runtimeRunArgs = [...args]
+          return { exitCode: 0, stdout: 'container-id' }
+        }
+        if (args[0] === 'inspect' && args[2] === '{{json .}}') {
+          return {
+            exitCode: 0,
+            stdout: JSON.stringify(fakeBoundaryInspection(runtimeRunArgs, args.at(-1) || '')),
+          }
+        }
+        if (args[0] === 'stop') {
+          stopAttempts += 1
+          return { exitCode: 0 }
+        }
+        if (args[0] === 'rm') {
+          removeAttempts += 1
+          return { exitCode: 0 }
+        }
+        return { exitCode: 1 }
+      },
+    },
+  })
+
+  let cleanupCompletion: Promise<void> | null = null
+  try {
+    await assert.rejects(() => provider.provision({
+      paths,
+      policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+        OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+      }),
+      env: {},
+      config: DEFAULT_CONFIG,
+      execution: context,
+      runtimeConfig: {
+        model: 'or/missing-model',
+        permission: { '*': 'deny' },
+      },
+    }), (error: unknown) => {
+      if (
+        !(error instanceof CloudExecutionCleanupDebtError)
+        || error.reasonCode !== 'sandbox_runtime_teardown_failed'
+      ) return false
+      cleanupCompletion = error.cleanup
+      return true
+    })
+
+    let cleanupResolved = false
+    void cleanupCompletion!.then(() => {
+      cleanupResolved = true
+    })
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 30))
+    assert.equal(bridgeCloseAttempts, 1)
+    assert.equal(stopAttempts, 1)
+    assert.equal(removeAttempts, 1)
+    assert.equal(cleanupResolved, false)
+    assert.equal((await provider.capability()).reasonCode, 'sandbox_orphan_cleanup_pending')
+    assert.doesNotThrow(() => statSync(paths.getRuntimeHomeDir()))
+
+    const cleanupDeadline = Date.now() + 2_000
+    while (!cleanupResolved && Date.now() < cleanupDeadline) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 20))
+    }
+    await cleanupCompletion
+    assert.equal(cleanupResolved, true)
+    assert.equal(bridgeCloseAttempts, 2)
+    assert.equal(stopAttempts, 1)
+    assert.equal(removeAttempts, 1)
+    assert.equal((await provider.capability()).available, true)
+    assert.throws(() => statSync(paths.getRuntimeHomeDir()))
+  } finally {
+    await provider.close?.()
+    await new Promise<void>((resolveClose, reject) => {
+      readinessServer.close((error) => error ? reject(error) : resolveClose())
+    })
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('sandbox provider owns private-runtime cleanup debt after a stopped failed launch', async () => {
@@ -1429,11 +1726,23 @@ test('sandbox provider owns private-runtime cleanup debt after a stopped failed 
   )
   let cleanupFails = true
   let cleanupAttempts = 0
+  let releaseProvisionMetric!: () => void
+  const provisionMetricGate = new Promise<void>((resolve) => {
+    releaseProvisionMetric = resolve
+  })
   const provider = createSandboxCloudExecutionIsolationProvider({
     policy: sandboxPolicy(),
     workerId: 'sandbox-cleanup-debt-test-worker',
     runtimeRootPath: root,
     orphanCleanupRetryMs: 10,
+    observability: {
+      async metric(record) {
+        if (
+          record.name === 'open_cowork_cloud_isolation_provision_total'
+          && record.attributes?.status === 'failed'
+        ) await provisionMetricGate
+      },
+    },
     cleanupPrivateRuntimePaths(input) {
       cleanupAttempts += 1
       if (cleanupFails) throw new Error('synthetic private path cleanup failure')
@@ -1462,7 +1771,8 @@ test('sandbox provider owns private-runtime cleanup debt after a stopped failed 
     },
   })
 
-  await assert.rejects(() => provider.provision({
+  let cleanupCompletion: Promise<void> | null = null
+  const provisioning = provider.provision({
     paths,
     policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
       OPEN_COWORK_CLOUD_ROLE: 'worker',
@@ -1472,19 +1782,33 @@ test('sandbox provider owns private-runtime cleanup debt after a stopped failed 
     config: DEFAULT_CONFIG,
     execution: context,
     runtimeConfig: {},
-  }), (error: unknown) => (
-    error instanceof CloudExecutionIsolationError
-    && error.reasonCode === 'sandbox_private_runtime_cleanup_failed'
-  ))
+  })
+  while (cleanupAttempts === 0) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 5))
+  }
   assert.equal(cleanupAttempts, 1)
   assert.doesNotThrow(() => statSync(paths.getRuntimeHomeDir()))
   assert.equal((await provider.capability()).reasonCode, 'sandbox_orphan_cleanup_pending')
 
   cleanupFails = false
-  const deadline = Date.now() + 2_000
-  while (!(await provider.capability()).available && Date.now() < deadline) {
+  while (cleanupAttempts < 2) {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 20))
   }
+  releaseProvisionMetric()
+  await assert.rejects(() => provisioning, (error: unknown) => {
+    if (
+      !(error instanceof CloudExecutionCleanupDebtError)
+      || error.reasonCode !== 'sandbox_private_runtime_cleanup_failed'
+    ) return false
+    cleanupCompletion = error.cleanup
+    return true
+  })
+  let cleanupResolved = false
+  void cleanupCompletion!.then(() => {
+    cleanupResolved = true
+  })
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 20))
+  assert.equal(cleanupResolved, true)
   assert.equal((await provider.capability()).available, true)
   assert.ok(cleanupAttempts >= 2)
   assert.throws(() => statSync(paths.getRuntimeHomeDir()))
@@ -1764,6 +2088,239 @@ test('sandbox provider close removes abandoned prepared roots without touching w
   }
 })
 
+test('sandbox abort before provision handoff releases prepared restored state', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-isolation-prepared-abort-'))
+  const context = { tenantId: 'tenant-a', sessionId: 'session-prepared-abort' }
+  const paths = createCloudSessionPathProvider(
+    createCloudPathProvider(root),
+    context.tenantId,
+    context.sessionId,
+  )
+  const controller = new AbortController()
+  let runtimeStarts = 0
+  const provider = createSandboxCloudExecutionIsolationProvider({
+    policy: sandboxPolicy(),
+    workerId: 'sandbox-prepared-abort-test-worker',
+    runtimeRootPath: root,
+    runner: {
+      async run(_command, args) {
+        if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
+        if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
+        if (args[0] === 'image') {
+          return { exitCode: 0, stdout: fakeImageInspection() }
+        }
+        if (args[0] === 'run') runtimeStarts += 1
+        return { exitCode: 1 }
+      },
+    },
+  })
+  const input = {
+    paths,
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+    }),
+    env: {},
+    config: DEFAULT_CONFIG,
+    execution: context,
+    runtimeConfig: {},
+    signal: controller.signal,
+  }
+
+  try {
+    assert.ok(provider.prepareProvision)
+    const preparation = await provider.prepareProvision(input)
+    const restoredState = join(
+      paths.getRuntimeXdgRoots().dataHome,
+      'opencode',
+      'restored-secret.json',
+    )
+    mkdirSync(join(restoredState, '..'), { recursive: true })
+    writeFileSync(restoredState, '{"token":"synthetic-restored-secret"}\n')
+
+    // The two-phase worker can pass its final abort check while a cancellation
+    // microtask is already queued. The provider must retain cleanup ownership
+    // until the prepared reservation has actually entered provisioning.
+    queueMicrotask(() => {
+      controller.abort(new DOMException('Provisioning cancelled.', 'AbortError'))
+    })
+    await assert.rejects(
+      () => provider.provision(input),
+      (error: unknown) => error instanceof DOMException && error.name === 'AbortError',
+    )
+    await preparation.release()
+
+    assert.equal(runtimeStarts, 0)
+    assert.throws(() => statSync(restoredState))
+    assert.throws(() => statSync(paths.getRuntimeHomeDir()))
+  } finally {
+    await provider.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('sandbox abort during preparation handoff scrubs private state and permits same-scope retry', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-isolation-prepare-handoff-abort-'))
+  const context = { tenantId: 'tenant-a', sessionId: 'session-prepare-handoff-abort' }
+  const paths = createCloudSessionPathProvider(
+    createCloudPathProvider(root),
+    context.tenantId,
+    context.sessionId,
+  )
+  const restoredState = join(
+    paths.getRuntimeXdgRoots().dataHome,
+    'opencode',
+    'restored-secret.json',
+  )
+  const handoffAbort = abortAtPreparedReservationHandoff(
+    paths.getRuntimeHomeDir(),
+    () => {
+      mkdirSync(join(restoredState, '..'), { recursive: true })
+      writeFileSync(restoredState, '{"token":"synthetic-restored-secret"}\n')
+    },
+  )
+  const provider = createSandboxCloudExecutionIsolationProvider({
+    policy: sandboxPolicy(),
+    workerId: 'sandbox-prepare-handoff-abort-test-worker',
+    runtimeRootPath: root,
+    runner: {
+      async run(_command, args) {
+        if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
+        if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
+        if (args[0] === 'image') {
+          return { exitCode: 0, stdout: fakeImageInspection() }
+        }
+        return { exitCode: 1 }
+      },
+    },
+  })
+  const input = {
+    paths,
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+    }),
+    env: {},
+    config: DEFAULT_CONFIG,
+    execution: context,
+    runtimeConfig: {},
+    signal: handoffAbort.signal,
+  }
+
+  try {
+    assert.ok(provider.prepareProvision)
+    await assert.rejects(
+      () => provider.prepareProvision!(input),
+      (error: unknown) => error instanceof DOMException && error.name === 'AbortError',
+    )
+    assert.equal(handoffAbort.preparedChecks(), 2)
+    assert.throws(() => statSync(restoredState))
+    assert.throws(() => statSync(paths.getRuntimeHomeDir()))
+
+    const retryPreparation = await provider.prepareProvision({
+      ...input,
+      signal: undefined,
+    })
+    await retryPreparation.release()
+    assert.throws(() => statSync(paths.getRuntimeHomeDir()))
+  } finally {
+    await provider.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('failed preparation-handoff cleanup remains provider-owned and does not block close draining', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-isolation-prepare-handoff-debt-'))
+  const context = { tenantId: 'tenant-a', sessionId: 'session-prepare-handoff-debt' }
+  const paths = createCloudSessionPathProvider(
+    createCloudPathProvider(root),
+    context.tenantId,
+    context.sessionId,
+  )
+  const handoffAbort = abortAtPreparedReservationHandoff(paths.getRuntimeHomeDir())
+  let cleanupFails = true
+  let cleanupAttempts = 0
+  const provider = createSandboxCloudExecutionIsolationProvider({
+    policy: sandboxPolicy(),
+    workerId: 'sandbox-prepare-handoff-debt-test-worker',
+    runtimeRootPath: root,
+    cleanupPrivateRuntimePaths(input) {
+      cleanupAttempts += 1
+      if (cleanupFails) throw new Error('synthetic private path cleanup failure')
+      const xdg = input.paths.getRuntimeXdgRoots()
+      for (const path of [
+        input.paths.getRuntimeHomeDir(),
+        xdg.configHome,
+        xdg.dataHome,
+        xdg.stateHome,
+        xdg.cacheHome,
+      ]) {
+        rmSync(path, { recursive: true, force: true })
+      }
+    },
+    runner: {
+      async run(_command, args) {
+        if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
+        if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
+        if (args[0] === 'image') {
+          return { exitCode: 0, stdout: fakeImageInspection() }
+        }
+        return { exitCode: 1 }
+      },
+    },
+  })
+  const input = {
+    paths,
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+    }),
+    env: {},
+    config: DEFAULT_CONFIG,
+    execution: context,
+    runtimeConfig: {},
+    signal: handoffAbort.signal,
+  }
+
+  try {
+    assert.ok(provider.prepareProvision)
+    await assert.rejects(
+      () => provider.prepareProvision!(input),
+      (error: unknown) => (
+        error instanceof CloudExecutionIsolationError
+        && error.reasonCode === 'sandbox_private_runtime_cleanup_failed'
+      ),
+    )
+    assert.equal(handoffAbort.preparedChecks(), 2)
+    assert.doesNotThrow(() => statSync(paths.getRuntimeHomeDir()))
+
+    const firstCloseOutcome = await Promise.race([
+      provider.close!().then(
+        () => 'fulfilled' as const,
+        (error: unknown) => error,
+      ),
+      new Promise<'timed_out'>((resolveTimeout) => {
+        setTimeout(() => resolveTimeout('timed_out'), 500)
+      }),
+    ])
+    assert.notEqual(firstCloseOutcome, 'timed_out')
+    assert.ok(
+      firstCloseOutcome instanceof CloudExecutionIsolationError
+      && firstCloseOutcome.reasonCode === 'sandbox_provider_cleanup_residue',
+    )
+    assert.ok(cleanupAttempts >= 4)
+    assert.doesNotThrow(() => statSync(paths.getRuntimeHomeDir()))
+
+    cleanupFails = false
+    await provider.close?.()
+    assert.throws(() => statSync(paths.getRuntimeHomeDir()))
+  } finally {
+    cleanupFails = false
+    await provider.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('sandbox provisioning failure removes partial runtime and credential artifacts', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-isolation-failure-'))
   const context = { tenantId: 'tenant-a', sessionId: 'session-failure' }
@@ -1813,6 +2370,147 @@ test('sandbox provisioning failure removes partial runtime and credential artifa
   assert.throws(() => statSync(paths.getRuntimeHomeDir()))
   assert.throws(() => statSync(paths.getRuntimeXdgRoots().dataHome))
   rmSync(root, { recursive: true, force: true })
+})
+
+test('late provision abort owns the started sandbox and retains hard-cap cleanup debt', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-isolation-late-abort-'))
+  const store = new InMemoryControlPlaneStore()
+  await store.ensureOrgForTenant({ tenantId: 'tenant-a', name: 'Tenant A' })
+  let provisionSignal: AbortSignal | undefined
+  let runtimeStarts = 0
+  let stopAttempts = 0
+  let cleanupAttempts = 0
+  let cleanupFails = true
+  let resolveCreationFailure!: () => void
+  const creationFailureRecorded = new Promise<void>((resolve) => {
+    resolveCreationFailure = resolve
+  })
+  const provider = createSandboxCloudExecutionIsolationProvider({
+    policy: sandboxPolicy(),
+    workerId: 'sandbox-late-abort-test-worker',
+    runtimeRootPath: root,
+    orphanCleanupRetryMs: 10,
+    prepareInput(input) {
+      provisionSignal = input.signal
+      return input
+    },
+    runner: {
+      async run(_command, args) {
+        if (args[0] === 'ps') return { exitCode: 0, stdout: '' }
+        if (args[0] === 'version') return { exitCode: 0, stdout: '27.1.0' }
+        if (args[0] === 'image') {
+          return { exitCode: 0, stdout: fakeImageInspection() }
+        }
+        if (args[0] === 'run') {
+          runtimeStarts += 1
+          assert.ok(provisionSignal)
+          await new Promise<void>((resolveAbort) => {
+            if (provisionSignal!.aborted) {
+              resolveAbort()
+              return
+            }
+            provisionSignal!.addEventListener('abort', () => resolveAbort(), { once: true })
+          })
+          return { exitCode: 0, stdout: 'container-id' }
+        }
+        if (args[0] === 'stop') {
+          stopAttempts += 1
+          return cleanupFails
+            ? { exitCode: 1, stderr: 'synthetic stop failure' }
+            : { exitCode: 0 }
+        }
+        if (args[0] === 'rm') {
+          cleanupAttempts += 1
+          return cleanupFails
+            ? { exitCode: 1, stderr: 'synthetic cleanup failure' }
+            : { exitCode: 0 }
+        }
+        return { exitCode: 1 }
+      },
+    },
+  })
+  const runtime = createWorkerScopedRuntimeAdapter({
+    paths: createCloudPathProvider(root),
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+    }),
+    env: {},
+    config: DEFAULT_CONFIG,
+    byokSecrets: createByokSecretStore(
+      store,
+      createEnvelopeSecretAdapter('late-abort-cleanup-debt-test-key'),
+    ),
+    observability: {
+      log() {},
+      span() {},
+      metric(record) {
+        if (
+          record.name === 'open_cowork_cloud_runtime_creation_duration_ms'
+          && record.attributes?.status === 'error'
+        ) {
+          resolveCreationFailure()
+        }
+      },
+    },
+    isolationProvider: provider,
+    runtimeFactory() {
+      throw new Error('The sandbox provider owns runtime creation.')
+    },
+    maxRuntimeEntries: 1,
+    maxAdmissionQueueEntries: 1,
+    admissionQueueTimeoutMs: 1_000,
+    runtimeProvisionTimeoutMs: 20,
+  })
+  const prompt = (sessionId: string) => runtime.promptSession({
+    sessionId: 'native-session',
+    parts: [],
+    agent: 'build',
+    context: { tenantId: 'tenant-a', sessionId },
+  })
+
+  try {
+    await assert.rejects(
+      () => prompt('session-a'),
+      (error: unknown) => (
+        error instanceof CloudRuntimeCapacityError
+        && error.reason === 'provision_timeout'
+      ),
+    )
+    await creationFailureRecorded
+    assert.equal(runtimeStarts, 1)
+    assert.ok(stopAttempts > 0)
+    assert.ok(cleanupAttempts > 0)
+
+    await assert.rejects(
+      () => prompt('session-b'),
+      (error: unknown) => (
+        error instanceof CloudRuntimeCapacityError
+        && error.reason === 'cleanup_pending'
+      ),
+    )
+    assert.equal(runtimeStarts, 1)
+
+    cleanupFails = false
+    const cleanupDeadline = Date.now() + 2_000
+    while (!(await provider.capability()).available && Date.now() < cleanupDeadline) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 10))
+    }
+    assert.equal((await provider.capability()).available, true)
+
+    await assert.rejects(
+      () => prompt('session-c'),
+      (error: unknown) => (
+        error instanceof CloudRuntimeCapacityError
+        && error.reason === 'provision_timeout'
+      ),
+    )
+    assert.equal(runtimeStarts, 2)
+  } finally {
+    cleanupFails = false
+    await runtime.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('sandbox teardown failure is redacted, observable, and retryable without deleting live credentials', async () => {
@@ -2488,8 +3186,8 @@ test('worker blocks replacement admission while an external boundary has cleanup
       ...prompt,
       context: { tenantId: 'tenant-a', sessionId: 'session-b' },
     }), (error: unknown) => (
-      error instanceof CloudExecutionIsolationError
-      && error.reasonCode === 'cloud_runtime_boundary_cleanup_pending'
+      error instanceof CloudRuntimeCapacityError
+      && error.reason === 'cleanup_pending'
     ))
     assert.equal(provisioned, 1)
   } finally {
@@ -2611,7 +3309,7 @@ test('execution scope pins one boundary through checkpoint save and acknowledgem
     env: {},
     config: DEFAULT_CONFIG,
     byokSecrets,
-    maxRuntimeEntries: 1,
+    maxRuntimeEntries: 2,
     runtimeIdleTtlMs: 60_000,
     async prepareProvision(input) {
       order.push(`restore:${input.execution.sessionId}`)
@@ -2669,7 +3367,6 @@ test('execution scope pins one boundary through checkpoint save and acknowledgem
       'execute:session-b',
       'checkpoint-save',
       'command-ack',
-      'teardown:session-a',
     ])
   } finally {
     await runtime.close?.()

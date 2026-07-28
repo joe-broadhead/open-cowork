@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { resolveEffectiveCloudRuntimeConfig } from '../scripts/cloud-runtime-prune-core.mjs'
 
 function readRepoFile(path: string) {
   return readFileSync(join(process.cwd(), path), 'utf8')
@@ -193,6 +194,9 @@ test('managed worker templates require a verifiable fail-closed execution bounda
     assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_IMAGE=.*@sha256:/)
     assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_IMAGE_SHA256=sha256:/)
     assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_NETWORK_POLICY=deny-all/)
+    assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES=/)
+    assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT=/)
+    assert.match(template, /OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT=/)
     assert.match(template, /non-root service user/)
   }
   const managed = readRepoFile('deploy/managed-workers/managed-operator-worker.env.template')
@@ -217,6 +221,19 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(chart, /name: open-cowork-cloud/)
   assert.match(chart, /open-cowork-gateway/)
   assert.match(values, /web:/)
+  assert.match(values, /worker:[\s\S]*runtimeCapacity: 2/)
+  assert.match(values, /worker:[\s\S]*admissionQueueCapacity: 8/)
+  assert.match(values, /worker:[\s\S]*admissionQueueTimeoutMs: 30000/)
+  assert.match(values, /worker:[\s\S]*runtimeProvisionTimeoutMs: 120000/)
+  assert.match(values, /worker:[\s\S]*runtimeTeardownTimeoutMs: 30000/)
+  assert.match(values, /worker:[\s\S]*isolationMemoryLimitBytes: 1610612736/)
+  assert.match(values, /worker:[\s\S]*isolationCpuLimit: 0\.75/)
+  assert.match(values, /worker:[\s\S]*isolationPidsLimit: 256/)
+  assert.match(values, /worker:[\s\S]*sessionConcurrency: 2/)
+  assert.match(values, /worker:[\s\S]*maxCommandsPerSessionPerTick: 50/)
+  assert.match(values, /worker:[\s\S]*maxLeases: 4096/)
+  assert.match(values, /worker:[\s\S]*resources:[\s\S]*requests:[\s\S]*cpu: 500m[\s\S]*memory: 1Gi[\s\S]*ephemeral-storage: 2Gi/)
+  assert.match(values, /worker:[\s\S]*resources:[\s\S]*limits:[\s\S]*cpu: "2"[\s\S]*memory: 4Gi[\s\S]*ephemeral-storage: 8Gi/)
   assert.match(values, /deploymentTier: local/)
   assert.match(values, /tag: "0\.0\.0"/)
   assert.match(values, /digest: ""/)
@@ -299,6 +316,15 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(networkPolicy, /egress: \[\]/)
   assert.match(deployment, /cloud\.deploymentTier=public_production requires roles\.web\.enabled=true/)
   assert.match(deployment, /cloud\.deploymentTier=public_production requires roles\.worker\.enabled=true/)
+  assert.match(deployment, /roles\.worker\.runtimeCapacity must be greater than zero/)
+  assert.match(deployment, /roles\.worker\.admissionQueueCapacity must be greater than zero/)
+  assert.match(deployment, /roles\.worker\.admissionQueueTimeoutMs must be greater than zero/)
+  assert.match(deployment, /roles\.worker\.runtimeProvisionTimeoutMs must be greater than zero/)
+  assert.match(deployment, /roles\.worker\.runtimeTeardownTimeoutMs must be greater than zero/)
+  assert.match(deployment, /roles\.worker\.isolationMemoryLimitBytes must be greater than zero/)
+  assert.match(deployment, /roles\.worker\.isolationCpuLimit must be greater than zero/)
+  assert.match(deployment, /roles\.worker\.isolationPidsLimit must be greater than zero/)
+  assert.match(deployment, /public_production requires worker CPU, memory, and ephemeral-storage requests and limits/)
   assert.match(deployment, /cloud\.deploymentTier=public_production requires roles\.scheduler\.enabled=true/)
   assert.match(deployment, /cloud\.deploymentTier=public_production web role requires cloud\.publicUrl/)
   assert.match(deployment, /cloud\.deploymentTier=public_production web role must set roles\.web\.autoProcessCommands=false/)
@@ -381,6 +407,17 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(configMap, /OPEN_COWORK_CLOUD_SERVICE_NAME/)
   assert.match(configMap, /OPEN_COWORK_CLOUD_OTLP_ENDPOINT/)
   assert.match(configMap, /OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_QUEUE_MAX_ENTRIES/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_RUNTIME_ADMISSION_TIMEOUT_MS/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_RUNTIME_PROVISION_TIMEOUT_MS/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_RUNTIME_TEARDOWN_TIMEOUT_MS/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_ISOLATION_MEMORY_LIMIT_BYTES/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_ISOLATION_CPU_LIMIT/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_ISOLATION_PIDS_LIMIT/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_WORKER_SESSION_CONCURRENCY/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_WORKER_MAX_COMMANDS_PER_SESSION_PER_TICK/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_WORKER_MAX_LEASES/)
   assert.match(secret, /OPEN_COWORK_CLOUD_CONTROL_PLANE_URL/)
   assert.match(secret, /OPEN_COWORK_CLOUD_SECRET_KEY/)
   assert.match(secret, /OPEN_COWORK_CLOUD_SECRET_KEY_REF/)
@@ -882,6 +919,7 @@ test('downstream example covers desktop, cloud, and gateway branding parity', ()
 
 test('cloud CLI entrypoint uses the shared config loader and cloud app bootstrap', () => {
   const script = readRepoFile('scripts/open-cowork-cloud.ts')
+  assert.match(script, /assertConfigValid\(\)/)
   assert.match(script, /getAppConfig/)
   assert.match(script, /startCloudApp/)
   assert.match(script, /--development-process/)
@@ -892,17 +930,77 @@ test('cloud CLI entrypoint uses the shared config loader and cloud app bootstrap
 
 test('cloud bundle import smoke explicitly opts into local development isolation', () => {
   const script = readRepoFile('scripts/cloud-bundle-import-smoke.mjs')
-  assert.match(script, /'--experimental-sqlite', bundle, '--development-process'/)
+  assert.match(script, /--runtime-root/)
+  assert.match(script, /cwd: runtimeRoot/)
+  assert.match(script, /OPEN_COWORK_DOWNSTREAM_ROOT: runtimeRoot/)
+  assert.match(script, /OPEN_COWORK_CONFIG_DIR: input\.root/)
+  assert.match(script, /process\.chdir\(runtimeRoot\)/)
+  assert.match(script, /process\.chdir\(previousCwd\)/)
+  assert.match(script, /assertRuntimeExternalResolutionsContained/)
+  assert.match(script, /buildSmokeProviderOverride/)
+  assert.match(script, /invokeStdioMcpTool/)
+  assert.match(
+    script,
+    /effectiveConfig = resolveEffectiveCloudRuntimeConfig\(configModule\.getAppConfig\(\)\)/,
+  )
+  assert.match(script, /Cloud smoke config advertises unsupported bare local MCP/)
+  assert.doesNotMatch(script, /\.\.\.process\.env/)
+  assert.match(script, /\/api\/sessions/)
+  assert.match(script, /\/prompt/)
+  assert.match(script, /mcps\/charts\/dist\/index\.js/)
+  assert.match(script, /effectiveConfig\.providers\.defaultModel !== 'cloud-smoke-model'/)
+  const providerValidation = script.indexOf('/api/byok/openrouter/validate')
+  const evidenceReset = script.indexOf('provider.resetEvidence()', providerValidation)
+  const sessionPrompt = script.indexOf('/prompt', evidenceReset)
+  assert.ok(providerValidation >= 0, 'closure smoke must validate the provider adapter')
+  assert.ok(evidenceReset > providerValidation, 'closure smoke must discard provider-validation evidence')
+  assert.ok(sessionPrompt > evidenceReset, 'closure smoke must require fresh evidence from a session prompt')
 })
 
 test('cloud image builds workspace packages required by package entrypoints', () => {
   const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
   const gatewayDockerfile = readRepoFile('docker/open-cowork-gateway/Dockerfile')
   const buildScript = readRepoFile('scripts/build-cloud.mjs')
+  const productConfig = JSON.parse(readRepoFile('open-cowork.config.json')) as {
+    tools?: Array<{ id?: string; namespace?: string }>
+    skills?: Array<{ sourceName?: string; toolIds?: string[] }>
+    mcps?: Array<{ name?: string; type?: string; packageName?: string; command?: string[] }>
+  }
 
   assert.match(buildScript, /cloudElectronShimPlugin/)
   assert.match(buildScript, /onResolve\(\{ filter: \/\^electron\$\/ \}/)
   assert.match(buildScript, /plugins: \[cloudElectronShimPlugin\]/)
+  assert.match(buildScript, /metafile: true/)
+  assert.match(buildScript, /cloud-runtime-workspaces\.json/)
+  assert.match(buildScript, /schemaVersion: 3/)
+  assert.match(buildScript, /externalPackages: runtimeExternalPackages/)
+  assert.match(buildScript, /runtimePackages/)
+  assert.match(buildScript, /runtimeAssets/)
+  assert.match(buildScript, /configuredMcpWorkspaceFilters/)
+  assert.match(buildScript, /resolveEffectiveCloudRuntimeConfig/)
+  assert.match(buildScript, /mcpWorkspaceFilters\.flatMap/)
+  assert.match(buildScript, /rm\(cloudOutputDir, \{ recursive: true, force: true \}\)/)
+  assert.match(buildScript, /'chart-frame\.html'/)
+  assert.doesNotMatch(buildScript, /sourcemap: true/)
+  const desktopTimeKeep = productConfig.mcps?.find((mcp) => mcp.name === 'time-keep')
+  assert.deepEqual(
+    desktopTimeKeep?.command,
+    ['time-keep', 'server', 'start', '--transport', 'stdio'],
+    'the shared Desktop config must retain its vendored time-keep launcher',
+  )
+  const productionCloudConfig = resolveEffectiveCloudRuntimeConfig(productConfig)
+  assert.equal(productionCloudConfig.mcps.some((mcp) => mcp.name === 'time-keep'), false)
+  assert.equal(productionCloudConfig.tools.some((tool) => tool.id === 'time-keep'), false)
+  assert.equal(productionCloudConfig.skills.some((skill) => skill.sourceName === 'time-keep'), false)
+  assert.equal(
+    productionCloudConfig.mcps.some((mcp) => (
+      mcp.type === 'local'
+      && Array.isArray(mcp.command)
+      && !mcp.packageName
+    )),
+    false,
+    'the effective production Cloud config must not advertise unsupported bare local MCPs',
+  )
   // The cloud serves the UNIFIED RENDERER (the one-UI-codebase cutover): build-cloud
   // builds the shared @open-cowork/app browser renderer and copies it next to the cloud
   // entry under ./browser-renderer/, the location packages/cloud-server/src/browser-renderer-app.ts
@@ -916,6 +1014,11 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   assert.match(dockerfile, /pnpm --filter @open-cowork\/shared build/)
   assert.match(dockerfile, /pnpm cloud:build/)
   assert.match(dockerfile, /USER node/)
+  assert.match(
+    dockerfile,
+    /COPY skills \.\/skills[\s\S]*prune-cloud-runtime\.mjs \/runtime/,
+    'the clean Cloud build stage must copy configured skill sources before pruning',
+  )
   // The runtime stage ships the PRUNED tree (manifests + dist only), never the
   // full monorepo source: scripts/prune-cloud-runtime.mjs runs in the build
   // stage and the runtime stage copies its output.
@@ -950,8 +1053,14 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   // pinned Node 22.x (stable/flag-free only on 23.4+).
   assert.match(dockerfile, /CMD \["node", "--experimental-sqlite", "apps\/desktop\/dist\/cloud\/open-cowork-cloud\.mjs"\]/)
 
-  assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/channel-gateway build/)
-  assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/shared build/)
+  assert.match(
+    gatewayDockerfile,
+    /pnpm --filter "@open-cowork\/channel-gateway\.\.\." run build/,
+  )
+  assert.doesNotMatch(
+    gatewayDockerfile,
+    /pnpm --filter @open-cowork\/shared build/,
+  )
   assert.match(gatewayDockerfile, /COPY open-cowork\.config\.json open-cowork\.config\.schema\.json/)
   assert.match(gatewayDockerfile, /COPY scripts \.\/scripts/)
   assert.match(gatewayDockerfile, /prune-gateway-runtime\.mjs \/runtime/)
@@ -1152,6 +1261,8 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   assert.match(packageJson, /"release:gates:validate": "node scripts\/validate-release-gates\.mjs"/)
   assert.match(validator, /open_cowork_cloud_http_requests_total/)
   assert.match(validator, /open_cowork_gateway_delivery_dead_letters_total/)
+  assert.doesNotMatch(dashboard, /url_path/)
+  assert.match(catalog, /Raw routes are never metric labels/)
 
   for (const metric of [
     'open_cowork_cloud_http_requests_total',
@@ -1163,6 +1274,19 @@ test('operations observability assets define metrics, dashboards, alerts, and re
     'open_cowork_cloud_worker_expired_leases_reaped_total',
     'open_cowork_cloud_worker_expired_lease_reaper_drain_cap_hits_total',
     'open_cowork_cloud_worker_stale_owner_rejections_total',
+    'open_cowork_cloud_runtime_capacity',
+    'open_cowork_cloud_runtime_capacity_in_use',
+    'open_cowork_cloud_runtime_cached',
+    'open_cowork_cloud_runtime_active',
+    'open_cowork_cloud_runtime_creating',
+    'open_cowork_cloud_runtime_cleanup_debt',
+    'open_cowork_cloud_runtime_admission_queue_depth',
+    'open_cowork_cloud_runtime_admission_rejections_total',
+    'open_cowork_cloud_runtime_creation_duration_ms',
+    'open_cowork_cloud_worker_rss_bytes',
+    'open_cowork_cloud_worker_cpu_user_seconds_total',
+    'open_cowork_cloud_worker_cpu_system_seconds_total',
+    'open_cowork_cloud_worker_event_loop_utilization_ratio',
     'open_cowork_cloud_scheduler_claims_total',
     'open_cowork_cloud_scheduler_expired_claims_reaped_total',
     'open_cowork_cloud_scheduler_expired_claim_reaper_drain_cap_hits_total',
@@ -1187,6 +1311,8 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   for (const alert of [
     'OpenCoworkCloudHighHttpErrorRate',
     'OpenCoworkWorkerBacklogGrowing',
+    'OpenCoworkWorkerRuntimeNearCapacity',
+    'OpenCoworkWorkerRuntimeAdmissionRejected',
     'OpenCoworkWorkerLeaseRecoverySpike',
     'OpenCoworkSchedulerStalled',
     'OpenCoworkProjectionLag',
@@ -1227,6 +1353,14 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   const packageJson = readRepoFile('package.json')
   const scriptsReadme = readRepoFile('scripts/README.md')
   const validate = readRepoFile('scripts/validate-deployment-configs.mjs')
+  const validationModules = [
+    'scripts/deployment-validation/chart-values.mjs',
+    'scripts/deployment-validation/compose.mjs',
+    'scripts/deployment-validation/helm-cloud.mjs',
+    'scripts/deployment-validation/helm-gateway.mjs',
+    'scripts/deployment-validation/kubernetes.mjs',
+    'scripts/deployment-validation/private-beta.mjs',
+  ].map(readRepoFile).join('\n')
   const smoke = readRepoFile('scripts/smoke-deployment.mjs')
 
   assert.match(packageJson, /"deploy:validate": "node scripts\/validate-deployment-configs\.mjs"/)
@@ -1244,21 +1378,19 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(scriptsReadme, /pnpm ops:validate/)
   const ciWorkflow = readRepoFile('.github/workflows/ci.yml')
   assert.match(ciWorkflow, /pnpm ops:validate/)
-  assert.match(validate, /docker-compose\.cloud\.yml/)
-  assert.match(validate, /docker-compose\.cloud\.split\.yml/)
-  assert.match(validate, /docker-compose\.cloud-gateway\.yml/)
+  assert.ok(validate.split('\n').length < 200, 'deployment validator runner must remain composition-only')
+  assert.match(validationModules, /composeFiles/)
   assert.match(validate, /helm\/open-cowork-cloud/)
   assert.match(validate, /helm\/open-cowork-gateway/)
-  assert.match(validate, /deploy\/observability\/metrics-catalog\.json/)
-  assert.match(validate, /docs\/runbooks\/backup-restore\.md/)
-  assert.match(validate, /docs\/runbooks\/restore-drill-report\.md/)
-  assert.match(validate, /unsafe-public-cloud/)
-  assert.match(validate, /latest-cloud-image/)
-  assert.match(validate, /unsafe-multi-worker-cloud/)
-  assert.match(validate, /image\.tag=latest is not allowed/)
-  assert.match(validate, /unsafe-webhook-gateway/)
-  assert.match(validate, /latest-gateway-image/)
-  assert.match(validate, /unsafe-metrics-gateway/)
+  assert.match(validationModules, /DEPLOY_IMAGE_IMMUTABLE_REQUIRED/)
+  assert.match(validationModules, /DEPLOY_WORKER_RESOURCES_REQUIRED/)
+  assert.match(validationModules, /unsafe-public-cloud/)
+  assert.match(validationModules, /latest-cloud-image/)
+  assert.match(validationModules, /unsafe-multi-worker-cloud/)
+  assert.match(validationModules, /image\.tag=latest is not allowed/)
+  assert.match(validationModules, /unsafe-webhook-gateway/)
+  assert.match(validationModules, /latest-gateway-image/)
+  assert.match(validationModules, /unsafe-metrics-gateway/)
   assert.match(smoke, /OPEN_COWORK_SMOKE_CLOUD_URL/)
   assert.match(smoke, /OPEN_COWORK_SMOKE_GATEWAY_URL/)
   assert.match(smoke, /\/livez/)
@@ -1309,6 +1441,7 @@ test('managed operations runbook covers readiness, rollback, diagnostics, and ga
     'Gateway Provider Outage',
     'Webhook Abuse',
     'BYOK Provider Key Failure',
+    'Runtime Capacity Pressure',
     'Secret Rotation',
     'Diagnostics',
     'API tokens',

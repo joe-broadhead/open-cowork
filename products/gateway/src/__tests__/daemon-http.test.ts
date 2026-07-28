@@ -14,7 +14,7 @@ import { clearConfigCacheForTest, updateConfig } from '../config.js'
 import { clearWorkStateForTest, loadWorkState } from '../work-store.js'
 import { clearCurrentDaemonLeadershipForTest } from '../daemon-leadership.js'
 import { clearMissionDataCacheForTest } from '../mission-data.js'
-import { broadcastLiveEventForTest, clearLiveClientsForTest, liveClientCountForTest } from '../live.js'
+import { broadcastLiveEventForTest, clearLiveClientsForTest, liveClientCountForTest, runLiveClientMaintenanceForTest } from '../live.js'
 
 /**
  * Boots the ACTUAL daemon HTTP server (the handler daemon.ts serves in
@@ -296,5 +296,114 @@ describe.sequential('daemon HTTP server integration', () => {
       await new Promise(resolve => setTimeout(resolve, 25))
     }
     expect(liveClientCountForTest()).toBe(0)
+  })
+
+  it('connects the bundled live page to its sanitized stream under the default loopback read policy', async () => {
+    const page = await fetch(`${baseUrl}/live`)
+    expect(page.status).toBe(200)
+    expect(await page.text()).toContain("new EventSource('/live/events')")
+
+    const response = await fetch(`${baseUrl}/live/events`, {
+      headers: { Accept: 'text/event-stream' },
+    })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('text/event-stream')
+
+    const reader = response.body!.getReader()
+    const connected = await reader.read()
+    expect(new TextDecoder().decode(connected.value)).toContain('"type":"connected"')
+    await reader.cancel()
+  })
+
+  it('revalidates live-stream authentication and closes a client after its credential is revoked', async () => {
+    process.env['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN'] = 'daemon-http-revoked-admin-token'
+    const response = await fetch(`${baseUrl}/live/events`, {
+      headers: { Accept: 'text/event-stream', Authorization: 'Bearer daemon-http-revoked-admin-token' },
+    })
+    expect(response.status).toBe(200)
+    const reader = response.body!.getReader()
+    await reader.read()
+    expect(liveClientCountForTest()).toBe(1)
+
+    delete process.env['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN']
+    runLiveClientMaintenanceForTest(Date.now() + 15_000)
+
+    expect(liveClientCountForTest()).toBe(0)
+    const closed = await reader.read()
+    expect(new TextDecoder().decode(closed.value)).toContain('"reason":"authentication_expired"')
+    await reader.cancel()
+  })
+
+  it('admits one of two concurrent clients at the exact global limit and returns retry guidance', async () => {
+    process.env['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN'] = 'daemon-http-capacity-admin-token'
+    updateConfig({ live: { maxClients: 1, maxClientsPerPrincipal: 1, retryAfterSeconds: 9 } } as any)
+    const headers = { Accept: 'text/event-stream', Authorization: 'Bearer daemon-http-capacity-admin-token' }
+
+    const responses = await Promise.all([
+      fetch(`${baseUrl}/live/events`, { headers }),
+      fetch(`${baseUrl}/live/events`, { headers }),
+    ])
+    expect(responses.map(response => response.status).sort()).toEqual([200, 503])
+
+    const admitted = responses.find(response => response.status === 200)!
+    const rejected = responses.find(response => response.status === 503)!
+    expect(rejected.headers.get('retry-after')).toBe('9')
+    expect(await rejected.json()).toEqual({
+      error: 'live SSE capacity exceeded',
+      code: 'LIVE_SSE_CAPACITY',
+      retryable: true,
+    })
+
+    await admitted.body!.cancel()
+  })
+
+  it('accounts live-stream capacity by authenticated bearer identity instead of spoofable headers', async () => {
+    updateConfig({ live: { maxClients: 2, maxClientsPerPrincipal: 1 } } as any)
+    process.env['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN'] = 'daemon-http-principal-a-token'
+    const first = await fetch(`${baseUrl}/live/events`, {
+      headers: {
+        Accept: 'text/event-stream',
+        Authorization: 'Bearer daemon-http-principal-a-token',
+        'X-Gateway-Actor': 'spoofed-shared-actor',
+      },
+    })
+    expect(first.status).toBe(200)
+
+    process.env['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN'] = 'daemon-http-principal-b-token'
+    const second = await fetch(`${baseUrl}/live/events`, {
+      headers: {
+        Accept: 'text/event-stream',
+        Authorization: 'Bearer daemon-http-principal-b-token',
+        'X-Gateway-Actor': 'spoofed-shared-actor',
+      },
+    })
+    expect(second.status).toBe(200)
+    expect(liveClientCountForTest()).toBe(2)
+
+    await Promise.all([first.body!.cancel(), second.body!.cancel()])
+  })
+
+  it('canonicalizes bearer scheme case and whitespace before enforcing the principal cap', async () => {
+    updateConfig({ live: { maxClients: 2, maxClientsPerPrincipal: 1 } } as any)
+    process.env['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN'] = 'daemon-http-canonical-principal-token'
+
+    const first = await fetch(`${baseUrl}/live/events`, {
+      headers: {
+        Accept: 'text/event-stream',
+        Authorization: 'Bearer daemon-http-canonical-principal-token',
+      },
+    })
+    expect(first.status).toBe(200)
+
+    const equivalent = await fetch(`${baseUrl}/live/events`, {
+      headers: {
+        Accept: 'text/event-stream',
+        Authorization: 'bEaReR      daemon-http-canonical-principal-token',
+      },
+    })
+    expect(equivalent.status).toBe(503)
+    expect((await equivalent.json() as any).code).toBe('LIVE_SSE_CAPACITY')
+
+    await first.body!.cancel()
   })
 })

@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 import * as http from 'node:http'
 import * as path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { getConfig } from './config.js'
 import { startHeartbeat, stopHeartbeat } from './heartbeat.js'
 import { setDaemonClient } from './gateway-runtime.js'
 import { trackWorker, loadWorkerState, reconcileWorkersFromOpenCode } from './workers.js'
 import { renderDashboard } from './dashboard.js'
-import { subscribeToOpenCodeEvents, addLiveClient, closeAllLiveClients, removeLiveClient } from './live.js'
+import { subscribeToOpenCodeEvents, addLiveClient, closeAllLiveClients, stopLiveEvents } from './live.js'
 import { getTelegramChannel } from './channels/telegram-protocol-stack.js'
 import { getWhatsAppChannel, isWhatsAppMonorepoBridge } from './channels/whatsapp-protocol-stack.js'
 import { getDiscordChannel, isDiscordMonorepoBridge } from './channels/discord-protocol-stack.js'
 import { claimInboundWebhookRateLimit, inboundWebhookRateKey, noteInboundWebhookAuthFailure } from './channels/webhook-rate-limit.js'
 import { actionDeliveryForCapabilities } from './channels/capabilities.js'
 import { resolveAgent } from './routing.js'
-import { TransientInboundError, assertHttpBindAllowed, channelTargetFingerprint, channelTargetLabel, evaluateExposedHttpGuard, evaluateHttpRequestSecurity, exposedHttpGuardKeys, isLocalOrigin, isTransientInboundError, isTrustedChannelActor, isTrustedChannelTarget, listChannelAllowlistActorGaps, recordExposedHttpAuthResult, redactSensitiveText, redactedChannelTargetLabel, resolveHttpClientAddress } from './security.js'
+import { TransientInboundError, assertHttpBindAllowed, channelTargetFingerprint, channelTargetLabel, evaluateExposedHttpGuard, evaluateHttpRequestSecurity, exposedHttpGuardKeys, extractBearerToken, isLocalOrigin, isTransientInboundError, isTrustedChannelActor, isTrustedChannelTarget, listChannelAllowlistActorGaps, recordExposedHttpAuthResult, redactSensitiveText, redactedChannelTargetLabel, resolveHttpClientAddress } from './security.js'
 import { appendChannelInboundDenialAudit } from './channel-audit.js'
 import { getChannelSession, listChannelSessions, setChannelSession } from './channel-sessions.js'
 import { queueEvent } from './wakeup.js'
@@ -438,6 +438,7 @@ export async function serve() {
         stopRuntimeMetricsSampler()
       }),
       stopHeartbeat(),
+      stopLiveEvents(),
       syncBridge?.stop() || Promise.resolve(),
       waitForSchedulerIdle(),
       stopExternalChannels(reason),
@@ -569,8 +570,24 @@ export function createDaemonHttpServer(input: DaemonHttpServerInput): http.Serve
       // Live SSE stream
       if (req.method === 'GET' && url.pathname === '/live/events') {
         const clientId = randomUUID()
-        addLiveClient(clientId, res, origin, port)
-        req.on('close', () => removeLiveClient(clientId))
+        const initialActor = decision.actor
+        const authInput = {
+          host: req.headers.host,
+          origin: req.headers.origin,
+          remoteAddress: clientAddress,
+          method: req.method,
+          pathname: url.pathname,
+          search: url.search,
+          authorization: req.headers.authorization,
+        }
+        addLiveClient(clientId, res, origin, port, {
+          principal: liveAuthenticatedPrincipal(decision.actor, clientAddress, req.headers.authorization),
+          lifecycle: req,
+          authorize: () => {
+            const current = evaluateHttpRequestSecurity(authInput, getConfig().security)
+            return current.allowed && (initialActor !== 'http-token' || current.actor === 'http-token')
+          },
+        })
         return // Don't end — keep SSE open
       }
 
@@ -868,6 +885,17 @@ async function startChannelAdapter(channel: { name: string; start: () => Promise
 
 function requestSource(req: http.IncomingMessage): string {
   return `${req.socket.remoteAddress || 'unknown'} host=${redactSensitiveText(String(req.headers.host || 'unknown'))}`
+}
+
+function liveAuthenticatedPrincipal(
+  actor: ReturnType<typeof evaluateHttpRequestSecurity>['actor'],
+  clientAddress: string,
+  authorization?: string | string[],
+): string {
+  if (actor === 'http-token') {
+    return `http-token:${createHash('sha256').update(extractBearerToken(authorization)).digest('hex').slice(0, 24)}`
+  }
+  return `${actor}:${clientAddress || 'unknown'}`
 }
 
 function sendStandbyWebhookResponse(res: http.ServerResponse): void {

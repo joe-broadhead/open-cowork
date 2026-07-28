@@ -33,7 +33,7 @@ export class InMemoryUsageQuotaDomain {
     const windowMs = normalizePositiveInteger(input.windowMs, 'Quota window')
     const now = input.now || new Date()
     const nowMs = now.getTime()
-    const startedAtMs = windowStart(nowMs, windowMs)
+    const startedAtMs = quotaWindowStart(nowMs, windowMs)
     const counterKey = key(input.orgId, input.quotaKey)
     const existing = this.usageCounters.get(counterKey)
     const current = existing && existing.windowStartedAtMs === startedAtMs ? existing.quantity : 0
@@ -111,7 +111,7 @@ export class InMemoryUsageQuotaDomain {
   }
 }
 
-function windowStart(nowMs: number, windowMs: number) {
+export function quotaWindowStart(nowMs: number, windowMs: number) {
   return Math.floor(nowMs / windowMs) * windowMs
 }
 

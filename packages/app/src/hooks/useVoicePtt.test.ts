@@ -1,5 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
+import type {
+  CoworkAPI,
+  PublicAppConfig,
+  VoiceHostEvent,
+  VoiceHostStatus,
+  VoiceSessionSnapshot,
+} from '@open-cowork/shared'
+import { installRendererTestCoworkApi } from '../test/setup'
+import { createTestVoiceApi, createTestVoiceHostStatus } from '../test/voice-fixtures'
 import { appendDictation, useVoicePtt } from './useVoicePtt'
 
 const supportFlags = {
@@ -35,7 +44,7 @@ describe('appendDictation', () => {
 })
 
 describe('useVoicePtt', () => {
-  let listeners: Array<(event: unknown) => void>
+  let listeners: Array<(event: VoiceHostEvent) => void>
   let composerText: string
 
   beforeEach(() => {
@@ -44,32 +53,39 @@ describe('useVoicePtt', () => {
     supportFlags.canPrompt = true
     listeners = []
     composerText = 'Draft: '
-    // @ts-expect-error test double
-    window.coworkApi = {
-      app: {
-        config: vi.fn(async () => ({ features: { voice: true } })),
+    const baseConfig = window.coworkApi.app.config
+    const readyStatus = createTestVoiceHostStatus({
+      tts: { engine: 'system_os', ready: false, detail: null },
+      capture: {
+        backend: 'fake',
+        detail: 'fake',
+        sampleRate: 16000,
+        channels: 1,
+        frames: 0,
+        durationSeconds: 0,
+        peak: 0,
       },
-      voice: {
-        status: vi.fn(async () => ({
-          enabled: true,
-          phase: 'ready',
-          captureMode: 'voice_host',
-          stt: { engine: 'aurum_local', ready: true, detail: 'ok' },
-          tts: { engine: 'system_os', ready: false, detail: null },
-          permissions: { microphone: 'granted' },
-          reason: null,
-          sessionId: null,
-          capture: {
-            backend: 'fake',
-            detail: 'fake',
-            sampleRate: 16000,
-            channels: 1,
-            frames: 0,
-            durationSeconds: 0,
-            peak: 0,
-          },
+    })
+    const idleStatus = createTestVoiceHostStatus({
+      tts: { engine: 'system_os', ready: false },
+    })
+    const voiceEvent: CoworkAPI['on']['voiceEvent'] = (callback) => {
+      listeners.push(callback)
+      return () => {
+        const index = listeners.indexOf(callback)
+        if (index >= 0) listeners.splice(index, 1)
+      }
+    }
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async (): Promise<PublicAppConfig> => ({
+          ...(await baseConfig()),
+          features: { voice: true },
         })),
-        startSession: vi.fn(async () => ({
+      },
+      voice: createTestVoiceApi({
+        status: vi.fn(async (): Promise<VoiceHostStatus> => readyStatus),
+        startSession: vi.fn(async (): Promise<VoiceSessionSnapshot> => ({
           id: 'voice-1',
           openCodeSessionId: null,
           workspaceId: 'local',
@@ -89,38 +105,12 @@ describe('useVoicePtt', () => {
               },
             })
           }
-          return {
-            enabled: true,
-            phase: 'ready',
-            captureMode: 'voice_host',
-            stt: { engine: 'aurum_local', ready: true },
-            tts: { engine: 'system_os', ready: false },
-            permissions: { microphone: 'granted' },
-            reason: null,
-            sessionId: null,
-          }
+          return idleStatus
         }),
-        cancel: vi.fn(async () => ({
-          enabled: true,
-          phase: 'ready',
-          captureMode: 'voice_host',
-          stt: { engine: 'aurum_local', ready: true },
-          tts: { engine: 'system_os', ready: false },
-          permissions: { microphone: 'granted' },
-          reason: null,
-          sessionId: null,
-        })),
-      },
-      on: {
-        voiceEvent: (callback: (event: unknown) => void) => {
-          listeners.push(callback)
-          return () => {
-            const index = listeners.indexOf(callback)
-            if (index >= 0) listeners.splice(index, 1)
-          }
-        },
-      },
-    }
+        cancel: vi.fn(async (): Promise<VoiceHostStatus> => idleStatus),
+      }),
+      on: { voiceEvent },
+    })
   })
 
   function renderVoicePtt() {
@@ -154,17 +144,11 @@ describe('useVoicePtt', () => {
 
   it('applies partials against the baseline and final replaces the segment', async () => {
     // Don't auto-emit final from stop — drive events manually.
-    // @ts-expect-error test double
-    window.coworkApi.voice.stopSession = vi.fn(async () => ({
-      enabled: true,
-      phase: 'ready',
-      captureMode: 'voice_host',
-      stt: { engine: 'aurum_local', ready: true },
-      tts: { engine: 'system_os', ready: false },
-      permissions: { microphone: 'granted' },
-      reason: null,
-      sessionId: null,
-    }))
+    window.coworkApi.voice.stopSession = vi.fn(async (): Promise<VoiceHostStatus> => (
+      createTestVoiceHostStatus({
+        tts: { engine: 'system_os', ready: false },
+      })
+    ))
 
     const { result } = renderVoicePtt()
     await waitFor(() => expect(result.current.enabled).toBe(true))
@@ -253,8 +237,11 @@ describe('useVoicePtt', () => {
   })
 
   it('hides when features.voice is off', async () => {
-    // @ts-expect-error test double
-    window.coworkApi.app.config = vi.fn(async () => ({ features: {} }))
+    const baseConfig = window.coworkApi.app.config
+    window.coworkApi.app.config = vi.fn(async (): Promise<PublicAppConfig> => ({
+      ...(await baseConfig()),
+      features: {},
+    }))
     const { result } = renderHook(() => useVoicePtt({
       getComposerText: () => '',
       setComposerText: vi.fn(),

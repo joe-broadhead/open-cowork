@@ -245,6 +245,13 @@ resources in the deployment overlay that owns metrics and cluster policy:
   capacity.
 - KEDA: scale workers from durable queue depth, backlog age, or another
   provider-native metric that maps to command pressure.
+- Worker budgets: keep nonzero CPU, memory, and ephemeral-storage requests and
+  limits, and size `roles.worker.runtimeCapacity`,
+  `admissionQueueCapacity`, `admissionQueueTimeoutMs`, and
+  `sessionConcurrency` together with `isolationMemoryLimitBytes`,
+  `isolationCpuLimit`, and `isolationPidsLimit`. Leave pod headroom above the
+  aggregate sandbox ceilings. Runtime admission remains hard-capped even when
+  queue or process pressure rises.
 - PodDisruptionBudgets: enable
   `roles.<role>.podDisruptionBudget.enabled=true` for production web, worker,
   scheduler, and gateway deployments.
