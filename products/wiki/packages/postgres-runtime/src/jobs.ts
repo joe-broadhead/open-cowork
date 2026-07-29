@@ -650,7 +650,7 @@ async function upsertRun(sql: PostgresQuery, run: RunRecord, workerId?: string):
   return upsertJobForRun(sql, run, workerId);
 }
 
-export async function upsertJobForRun(sql: PostgresQuery, run: RunRecord, workerId?: string): Promise<{ attempts: number; maxAttempts: number }> {
+async function upsertJobForRun(sql: PostgresQuery, run: RunRecord, workerId?: string): Promise<{ attempts: number; maxAttempts: number }> {
   const claimedAt = workerId === undefined ? null : isoNow();
   const completedAt = run.status === "succeeded" || run.status === "failed" ? run.completed_at ?? isoNow() : null;
   const insertAttempts = run.status === "running" ? 1 : 0;
@@ -685,7 +685,7 @@ export async function upsertJobForRun(sql: PostgresQuery, run: RunRecord, worker
   };
 }
 
-export async function upsertJobAttempt(
+async function upsertJobAttempt(
   sql: PostgresQuery,
   run: RunRecord,
   attempt: number,

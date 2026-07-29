@@ -85,14 +85,14 @@ function runSqliteTransaction(db: DatabaseSync, callback: () => void): void {
   }
 }
 
-export function insertMetadata(db: DatabaseSync, values: Record<string, string>): void {
+function insertMetadata(db: DatabaseSync, values: Record<string, string>): void {
   const insert = db.prepare("INSERT INTO metadata (key, value) VALUES (?, ?)");
   for (const [key, value] of Object.entries(values).sort(([left], [right]) => left.localeCompare(right))) {
     insert.run(key, value);
   }
 }
 
-export function insertWorkspacePlane(db: DatabaseSync, repo: LoadedOpenWikiRepo, sourceCommit: string, generatedAt: string): void {
+function insertWorkspacePlane(db: DatabaseSync, repo: LoadedOpenWikiRepo, sourceCommit: string, generatedAt: string): void {
   const redactedGit = redactedRuntimeGitConfig(repo.config.runtime?.git);
   const redactedConfig = redactOpenWikiWorkspaceConfig(repo.config);
   db.prepare("INSERT INTO organizations (organization_id, title, created_at, json) VALUES (?, ?, ?, ?)").run(
@@ -160,7 +160,7 @@ function redactedRuntimeGitConfig(git: RuntimeGitConfig | undefined): RedactedRu
   };
 }
 
-export function insertRecords(
+function insertRecords(
   db: DatabaseSync,
   repo: LoadedOpenWikiRepo,
   records: DerivedRecord[],
@@ -230,7 +230,7 @@ export function insertRecords(
   }
 }
 
-export function insertEdges(db: DatabaseSync, edges: GraphEdgeRecord[], sourceCommit: string, generatedAt: string): void {
+function insertEdges(db: DatabaseSync, edges: GraphEdgeRecord[], sourceCommit: string, generatedAt: string): void {
   const insert = db.prepare(
     "INSERT INTO edges (workspace_id, edge_id, from_id, to_id, edge_type, path, anchor, weight, source_commit, created_at, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
@@ -251,7 +251,7 @@ export function insertEdges(db: DatabaseSync, edges: GraphEdgeRecord[], sourceCo
   }
 }
 
-export function insertSearchDocuments(db: DatabaseSync, documents: SearchDocument[], sourceCommit: string): void {
+function insertSearchDocuments(db: DatabaseSync, documents: SearchDocument[], sourceCommit: string): void {
   const insert = db.prepare(
     "INSERT INTO search_documents (workspace_id, record_id, search_text, topics_json, source_ids_json, source_commit) VALUES (?, ?, ?, ?, ?, ?)",
   );
@@ -260,7 +260,7 @@ export function insertSearchDocuments(db: DatabaseSync, documents: SearchDocumen
   }
 }
 
-export function insertPolicyPlane(db: DatabaseSync, repo: LoadedOpenWikiRepo, sourceCommit: string): void {
+function insertPolicyPlane(db: DatabaseSync, repo: LoadedOpenWikiRepo, sourceCommit: string): void {
   const principalIds = new Set<string>();
   for (const grant of repo.policy.grants) {
     principalIds.add(grant.principal);
@@ -327,7 +327,7 @@ export function insertPolicyPlane(db: DatabaseSync, repo: LoadedOpenWikiRepo, so
   }
 }
 
-export function insertGovernancePlane(db: DatabaseSync, repo: LoadedOpenWikiRepo, sourceCommit: string): void {
+function insertGovernancePlane(db: DatabaseSync, repo: LoadedOpenWikiRepo, sourceCommit: string): void {
   const insertProposal = db.prepare(
     "INSERT INTO proposals (workspace_id, proposal_id, status, actor_id, target_path, target_ids_json, created_at, updated_at, source_commit, json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );

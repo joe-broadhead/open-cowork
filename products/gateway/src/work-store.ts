@@ -11,21 +11,30 @@ import { redactSensitiveText } from './security.js'
 import { isActiveRunStatus, isTaskActiveStatus, shouldAbortActiveRunForTaskStatus } from './runtime-state-machine.js'
 import { writeRunArtifactManifest } from './artifacts.js'
 
-export type { WorkStoreSchemaInspection } from './work-store/schema.js'
-export { closeWorkDb, currentWorkDbLeadershipEpoch, disposeWorkStore, getRow, isStaleWorkDbLeadershipError, openWorkDb, parseJSON, queryRows, recoverInterruptedStorageRestore, resetWorkDbInitState, restrictSqliteDbPermissions, setWorkDbLeadershipEpochProvider, storageRestoreJournalPath, withWorkDb, withWorkDbLeadershipEpoch, withWorkDbReadOnly, workStatePath, writeStorageRestoreJournal } from './work-store/db.js'
-export type { SqliteRow, StorageRestoreJournal, StorageRestoreJournalEntry, StorageRestoreRecoveryResult, WorkDbLeadershipEpoch } from './work-store/db.js'
+export {
+  closeWorkDb,
+  currentWorkDbLeadershipEpoch,
+  disposeWorkStore,
+  getRow,
+  isStaleWorkDbLeadershipError,
+  openWorkDb,
+  parseJSON,
+  queryRows,
+  recoverInterruptedStorageRestore,
+  resetWorkDbInitState,
+  restrictSqliteDbPermissions,
+  setWorkDbLeadershipEpochProvider,
+  withWorkDb,
+  withWorkDbLeadershipEpoch,
+  workStatePath,
+} from './work-store/db.js'
+export type { WorkDbLeadershipEpoch } from './work-store/db.js'
 export { listWorkStoreRepositoryDomains, validateWorkStoreMutationContracts } from './work-store/repositories.js'
-export type { WorkStoreMutationCompatibilityContract, WorkStoreMutationContractValidation, WorkStoreMutationEntryPoint, WorkStoreRepositoryDomain, WorkStoreRepositoryDomainId, WorkStoreTransactionOwner } from './work-store/repositories.js'
+export type { WorkStoreMutationEntryPoint } from './work-store/repositories.js'
 export type { AuditLedgerQueryOptions } from './audit-ledger.js'
 
 export * from './work-store/types.js'
 export { runWorkStoreRetentionMaintenance } from './work-store/retention.js'
-export type {
-  AuditLedgerRetentionResult,
-  RowRetentionResult,
-  WorkStoreRetentionMaintenanceOptions,
-  WorkStoreRetentionMaintenanceResult,
-} from './work-store/retention.js'
 
 export {
   listAlerts,
@@ -46,7 +55,6 @@ export {
   listChannelClaimCodesReadOnly,
   updateChannelClaimCodeStatus,
   clearChannelBindingsForTest,
-  upsertChannelBindingRow,
 } from './work-store/channel-bindings.js'
 import { upsertChannelBindingRow } from './work-store/channel-bindings.js'
 import { appendWorkEventRow } from './work-store/event-append.js'
@@ -83,8 +91,6 @@ export {
   createHumanGate,
   ensureHumanGate,
   insertHumanGateRow,
-  normalizeHumanGateDecision,
-  normalizeHumanGateScope,
 } from './work-store/human-gates.js'
 import {
   listWorkTaskViews,
@@ -149,7 +155,7 @@ import {
   applyStageResultInState,
   startWorkTaskRunInState,
 } from './work-store/run-helpers.js'
-export { abortActiveRunInState } from './work-store/run-helpers.js'
+
 
 import {
   loadWorkState,
@@ -163,8 +169,6 @@ export {
   loadWorkStateReadOnly,
   saveWorkState,
   getRunFromDb,
-  mutateWorkState,
-  type LoadWorkStateOptions,
 } from './work-store/state-io.js'
 import {
   appendWorkEvent,
@@ -187,7 +191,6 @@ export {
   createRun,
   listWorkTaskViews,
   calculateTaskReadiness,
-  recomputeRoadmapStatusInState,
 } from './work-store/task-helpers.js'
 export { appendWorkEventRow } from './work-store/event-append.js'
 export { getWorkTaskReadiness, listWorkDependencies, summarizeWorkTasks } from './work-store/work-queries.js'
@@ -409,8 +412,6 @@ export {
   acquireDueRoadmapSupervisorWakeups,
   completeRoadmapSupervisorWakeup,
   applyRoadmapSupervisorResult,
-  type PlanInitiativeDependency,
-  type PlanInitiativeInput,
   type PlanInitiativeResult,
 } from './work-store/project-orchestration.js'
 

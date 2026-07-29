@@ -99,7 +99,7 @@ export function stripApprovalFields(body: any): Record<string, unknown> {
   return rest
 }
 
-export function destructiveApprovalScopeKey(operation: string, target: string, payload: Record<string, unknown>): string {
+function destructiveApprovalScopeKey(operation: string, target: string, payload: Record<string, unknown>): string {
   const payloadHash = createHash('sha256').update(stableStringify(payload)).digest('hex').slice(0, 24)
   return `admin:${operation}:${target}:${payloadHash}`
 }

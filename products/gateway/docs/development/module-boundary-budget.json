@@ -811,55 +811,5 @@
     "rationale": "The validation gate selector may classify changed repo paths but must not import mutable runtime, storage, scheduler, channel, daemon, dashboard, MCP, CI, or package side effects."
    }
   ]
- },
- "fileLocBudgets": [
-  {
-   "path": "src/work-store.ts",
-   "maxLines": 1550,
-   "owner": "work_store",
-   "note": "Hard LOC budget (JOE-919/JOE-942/JOE-992); work-queries peel; hard max 1550 (soft \u22641500)"
-  },
-  {
-   "path": "src/environments.ts",
-   "maxLines": 1300,
-   "owner": "environments",
-   "note": "Hard LOC budget (JOE-919/JOE-936); current ~1262 after util/lifecycle/local-container/remote-crabbox extract; \u22642000"
-  },
-  {
-   "path": "src/config.ts",
-   "maxLines": 1500,
-   "owner": "config",
-   "note": "Hard LOC budget (JOE-919); post-#961 extract ratcheted hard max to soft target \u22641500; current ~1407"
-  },
-  {
-   "path": "src/scheduler.ts",
-   "maxLines": 1500,
-   "owner": "scheduler_replay",
-   "note": "Hard LOC budget (JOE-919); post-#961 scheduler-helpers extract; hard max ratcheted to soft \u22641500 (~1461)"
-  },
-  {
-   "path": "src/daemon-routes/work.ts",
-   "maxLines": 1550,
-   "owner": "scheduler_replay",
-   "note": "Hard LOC budget (JOE-919); post-#961 work-presentation extract; hard max ratcheted to 1550 (soft \u22641500); current ~1495"
-  },
-  {
-   "path": "src/mcp.ts",
-   "maxLines": 1600,
-   "owner": "daemon_cli_edge",
-   "note": "Hard LOC budget (post-#961/JOE-992); mcp-tools-ops + mcp-formatters peels; hard max 1600 (soft \u22641550)"
-  },
-  {
-   "path": "src/channel-commands.ts",
-   "maxLines": 1450,
-   "owner": "channels",
-   "note": "Hard LOC budget (post-#961); channel-commands-helpers extract; current ~1300 under soft 1400 / hard 1450"
-  },
-  {
-   "path": "src/channel-sync.ts",
-   "maxLines": 1100,
-   "owner": "channels",
-   "note": "Hard LOC budget (post-#961); current ~1004; HA migrate residual H1 surface"
-  }
- ]
+ }
 }

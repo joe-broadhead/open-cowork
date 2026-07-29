@@ -43,3 +43,11 @@ export {
 export type {
   WebhookRetryOptions
 } from "./webhook-retry.js";
+export {
+  createBridgeProvider
+} from "./bridge-provider.js";
+export type {
+  BridgeProviderConfig,
+  BridgeProviderConstructor,
+  BridgeProviderDefinition
+} from "./bridge-provider.js";

@@ -76,7 +76,7 @@ export const DEFAULT_MANAGED_POLICY: ManagedDesktopPolicy = {
   updateChannel: null,
 }
 
-export function isManagedPolicyPermissionCeiling(value: unknown): value is ManagedPolicyPermissionCeiling {
+function isManagedPolicyPermissionCeiling(value: unknown): value is ManagedPolicyPermissionCeiling {
   return typeof value === 'string' && PERMISSION_CEILING_SET.has(value as ManagedPolicyPermissionCeiling)
 }
 

@@ -12,12 +12,12 @@ import type {
   WorkTaskRecord,
 } from './work-store.js'
 
-export type RuntimeReplayConsistencyStatus = 'pass' | 'warn' | 'fail'
-export type RuntimeReplayConsistencySeverity = 'info' | 'warning' | 'critical'
-export type RuntimeReplayRepairMode = 'none' | 'automatic' | 'operator_confirmed' | 'blocked'
-export type RuntimeReplaySurfaceRebuildability = 'rebuildable' | 'best_effort' | 'operator_intervention_required'
+type RuntimeReplayConsistencyStatus = 'pass' | 'warn' | 'fail'
+type RuntimeReplayConsistencySeverity = 'info' | 'warning' | 'critical'
+type RuntimeReplayRepairMode = 'none' | 'automatic' | 'operator_confirmed' | 'blocked'
+type RuntimeReplaySurfaceRebuildability = 'rebuildable' | 'best_effort' | 'operator_intervention_required'
 
-export type RuntimeReplaySurface =
+type RuntimeReplaySurface =
   | 'events'
   | 'tasks'
   | 'runs'
@@ -32,7 +32,7 @@ export type RuntimeReplaySurface =
   | 'dashboard_summary'
   | 'evidence_export'
 
-export interface RuntimeReplayConsistencyFinding {
+interface RuntimeReplayConsistencyFinding {
   code: string
   owner: string
   surface: RuntimeReplaySurface
@@ -47,7 +47,7 @@ export interface RuntimeReplayConsistencyFinding {
   evidenceRefs: string[]
 }
 
-export interface RuntimeReplaySurfaceSummary {
+interface RuntimeReplaySurfaceSummary {
   surface: RuntimeReplaySurface
   owner: string
   status: RuntimeReplayConsistencyStatus
@@ -111,7 +111,7 @@ export interface RuntimeReplayConsistencyInput {
   staleRouteReceiptMs?: number
 }
 
-export interface RuntimeReplayDashboardSummary {
+interface RuntimeReplayDashboardSummary {
   status?: string
   taskCounts?: string
   gatewaySessions?: string
@@ -119,7 +119,7 @@ export interface RuntimeReplayDashboardSummary {
   initiatives?: Array<{ id?: string; status?: string }>
 }
 
-export interface RuntimeReplayEvidenceManifest {
+interface RuntimeReplayEvidenceManifest {
   counts?: Partial<Record<'tasks' | 'runs' | 'events' | 'channelBindings' | 'projectBindings' | 'artifacts', number>>
   evidenceContract?: { claimState?: string; validation?: { state?: string }; redaction?: { safeToShare?: boolean } }
   contractState?: { safeToShare?: boolean; validationState?: string; claimState?: string }

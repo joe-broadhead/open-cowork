@@ -2,7 +2,7 @@ import type { GatewayConfig } from './config.js'
 import type { ChannelSyncSummary } from './channel-sync.js'
 import type { HumanGateRecord, RunRecord, TaskDispatchReceiptRecord, WorkState, WorkTaskRecord } from './work-store.js'
 
-export type CapacityDimension = 'global' | 'stage' | 'profile' | 'team' | 'roadmap' | 'channel' | 'environment'
+type CapacityDimension = 'global' | 'stage' | 'profile' | 'team' | 'roadmap' | 'channel' | 'environment'
 
 export interface CapacityAdmission {
   allowed: boolean
@@ -20,7 +20,7 @@ export interface CapacitySelection {
   agentTeamName?: string
 }
 
-export interface CapacityReportRow {
+interface CapacityReportRow {
   dimension: CapacityDimension
   key: string
   used: number

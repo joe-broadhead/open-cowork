@@ -37,6 +37,21 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   // One 120ms delivery — lands in the le="250" bucket on both the gateway-wide and
   // the per-provider histogram.
   observeGatewayDeliveryLatency(metrics, metrics.providerMetrics.fake, 120)
+  metrics.channelTelemetry.setBindingCount('monorepo-provider', 'telegram-instance-a', 'configured', 1)
+  metrics.channelTelemetry.setBindingCount('monorepo-provider', 'telegram-instance-a', 'active', 1)
+  metrics.channelTelemetry.recordOperation({
+    stack: 'monorepo-provider',
+    providerKind: 'telegram-instance-a',
+    direction: 'inbound',
+    outcome: 'success',
+  })
+  metrics.channelTelemetry.recordOperation({
+    stack: 'monorepo-provider',
+    providerKind: 'telegram-instance-a',
+    direction: 'outbound',
+    outcome: 'retry',
+    latencyMs: 90,
+  })
 
   const text = renderPrometheusMetrics(metrics, 2, 7, () => new Date('2026-01-01T00:01:00.000Z').getTime())
 
@@ -62,4 +77,10 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   assert.match(text, /open_cowork_gateway_provider_state\{provider_id="fake",provider_kind="fake",state="healthy"\} 1/)
   assert.match(text, /open_cowork_gateway_provider_webhook_requests_total\{provider_id="fake",provider_kind="fake"\} 4/)
   assert.match(text, /open_cowork_gateway_provider_interactions_resolved_total\{provider_id="fake",provider_kind="fake"\} 1/)
+  assert.match(text, /open_cowork_channel_stack_info\{schema_version="1",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(text, /open_cowork_channel_messages_total\{direction="outbound",outcome="retry",provider_kind="telegram",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.doesNotMatch(
+    text.split('# HELP open_cowork_channel_stack_info')[1] || '',
+    /provider_id|telegram-instance-a|binding_id|tenant|content|secret="/,
+  )
 })

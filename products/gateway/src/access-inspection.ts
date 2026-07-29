@@ -6,7 +6,7 @@ import { isGatewayMcpToolName } from './gateway-tools.js'
 
 export type AccessInspectionKind = 'profile' | 'team'
 export type AccessInspectionStatus = 'valid' | 'warning' | 'blocked'
-export type AccessWarningSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical'
+type AccessWarningSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical'
 
 export interface AccessInspectionWarning {
   code: string

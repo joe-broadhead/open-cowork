@@ -20,7 +20,7 @@ import {
 import { allowsAllChannelTargets, hasChannelAllowlist } from './security.js'
 import { verifyChannelWebhookExposure, type WebhookRouteVerification, type WebhookVerificationResult } from './webhook-verifier.js'
 
-export type ChannelConnectorPrerequisiteKind =
+type ChannelConnectorPrerequisiteKind =
   | 'credential'
   | 'enablement'
   | 'webhook'
@@ -29,10 +29,10 @@ export type ChannelConnectorPrerequisiteKind =
   | 'binding'
   | 'provider'
 
-export type ChannelConnectorReadinessStatus = 'ready' | 'missing' | 'unsupported' | 'not_applicable'
-export type ChannelConnectorRouteExposure = 'public_webhook_mode' | 'authenticated_reverse_proxy' | 'local_only' | 'unsafe_public' | 'not_applicable'
+type ChannelConnectorReadinessStatus = 'ready' | 'missing' | 'unsupported' | 'not_applicable'
+type ChannelConnectorRouteExposure = 'public_webhook_mode' | 'authenticated_reverse_proxy' | 'local_only' | 'unsafe_public' | 'not_applicable'
 
-export interface ChannelCredentialStatus {
+interface ChannelCredentialStatus {
   key: string
   label: string
   configured: boolean
@@ -42,7 +42,7 @@ export interface ChannelCredentialStatus {
   sources: Array<'environment' | 'config'>
 }
 
-export interface ChannelConnectorMissingPrerequisite {
+interface ChannelConnectorMissingPrerequisite {
   kind: ChannelConnectorPrerequisiteKind
   code: ChannelSetupDiagnosticCode
   key: string
@@ -53,7 +53,7 @@ export interface ChannelConnectorMissingPrerequisite {
   remediation: string
 }
 
-export interface ChannelConnectorDiagnostic {
+interface ChannelConnectorDiagnostic {
   code: ChannelSetupDiagnosticCode
   state: ChannelConnectorState
   severity: ChannelSetupDiagnosticSeverity
@@ -61,7 +61,7 @@ export interface ChannelConnectorDiagnostic {
   remediation: string
 }
 
-export interface ChannelConnectorCallbackStatus {
+interface ChannelConnectorCallbackStatus {
   required: boolean
   publicWebhookMode: boolean
   routeExposure: ChannelConnectorRouteExposure
@@ -72,7 +72,7 @@ export interface ChannelConnectorCallbackStatus {
   verifier: WebhookVerificationResult
 }
 
-export interface ChannelConnectorSetupPath {
+interface ChannelConnectorSetupPath {
   key: string
   label: string
   modes: ChannelSetupMode[]
@@ -114,17 +114,17 @@ export interface ChannelConnectorStatus {
   redacted: true
 }
 
-export type ChannelOnboardingStepId = ChannelOnboardingAction | 'monitor'
-export type ChannelOnboardingStepStatus = 'done' | 'current' | 'blocked' | 'pending'
+type ChannelOnboardingStepId = ChannelOnboardingAction | 'monitor'
+type ChannelOnboardingStepStatus = 'done' | 'current' | 'blocked' | 'pending'
 
-export interface ChannelOnboardingFlowAction {
+interface ChannelOnboardingFlowAction {
   label: string
   summary: string
   command?: string
   refs: string[]
 }
 
-export interface ChannelOnboardingFlowStep {
+interface ChannelOnboardingFlowStep {
   id: ChannelOnboardingStepId
   label: string
   status: ChannelOnboardingStepStatus
@@ -135,7 +135,7 @@ export interface ChannelOnboardingFlowStep {
   blockers: string[]
 }
 
-export interface ChannelOnboardingFlow {
+interface ChannelOnboardingFlow {
   path: ChannelOnboardingStepId[]
   currentStep: ChannelOnboardingStepId
   primaryAction: ChannelOnboardingFlowAction
@@ -158,7 +158,7 @@ export interface ChannelConnectorRegistryOptions {
   generatedAt?: string
 }
 
-export const UNIVERSAL_CHANNEL_ONBOARDING_PATH: ChannelOnboardingStepId[] = ['connect', 'verify', 'trust', 'bind', 'monitor']
+const UNIVERSAL_CHANNEL_ONBOARDING_PATH: ChannelOnboardingStepId[] = ['connect', 'verify', 'trust', 'bind', 'monitor']
 
 export function buildChannelConnectorRegistry(options: ChannelConnectorRegistryOptions = {}): ChannelConnectorRegistry {
   const config = options.config || getConfig()
@@ -315,7 +315,7 @@ function buildChannelConnectorStatus(capability: ChannelCapabilities, options: C
   return { ...connector, onboardingFlow: buildChannelOnboardingFlow(connector) }
 }
 
-export function buildChannelOnboardingFlow(connector: Omit<ChannelConnectorStatus, 'onboardingFlow'>): ChannelOnboardingFlow {
+function buildChannelOnboardingFlow(connector: Omit<ChannelConnectorStatus, 'onboardingFlow'>): ChannelOnboardingFlow {
   const path = UNIVERSAL_CHANNEL_ONBOARDING_PATH
   const completed = completedFlowSteps(connector)
   const currentStep = path.find(step => !completed.has(step)) || 'monitor'

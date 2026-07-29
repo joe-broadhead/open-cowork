@@ -34,7 +34,7 @@ export function sourceFetchBudget(
   return calculateSourceFetchBudget(config, requested, process.env);
 }
 
-export function calculateSourceFetchBudget(
+function calculateSourceFetchBudget(
   config: OpenWikiSourceFetchBudgetConfig | undefined,
   requested: { maxBytes?: number; timeoutMs?: number } = {},
   env: NodeJS.ProcessEnv = {},
@@ -180,7 +180,7 @@ interface PinnedSourceFetchTarget {
   hostHeader: string;
 }
 
-export type SourceFetchDnsLookup = (
+type SourceFetchDnsLookup = (
   hostname: string,
   options: { all: true; verbatim: true },
 ) => Promise<Array<{ address: string; family: number }>>;

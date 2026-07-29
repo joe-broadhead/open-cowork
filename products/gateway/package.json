@@ -38,7 +38,7 @@
     "status": "node dist/cli.js status",
     "doctor": "node dist/cli.js doctor",
     "setup": "node dist/cli.js setup",
-    "knip": "knip --directory ../.. --config knip.jsonc --workspace products/gateway --production --files --exports"
+    "knip": "pnpm --dir ../.. lint:dead-code"
   },
   "files": [
     "dist/",

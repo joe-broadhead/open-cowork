@@ -65,12 +65,10 @@ const SETTINGS_UPDATE_KEYS = new Set([
   'taskPermission',
   'externalDirectoryPermission',
   'mcpPermission',
-  'requireApprovalBeforeSending',
   'notificationVoiceReplies',
   'notificationSmartSuggestions',
   'notificationDailyDigest',
   'notificationSounds',
-  'privacyKeepConversationHistory',
   'privacyShareAnonymizedUsage',
   'runtimeConfigSource',
   'runtimeToolingBridge',
@@ -447,12 +445,10 @@ export function validateSettingsUpdate(record: Record<string, unknown>): Partial
     }
   }
   update.webSearchEnabled = optionalBoolean(record, 'webSearchEnabled', 'Web search enabled')
-  update.requireApprovalBeforeSending = optionalBoolean(record, 'requireApprovalBeforeSending', 'Require approval before sending')
   update.notificationVoiceReplies = optionalBoolean(record, 'notificationVoiceReplies', 'Voice reply notifications')
   update.notificationSmartSuggestions = optionalBoolean(record, 'notificationSmartSuggestions', 'Smart suggestion notifications')
   update.notificationDailyDigest = optionalBoolean(record, 'notificationDailyDigest', 'Daily digest notifications')
   update.notificationSounds = optionalBoolean(record, 'notificationSounds', 'Notification sounds')
-  update.privacyKeepConversationHistory = optionalBoolean(record, 'privacyKeepConversationHistory', 'Conversation history retention')
   update.privacyShareAnonymizedUsage = optionalBoolean(record, 'privacyShareAnonymizedUsage', 'Anonymized usage sharing')
   if (record.runtimeConfigSource !== undefined) {
     if (typeof record.runtimeConfigSource !== 'string' || !RUNTIME_CONFIG_SOURCES.has(record.runtimeConfigSource)) {

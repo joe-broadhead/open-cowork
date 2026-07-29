@@ -34,7 +34,7 @@ import {
   shouldSuppressGlobalRuntimeEvent,
 } from './durable-session-events.ts'
 export { removeParentSession } from './event-runtime-handlers.ts'
-export { markSessionPromptAdmitted } from './durable-session-events.ts'
+
 
 const UNKNOWN_EVENT_LOG_INTERVAL_MS = 60_000
 const unknownEventLastLoggedAt = new Map<string, number>()

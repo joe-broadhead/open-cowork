@@ -537,19 +537,19 @@ export interface RoadmapSupervisorUpdateInput {
   lastResultSummary?: string | null
 }
 
-export interface RoadmapSupervisorResultTurnInput {
+interface RoadmapSupervisorResultTurnInput {
   supervisorId: string
   roadmapId: string
   leaseOwner: string
   cursorEventId: number
 }
 
-export interface RoadmapSupervisorResultActionInput {
+interface RoadmapSupervisorResultActionInput {
   type: string
   summary: string
 }
 
-export interface RoadmapSupervisorCompletionInput {
+interface RoadmapSupervisorCompletionInput {
   recommendation: string
   evidence: string[]
   risks: string[]

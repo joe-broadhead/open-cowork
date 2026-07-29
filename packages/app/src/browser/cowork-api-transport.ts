@@ -13,7 +13,7 @@ import {
   type SessionView,
   type WorkspaceSessionsUpdatedEvent,
 } from '@open-cowork/shared'
-import { createCloudTranscriptProjector, type CloudTranscriptProjector } from './cowork-api-transcript'
+import { createCloudTranscriptProjector } from './cowork-api-transcript'
 
 export type BrowserCoworkApiBootstrap = {
   api?: Array<{ id: string; path: string }>
@@ -317,7 +317,7 @@ function parseSseEvent(event: MessageEvent, type: string): SseEvent {
   return { type, data: record }
 }
 
-export { createCloudTranscriptProjector, type CloudTranscriptProjector }
+
 
 /**
  * Owns the cloud SSE streams (workspace + per-session) and fans each incoming

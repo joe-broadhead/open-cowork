@@ -3,8 +3,13 @@ import { InMemoryWorkflowWebhookSecurityStore, WebhookHttpError, type WorkflowWe
 import { createHash, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { CLOUD_SESSION_EVENT_TYPES, emptySessionImportItemCounts, createCloudProjectionFenceToken, isCloudSessionEventType, normalizeCloudProjectSource, type CloudProjectionFenceToken, type CloudSessionEventType, type CloudProjectSourceInput, type PublicBrandingConfig, type SessionImportRequest, type WorkflowDraft, type WorkflowStatus, type WorkflowTriggerType, type KnowledgeStore } from '@open-cowork/shared'
-import type { CloudArtifactService } from './artifact-service.ts'
+import {
+  CLOUD_SESSION_EVENT_TYPES,
+  createCloudProjectionFenceToken,
+  normalizeCloudProjectSource,
+  type CloudProjectionFenceToken,
+  type CloudProjectSourceInput,
+} from '@open-cowork/shared'
 import {
   BROWSER_RENDERER_ASSET_CACHE_CONTROL,
   browserRendererChartFrameHtml,
@@ -19,12 +24,6 @@ import {
   routeAllowsOperationalToken,
   routeAllowsWorkerCredential,
 } from './http-routes/access-policy.ts'
-import {
-  DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG,
-  SSE_MAX_BUFFERED_BYTES,
-  SSE_REPLAY_BATCH,
-  SSE_TCP_KEEPALIVE_MS,
-} from './http-routes/sse-limits.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleScimApiRoute } from './http-routes/scim.ts'
 import { handleArtifactsApiRoute } from './http-routes/artifacts.ts'
@@ -40,15 +39,20 @@ import { handleKnowledgeAgentProposeRoute } from './http-routes/knowledge-agent.
 import { handleLaunchpadApiRoute } from './http-routes/launchpad.ts'
 import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
 import { handleSettingsApiRoute } from './http-routes/settings.ts'
-import { handleSessionArtifactsApiRoute } from './http-routes/session-artifacts.ts'
+import { handleSessionsApiRoute } from './http-routes/sessions.ts'
 import { handleThreadsApiRoute } from './http-routes/threads.ts'
+import { handleWorkflowsApiRoute } from './http-routes/workflows.ts'
 import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
 import { CloudByokRuntimeConfigError } from './byok-runtime-config.ts'
-import type { CompiledCloudRuntimeCapabilityPolicy } from './cloud-runtime-capability-policy.ts'
-import { CloudServiceError, type CloudPrincipal, type CloudSessionService, type CloudSessionView } from './session-service.ts'
+import {
+  CloudHttpError,
+  type CloudAuthResolver,
+  type CloudHttpRouteContext,
+  type CloudHttpServerOptions,
+} from './http-contracts.ts'
+import { CloudServiceError, type CloudPrincipal, type CloudSessionView } from './session-service.ts'
 import {
   firstHeader,
-  parseAfterSequence,
   parseLimit,
   parseSessionStatus,
   parseTagIds,
@@ -72,12 +76,14 @@ import {
   writeRedirect,
   writeSecurityHeaders,
 } from './http-response-writers.ts'
-import { internalTokenIsValid } from './http-auth-helpers.ts'
+import { publicChannelInteraction } from './http-sse-helpers.ts'
 import {
-  publicChannelInteraction,
-  writeSnapshotRequiredEvent,
-  writeSseEvent,
-} from './http-sse-helpers.ts'
+  armSseSocketLifetime,
+  handleSessionSse,
+  handleWorkspaceSse,
+  ssePollMs,
+  trackSseStream,
+} from './http-sse-streams.ts'
 import {
   authFailureScopes,
   extractSignatureWebhookAuth,
@@ -86,124 +92,28 @@ import {
   requestSource,
   webhookAuthScope,
 } from './http-request-context.ts'
-import { cloudSessionViewToSessionView } from './session-view-contract.ts'
-import type { CloudWorker } from './worker.ts'
-import type { CloudRuntimePolicy } from './cloud-config.ts'
-import type { CloudObservabilityAdapter } from './observability.ts'
 import type { CloudReadinessReport } from './readiness.ts'
 import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
-import { sessionSseWakeKey, workspaceSseWakeKey } from './sse-pg-notify.ts'
 import type {
   SessionEventRecord,
   SessionCommandRecord,
-  WorkspaceEventRecord,
 } from './control-plane-store.ts'
 import { recordCloudHttpRequest, recordCloudLog, recordCloudMetric } from './observability.ts'
-import type { CloudCookieSession, CloudSessionCookieManager } from './session-cookie-auth.ts'
-export type CloudAuthResolver = (req: IncomingMessage) => Promise<CloudPrincipal> | CloudPrincipal
 
-export type CloudBrowserAuthRedirect = {
-  location: string
-  setCookieHeaders?: string[]
-}
-
-export type CloudBrowserAuthCallback = {
-  principal: CloudPrincipal
-  redirectTo: string
-  setCookieHeaders?: string[]
-}
-
-export type CloudBrowserAuthProvider = {
-  isCallbackPath(pathname: string): boolean
-  login(req: IncomingMessage, url: URL): Promise<CloudBrowserAuthRedirect> | CloudBrowserAuthRedirect
-  callback(req: IncomingMessage, url: URL): Promise<CloudBrowserAuthCallback> | CloudBrowserAuthCallback
-}
-
-export type CloudDesktopAuthConfig = {
-  mode: 'oidc'
-  issuerUrl: string
-  clientId: string
-  scope: string
-}
-
-export type CloudHttpServerOptions = {
-  service: CloudSessionService
-  artifacts?: CloudArtifactService | null
-  policy: CloudRuntimePolicy
-  publicBranding?: PublicBrandingConfig | null
-  auth?: CloudAuthResolver
-  browserAuth?: CloudBrowserAuthProvider | null
-  desktopAuth?: CloudDesktopAuthConfig | null
-  worker?: CloudWorker | null
-  webhookSecurity?: WorkflowWebhookSecurityStore | null
-  internalToken?: string | null
-  sessionCookies?: CloudSessionCookieManager | null
-  observability?: CloudObservabilityAdapter | null
-  autoProcessCommands?: boolean
-  corsOrigin?: string | null
-  strictTransportSecurity?: boolean
-  maxBodyBytes?: number
-  ssePollMs?: number
-  // Connection caps routed through the validated env resolver (CloudAppOptions /
-  // resolveCloudBootstrapOptionsFromEnv) like every other knob, instead of reading
-  // process.env directly here. Undefined ⇒ the documented defaults below.
-  maxSseConnectionsPerOrg?: number
-  maxConnections?: number
-  sseReplayHub?: CloudSseReplayHub
-  sseStreamRegistry?: CloudSseStreamRegistry
-  trustProxyHeaders?: boolean
-  trustedProxyCidrs?: readonly string[] | null
-  readiness?: () => Promise<CloudReadinessReport> | CloudReadinessReport
-  knowledgeDataDir?: string | null
-  /**
-   * Backend for cloud knowledge wiki reads/writes. When omitted, the server
-   * falls back to a SQLite store rooted at {@link knowledgeDataDir} (desktop /
-   * local / in-memory). The cloud app injects a Postgres-backed store when the
-   * control plane is Postgres so knowledge shares the durable control plane
-   * rather than a node-local SQLite file.
-   */
-  knowledgeStore?: KnowledgeStore
-  /**
-   * Cloud signing secret used to verify the per-session, tenant-scoped knowledge
-   * agent token presented by the knowledge MCP on the agent-propose route. When
-   * omitted, the route fails closed (401) — no agent proposals are accepted.
-   * Same secret the cloud app uses for session cookies / team-invite tokens.
-   */
-  knowledgeAgentTokenSecret?: string | null
-  /** Effective SDK-native ceiling, rechecked per request and fail-closed when omitted. */
-  runtimeCapabilityPolicy?: CompiledCloudRuntimeCapabilityPolicy | null
-}
-
-export class CloudHttpError extends Error {
-  readonly status: number
-  readonly publicMessage: string
-  readonly policyCode: string | null
-  readonly retryAfterMs: number | null
-
-  constructor(status: number, message: string, details: {
-    policyCode?: string | null
-    retryAfterMs?: number | null
-  } = {}) {
-    super(message)
-    this.status = status
-    this.publicMessage = message
-    this.policyCode = details.policyCode || null
-    this.retryAfterMs = details.retryAfterMs || null
-  }
-}
+export { CloudHttpError }
+export type {
+  CloudAuthResolver,
+  CloudBrowserAuthCallback,
+  CloudBrowserAuthProvider,
+  CloudBrowserAuthRedirect,
+  CloudDesktopAuthConfig,
+  CloudHttpServerOptions,
+} from './http-contracts.ts'
 
 type AuthAccountingOperation = 'check_backoff' | 'record_failure'
 
 function isRequestPolicyError(error: unknown): error is CloudHttpError | CloudServiceError {
   return error instanceof CloudHttpError || error instanceof CloudServiceError
-}
-
-type RouteContext = {
-  principal: CloudPrincipal
-  authSource: 'cookie' | 'resolver'
-  cookieSession: CloudCookieSession | null
-  url: URL
-  segments: string[]
 }
 
 const DEFAULT_PRINCIPAL: CloudPrincipal = {
@@ -224,7 +134,6 @@ const CLOUD_WEBHOOK_AUTH_FAILURE_LIMIT = 5
 const CLOUD_WEBHOOK_AUTH_BACKOFF_MS = 60 * 1000
 const WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS = 5 * 60 * 1000
 const WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT = 512
-const SESSION_IMPORT_MAX_ARTIFACTS = 25
 
 function defaultAuthResolver(): CloudPrincipal {
   return DEFAULT_PRINCIPAL
@@ -278,29 +187,6 @@ function readOptionalDate(value: unknown) {
 }
 
 
-function ssePollMs(options: CloudHttpServerOptions) {
-  const value = options.ssePollMs ?? 1000
-  return Number.isInteger(value) && value > 0 ? value : 1000
-}
-
-// Hard ceiling on a single SSE stream's lifetime. A wedged or half-open connection
-// cannot pin a server slot indefinitely; EventSource clients reconnect transparently
-// (with their Last-Event-ID), so the cap is invisible to healthy clients.
-function sseMaxStreamLifetimeMs(): number {
-  const raw = Number(process.env.OPEN_COWORK_CLOUD_SSE_MAX_LIFETIME_MS)
-  return Number.isInteger(raw) && raw > 0 ? raw : 30 * 60_000
-}
-
-// Enable TCP keep-alive on the SSE socket and arm a max-lifetime timer that ends the
-// response. Returns the timer so the caller clears it from its cleanup path.
-function armSseSocketLifetime(req: IncomingMessage, res: ServerResponse): ReturnType<typeof setTimeout> {
-  req.socket?.setKeepAlive(true, SSE_TCP_KEEPALIVE_MS)
-  const timer = setTimeout(() => {
-    if (!res.destroyed) res.end()
-  }, sseMaxStreamLifetimeMs())
-  timer.unref?.()
-  return timer
-}
 
 async function processCommandIfConfigured(
   options: CloudHttpServerOptions,
@@ -540,240 +426,12 @@ async function handleBillingWebhook(
 // Default per-org SSE connection cap when the resolver did not supply one. The
 // env var (OPEN_COWORK_CLOUD_MAX_SSE_CONNECTIONS_PER_ORG) is parsed once in the
 // central resolver and passed through CloudHttpServerOptions.maxSseConnectionsPerOrg.
-function sseMaxConnectionsPerOrg(options: CloudHttpServerOptions): number {
-  const value = options.maxSseConnectionsPerOrg
-  // Always enforce a positive cap (JOE-844). A missing/invalid option falls back to
-  // the documented default so multi-tenant pods cannot run uncapped by accident.
-  return Number.isInteger(value) && (value as number) > 0 ? (value as number) : DEFAULT_MAX_SSE_CONNECTIONS_PER_ORG
-}
-
-function trackSseStream(
-  req: IncomingMessage,
-  res: ServerResponse,
-  options: CloudHttpServerOptions,
-  cleanup: () => void,
-  orgKey?: string | null,
-) {
-  if (options.sseStreamRegistry) {
-    return options.sseStreamRegistry.track(req, res, cleanup, { orgKey: orgKey || undefined, maxPerOrg: sseMaxConnectionsPerOrg(options) })
-  }
-
-  let closed = false
-  const close = () => {
-    if (closed) return
-    closed = true
-    req.off('close', close)
-    res.off('close', close)
-    res.off('finish', close)
-    cleanup()
-  }
-  req.once('close', close)
-  res.once('close', close)
-  res.once('finish', close)
-  return true
-}
-
-async function handleSse(
-  req: IncomingMessage,
-  res: ServerResponse,
-  options: CloudHttpServerOptions,
-  context: RouteContext,
-  sessionId: string,
-) {
-  const afterSequence = parseAfterSequence(req, context.url)
-  await options.service.getSessionView(context.principal, sessionId)
-  writeCorsHeaders(res, options.corsOrigin)
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-store, no-transform',
-    connection: 'keep-alive',
-    'x-accel-buffering': 'no',
-  })
-  res.write(': connected\n\n')
-  let lastSequence = afterSequence
-  let cleaned = false
-  let unsubscribe: (() => void) | null = null
-  let replayUnsubscribe: (() => void) | null = null
-  let keepAliveTimer: ReturnType<typeof setInterval> | null = null
-  let lifetimeTimer: ReturnType<typeof setTimeout> | null = null
-  const cleanup = () => {
-    if (cleaned) return
-    cleaned = true
-    if (keepAliveTimer) clearInterval(keepAliveTimer)
-    if (lifetimeTimer) clearTimeout(lifetimeTimer)
-    replayUnsubscribe?.()
-    unsubscribe?.()
-  }
-  if (!trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
-  lifetimeTimer = armSseSocketLifetime(req, res)
-  const writeIfNew = (event: {
-    sequence: number
-    type: string
-    eventId: string
-    payload: Record<string, unknown>
-  }) => {
-    if (cleaned || res.destroyed) return
-    if (event.sequence <= lastSequence) return
-    if (!isCloudSessionEventType(event.type)) {
-      lastSequence = event.sequence
-      return
-    }
-    const type: CloudSessionEventType = event.type
-    writeSseEvent(res, { ...event, type })
-    lastSequence = event.sequence
-    if (res.writableLength > SSE_MAX_BUFFERED_BYTES) res.destroy()
-  }
-  // Drain the catch-up backlog in bounded keyset pages — the initial connect previously
-  // loaded the session's entire event history (no retention) into memory in one read.
-  // The authz/getSessionView check ran ONCE above (line ~592); page the backlog with the
-  // guard-free steady-state read (the same path the live replay poll below uses) so each
-  // page doesn't re-run the full membership/session/projection authorization (PERF-4).
-  let drainAfter = afterSequence
-  for (;;) {
-    const batch = await options.service.listSessionEventsForStream(context.principal.tenantId, sessionId, drainAfter, SSE_REPLAY_BATCH)
-    for (const event of batch) writeIfNew(event)
-    if (cleaned || batch.length < SSE_REPLAY_BATCH) break
-    drainAfter = batch[batch.length - 1]!.sequence
-  }
-  if (cleaned) return
-  unsubscribe = options.service.eventBus.subscribe({
-    tenantId: context.principal.tenantId,
-    sessionId,
-    afterSequence,
-  }, (event) => {
-    writeIfNew(event)
-  })
-  replayUnsubscribe = options.sseReplayHub?.subscribe({
-    key: `session:${context.principal.tenantId}:${context.principal.userId}:${sessionId}`,
-    // Coarse wake key drops the per-subscriber userId so one session NOTIFY wakes every
-    // user watching the session. Inert when the LISTEN/NOTIFY accelerator is off.
-    wakeKey: sessionSseWakeKey(context.principal.tenantId, sessionId),
-    afterSequence: lastSequence,
-    pollMs: ssePollMs(options),
-    loadEvents: (sequence) => options.service.listSessionEventsForStream(context.principal.tenantId, sessionId, sequence, SSE_REPLAY_BATCH),
-    listener: (event) => writeIfNew(event as SessionEventRecord),
-    batchSize: SSE_REPLAY_BATCH,
-  }) ?? null
-  keepAliveTimer = setInterval(() => {
-    if (cleaned || res.destroyed) return
-    res.write(': keep-alive\n\n')
-  }, ssePollMs(options))
-}
-
-async function handleWorkspaceSse(
-  req: IncomingMessage,
-  res: ServerResponse,
-  options: CloudHttpServerOptions,
-  context: RouteContext,
-) {
-  const afterSequence = parseAfterSequence(req, context.url)
-  writeCorsHeaders(res, options.corsOrigin)
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-store, no-transform',
-    connection: 'keep-alive',
-    'x-accel-buffering': 'no',
-  })
-  res.write(': connected\n\n')
-  let lastSequence = afterSequence
-  let cleaned = false
-  let unsubscribe: (() => void) | null = null
-  let replayUnsubscribe: (() => void) | null = null
-  let keepAliveTimer: ReturnType<typeof setInterval> | null = null
-  let lifetimeTimer: ReturnType<typeof setTimeout> | null = null
-  const cleanup = () => {
-    if (cleaned) return
-    cleaned = true
-    if (keepAliveTimer) clearInterval(keepAliveTimer)
-    if (lifetimeTimer) clearTimeout(lifetimeTimer)
-    replayUnsubscribe?.()
-    unsubscribe?.()
-  }
-  if (!trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
-  lifetimeTimer = armSseSocketLifetime(req, res)
-  const writeIfNew = (event: {
-    tenantId?: string
-    userId?: string
-    sessionId?: string | null
-    sequence: number
-    entityType?: string
-    entityId?: string
-    operation?: string
-    projectionVersion?: number
-    type: string
-    eventId: string
-    payload: Record<string, unknown>
-    createdAt?: string
-  }) => {
-    if (cleaned || res.destroyed) return
-    if (event.sequence <= lastSequence) return
-    if (!isCloudSessionEventType(event.type)) {
-      lastSequence = event.sequence
-      return
-    }
-    const type: CloudSessionEventType = event.type
-    writeSseEvent(res, { ...event, type })
-    lastSequence = event.sequence
-    if (res.writableLength > SSE_MAX_BUFFERED_BYTES) res.destroy()
-  }
-
-  const cursor = await options.service.getWorkspaceEventCursor(context.principal)
-  if (cleaned || res.destroyed) return
-  const earliestSequence = cursor.earliestSequence
-  const hasReplayGap = afterSequence > 0
-    && earliestSequence !== null
-    && earliestSequence > afterSequence + 1
-
-  if (hasReplayGap) {
-    const latestSequence = cursor.latestSequence || afterSequence
-    writeSnapshotRequiredEvent(res, afterSequence, {
-      reason: 'event_retention_gap',
-      afterSequence,
-      earliestSequence,
-      latestSequence,
-    })
-    lastSequence = Math.max(lastSequence, latestSequence)
-  } else {
-    // Bounded keyset drain of the workspace backlog (see the session handler).
-    let drainAfter = afterSequence
-    for (;;) {
-      const batch = await options.service.listWorkspaceEvents(context.principal, drainAfter, SSE_REPLAY_BATCH)
-      for (const event of batch) writeIfNew(event)
-      if (cleaned || batch.length < SSE_REPLAY_BATCH) break
-      drainAfter = batch[batch.length - 1]!.sequence
-    }
-  }
-
-  if (cleaned) return
-  unsubscribe = options.service.workspaceEventBus.subscribe({
-    tenantId: context.principal.tenantId,
-    userId: context.principal.userId,
-    afterSequence: lastSequence,
-  }, (event) => {
-    writeIfNew(event)
-  })
-  replayUnsubscribe = options.sseReplayHub?.subscribe({
-    key: `workspace:${context.principal.tenantId}:${context.principal.userId}`,
-    // Workspace topics are already per-user, so the wake key equals the topic key.
-    // Inert when the LISTEN/NOTIFY accelerator is off.
-    wakeKey: workspaceSseWakeKey(context.principal.tenantId, context.principal.userId),
-    afterSequence: lastSequence,
-    pollMs: ssePollMs(options),
-    loadEvents: (sequence) => options.service.listWorkspaceEventsForStream(context.principal.tenantId, context.principal.userId, sequence, SSE_REPLAY_BATCH),
-    listener: (event) => writeIfNew(event as WorkspaceEventRecord),
-    batchSize: SSE_REPLAY_BATCH,
-  }) ?? null
-  keepAliveTimer = setInterval(() => {
-    if (cleaned || res.destroyed) return
-    res.write(': keep-alive\n\n')
-  }, ssePollMs(options))
-}
 
 async function handleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
   options: CloudHttpServerOptions,
-  context: RouteContext,
+  context: CloudHttpRouteContext,
 ) {
   if (context.authSource === 'cookie' && methodRequiresCsrf(req.method)) {
     try {
@@ -823,11 +481,17 @@ async function handleApiRequest(
     readApiTokenScopes,
     readOptionalCloudProjectSource,
     parseLimit,
+    parseSessionStatus,
     parseTagIds,
     writeJson,
     writeError,
     writePolicyError,
+    handleSessionSse,
     handleWorkspaceSse,
+    currentSessionProjectionSequence,
+    processCommandIfConfigured,
+    processSessionCommandIfConfigured,
+    writeSessionCommandMutationResponse,
   }
 
   if (await handleWorkspaceApiRoute({
@@ -1079,335 +743,29 @@ async function handleApiRequest(
     return
   }
 
-  if (resource === 'import') {
-    if (sessionId === 'sessions' && !action && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
-      const importRequest = body as SessionImportRequest
-      const artifactUploads = Array.isArray(importRequest.artifacts)
-        ? importRequest.artifacts.slice(0, SESSION_IMPORT_MAX_ARTIFACTS)
-        : []
-      if (artifactUploads.length > 0 && !options.artifacts) {
-        writeError(res, 503, 'Cloud artifact storage is not configured for session import.', options.corsOrigin)
-        return
-      }
-      let createdSessionId: string | null = null
-      try {
-        const created = await options.service.createImportedSession(context.principal, {
-          ...importRequest,
-          artifacts: [],
-        })
-        createdSessionId = created.session.sessionId
-        for (const artifact of artifactUploads) {
-          await options.artifacts!.uploadSessionArtifact(context.principal, createdSessionId, {
-            filename: artifact.filename,
-            contentType: artifact.contentType || null,
-            dataBase64: artifact.dataBase64,
-            kind: artifact.kind || null,
-            status: artifact.status || null,
-            authorAgentId: artifact.authorAgentId || null,
-            projectId: artifact.projectId || null,
-            taskId: artifact.taskId || null,
-            statusUpdatedBy: artifact.statusUpdatedBy || null,
-            statusUpdatedAt: artifact.statusUpdatedAt || null,
-          })
-        }
-        const itemCounts = emptySessionImportItemCounts({
-          ...(importRequest.itemCounts || {}),
-          artifacts: artifactUploads.length,
-        })
-        await options.service.completeSessionImport(context.principal, createdSessionId, {
-          sourceFingerprint: importRequest.source?.fingerprint || '',
-          itemCounts,
-        })
-        writeJson(res, 201, await options.service.getSessionView(context.principal, createdSessionId), options.corsOrigin)
-      } catch (error) {
-        if (createdSessionId) {
-          await options.service.recordImportFailed(context.principal, {
-            sessionId: createdSessionId,
-            sourceFingerprint: importRequest.source?.fingerprint || '',
-            itemCounts: importRequest.itemCounts,
-            error,
-          }).catch(() => undefined)
-        }
-        throw error
-      }
-      return
-    }
-    writeError(res, 404, 'Not found.', options.corsOrigin)
-    return
-  }
+  if (await handleSessionsApiRoute({
+    req,
+    res,
+    options,
+    context,
+    resource,
+    itemId: sessionId,
+    action,
+    artifactId,
+    tools: routeTools,
+  })) return
 
-  if (resource === 'workflows') {
-    if (!options.policy.features.workflows) {
-      writePolicyError(res, 403, 'Workflows are disabled for this cloud profile.', 'workflows.disabled', options.corsOrigin)
-      return
-    }
-
-    const workflowId = sessionId
-    const workflowAction = action
-
-    if (!workflowId && req.method === 'GET') {
-      writeJson(res, 200, await options.service.domains.workflows.listWorkflows(context.principal, {
-        limit: parseLimit(context.url),
-        cursor: context.url.searchParams.get('cursor'),
-      }), options.corsOrigin)
-      return
-    }
-
-    if (!workflowId && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const draft = body as Partial<WorkflowDraft>
-      const created = await options.service.domains.workflows.createWorkflow(context.principal, {
-        title: readString(draft.title) || '',
-        instructions: readString(draft.instructions) || '',
-        agentName: readString(draft.agentName) || 'build',
-        skillNames: readStringArray(draft.skillNames) || [],
-        toolIds: readStringArray(draft.toolIds) || [],
-        steps: Array.isArray(draft.steps) ? draft.steps : undefined,
-        projectDirectory: readString(draft.projectDirectory),
-        draftSessionId: readString(draft.draftSessionId),
-        triggers: Array.isArray(draft.triggers) ? draft.triggers : [],
-      })
-      writeJson(res, 201, created, options.corsOrigin)
-      return
-    }
-
-    if (workflowId === 'scheduler' && workflowAction === 'tick' && req.method === 'POST') {
-      if (!options.internalToken) {
-        writeError(res, 404, 'Not found.', options.corsOrigin)
-        return
-      }
-      if (!internalTokenIsValid(req, options.internalToken)) {
-        writeError(res, 403, 'Internal scheduler token is missing or invalid.', options.corsOrigin)
-        return
-      }
-      const started = await options.service.domains.workflows.claimAndStartDueWorkflow()
-      const processed = started
-        ? await processSessionCommandIfConfigured(options, started.tenantId, started.sessionId)
-        : 0
-      writeJson(res, 200, {
-        claimed: started
-          ? {
-              tenantId: started.tenantId,
-              workflowId: started.workflow.id,
-              runId: started.run.id,
-              sessionId: started.sessionId,
-            }
-          : null,
-        processed,
-      }, options.corsOrigin)
-      return
-    }
-
-    if (!workflowId) {
-      writeError(res, 405, 'Method not allowed.', options.corsOrigin)
-      return
-    }
-
-    if (!workflowAction && req.method === 'GET') {
-      const workflow = await options.service.domains.workflows.getWorkflow(context.principal, workflowId)
-      if (!workflow) {
-        writeError(res, 404, 'Workflow was not found.', options.corsOrigin)
-        return
-      }
-      writeJson(res, 200, { workflow }, options.corsOrigin)
-      return
-    }
-
-    if (workflowAction === 'run' && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const triggerType = readString(body.triggerType) as WorkflowTriggerType | null
-      const started = await options.service.domains.workflows.runWorkflow(context.principal, workflowId, {
-        triggerType: triggerType || 'manual',
-        triggerPayload: readRecord(body.triggerPayload),
-      })
-      const processed = await processSessionCommandIfConfigured(options, started.tenantId, started.sessionId)
-      const workflow = await options.service.domains.workflows.getWorkflow(context.principal, workflowId)
-      writeJson(res, 202, {
-        ...started,
-        workflow: workflow || started.workflow,
-        run: workflow?.runs.find((run) => run.id === started.run.id) || started.run,
-        processed,
-      }, options.corsOrigin)
-      return
-    }
-
-    if (workflowAction === 'rotate-webhook-secret' && req.method === 'POST') {
-      const result = await options.service.domains.workflows.rotateWorkflowWebhookSecret(context.principal, workflowId)
-      if (!result) {
-        writeError(res, 404, 'Workflow webhook was not found.', options.corsOrigin)
-        return
-      }
-      writeJson(res, 200, result, options.corsOrigin)
-      return
-    }
-
-    if ((workflowAction === 'pause' || workflowAction === 'resume' || workflowAction === 'archive') && req.method === 'POST') {
-      const status: WorkflowStatus = workflowAction === 'resume'
-        ? 'active'
-        : workflowAction === 'pause'
-          ? 'paused'
-          : 'archived'
-      const workflow = await options.service.domains.workflows.updateWorkflowStatus(context.principal, workflowId, status)
-      if (!workflow) {
-        writeError(res, 404, 'Workflow was not found.', options.corsOrigin)
-        return
-      }
-      writeJson(res, 200, { workflow }, options.corsOrigin)
-      return
-    }
-
-    writeError(res, 404, 'Not found.', options.corsOrigin)
-    return
-  }
-
-  if (resource !== 'sessions') {
-    writeError(res, 404, 'Not found.', options.corsOrigin)
-    return
-  }
-
-  if (!sessionId && req.method === 'GET') {
-    const page = await options.service.listSessionsPage(context.principal, {
-      limit: parseLimit(context.url),
-      cursor: context.url.searchParams.get('cursor'),
-      status: parseSessionStatus(context.url.searchParams.get('status')),
-      profileName: context.url.searchParams.get('profileName'),
-      query: context.url.searchParams.get('q') || context.url.searchParams.get('query'),
-    })
-    writeJson(res, 200, {
-      sessions: page.items,
-      nextCursor: page.nextCursor,
-      totalEstimate: page.totalEstimate,
-    }, options.corsOrigin)
-    return
-  }
-
-  if (!sessionId && req.method === 'POST') {
-    const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-    const created = await options.service.createSession(context.principal, {
-      profileName: readString(body.profileName),
-      projectSource: readOptionalCloudProjectSource(body),
-    })
-    writeJson(res, 201, created, options.corsOrigin)
-    return
-  }
-
-  if (!sessionId) {
-    writeError(res, 405, 'Method not allowed.', options.corsOrigin)
-    return
-  }
-
-  if (!action && req.method === 'GET') {
-    writeJson(res, 200, await options.service.getSessionView(context.principal, sessionId), options.corsOrigin)
-    return
-  }
-
-  if (action === 'activate' && req.method === 'POST') {
-    writeJson(res, 200, await options.service.getSessionView(context.principal, sessionId), options.corsOrigin)
-    return
-  }
-
-  if (action === 'view' && req.method === 'GET') {
-    const cloudView = await options.service.getSessionView(context.principal, sessionId)
-    writeJson(res, 200, {
-      session: cloudView.session,
-      projection: cloudView.projection,
-      view: cloudSessionViewToSessionView(cloudView),
-    }, options.corsOrigin)
-    return
-  }
-
-  if (action === 'projection-status' && req.method === 'GET') {
-    writeJson(res, 200, await options.service.getSessionProjectionStatus(context.principal, sessionId), options.corsOrigin)
-    return
-  }
-
-  if (action === 'projection-repair' && req.method === 'POST') {
-    writeJson(res, 200, await options.service.repairSessionProjection(context.principal, sessionId), options.corsOrigin)
-    return
-  }
-
-  if (action === 'events' && req.method === 'GET') {
-    await handleSse(req, res, options, context, sessionId)
-    return
-  }
-
-  if (await handleSessionArtifactsApiRoute({ req, res, options, context, resource, itemId: sessionId, action, artifactId, tools: routeTools })) return
-
-  if (action === 'prompt' && req.method === 'POST') {
-    const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-    const text = readString(body.text)
-    if (!text) {
-      writeError(res, 400, 'Prompt text is required.', options.corsOrigin)
-      return
-    }
-    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
-    const command = await options.service.enqueuePrompt(context.principal, sessionId, {
-      text,
-      agent: readString(body.agent),
-    })
-    const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
-    return
-  }
-
-  if (action === 'abort' && req.method === 'POST') {
-    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
-    const command = await options.service.enqueueAbort(context.principal, sessionId)
-    const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
-    return
-  }
-
-  if (action === 'question-reply' && req.method === 'POST') {
-    const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-    const requestId = readString(body.requestId)
-    if (!requestId || !Array.isArray(body.answers)) {
-      writeError(res, 400, 'Question reply requires requestId and answers.', options.corsOrigin)
-      return
-    }
-    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
-    const command = await options.service.enqueueQuestionReply(context.principal, sessionId, {
-      requestId,
-      answers: body.answers,
-    })
-    const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
-    return
-  }
-
-  if (action === 'question-reject' && req.method === 'POST') {
-    const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-    const requestId = readString(body.requestId)
-    if (!requestId) {
-      writeError(res, 400, 'Question rejection requires requestId.', options.corsOrigin)
-      return
-    }
-    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
-    const command = await options.service.enqueueQuestionReject(context.principal, sessionId, {
-      requestId,
-    })
-    const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
-    return
-  }
-
-  if (action === 'permission-respond' && req.method === 'POST') {
-    const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-    const permissionId = readString(body.permissionId)
-    if (!permissionId) {
-      writeError(res, 400, 'Permission response requires permissionId.', options.corsOrigin)
-      return
-    }
-    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
-    const command = await options.service.enqueuePermissionResponse(context.principal, sessionId, {
-      permissionId,
-      response: body.response ?? null,
-    })
-    const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
-    return
-  }
+  if (await handleWorkflowsApiRoute({
+    req,
+    res,
+    options,
+    context,
+    resource,
+    itemId: sessionId,
+    action,
+    artifactId,
+    tools: routeTools,
+  })) return
 
   writeError(res, 404, 'Not found.', options.corsOrigin)
 }
@@ -1416,7 +774,7 @@ async function handleAuthRequest(
   req: IncomingMessage,
   res: ServerResponse,
   options: CloudHttpServerOptions,
-  context: RouteContext | null,
+  context: CloudHttpRouteContext | null,
   auth: CloudAuthResolver,
 ) {
   const url = new URL(req.url || '/', 'http://localhost')
@@ -1718,9 +1076,8 @@ export class CloudHttpServer {
           writeError(res, 404, 'Unified renderer browser build was not found.', requestOptions.corsOrigin)
           return
         }
-        // SEC-2: when the object store can presign, the browser shim PUTs F4 uploads
-        // directly to that cross-origin store, so allow its origin in the SPA CSP's
-        // connect-src (else the PUT is silently CSP-blocked and falls back to buffered).
+        // SEC-2: only a size-enforced upload capability contributes a cross-origin
+        // connect-src target; unqualified presigned PUT support remains buffered.
         const objectStoreOrigin = this.options.artifacts
           ? await this.options.artifacts.presignedUploadOrigin()
           : null
@@ -1877,7 +1234,7 @@ export class CloudHttpServer {
       const cookieSession = this.options.sessionCookies?.read(req) || null
       const principal = cookieSession?.principal || await this.resolvePrincipal(req, auth)
       await this.enforcePrincipalRateLimit(principal)
-      const context: RouteContext = {
+      const context: CloudHttpRouteContext = {
         principal,
         authSource: cookieSession ? 'cookie' : 'resolver',
         cookieSession,

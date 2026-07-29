@@ -1,4 +1,8 @@
-import type { ChannelProvider, IncomingChannelMessage } from '@open-cowork/gateway-channel'
+import {
+  classifyChannelTelemetryError,
+  type ChannelProvider,
+  type IncomingChannelMessage,
+} from '@open-cowork/gateway-channel'
 import type { CloudChannelProviderId } from '@open-cowork/cloud-client/domains/channels'
 
 import type { CloudGateway } from './cloud-gateway.js'
@@ -37,9 +41,30 @@ export async function routeGatewayInteraction(input: RouteGatewayInteractionInpu
   ensureGatewayProviderMetrics(input.metrics, input.providerConfig).interactionsResolved += 1
 
   if (input.provider.answerInteraction) {
+    const startedAt = Date.now()
+    input.metrics.channelTelemetry.recordOperation({
+      stack: 'monorepo-provider',
+      providerKind: input.providerConfig.kind,
+      direction: 'outbound',
+      outcome: 'attempt',
+    })
     try {
       await input.provider.answerInteraction(interaction.externalInteractionId, interaction.acknowledgement)
-    } catch {
+      input.metrics.channelTelemetry.recordOperation({
+        stack: 'monorepo-provider',
+        providerKind: input.providerConfig.kind,
+        direction: 'outbound',
+        outcome: 'success',
+        latencyMs: Date.now() - startedAt,
+      })
+    } catch (error) {
+      input.metrics.channelTelemetry.recordOperation({
+        stack: 'monorepo-provider',
+        providerKind: input.providerConfig.kind,
+        direction: 'outbound',
+        outcome: classifyChannelTelemetryError(error),
+        latencyMs: Date.now() - startedAt,
+      })
       input.metrics.errors += 1
     }
   }

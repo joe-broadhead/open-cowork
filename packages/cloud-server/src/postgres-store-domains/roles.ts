@@ -34,7 +34,7 @@ function normalizeBaseRole(role: ControlPlaneRole | null | undefined): ControlPl
   return role === 'owner' || role === 'admin' ? role : 'member'
 }
 
-export function customRoleFromRow(row: QueryRow): CustomRoleRecord {
+function customRoleFromRow(row: QueryRow): CustomRoleRecord {
   return {
     orgId: String(row.org_id),
     roleKey: String(row.role_key),

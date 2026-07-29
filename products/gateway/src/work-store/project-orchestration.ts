@@ -68,7 +68,7 @@ import type {
 import { normalizeOptionalString, normalizeStringList } from './validators.js'
 
 /** One dependency edge in a {@link PlanInitiativeInput}, addressed by task ref. */
-export interface PlanInitiativeDependency {
+interface PlanInitiativeDependency {
   /** The dependent task: a 0-based index into `tasks[]`, or a new task's title, or an existing task id. */
   taskRef: string | number
   /** The prerequisite task that must complete first, addressed the same way as {@link taskRef}. */

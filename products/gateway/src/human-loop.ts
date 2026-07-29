@@ -28,10 +28,10 @@ import {
   type OperatorDecisionSummary,
 } from './operator-decisions.js'
 
-export type AttentionSeverity = 'critical' | 'high' | 'medium' | 'low'
+type AttentionSeverity = 'critical' | 'high' | 'medium' | 'low'
 export type AttentionKind = 'gateway_gate' | 'opencode_question' | 'opencode_permission' | 'completion_proposal' | 'task' | 'stale_run'
 
-export interface NeedsAttentionItem {
+interface NeedsAttentionItem {
   id: string
   kind: AttentionKind
   severity: AttentionSeverity

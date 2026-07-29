@@ -2,7 +2,7 @@ import type { PendingApproval, PendingQuestion, TaskRun } from '@open-cowork/sha
 import { listArtifactsForTools } from './session-artifacts'
 
 export const AGENT_RUN_FILTERS_FEATURE_GATE_KEY = 'open-cowork.feature.agentRunFilters'
-export const AGENT_RUN_FILTER_STATE_KEY_PREFIX = 'open-cowork.agentRunFilters'
+const AGENT_RUN_FILTER_STATE_KEY_PREFIX = 'open-cowork.agentRunFilters'
 
 export type AgentRunStatusFilter = 'all' | 'running' | 'waiting' | 'blocked' | 'errored' | 'complete' | 'cancelled'
 export type AgentRunActivityFilter = 'all' | 'needs_review' | 'approvals' | 'questions' | 'tools' | 'artifacts' | 'errors'

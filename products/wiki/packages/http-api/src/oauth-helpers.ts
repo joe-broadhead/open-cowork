@@ -84,7 +84,7 @@ export async function findOAuthClient(root: string, clientId: string | undefined
   return [...configured, ...state.dynamic_clients].find((client) => client.client_id === clientId);
 }
 
-export function oauthClientFromConfig(client: OpenWikiOAuthClientConfig): OAuthClientRecord {
+function oauthClientFromConfig(client: OpenWikiOAuthClientConfig): OAuthClientRecord {
   const bounds = policyBoundsFromConfig(client.bounds);
   return {
     client_id: client.client_id,
@@ -116,7 +116,7 @@ export function requestedOAuthScopes(client: OAuthClientRecord, requested: strin
   return uniqueScopes(scopes);
 }
 
-export function clientEffectiveScopes(client: Pick<OAuthClientRecord, "role" | "scopes">): OpenWikiScope[] {
+function clientEffectiveScopes(client: Pick<OAuthClientRecord, "role" | "scopes">): OpenWikiScope[] {
   return uniqueScopes([...(client.role === undefined ? scopesForRole("viewer") : scopesForRole(client.role)), ...(client.scopes ?? [])]);
 }
 
@@ -170,7 +170,7 @@ export function randomToken(prefix: string): string {
   return `${prefix}_${randomBytes(32).toString("base64url")}`;
 }
 
-export function boundedTtl(value: number | undefined, fallback: number, min: number, max: number): number {
+function boundedTtl(value: number | undefined, fallback: number, min: number, max: number): number {
   if (value === undefined || !Number.isFinite(value)) {
     return fallback;
   }
@@ -181,7 +181,7 @@ export function clientExpired(client: OAuthClientRecord): boolean {
   return client.expires_at !== undefined && isPastIsoTimestamp(client.expires_at);
 }
 
-export function isPastIsoTimestamp(value: string): boolean {
+function isPastIsoTimestamp(value: string): boolean {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) && timestamp <= Date.now();
 }
@@ -207,7 +207,7 @@ export function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-export function optionalStringProperty<Key extends string>(value: unknown, key: Key): Partial<Record<Key, string>> {
+function optionalStringProperty<Key extends string>(value: unknown, key: Key): Partial<Record<Key, string>> {
   const string = optionalString(value);
   return string === undefined ? {} : ({ [key]: string } as Partial<Record<Key, string>>);
 }

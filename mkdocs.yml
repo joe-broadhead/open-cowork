@@ -151,6 +151,7 @@ nav:
       - Cloud Web Workbench: cloud-web-workbench.md
       - Cloud Client SDK: cloud-client.md
       - Gateway Provider Readiness: gateway-provider-readiness.md
+      - Channel Stack Telemetry: channel-stack-telemetry.md
       - Downstream Customization: downstream.md
       - Downstream Contract: downstream-contract.md
       - Design System: design-system.md
@@ -198,6 +199,7 @@ nav:
       - "ADR: Knowledge vs Wiki": adr/knowledge-vs-wiki.md
       - "ADR: Standalone Desktop session API": adr/standalone-desktop-session-api.md
       - "ADR: Private realtime voice": adr/private-realtime-voice.md
+      - "ADR: Channel stack policy": adr/channel-stack-policy.md
       - Decisions & History:
           - Product channel ownership: product-channel-ownership.md
           - Channel protocol unification: product-channel-protocol-unification.md
@@ -227,4 +229,3 @@ not_in_nav: |
   /desktop-composition-shell.md
   /empty-error-density.md
   /opencode-classic-sdk-burndown.md
-  /settings-migration.md

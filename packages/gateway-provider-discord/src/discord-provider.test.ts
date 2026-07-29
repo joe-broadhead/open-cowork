@@ -8,34 +8,6 @@ describe("DiscordProvider", () => {
     return [{ address: "93.184.216.34", family: 4 }];
   }
 
-  it("declares Discord bridge capabilities", () => {
-    const provider = new DiscordProvider({
-      deliveryUrl: "https://bridge.example.test/discord",
-      sharedSecret: "secret"
-    });
-
-    expect(provider.id).toBe("discord");
-    expect(provider.capabilities).toMatchObject({
-      threads: true,
-      messageEditing: true,
-      inlineButtons: true,
-      fileUploads: true,
-      fileDownloads: true,
-      typingIndicator: true,
-      maxTextLength: 2000,
-      preferredParseMode: "markdown",
-      maxButtonsPerMessage: 25,
-      supportsEphemeralResponses: true
-    });
-  });
-
-  it("requires a bridge shared secret at construction", () => {
-    expect(() => new DiscordProvider({
-      deliveryUrl: "https://bridge.example.test/discord",
-      sharedSecret: " "
-    })).toThrow("sharedSecret is required");
-  });
-
   it("delivers outbound messages through the signed bridge contract", async () => {
     const deliveries: Array<{ headers: Record<string, string>, rawBody: string, body: unknown }> = [];
     const provider = new DiscordProvider({

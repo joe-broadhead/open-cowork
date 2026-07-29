@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { ModelInfoSnapshot, ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
@@ -26,6 +26,10 @@ import type {
   OpenCoworkConfig,
 } from '@open-cowork/shared'
 import { applyE2EArgEnvironment } from './e2e-remote-debugging.js'
+import {
+  clearAppDataDirCache,
+  getAppDataDir,
+} from './app-data-dir.js'
 
 applyE2EArgEnvironment()
 
@@ -59,7 +63,6 @@ export { resolveConfigEnvPlaceholders } from './config-layer-utils.js'
 // the host unset and the env/homedir/cwd fallbacks below apply.
 let configCache: OpenCoworkConfig | null = null
 let publicConfigCache: PublicAppConfig | null = null
-let dataDirCache: string | null = null
 let configErrorCache: string | null = null
 
 function validateConfigFileInput(raw: unknown, source: string) {
@@ -138,18 +141,6 @@ function getManagedConfigCandidates(dataDirName: string) {
     return jsonConfigCandidates(join(programData, dataDirName, 'config.json'))
   }
   return jsonConfigCandidates(join('/etc', dataDirName, 'config.json'))
-}
-
-function getUserDataRoot() {
-  const override = process.env.OPEN_COWORK_USER_DATA_DIR?.trim()
-  if (override) {
-    return resolve(override)
-  }
-  try {
-    return getAppPathHost()?.getPath?.('userData') || join(process.cwd(), '.open-cowork-test')
-  } catch {
-    return join(process.cwd(), '.open-cowork-test')
-  }
 }
 
 // A config candidate "exists" only if it is a readable regular file. Docker bind
@@ -288,15 +279,7 @@ export function getLogFilePrefix() {
   return getDataDirName()
 }
 
-export function getAppDataDir() {
-  if (dataDirCache) return dataDirCache
-
-  const userDataRoot = getUserDataRoot()
-  mkdirSync(userDataRoot, { recursive: true })
-
-  dataDirCache = userDataRoot
-  return dataDirCache
-}
+export { getAppDataDir }
 
 export function resolveProviderDefaultModel(
   providerId: string,
@@ -418,7 +401,7 @@ export function getConfiguredCapabilityBundlesFromConfig() {
 export function clearConfigCaches() {
   configCache = null
   publicConfigCache = null
-  dataDirCache = null
+  clearAppDataDirCache()
   configErrorCache = null
 }
 

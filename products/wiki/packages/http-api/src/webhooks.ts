@@ -162,7 +162,7 @@ function objectMetadata(params: Record<string, unknown>, key: string): Record<st
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-export function stringMetadata(params: Record<string, unknown> | undefined, key: string): string | undefined {
+function stringMetadata(params: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = params?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }

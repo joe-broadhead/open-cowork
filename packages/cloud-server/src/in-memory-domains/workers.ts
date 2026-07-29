@@ -406,7 +406,7 @@ export function verifyManagedWorkerCredentialHash(plaintext: string, tokenHash: 
   return verifySecretHash(plaintext, tokenHash)
 }
 
-export function plaintextMatchesManagedWorkerCredentialId(plaintext: string, credentialId: string) {
+function plaintextMatchesManagedWorkerCredentialId(plaintext: string, credentialId: string) {
   return plaintext.startsWith(`ocw_${credentialId}_`)
 }
 

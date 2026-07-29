@@ -4,33 +4,6 @@ import { signWebhookIngressPayload } from "@open-cowork/gateway-provider-webhook
 import { WhatsAppProvider } from "@open-cowork/gateway-provider-whatsapp";
 
 describe("WhatsAppProvider", () => {
-  it("declares WhatsApp bridge capabilities", () => {
-    const provider = new WhatsAppProvider({
-      deliveryUrl: "https://bridge.example.test/whatsapp",
-      sharedSecret: "secret"
-    });
-
-    expect(provider.id).toBe("whatsapp");
-    expect(provider.capabilities).toMatchObject({
-      threads: false,
-      messageEditing: false,
-      inlineButtons: true,
-      fileUploads: true,
-      fileDownloads: true,
-      typingIndicator: true,
-      maxTextLength: 4096,
-      preferredParseMode: "plain",
-      maxButtonsPerMessage: 3
-    });
-  });
-
-  it("requires a bridge shared secret at construction", () => {
-    expect(() => new WhatsAppProvider({
-      deliveryUrl: "https://bridge.example.test/whatsapp",
-      sharedSecret: " "
-    })).toThrow("sharedSecret is required");
-  });
-
   it("maps signed bridge ingress and fails closed without signatures", async () => {
     const provider = new WhatsAppProvider({
       deliveryUrl: "https://bridge.example.test/whatsapp",

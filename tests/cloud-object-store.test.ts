@@ -62,6 +62,36 @@ test('instrumentObjectStore is transparent without an observability adapter', ()
   assert.equal(instrumentObjectStore(base, null), base)
 })
 
+test('instrumentObjectStore preserves exact-size upload capability without weakening its contract', async () => {
+  const base = createInMemoryObjectStore()
+  let declaredSize = 0
+  const adapter: ObjectStoreAdapter = {
+    ...base,
+    presignedUpload: {
+      enforcement: 'exact-content-length',
+      maxBytes: 1024,
+      async presignPut(input) {
+        declaredSize = input.expectedSize
+        return {
+          method: 'PUT',
+          url: `https://objects.example.test/${input.key}`,
+          headers: {},
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }
+      },
+    },
+  }
+  const instrumented = instrumentObjectStore(adapter, { log() {}, metric() {}, span() {} })
+  assert.equal(instrumented.presignedUpload?.enforcement, 'exact-content-length')
+  assert.equal(instrumented.presignedUpload?.maxBytes, 1024)
+  const request = await instrumented.presignedUpload?.presignPut({
+    key: 'tenant/session/artifact.bin',
+    expectedSize: 17,
+  })
+  assert.equal(request?.method, 'PUT')
+  assert.equal(declaredSize, 17)
+})
+
 function httpResponse(input: {
   status?: number
   headers?: Record<string, string>
@@ -416,7 +446,7 @@ test('signS3PresignedUrl includes the session token when present', () => {
   assert.match(signed.url, /X-Amz-Signature=[0-9a-f]{64}$/)
 })
 
-test('S3 object store presigns get and put when static credentials are configured', async () => {
+test('S3 object store presigns downloads but does not attest to size-enforced uploads', async () => {
   const store = createS3CompatibleObjectStore({
     kind: 's3',
     bucket: 'open-cowork',
@@ -433,12 +463,8 @@ test('S3 object store presigns get and put when static credentials are configure
   assert.match(get!.url, /X-Amz-Algorithm=AWS4-HMAC-SHA256/)
   assert.match(get!.url, /X-Amz-Signature=[0-9a-f]{64}$/)
   assert.deepEqual(get!.headers, {})
-
-  const put = await store.presignPut!({ key: 'tenant/session/artifact.txt', contentType: 'text/plain' })
-  assert.ok(put)
-  assert.equal(put!.method, 'PUT')
-  assert.deepEqual(put!.headers, { 'content-type': 'text/plain' })
-  assert.match(put!.url, /X-Amz-Signature=[0-9a-f]{64}$/)
+  assert.equal('presignPut' in store, false)
+  assert.equal('presignedUpload' in store, false)
 })
 
 test('S3 object store path-style presign targets the endpoint host', async () => {
@@ -463,10 +489,11 @@ test('S3 object store declines to presign without static credentials (buffered f
     client: { send: async () => ({}), destroy() {} } as never,
   })
   assert.equal(await store.presignGet!('tenant/object.bin'), null)
-  assert.equal(await store.presignPut!({ key: 'tenant/object.bin' }), null)
+  assert.equal('presignPut' in store, false)
+  assert.equal('presignedUpload' in store, false)
 })
 
 test('non-S3 object stores omit the presign capability', () => {
   assert.equal(createInMemoryObjectStore().presignGet, undefined)
-  assert.equal(createInMemoryObjectStore().presignPut, undefined)
+  assert.equal('presignedUpload' in createInMemoryObjectStore(), false)
 })

@@ -21,6 +21,16 @@ function resolveGatewayConfig(
   })
 }
 
+function telemetryCount(
+  metrics: ReturnType<typeof createGatewayMetrics>,
+  outcome: 'attempt' | 'success' | 'retry' | 'error',
+): number {
+  const match = metrics.channelTelemetry.renderPrometheus().match(new RegExp(
+    `open_cowork_channel_messages_total\\{direction="outbound",outcome="${outcome}",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\\} (\\d+)`,
+  ))
+  return Number(match?.[1] ?? 0)
+}
+
 test('interaction router resolves channel button tokens through cloud and acknowledges provider callback', async () => {
   const provider = new FakeChannelProvider()
   const calls: unknown[] = []
@@ -93,6 +103,71 @@ test('interaction router resolves channel button tokens through cloud and acknow
   }])
   assert.equal(metrics.interactionsResolved, 1)
   assert.equal(metrics.providerMetrics.fake?.interactionsResolved, 1)
+  assert.equal(telemetryCount(metrics, 'attempt'), 1)
+  assert.equal(telemetryCount(metrics, 'success'), 1)
+})
+
+test('interaction router applies the common classifier to acknowledgement failures', async () => {
+  const cases = [
+    { name: '429', error: Object.assign(new Error('limited'), { status: 429 }), outcome: 'retry' },
+    { name: '5xx', error: Object.assign(new Error('unavailable'), { statusCode: 503 }), outcome: 'retry' },
+    { name: 'network', error: Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }), outcome: 'retry' },
+    { name: '4xx', error: Object.assign(new Error('bad request'), { status: 400 }), outcome: 'error' },
+    { name: 'unknown', error: new Error('provider offline'), outcome: 'error' },
+  ] as const
+  const config = resolveGatewayConfig({
+    server: { adminToken: 'admin-token' },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }).providers[0]
+  const cloud = {
+    async resolveChannelInteraction() {
+      return { interaction: { interactionId: 'interaction-1' }, command: { commandId: 'cmd-1' }, processed: 1 }
+    },
+  } as CloudGateway
+
+  for (const scenario of cases) {
+    const provider = new FakeChannelProvider()
+    provider.answerInteraction = async () => {
+      throw scenario.error
+    }
+    const metrics = createGatewayMetrics()
+    const handled = await routeGatewayInteraction({
+      cloud,
+      provider,
+      providerConfig: config,
+      metrics,
+      message: {
+        id: `message-${scenario.name}`,
+        provider: 'cli',
+        target: { provider: 'cli', chatId: 'chat-1' },
+        sender: { providerUserId: 'user-1' },
+        text: 'token',
+        rawText: 'token',
+        isCommand: false,
+        attachments: [],
+        interaction: {
+          id: `callback-${scenario.name}`,
+          token: 'apv:token',
+          kind: 'button',
+        },
+        receivedAt: new Date(0),
+        raw: {},
+      },
+    })
+
+    assert.equal(handled, true, scenario.name)
+    assert.equal(telemetryCount(metrics, 'attempt'), 1, scenario.name)
+    assert.equal(telemetryCount(metrics, scenario.outcome), 1, scenario.name)
+    assert.equal(
+      telemetryCount(metrics, scenario.outcome === 'retry' ? 'error' : 'retry'),
+      0,
+      scenario.name,
+    )
+  }
 })
 
 test('interaction router resolves unrecognized interaction tokens as a denial, never an approval (#874)', async () => {

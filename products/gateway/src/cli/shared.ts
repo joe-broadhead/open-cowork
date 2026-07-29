@@ -41,7 +41,7 @@ let cliDaemonTokenResolved = false
 let cliDaemonTokenValue: string | undefined
 let capabilityLoopbackWarned = false
 const CLI_DAEMON_REQUEST_TIMEOUT_MS = 5000
-export const CLI_DAEMON_RESPONSE_LIMIT_BYTES = 1024 * 1024
+const CLI_DAEMON_RESPONSE_LIMIT_BYTES = 1024 * 1024
 
 export class GatewayTransportError extends Error {
   constructor(message: string, options: { cause?: unknown } = {}) {

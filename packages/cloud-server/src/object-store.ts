@@ -57,20 +57,35 @@ export type ObjectStorePresignedRequest = {
   expiresAt: string
 }
 
+export type ObjectStorePresignedPutRequest = Omit<ObjectStorePresignedRequest, 'method'> & {
+  method: 'PUT'
+}
+
+// A plain ability to sign PUT requests says nothing about how many bytes the backing
+// store accepts. Adapters may expose direct upload only when the generated request
+// binds the declared content length exactly and independently enforces this maximum.
+export type ObjectStorePresignedUploadCapability = {
+  enforcement: 'exact-content-length'
+  maxBytes: number
+  presignPut(input: {
+    key: string
+    contentType?: string | null
+    expectedSize: number
+    expiresSeconds?: number
+  }): Promise<ObjectStorePresignedPutRequest | null>
+}
+
 export type ObjectStoreAdapter = {
   kind: ObjectStoreKind
   putObject(input: ObjectStorePutInput): Promise<ObjectStoreHeadResult>
   getObject(key: string): Promise<ObjectStoreReadResult | null>
   headObject(key: string): Promise<ObjectStoreHeadResult | null>
   deleteObject(key: string): Promise<void>
-  // OPTIONAL direct-to-store transfer. When the method is implemented AND the store can presign
-  // (S3-compatible with static credentials configured), it returns a presigned URL so the
-  // client transfers bytes straight to/from object storage instead of base64-buffering them
-  // through the web pod. An ABSENT method or a NULL result means the caller MUST fall back to
-  // the buffered putObject/getObject path. Only S3-compatible stores implement these; the
-  // filesystem/in-memory/gcs/azure adapters intentionally omit them (buffered path only).
+  // OPTIONAL direct-to-store transfer. Downloads require only a presigned GET. Uploads require
+  // explicit size enforcement; a plain presigned PUT must never qualify. An absent capability
+  // or null request means the caller MUST use the bounded buffered path.
   presignGet?(key: string, options?: { expiresSeconds?: number }): Promise<ObjectStorePresignedRequest | null>
-  presignPut?(input: { key: string, contentType?: string | null, expiresSeconds?: number }): Promise<ObjectStorePresignedRequest | null>
+  presignedUpload?: ObjectStorePresignedUploadCapability
   close?: () => Promise<void> | void
 }
 
@@ -114,7 +129,15 @@ export function instrumentObjectStore(
     // Presigning is a local URL-signing computation (no I/O round-trip), so it is passed through
     // transparently rather than wrapped in I/O telemetry. Only present when the inner adapter supports it.
     ...(adapter.presignGet ? { presignGet: (key, options) => adapter.presignGet!(key, options) } : {}),
-    ...(adapter.presignPut ? { presignPut: (input) => adapter.presignPut!(input) } : {}),
+    ...(adapter.presignedUpload
+      ? {
+          presignedUpload: {
+            enforcement: adapter.presignedUpload.enforcement,
+            maxBytes: adapter.presignedUpload.maxBytes,
+            presignPut: (input) => adapter.presignedUpload!.presignPut(input),
+          },
+        }
+      : {}),
     ...(adapter.close ? { close: () => adapter.close!() } : {}),
   }
 }
@@ -652,13 +675,6 @@ export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOp
     async presignGet(key, presignOptions) {
       const signed = presignS3Object('GET', key, undefined, presignOptions?.expiresSeconds)
       return signed
-    },
-    async presignPut(input) {
-      const signed = presignS3Object('PUT', input.key, input.contentType, input.expiresSeconds)
-      // The client must send this content-type on the upload so the stored object is typed
-      // correctly (content-type is intentionally NOT in SignedHeaders, so S3 won't reject a
-      // mismatch — it just records whatever the client sends).
-      return signed && input.contentType ? { ...signed, headers: { 'content-type': input.contentType } } : signed
     },
     close() {
       client.destroy?.()

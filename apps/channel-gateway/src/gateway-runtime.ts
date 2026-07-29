@@ -4,7 +4,10 @@ import type {
   IncomingChannelMessage,
   SentMessage,
 } from '@open-cowork/gateway-channel'
-import { chunkText } from '@open-cowork/gateway-channel'
+import {
+  classifyChannelTelemetryError,
+  chunkText,
+} from '@open-cowork/gateway-channel'
 import type { ChannelDeliveryRecord, CloudChannelProviderId } from '@open-cowork/cloud-client/domains/channels'
 import { isCloudTransportError } from '@open-cowork/cloud-client/domains/transport'
 
@@ -445,11 +448,18 @@ async function handleMessage(
   metrics.incomingMessages += 1
   const providerMetrics = ensureGatewayProviderMetrics(metrics, providerConfig)
   providerMetrics.incomingMessages += 1
+  metrics.channelTelemetry.recordOperation({
+    stack: 'monorepo-provider',
+    providerKind: providerConfig.kind,
+    direction: 'inbound',
+    outcome: 'attempt',
+  })
   const provider = message.provider as CloudChannelProviderId
   const externalWorkspaceId = providerConfig.externalWorkspaceId ?? null
   const externalUserId = message.sender.providerUserId
   let claimedEvent: { eventId: string } | null = null
   let sideEffectCommitted = false
+  let inboundOutcome: 'success' | 'retry' | 'error' = 'success'
 
   try {
     const registration = providers.get(providerConfig.id)
@@ -532,6 +542,7 @@ async function handleMessage(
     })
   } catch (error) {
     const retryable = providerEventFailureIsRetryable(error)
+    inboundOutcome = classifyChannelTelemetryError(error)
     if (claimedEvent && !sideEffectCommitted) {
       await cloud.completeProviderEvent(claimedEvent.eventId, {
         channelBindingId: providerConfig.channelBindingId,
@@ -545,12 +556,25 @@ async function handleMessage(
       // quiet for those; but a non-retryable failure means the message is dropped for good, so tell
       // the user in-channel rather than leaving the bot looking like it ignored them.
       if (!retryable) {
-        await notifyChannelOfDroppedMessage(providers, providerConfig, message, claimedEvent.eventId).catch(() => {})
+        await notifyChannelOfDroppedMessage(
+          providers,
+          providerConfig,
+          message,
+          claimedEvent.eventId,
+          metrics,
+        ).catch(() => {})
       }
     }
     metrics.errors += 1
     providerMetrics.inboundFailures += 1
     throw error
+  } finally {
+    metrics.channelTelemetry.recordOperation({
+      stack: 'monorepo-provider',
+      providerKind: providerConfig.kind,
+      direction: 'inbound',
+      outcome: inboundOutcome,
+    })
   }
 }
 
@@ -562,14 +586,40 @@ async function notifyChannelOfDroppedMessage(
   providerConfig: GatewayProviderConfig,
   message: IncomingChannelMessage,
   eventId: string,
+  metrics: GatewayMetrics,
 ) {
   const registration = providers.get(providerConfig.id)
   if (!registration) return
-  await registration.provider.sendText(
-    message.target,
-    'Sorry — I could not process that message. Please try again.',
-    { deliveryId: `${eventId}:dropped` },
-  )
+  const startedAt = Date.now()
+  metrics.channelTelemetry.recordOperation({
+    stack: 'monorepo-provider',
+    providerKind: providerConfig.kind,
+    direction: 'outbound',
+    outcome: 'attempt',
+  })
+  try {
+    await registration.provider.sendText(
+      message.target,
+      'Sorry — I could not process that message. Please try again.',
+      { deliveryId: `${eventId}:dropped` },
+    )
+    metrics.channelTelemetry.recordOperation({
+      stack: 'monorepo-provider',
+      providerKind: providerConfig.kind,
+      direction: 'outbound',
+      outcome: 'success',
+      latencyMs: Date.now() - startedAt,
+    })
+  } catch (error) {
+    metrics.channelTelemetry.recordOperation({
+      stack: 'monorepo-provider',
+      providerKind: providerConfig.kind,
+      direction: 'outbound',
+      outcome: classifyChannelTelemetryError(error),
+      latencyMs: Date.now() - startedAt,
+    })
+    throw error
+  }
 }
 
 async function handleDelivery(
@@ -579,12 +629,24 @@ async function handleDelivery(
   metrics: GatewayMetrics,
   onSent?: (deliveryId: string) => void,
 ) {
-  const startedAt = Date.now()
+  const deliveryStartedAt = Date.now()
   metrics.deliveriesReceived += 1
   const registration = findDeliveryProvider(providers, delivery)
   if (!registration) {
+    metrics.channelTelemetry.recordOperation({
+      stack: 'monorepo-provider',
+      providerKind: delivery.provider,
+      direction: 'outbound',
+      outcome: 'attempt',
+    })
     metrics.errors += 1
     metrics.deliveryDeadLetters += 1
+    metrics.channelTelemetry.recordOperation({
+      stack: 'monorepo-provider',
+      providerKind: delivery.provider,
+      direction: 'outbound',
+      outcome: 'error',
+    })
     await cloud.ackDelivery(delivery.deliveryId, {
       status: 'dead',
       claimedBy: delivery.claimedBy,
@@ -594,12 +656,28 @@ async function handleDelivery(
   }
   const providerMetrics = ensureGatewayProviderMetrics(metrics, registration.config)
   providerMetrics.deliveriesReceived += 1
+  const providerStartedAt = Date.now()
+  let terminalOutcomeRecorded = false
+  metrics.channelTelemetry.recordOperation({
+    stack: 'monorepo-provider',
+    providerKind: registration.config.kind,
+    direction: 'outbound',
+    outcome: 'attempt',
+  })
 
   try {
     if (!registration.started || !registration.healthy) {
       throw new Error(`Gateway provider ${registration.config.id} is not started or healthy.`)
     }
     await sendDelivery(registration.provider, delivery)
+    metrics.channelTelemetry.recordOperation({
+      stack: 'monorepo-provider',
+      providerKind: registration.config.kind,
+      direction: 'outbound',
+      outcome: 'success',
+      latencyMs: Date.now() - providerStartedAt,
+    })
+    terminalOutcomeRecorded = true
     // Record the send before acking: if the 'sent' ack fails the cloud will re-serve this id, and
     // the dedupe cache must already know the message reached the provider (audit #857).
     onSent?.(delivery.deliveryId)
@@ -610,7 +688,7 @@ async function handleDelivery(
     })
     metrics.deliveriesSent += 1
     providerMetrics.deliveriesSent += 1
-    observeGatewayDeliveryLatency(metrics, providerMetrics, Date.now() - startedAt)
+    observeGatewayDeliveryLatency(metrics, providerMetrics, Date.now() - deliveryStartedAt)
   } catch (error) {
     metrics.errors += 1
     const failure = classifyProviderFailure(error)
@@ -621,6 +699,15 @@ async function handleDelivery(
     } else {
       metrics.deliveryDeadLetters += 1
       providerMetrics.deliveryDeadLetters += 1
+    }
+    if (!terminalOutcomeRecorded) {
+      metrics.channelTelemetry.recordOperation({
+        stack: 'monorepo-provider',
+        providerKind: registration.config.kind,
+        direction: 'outbound',
+        outcome: classifyChannelTelemetryError(error),
+        latencyMs: Date.now() - providerStartedAt,
+      })
     }
     await cloud.ackDelivery(delivery.deliveryId, {
       status: shouldRetry ? 'failed' : 'dead',

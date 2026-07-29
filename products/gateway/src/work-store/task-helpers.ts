@@ -286,7 +286,7 @@ export function assertStageInPipeline(task: WorkTaskRecord, stage: string): void
   if (!task.pipeline.includes(stage)) throw new Error(`stage must be in pipeline: ${stage}`)
 }
 
-export function normalizeTaskPipeline(input?: string[], fallback = defaultPipeline()): string[] {
+function normalizeTaskPipeline(input?: string[], fallback = defaultPipeline()): string[] {
   const source = Array.isArray(input) && input.length > 0 ? input : fallback
   const candidates = source
     .map((stage, index) => {
@@ -326,7 +326,7 @@ export function normalizeRoadmapStatus(value: unknown): RoadmapStatus {
 }
 
 
-export function normalizeWorkStatus(value: unknown): WorkStatus {
+function normalizeWorkStatus(value: unknown): WorkStatus {
   if (value === 'pending' || value === 'running' || value === 'done' || value === 'blocked' || value === 'paused' || value === 'cancelled' || value === 'archived') return value
   throw new Error(`task status must be pending, running, done, blocked, paused, cancelled, or archived: ${String(value)}`)
 }
@@ -336,13 +336,13 @@ export function normalizeWorkTaskAction(value: unknown): WorkTaskAction {
   throw new Error(`task action must be pause, resume, cancel, retry, done, or block: ${String(value)}`)
 }
 
-export function normalizeDependencyType(value: unknown): WorkDependencyType {
+function normalizeDependencyType(value: unknown): WorkDependencyType {
   if (value === undefined || value === null || value === '') return 'blocks'
   if (value === 'blocks' || value === 'blocked_by' || value === 'parent' || value === 'child' || value === 'related' || value === 'duplicate') return value
   throw new Error(`dependency type must be blocks, blocked_by, parent, child, related, or duplicate: ${String(value)}`)
 }
 
-export function normalizeManualGate(value: unknown): ManualGate | undefined {
+function normalizeManualGate(value: unknown): ManualGate | undefined {
   if (value === undefined || value === null || value === '') return undefined
   if (value === 'approval_required' || value === 'credentials_required' || value === 'external_dependency' || value === 'waiting_for_user') return value
   throw new Error(`manualGate must be approval_required, credentials_required, external_dependency, or waiting_for_user: ${String(value)}`)
@@ -401,7 +401,7 @@ export function recomputeRoadmapStatusInState(state: WorkState, roadmapId: strin
   return roadmap
 }
 
-export function ensureInboxRoadmap(state: WorkState, now: Date): RoadmapRecord {
+function ensureInboxRoadmap(state: WorkState, now: Date): RoadmapRecord {
   const existing = state.roadmaps.find(roadmap => roadmap.id === INBOX_ROADMAP_ID)
   if (existing) return existing
   const roadmap: RoadmapRecord = {
@@ -416,6 +416,6 @@ export function ensureInboxRoadmap(state: WorkState, now: Date): RoadmapRecord {
   return roadmap
 }
 
-export function priorityRank(priority: string): number {
+function priorityRank(priority: string): number {
   return priority === 'HIGH' ? 0 : priority === 'MEDIUM' ? 1 : 2
 }

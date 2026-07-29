@@ -99,11 +99,15 @@ describe('whatsapp channel', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     await whatsappChannel.start()
-
-    const queued = getQueuedEvents().join('\n')
-    expect(queued).toContain('WhatsApp outbound ready; inbound webhooks blocked: app secret missing')
-    expect(queued).not.toContain('WhatsApp channel ready')
-    expect(consoleSpy.mock.calls.flat().join('\n')).toContain('inbound webhook signature verification is blocked')
+    try {
+      const queued = getQueuedEvents().join('\n')
+      expect(queued).toContain('WhatsApp outbound ready; inbound webhooks blocked: app secret missing')
+      expect(queued).not.toContain('WhatsApp channel ready')
+      expect(consoleSpy.mock.calls.flat().join('\n')).toContain('inbound webhook signature verification is blocked')
+      expect(whatsappChannel.isActive?.()).toBe(true)
+    } finally {
+      await whatsappChannel.stop()
+    }
   })
 
   it('reports WhatsApp ready only when outbound credentials and inbound signing secret are configured', async () => {

@@ -43,7 +43,7 @@ const GATEWAY_AGENT_TOOLS: Record<string, boolean> = {
   ...Object.fromEntries(GATEWAY_MCP_TOOL_NAMES.map(name => [name, true])),
 }
 
-export function gatewayAgentDefinitions() {
+function gatewayAgentDefinitions() {
   return [
     {
       name: 'gateway-assistant',
@@ -165,7 +165,7 @@ export function installGatewayOpenCodeAssets(configDir?: string): { skills: stri
   return { skills: [...GATEWAY_SKILL_NAMES], agents: [...GATEWAY_AGENT_NAMES], mcp: 'gateway' }
 }
 
-export function gatewayMcpServerConfig(): Record<string, unknown> {
+function gatewayMcpServerConfig(): Record<string, unknown> {
   const operatorTokenFile = process.env['OPENCODE_GATEWAY_HTTP_OPERATOR_TOKEN_FILE']
     || process.env['OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN_FILE']
     || localHttpAdminTokenFilePath()

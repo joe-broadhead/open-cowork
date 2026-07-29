@@ -15,12 +15,12 @@ import type { NativeConfirmationOptions } from '../native-confirmation.ts'
 import type { WorkspaceGateway } from '../workspace-gateway.ts'
 import type { DesktopPairingService } from '../desktop-pairing/service.ts'
 
-export type SessionClientContext = {
+type SessionClientContext = {
   client: OpencodeClient
   record: SessionRecord | null
 }
 
-export type SessionV2ClientContext = {
+type SessionV2ClientContext = {
   client: OpencodeClient
   record: SessionRecord
   directory: string

@@ -90,7 +90,7 @@ function publicMetricsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return value === "1" || value === "true";
 }
 
-export function capabilities(): unknown {
+function capabilities(): unknown {
   return {
     protocol_version: "0.1",
     operations: operationNames().filter((operation) => operation !== "wiki.admin"),

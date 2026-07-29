@@ -2,12 +2,12 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { createHash } from 'node:crypto'
 
-export const RUN_ARTIFACT_MANIFEST_SCHEMA_VERSION = 1
-export const RUN_ARTIFACT_INLINE_VIEW_LIMIT_BYTES = 2 * 1024 * 1024
+const RUN_ARTIFACT_MANIFEST_SCHEMA_VERSION = 1
+const RUN_ARTIFACT_INLINE_VIEW_LIMIT_BYTES = 2 * 1024 * 1024
 
-export type RunArtifactEntryStatus = 'available' | 'missing' | 'unsupported' | 'blocked'
-export type RunArtifactRedactionStatus = 'redacted' | 'not_applicable' | 'blocked' | 'unknown'
-export type RunArtifactRetentionPolicy = 'run_artifact' | 'external_reference'
+type RunArtifactEntryStatus = 'available' | 'missing' | 'unsupported' | 'blocked'
+type RunArtifactRedactionStatus = 'redacted' | 'not_applicable' | 'blocked' | 'unknown'
+type RunArtifactRetentionPolicy = 'run_artifact' | 'external_reference'
 
 interface RunArtifactEvidenceLike {
   ref?: string
@@ -37,7 +37,7 @@ export interface RunArtifactWorkStateLike {
   runs?: RunArtifactRunLike[]
 }
 
-export interface RunArtifactManifestEntry {
+interface RunArtifactManifestEntry {
   id: string
   ref: string
   refHash: string
@@ -74,7 +74,7 @@ export interface RunArtifactManifest {
   entries: RunArtifactManifestEntry[]
 }
 
-export interface RunArtifactManifestEntryView extends Omit<RunArtifactManifestEntry, 'ref'> {
+interface RunArtifactManifestEntryView extends Omit<RunArtifactManifestEntry, 'ref'> {
   ref: string
   rawRefAvailable: false
 }
@@ -97,7 +97,7 @@ export interface RunArtifactManifestView {
   entries: RunArtifactManifestEntryView[]
 }
 
-export function collectRunArtifactRefs(run: RunArtifactRunLike): string[] {
+function collectRunArtifactRefs(run: RunArtifactRunLike): string[] {
   const refs = [
     ...(run.environment?.artifacts || []),
     ...(run.result?.artifacts || []),
@@ -106,7 +106,7 @@ export function collectRunArtifactRefs(run: RunArtifactRunLike): string[] {
   return uniqueStrings(refs)
 }
 
-export function runArtifactWorkspaceDir(runId: string, stateFilePath: string): string {
+function runArtifactWorkspaceDir(runId: string, stateFilePath: string): string {
   return path.join(path.dirname(stateFilePath), 'artifacts', runId)
 }
 
@@ -146,7 +146,7 @@ export function listRunArtifactManifestViews(state: RunArtifactWorkStateLike, st
     .filter((view): view is RunArtifactManifestView => Boolean(view))
 }
 
-export function buildRunArtifactManifest(run: RunArtifactRunLike, refs: string[], stateFilePath: string, now: string): RunArtifactManifest {
+function buildRunArtifactManifest(run: RunArtifactRunLike, refs: string[], stateFilePath: string, now: string): RunArtifactManifest {
   const stateDir = path.dirname(stateFilePath)
   const workspaceDir = runArtifactWorkspaceDir(run.id, stateFilePath)
   const entries = uniqueStrings(refs).map(ref => inspectRunArtifactRef(ref, run, stateDir, workspaceDir, now))

@@ -18,8 +18,8 @@ import { channelTargetFingerprint, redactedChannelTargetLabel } from './security
 import type { ChannelMessage } from './channels/provider.js'
 import { captureCurrentDaemonLeadershipEpoch, getCurrentDaemonLeadershipStatus } from './daemon-leadership.js'
 
-export type ChannelClaimDenyReason = 'wrong_code' | 'wrong_provider' | 'wrong_action' | 'expired' | 'replay' | 'manual_trust_required'
-export type ChannelClaimAcceptStatus = 'no_claim' | 'accepted' | 'denied'
+type ChannelClaimDenyReason = 'wrong_code' | 'wrong_provider' | 'wrong_action' | 'expired' | 'replay' | 'manual_trust_required'
+type ChannelClaimAcceptStatus = 'no_claim' | 'accepted' | 'denied'
 
 export interface ChannelClaimCreateOptions {
   provider: string

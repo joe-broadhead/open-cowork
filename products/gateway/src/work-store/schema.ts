@@ -10,7 +10,7 @@ export interface WorkStoreSchemaInspection {
 
 export const CURRENT_WORK_STORE_SCHEMA_VERSION = 3
 
-export class UnsupportedWorkStoreSchemaVersionError extends Error {
+class UnsupportedWorkStoreSchemaVersionError extends Error {
   readonly foundVersion: number
   readonly supportedVersion: number
 
@@ -73,7 +73,7 @@ function sqliteIdentifier(name: string): string {
  * are advanced by {@link migrateWorkStoreSchema}; this remains idempotent so a
  * legacy version-0 database can be identified and adopted without losing rows.
  */
-export function initializeSchema(db: DatabaseSync): void {
+function initializeSchema(db: DatabaseSync): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,

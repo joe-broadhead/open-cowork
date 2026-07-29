@@ -115,7 +115,7 @@ function readArgs(argv) {
   return input
 }
 
-export function main(argv = process.argv.slice(2)) {
+function main(argv = process.argv.slice(2)) {
   process.stdout.write(`${JSON.stringify(listWindowsSigningTargets(readArgs(argv)), null, 2)}\n`)
 }
 

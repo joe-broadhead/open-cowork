@@ -303,7 +303,7 @@ export function detectStuckTaskAlerts(state: WorkState, config = getConfig()): A
   return alerts
 }
 
-export function probeStateDirFreeBytes(dir = getConfigDir()): number | undefined {
+function probeStateDirFreeBytes(dir = getConfigDir()): number | undefined {
   try {
     const stat = fs.statfsSync(dir)
     const free = Number(stat.bavail) * Number(stat.bsize)
@@ -314,7 +314,7 @@ export function probeStateDirFreeBytes(dir = getConfigDir()): number | undefined
   }
 }
 
-export interface RuntimeGrowthSignal {
+interface RuntimeGrowthSignal {
   rssGrowth: boolean
   eventLoopLagHigh: boolean
   firstRssBytes: number
@@ -323,7 +323,7 @@ export interface RuntimeGrowthSignal {
   sampleCount: number
 }
 
-export function detectRuntimeGrowthSignal(samples: RuntimeSample[] = []): RuntimeGrowthSignal {
+function detectRuntimeGrowthSignal(samples: RuntimeSample[] = []): RuntimeGrowthSignal {
   const empty: RuntimeGrowthSignal = { rssGrowth: false, eventLoopLagHigh: false, firstRssBytes: 0, lastRssBytes: 0, recentLagMs: 0, sampleCount: samples.length }
   if (samples.length < RUNTIME_GROWTH_MIN_SAMPLES) return empty
   const half = Math.floor(samples.length / 2)

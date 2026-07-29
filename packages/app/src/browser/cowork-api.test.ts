@@ -247,6 +247,13 @@ describe('browser shim presigned artifact upload', () => {
     const result = await createBrowserCoworkApi({}).artifact.upload(uploadRequest)
     expect(result.id).toBe('art-1')
 
+    const begin = calls.find((c) => c.url.includes('/artifacts?transfer=presigned'))
+    expect(begin?.body).toEqual({
+      filename: 'f.txt',
+      contentType: 'text/plain',
+      expectedSize: 5,
+    })
+
     // Direct PUT carried the RAW bytes (not base64) straight to the object store.
     const put = calls.find((c) => c.method === 'PUT')
     expect(put?.url).toBe('https://object-store.test/key?sig=put')
@@ -274,6 +281,26 @@ describe('browser shim presigned artifact upload', () => {
     expect(calls.some((c) => c.method === 'PUT')).toBe(false)
     const buffered = calls.find((c) => c.url.endsWith('/artifacts') && c.method === 'POST')
     expect((buffered?.body as { dataBase64?: string })?.dataBase64).toBe(uploadRequest.dataBase64)
+  })
+
+  it('routes an empty payload through buffered validation without requesting an upload URL', async () => {
+    const calls = installRecordingFetch((url, method) => {
+      if (url.endsWith('/auth/me')) return jsonResponse({ csrfToken: null })
+      if (url.includes('/artifacts?transfer=presigned')) throw new Error('empty uploads must not request direct transfer')
+      if (url.endsWith('/artifacts') && method === 'POST') return jsonResponse({ error: 'Artifact dataBase64 is required.' }, 400)
+      return jsonResponse({})
+    })
+
+    await expect(createBrowserCoworkApi({}).artifact.upload({
+      ...uploadRequest,
+      dataBase64: '',
+    })).rejects.toMatchObject({
+      message: 'Artifact dataBase64 is required.',
+      status: 400,
+    })
+    expect(calls.some((call) => call.url.includes('/artifacts?transfer=presigned'))).toBe(false)
+    const buffered = calls.find((call) => call.url.endsWith('/artifacts') && call.method === 'POST')
+    expect((buffered?.body as { dataBase64?: string })?.dataBase64).toBe('')
   })
 
   it('propagates presigned begin failures without retrying a buffered upload', async () => {

@@ -136,7 +136,7 @@ export async function readPostgresMigrationDiagnostics(options: PostgresRuntimeO
   }
 }
 
-export function assertStaticPostgresMigration(migration: PostgresMigration): void {
+function assertStaticPostgresMigration(migration: PostgresMigration): void {
   if (!/^\d{4}_[a-z0-9_]+$/u.test(migration.id)) {
     throw new Error(`Invalid Postgres migration id: ${migration.id}`);
   }

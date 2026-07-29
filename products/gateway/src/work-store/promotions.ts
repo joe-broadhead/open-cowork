@@ -22,16 +22,16 @@ import { appendWorkEventRow, insertHumanGateRow, type HumanGateInput } from '../
 import { normalizeOptionalString, normalizeRequiredString, normalizeStringList } from './validators.js'
 
 export type PromotionSubjectKind = 'profile' | 'team'
-export type PromotionEvidenceSourceKind = 'arena' | 'eval' | 'manual'
-export type PromotionRecommendation = 'promote' | 'hold' | 'block' | 'deprecate'
+type PromotionEvidenceSourceKind = 'arena' | 'eval' | 'manual'
+type PromotionRecommendation = 'promote' | 'hold' | 'block' | 'deprecate'
 export type PromotionAction = 'promote' | 'deprecate' | 'rollback' | 'block'
-export type PromotionDecisionStatus = 'pending' | 'approved' | 'rejected' | 'applied'
+type PromotionDecisionStatus = 'pending' | 'approved' | 'rejected' | 'applied'
 
 const PROMOTION_REGRESSION_WARN_DELTA = 0.05
 const PROMOTION_REGRESSION_BLOCK_DELTA = 0.15
 const UNSAFE_PROMOTION_ALLOW_KEYS = new Set(['', '*'])
 
-export interface PromotionMetricScore {
+interface PromotionMetricScore {
   id: string
   score: number
   maxScore: number
@@ -39,7 +39,7 @@ export interface PromotionMetricScore {
   diagnostic?: string
 }
 
-export interface PromotionThreshold {
+interface PromotionThreshold {
   id: string
   metric: string
   minScore?: number
@@ -49,9 +49,9 @@ export interface PromotionThreshold {
   passed: boolean
 }
 
-export type PromotionRegressionStatus = 'not_applicable' | 'pass' | 'warning' | 'blocked'
+type PromotionRegressionStatus = 'not_applicable' | 'pass' | 'warning' | 'blocked'
 
-export interface PromotionRegressionGuardrail {
+interface PromotionRegressionGuardrail {
   status: PromotionRegressionStatus
   baselineScorecardId?: string
   baselineDecisionId?: string

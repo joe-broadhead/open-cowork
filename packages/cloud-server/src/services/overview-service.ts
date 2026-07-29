@@ -136,7 +136,7 @@ export class CloudOverviewService {
     // NOTE: deliberately NOT admin-gated. The policy overview (allowed agents/tools/
     // features, signup mode, plan) is read-only-visible to any active member so the app
     // can show them what's permitted; member management + audit are the admin-only
-    // surfaces. This member-read contract is asserted in cloud-http-server.test.ts
+    // surfaces. This member-read contract is asserted in cloud-http-identity-admin-contracts.test.ts
     // ("...preserving read-only policy"). Mutations elsewhere use assertOrgAdmin.
     const membership = await this.store.resolvePrincipalMembership({
       tenantId: principal.tenantId,

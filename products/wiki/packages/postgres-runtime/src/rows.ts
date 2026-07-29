@@ -222,7 +222,7 @@ export function runtimeIdpMappingFromRow(row: Record<string, unknown>): OpenWiki
   };
 }
 
-export function runtimePrincipalType(value: string | undefined): OpenWikiRuntimePrincipalRecord["type"] {
+function runtimePrincipalType(value: string | undefined): OpenWikiRuntimePrincipalRecord["type"] {
   if (
     value === "actor" ||
     value === "group" ||

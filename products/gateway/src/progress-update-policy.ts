@@ -1,9 +1,9 @@
 import type { ProjectBindingRecord, ProjectNotificationMode, RoadmapSupervisorRecord, WorkState } from './work-store.js'
 
-export type ProgressUpdateDelivery = 'immediate' | 'digest' | 'deferred' | 'muted' | 'session'
-export type ProgressUpdateSeverity = 'normal' | 'critical'
+type ProgressUpdateDelivery = 'immediate' | 'digest' | 'deferred' | 'muted' | 'session'
+type ProgressUpdateSeverity = 'normal' | 'critical'
 
-export interface QuietHoursPolicy {
+interface QuietHoursPolicy {
   start?: string
   end?: string
   timezone?: 'UTC'
@@ -116,7 +116,7 @@ export function decideProgressUpdateDelivery(input: ProgressUpdateDecisionInput)
   return { delivery: hasChannelTarget ? 'immediate' : 'session', reason: hasChannelTarget ? 'immediate policy' : 'session target only', policy }
 }
 
-export function quietHoursWindow(quietHours: QuietHoursPolicy | Record<string, unknown> | undefined, now: number): { active: boolean; endsAt?: string } {
+function quietHoursWindow(quietHours: QuietHoursPolicy | Record<string, unknown> | undefined, now: number): { active: boolean; endsAt?: string } {
   const start = parseMinuteOfDay(quietHours?.start)
   const end = parseMinuteOfDay(quietHours?.end)
   if (start === undefined || end === undefined || start === end) return { active: false }

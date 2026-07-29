@@ -84,7 +84,32 @@ test("standalone server exposes health, readiness, and admin-gated dashboard", a
       headers: { authorization: "Bearer standalone-admin-token" },
     });
     assert.equal(metrics.status, 200);
-    assert.match(await metrics.text(), /open_cowork_standalone_gateway_sessions/);
+    const metricsText = await metrics.text();
+    assert.match(metricsText, /open_cowork_standalone_gateway_sessions/);
+    assert.match(metricsText, /open_cowork_channel_stack_info\{schema_version="1",stack="monorepo-provider",surface="standalone-gateway"\}/);
+    assert.match(metricsText, /open_cowork_channel_bindings\{provider_kind="webhook",stack="monorepo-provider",status="configured",surface="standalone-gateway"\} 1/);
+    assert.doesNotMatch(metricsText, /provider_id|binding_id|tenant|content|secret="/);
+
+    const registration = providers.registrations[0];
+    assert.ok(registration);
+    registration.started = true;
+    registration.provider.health = () => ({ ok: false, state: "degraded" });
+    const degradedMetrics = await fetch(`${url}/metrics`, {
+      headers: { authorization: "Bearer standalone-admin-token" },
+    });
+    assert.match(
+      await degradedMetrics.text(),
+      /open_cowork_channel_bindings\{provider_kind="webhook",stack="monorepo-provider",status="active",surface="standalone-gateway"\} 0/,
+    );
+
+    registration.provider.health = () => ({ ok: true, state: "ready" });
+    const healthyMetrics = await fetch(`${url}/metrics`, {
+      headers: { authorization: "Bearer standalone-admin-token" },
+    });
+    assert.match(
+      await healthyMetrics.text(),
+      /open_cowork_channel_bindings\{provider_kind="webhook",stack="monorepo-provider",status="active",surface="standalone-gateway"\} 1/,
+    );
   } finally {
     await server.close();
   }

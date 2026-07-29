@@ -31,7 +31,7 @@ const DEFAULT_GCS_REQUIRED_SCOPE = 'https://www.googleapis.com/auth/devstorage.r
 const GOOGLE_CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 const FETCH_TIMEOUT_MS = 5000
 
-export type ElectronUpdaterProviderConfig = Record<string, unknown>
+type ElectronUpdaterProviderConfig = Record<string, unknown>
 
 export interface ResolvedUpdateReleaseSource {
   descriptor: UpdateReleaseSourceDescriptor

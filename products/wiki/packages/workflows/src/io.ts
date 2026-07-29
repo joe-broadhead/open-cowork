@@ -2,15 +2,6 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { type ValidationReport, atomicWriteFile, validationReportFromUnknown } from "@openwiki/core";
 
-export async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function readValidationReport(root: string, reportPath: string | undefined): Promise<ValidationReport | null> {
   if (!reportPath) {
     return null;

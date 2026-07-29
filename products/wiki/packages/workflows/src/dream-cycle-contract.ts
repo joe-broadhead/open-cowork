@@ -15,7 +15,7 @@ export const DREAM_PHASE_NAMES = [
 ] as const;
 
 export type DreamPhaseName = typeof DREAM_PHASE_NAMES[number];
-export type DreamPhaseStatus = "succeeded" | "skipped" | "failed";
+type DreamPhaseStatus = "succeeded" | "skipped" | "failed";
 
 export interface DreamPhaseDefinition {
   name: DreamPhaseName;

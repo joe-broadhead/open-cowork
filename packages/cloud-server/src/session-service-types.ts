@@ -2,7 +2,6 @@ import type { CloudAbuseConfig, CloudSessionViewRecord, WorkflowDetail, Workflow
 import type {
   ApiTokenScope,
   BillingSubscriptionRecord,
-  ChannelProviderId,
   ControlPlanePermission,
   SessionCommandRecord,
   SessionProjectionRecord,
@@ -160,24 +159,6 @@ export type CloudWorkflowStartResult = {
   run: WorkflowRun
   sessionId: string
   command: SessionCommandRecord
-}
-
-export type ChannelActorInput = {
-  identityId?: string | null
-  provider?: ChannelProviderId | null
-  externalWorkspaceId?: string | null
-  externalUserId?: string | null
-  // Chat the responder is acting from, used to scope interaction approval to the chat the
-  // interaction was sent to (audit #922) rather than the whole provider/workspace.
-  externalChatId?: string | null
-}
-
-export type ChannelInteractionResolutionInput = ChannelActorInput & {
-  token?: string | null
-  externalInteractionId?: string | null
-  response?: unknown
-  answers?: unknown[]
-  reject?: boolean
 }
 
 export const SESSION_IMPORT_MAX_MESSAGES = 2_000

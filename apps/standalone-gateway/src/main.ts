@@ -100,9 +100,13 @@ if (command === "smoke") {
       });
     }, daemonLeaseRenewalMs);
 
-    const runtime = createStandaloneGatewayRuntime({ repository, opencode });
-    const leaseRef = { leaseId: daemonLeaseId, ownerId, get leaseToken() { return leaseToken; } };
     const providers = createStandaloneProviderRegistry(config);
+    const runtime = createStandaloneGatewayRuntime({
+      repository,
+      opencode,
+      telemetry: providers.telemetry,
+    });
+    const leaseRef = { leaseId: daemonLeaseId, ownerId, get leaseToken() { return leaseToken; } };
     await providers.start((providerConfig, message) => {
       // Don't prompt OpenCode once the lease is lost — a successor daemon owns the workspace.
       if (!leaseActive) return Promise.resolve();

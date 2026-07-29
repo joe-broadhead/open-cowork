@@ -76,7 +76,7 @@ export function decodeCloudArtifactDataUrl(url: string) {
   return bytes
 }
 
-export function writeCloudArtifactForExport(destination: string, attachment: Pick<SessionArtifactAttachment, 'url'>) {
+function writeCloudArtifactForExport(destination: string, attachment: Pick<SessionArtifactAttachment, 'url'>) {
   const bytes = decodeCloudArtifactDataUrl(attachment.url)
   // Explicit user artifact export/open. The bytes are validated as a bounded
   // base64 data URL above before being written to a user-selected or temp path.

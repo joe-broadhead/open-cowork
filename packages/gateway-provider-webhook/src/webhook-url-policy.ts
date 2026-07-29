@@ -80,14 +80,14 @@ export async function resolveWebhookDeliveryAddresses(
   }
 }
 
-export function isLocalHttpHost(hostname: string): boolean {
+function isLocalHttpHost(hostname: string): boolean {
   const normalized = normalizePolicyHostname(hostname);
   return normalized === "localhost" ||
     normalized === "127.0.0.1" ||
     normalized === "::1";
 }
 
-export function isHostnameAllowed(hostname: string, allowedHosts: readonly string[] | undefined): boolean {
+function isHostnameAllowed(hostname: string, allowedHosts: readonly string[] | undefined): boolean {
   const allowed = (allowedHosts || []).map(normalizePolicyHostname).filter(Boolean);
   if (allowed.length === 0) return true;
   const normalized = normalizePolicyHostname(hostname);

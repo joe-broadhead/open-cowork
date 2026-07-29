@@ -1,7 +1,7 @@
 import type * as http from 'node:http'
 import type { z } from 'zod'
 
-export const MAX_JSON_BODY_BYTES = 1024 * 1024
+const MAX_JSON_BODY_BYTES = 1024 * 1024
 
 export class HttpError extends Error {
   constructor(readonly status: number, message: string) {
@@ -25,7 +25,7 @@ export interface RouteResponse {
 
 export type RouteHandler = (ctx: RouteContext) => Promise<RouteResponse | undefined> | RouteResponse | undefined
 
-export type ApiRouteMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
+type ApiRouteMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
 /**
  * Runtime-adjacent metadata consumed by the API reference generator. Body and
@@ -79,7 +79,7 @@ export function pathMatch(pathname: string, pattern: RegExp): [string, ...string
   return groups as [string, ...string[]]
 }
 
-export function assertValidUrlPath(pathname: string): void {
+function assertValidUrlPath(pathname: string): void {
   try {
     // Validation only. Keep the original encoded pathname for route matching so
     // encoded slashes cannot change segment boundaries.
@@ -103,7 +103,7 @@ export async function readJsonBodyAs<Schema extends z.ZodTypeAny>(
   return validateJsonBody(schema, await readJsonBody(req), label)
 }
 
-export function validateJsonBody<Schema extends z.ZodTypeAny>(
+function validateJsonBody<Schema extends z.ZodTypeAny>(
   schema: Schema,
   body: unknown,
   label = 'body',

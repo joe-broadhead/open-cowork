@@ -32,7 +32,7 @@ export function redactAuditMetadata(value: Record<string, unknown> | undefined):
 }
 
 // Redact local filesystem paths out of a string for the default (redacted) export.
-export function redactAuditPathString(value: string): string {
+function redactAuditPathString(value: string): string {
   let redacted = value
   for (const pattern of LOCAL_PATH_PATTERNS) {
     redacted = redacted.replace(pattern, (match) => {

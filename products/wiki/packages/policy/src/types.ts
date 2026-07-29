@@ -19,7 +19,7 @@ import type {
   TakeRecord,
 } from "@openwiki/core";
 
-export type { OpenWikiRole, OpenWikiScope } from "@openwiki/core";
+;
 export type OpenWikiOperation =
   | "wiki.search"
   | "wiki.recall"

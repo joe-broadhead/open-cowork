@@ -24,6 +24,8 @@ export interface ChannelAdapter {
   capabilities: ChannelCapabilities
   start(): Promise<void>
   stop(): Promise<void>
+  /** Runtime readiness after start; used for low-cardinality binding telemetry. */
+  isActive?(): boolean
   sendMessage(chatId: string, text: string, options?: { threadId?: string; idempotencyKey?: string }): Promise<void>
   sendStructuredMessage?(chatId: string, message: StructuredGatewayMessage, options?: { threadId?: string }): Promise<void>
   sendCommandMenu?(chatId: string, text: string, actions: Array<{ label: string; command: string; description?: string }>, options?: { threadId?: string }): Promise<void>

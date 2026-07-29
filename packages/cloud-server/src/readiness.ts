@@ -13,7 +13,7 @@ import {
   type CloudExecutionIsolationPolicy,
 } from './execution-isolation.ts'
 
-export type CloudReadinessCheckStatus = 'ok' | 'error'
+type CloudReadinessCheckStatus = 'ok' | 'error'
 
 export type CloudReadinessCheckResult = {
   name: string

@@ -274,7 +274,7 @@ export function collectRunEnvironmentArtifacts(run: RunRecord, result: StageResu
   }
 }
 
-export function persistFileArtifactRefs(runId: string, refs: string[], filePath: string): string[] {
+function persistFileArtifactRefs(runId: string, refs: string[], filePath: string): string[] {
   const artifactDir = path.join(path.dirname(filePath), 'artifacts', runId)
   const copied = new Map<string, string>()
   const out: string[] = []
@@ -294,13 +294,13 @@ export function persistFileArtifactRefs(runId: string, refs: string[], filePath:
   return uniqueResultStrings(out)
 }
 
-export function fileArtifactPath(ref: string): string | undefined {
+function fileArtifactPath(ref: string): string | undefined {
   if (!ref.startsWith('file:')) return undefined
   const value = ref.slice('file:'.length)
   return value ? path.resolve(value) : undefined
 }
 
-export function rewriteCapturedMetadata(target: string, copied: Map<string, string>): void {
+function rewriteCapturedMetadata(target: string, copied: Map<string, string>): void {
   if (!target.endsWith('.json')) return
   try {
     const parsed = JSON.parse(fs.readFileSync(target, 'utf-8'))
@@ -313,11 +313,11 @@ export function rewriteCapturedMetadata(target: string, copied: Map<string, stri
   } catch {}
 }
 
-export function artifactHash(value: string): string {
+function artifactHash(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
 
-export function uniqueResultStrings(values: unknown[]): string[] {
+function uniqueResultStrings(values: unknown[]): string[] {
   return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))]
 }
 
@@ -338,7 +338,7 @@ export function runTokens(run: RunRecord): number {
   return Number(run.inputTokens || 0) + Number(run.outputTokens || 0) + Number(run.reasoningTokens || 0) + Number(run.cacheReadTokens || 0) + Number(run.cacheWriteTokens || 0)
 }
 
-export function normalizeMetric(value: unknown): number | undefined {
+function normalizeMetric(value: unknown): number | undefined {
   const number = Number(value || 0)
   return Number.isFinite(number) && number > 0 ? number : undefined
 }

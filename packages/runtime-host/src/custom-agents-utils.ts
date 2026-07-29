@@ -21,7 +21,7 @@ import {
   type CustomAgentPermissionRule,
 } from '@open-cowork/shared'
 import type { NativeConfigScope } from './runtime-paths.js'
-import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite } from './runtime-tools.js'
+import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite } from './runtime-tool-metadata.js'
 import { validateCustomAgentContentLimits } from './custom-content-limits.js'
 import { getEffectiveSettings } from './settings.js'
 

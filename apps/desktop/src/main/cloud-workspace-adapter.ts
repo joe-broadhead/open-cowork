@@ -202,7 +202,7 @@ function policyFromConfig(config: CloudTransportConfig): WorkspacePolicy {
 
 // Map the delivered policy view onto the enforcement shape (dropping the transparency
 // map) and hand it to the runtime-host singleton, which persists it for offline-safety.
-export function applyManagedPolicyFromConfig(view: ManagedDesktopPolicyView): void {
+function applyManagedPolicyFromConfig(view: ManagedDesktopPolicyView): void {
   setActiveManagedPolicy({
     allowedProviders: view.allowedProviders,
     deniedProviders: view.deniedProviders,

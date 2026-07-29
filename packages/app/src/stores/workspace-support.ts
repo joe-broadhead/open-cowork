@@ -110,7 +110,7 @@ export function supportAllows(entry: WorkspaceApiSupport | undefined, options: {
   return entry.status === 'supported' || entry.status === 'read_only' || entry.verdict?.allowed === true
 }
 
-export function supportReason(
+function supportReason(
   support: WorkspaceApiSupport[] | undefined,
   api: string,
   fallback = 'This action is disabled by this workspace policy.',
@@ -118,12 +118,8 @@ export function supportReason(
   return supportEntry(support, api)?.verdict?.reason || fallback
 }
 
-export function supportContext(support: WorkspaceApiSupport[] | undefined): WorkspaceApiSupportContext | null {
+function supportContext(support: WorkspaceApiSupport[] | undefined): WorkspaceApiSupportContext | null {
   return support?.find((entry) => entry.context)?.context || null
-}
-
-export function supportAuthority(support: WorkspaceApiSupport[] | undefined): WorkspaceExecutionAuthority | null {
-  return supportContext(support)?.authority || null
 }
 
 function statusIsUnavailable(status?: WorkspaceApiSupportStatus) {

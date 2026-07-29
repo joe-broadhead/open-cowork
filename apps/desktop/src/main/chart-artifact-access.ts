@@ -13,7 +13,7 @@ function toolMatchesChartArtifactRequest(tool: ToolCall, request: ChartSaveArtif
     && tool.name === request.toolName
 }
 
-export function findChartArtifactTool(view: SessionView, request: ChartSaveArtifactRequest): ToolCall | null {
+function findChartArtifactTool(view: SessionView, request: ChartSaveArtifactRequest): ToolCall | null {
   if (request.taskRunId) {
     const taskRun = view.taskRuns.find((entry) => entry.id === request.taskRunId)
     if (!taskRun) return null

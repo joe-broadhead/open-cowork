@@ -1,4 +1,4 @@
-import { appendEvent, loadRepository } from "@openwiki/repo";
+import { appendEvent } from "@openwiki/repo";
 
 export interface StaticExportOptions {
   root: string;
@@ -67,5 +67,3 @@ export const RESERVED_EXPORT_TOP_LEVEL_DIRS = new Set([
   "sources",
   "wiki",
 ]);
-
-export type StaticRepo = Awaited<ReturnType<typeof loadRepository>>;

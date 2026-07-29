@@ -7,7 +7,7 @@
 // "@@" header string plus its rows. A row is one of add / remove / context
 // with both old and new line numbers so the renderer can show a split gutter.
 
-export type DiffRowKind = 'context' | 'add' | 'remove'
+type DiffRowKind = 'context' | 'add' | 'remove'
 
 export interface DiffRow {
   kind: DiffRowKind
@@ -95,7 +95,7 @@ export function inferStatus(hunks: DiffHunk[], explicit?: 'added' | 'deleted' | 
   return 'modified'
 }
 
-export type WordDiffKind = 'same' | 'removed' | 'added'
+type WordDiffKind = 'same' | 'removed' | 'added'
 
 export interface WordDiffSegment {
   text: string

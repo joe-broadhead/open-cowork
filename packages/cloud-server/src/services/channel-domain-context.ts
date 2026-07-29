@@ -44,7 +44,7 @@ export type ChannelInteractionResolutionInput = ChannelActorInput & {
   reject?: boolean
 }
 
-export type CreateChannelSessionRecordInput = {
+type CreateChannelSessionRecordInput = {
   tenantId: string
   userId: string
   orgId?: string | null
@@ -55,7 +55,7 @@ export type CreateChannelSessionRecordInput = {
   deferRuntime?: boolean
 }
 
-export type ChannelAuditActor = {
+type ChannelAuditActor = {
   actorType: 'user' | 'api_token'
   actorId: string
   accountId: string | null

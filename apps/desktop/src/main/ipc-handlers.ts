@@ -46,7 +46,6 @@ import { registerVoiceHandlers } from './ipc/voice-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { objectArg, registerIpcInvoke } from './ipc/schema.ts'
 import { validateDestructiveConfirmationRequest } from './ipc/object-validators.ts'
-import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 import { ProjectDirectoryGrantRegistry } from './directory-grants.ts'
 import { isTrustedRendererIpcUrl } from './main-window-lifecycle.ts'
 import {
@@ -68,7 +67,7 @@ import {
 import { seedReplayedChildSessionLineage } from './event-task-state.ts'
 import { IpcSecurityError } from '@open-cowork/shared/ipc-security-errors'
 
-export { invalidateRuntimeToolCache } from '@open-cowork/runtime-host/runtime-tool-cache'
+
 
 type IpcSenderEvent = IpcMainEvent | IpcMainInvokeEvent
 
@@ -87,7 +86,7 @@ function expectedTrustedRendererPaths() {
   ]
 }
 
-export function isTrustedIpcSenderUrl(rawUrl: string, devServerUrl: string | null | undefined = process.env.VITE_DEV_SERVER_URL) {
+function isTrustedIpcSenderUrl(rawUrl: string, devServerUrl: string | null | undefined = process.env.VITE_DEV_SERVER_URL) {
   return isTrustedRendererIpcUrl({
     rawUrl,
     devServerUrl,
@@ -438,5 +437,3 @@ export function setupIpcHandlers(
     return windows
   })
 }
-
-export { trackPermission, clearPermissionsForSession }

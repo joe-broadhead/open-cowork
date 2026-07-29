@@ -16,12 +16,12 @@ import {
   type ProjectContextResolution,
 } from '../work-store.js'
 
-export type WorkStoreBindingsOperationGroup =
+type WorkStoreBindingsOperationGroup =
   | 'upsert_project_binding'
   | 'mirror_channel_binding'
   | 'resolve_project_context'
 
-export interface WorkStoreBindingsPortDomain {
+interface WorkStoreBindingsPortDomain {
   id: 'bindings'
   backendMode: 'local_sqlite'
   releaseStatus: 'supported_public_local_beta'
@@ -38,7 +38,7 @@ export interface WorkStoreProjectBindingFilter {
   threadId?: string
 }
 
-export interface WorkStoreProjectContextInput {
+interface WorkStoreProjectContextInput {
   alias?: string
   roadmapId?: string
   provider?: string
@@ -47,7 +47,7 @@ export interface WorkStoreProjectContextInput {
   sessionId?: string
 }
 
-export interface WorkStoreChannelBindingInput {
+interface WorkStoreChannelBindingInput {
   provider: string
   chatId: string
   threadId?: string
@@ -70,7 +70,7 @@ export interface WorkStoreBindingsPort {
   upsertChannelBinding(input: WorkStoreChannelBindingInput): ChannelBindingRecord
 }
 
-export const WORK_STORE_BINDINGS_PORT_DOMAIN: WorkStoreBindingsPortDomain = {
+const WORK_STORE_BINDINGS_PORT_DOMAIN: WorkStoreBindingsPortDomain = {
   id: 'bindings',
   backendMode: 'local_sqlite',
   releaseStatus: 'supported_public_local_beta',

@@ -37,7 +37,3 @@ export function useAdminAccessState(ready: boolean): AdminAccessState {
 
   return adminAccess
 }
-
-export function useAdminAccessible(ready: boolean): boolean {
-  return useAdminAccessState(ready).accessible
-}

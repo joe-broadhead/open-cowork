@@ -4,18 +4,6 @@ function escapeAttribute(value: string | number | undefined | null): string {
   return escapeHtml(value).replace(/'/g, "&#39;");
 }
 
-export function safeExternalHref(value: string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export function safeDocumentHref(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;

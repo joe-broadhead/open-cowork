@@ -131,7 +131,7 @@ export function isLocalOrigin(originHeader: string | string[] | undefined): bool
   }
 }
 
-export function isLocalRemoteAddress(address: string | undefined): boolean {
+function isLocalRemoteAddress(address: string | undefined): boolean {
   if (!address) return true
   const value = address.trim().toLowerCase()
   return value === '127.0.0.1' || value === '::1' || value === 'localhost' || value.startsWith('::ffff:127.')
@@ -720,7 +720,7 @@ function channelRuleLacksDmActorFallback(provider: string, rule: ChannelAllowlis
   return false
 }
 
-export function isPublicWebhookRoute(method: string, pathname: string): boolean {
+function isPublicWebhookRoute(method: string, pathname: string): boolean {
   const normalizedMethod = String(method || 'GET').toUpperCase()
   return PUBLIC_WEBHOOK_ROUTES.some(route => route.path === pathname && route.method === normalizedMethod)
 }

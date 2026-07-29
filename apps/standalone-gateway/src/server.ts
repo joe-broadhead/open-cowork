@@ -132,7 +132,11 @@ async function handleRequest(input: {
   }
   if (req.method === "GET" && url.pathname === "/metrics") {
     assertAdmin(input.config, req);
-    const metrics = renderStandaloneGatewayMetrics(await input.repository.dashboardSnapshot());
+    input.providers.refreshTelemetry?.();
+    const metrics = renderStandaloneGatewayMetrics(
+      await input.repository.dashboardSnapshot(),
+      input.providers.telemetry,
+    );
     res.writeHead(200, {
       "content-type": "text/plain; version=0.0.4; charset=utf-8",
       "cache-control": "no-store",

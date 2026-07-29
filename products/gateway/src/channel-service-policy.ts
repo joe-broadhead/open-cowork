@@ -1,6 +1,6 @@
 import type { ChannelConnectorStatus } from './channel-connectors.js'
 
-export type ChannelServicePolicyStatus = 'ok' | 'degraded' | 'down'
+type ChannelServicePolicyStatus = 'ok' | 'degraded' | 'down'
 
 export interface ChannelServicePolicyInput {
   provider: 'telegram' | 'whatsapp' | 'discord'

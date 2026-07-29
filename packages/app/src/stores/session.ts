@@ -36,20 +36,14 @@ const GLOBAL_ERROR_LIMIT = 50
 
 export type {
   CompactionNotice,
-  ExecutionPlanItem,
   Message,
-  MessageAttachment,
   MessageSegment,
   PendingApproval,
-  ReasoningSegment,
   SessionError,
-  SessionTokens,
   TaskRun,
-  TaskTranscriptSegment,
   ToolCall,
-  TodoItem,
 } from '@open-cowork/shared'
-export type { HistoryItem, SessionViewState } from '@open-cowork/shared'
+export type { SessionViewState } from '@open-cowork/shared'
 
 export type Session = SessionInfo
 export type PrimaryAgentMode = 'build' | 'plan' | 'chief-of-staff'

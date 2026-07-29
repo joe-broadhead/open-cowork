@@ -39,7 +39,7 @@ export interface PendingInbound {
   messageId?: string
 }
 
-export interface InboundReceipt {
+interface InboundReceipt {
   sessionId: string
   provider: string
   chatId: string

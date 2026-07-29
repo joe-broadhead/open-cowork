@@ -3,8 +3,8 @@ import type { RuntimeDoctorCheck, RuntimeStatus } from '@open-cowork/shared'
 import { writeFileAtomic } from '@open-cowork/shared/node'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-export const HEADLESS_HOST_STATUS_VERSION = 1
-export const HEADLESS_HOST_STATE_VERSION = 1
+const HEADLESS_HOST_STATUS_VERSION = 1
+const HEADLESS_HOST_STATE_VERSION = 1
 
 export type HeadlessHostMode = 'check' | 'status' | 'doctor' | 'start' | 'stop'
 export type HeadlessTopology = 'loopback' | 'lan' | 'remote' | 'tunnel'

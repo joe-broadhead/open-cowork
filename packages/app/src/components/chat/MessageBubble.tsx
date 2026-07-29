@@ -5,9 +5,10 @@ import { ReasoningDisclosure } from './ReasoningDisclosure'
 import { t } from '../../helpers/i18n'
 import { Icon } from '@open-cowork/ui'
 
+import type { MessageAttachment } from '@open-cowork/shared'
 import type { Message } from '../../stores/session'
 
-type Attachment = import('../../stores/session').MessageAttachment
+type Attachment = MessageAttachment
 
 function keyFragment(value: string) {
   return `${value.length}:${value.slice(0, 48)}:${value.slice(-48)}`
@@ -25,7 +26,7 @@ function attachmentRenderKey(prefix: string, attachment: Attachment, seen: Map<s
   return occurrence === 0 ? base : `${base}:${occurrence + 1}`
 }
 
-function AttachmentGrid({ attachments }: { attachments: import('../../stores/session').MessageAttachment[] }) {
+function AttachmentGrid({ attachments }: { attachments: MessageAttachment[] }) {
   const images = attachments.filter(a => a.mime.startsWith('image/'))
   const files = attachments.filter(a => !a.mime.startsWith('image/'))
   const imageKeys = new Map<string, number>()

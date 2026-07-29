@@ -7,8 +7,6 @@ import {
   type CloudProjectSourceInput,
   type SessionImportItemCounts,
   type SessionImportRequest,
-  normalizeCloudProjectSource,
-  summarizeCloudProjectSource,
 } from '@open-cowork/shared'
 import { InvalidSessionPageCursorError } from './control-plane-store.ts'
 import type {
@@ -19,7 +17,6 @@ import type {
   ListCloudLaunchpadSessionSummariesInput,
   SessionCommandRecord,
   SessionEventRecord,
-  SessionProjectionRecord,
   SessionRecord,
   UsageQuotaReservation,
   UpsertCloudArtifactIndexInput,
@@ -632,7 +629,7 @@ export class CloudSessionService {
     await this.assertGatewayTokenCanReadSession(principal, sessionId)
     const projection = await this.store.getSessionProjection(principal.tenantId, sessionId)
     return {
-      session: this.withProjectionProjectSource(session, projection),
+      session: this.projectSourceService.withProjectionProjectSource(session, projection),
       projection,
     }
   }
@@ -657,14 +654,6 @@ export class CloudSessionService {
     if (principal.authSource !== 'api_token') return false
     if (!principalHasPrivilegedTokenScope(principal, 'gateway')) return false
     return !principalHasTokenScope(principal, 'desktop')
-  }
-
-  private withProjectionProjectSource(session: SessionRecord, projection: SessionProjectionRecord | null): SessionRecord {
-    const source = normalizeCloudProjectSource(projection?.view?.projectSource)
-    return {
-      ...session,
-      projectSource: summarizeCloudProjectSource(source),
-    }
   }
 
   async listEvents(principal: CloudPrincipal, sessionId: string, afterSequence = 0, limit?: number): Promise<SessionEventRecord[]> {
@@ -732,6 +721,11 @@ export class CloudSessionService {
   // idle-connection cost (~6 queries/poll). These read directly, tenant-scoped by the query.
   listSessionEventsForStream(tenantId: string, sessionId: string, afterSequence = 0, limit?: number) {
     return this.store.listSessionEventsForStream(tenantId, sessionId, afterSequence, limit)
+  }
+
+  async getSessionEventCursor(principal: CloudPrincipal, sessionId: string) {
+    await this.getSessionView(principal, sessionId)
+    return this.store.getSessionEventStats(principal.tenantId, sessionId)
   }
 
   listWorkspaceEventsForStream(tenantId: string, userId: string, afterSequence = 0, limit?: number) {
@@ -1143,7 +1137,7 @@ export class CloudSessionService {
     if (!session) throw new CloudServiceError(404, 'Cloud session was not found.')
     const projection = await this.store.getSessionProjection(tenantId, sessionId)
     return {
-      session: this.withProjectionProjectSource(session, projection),
+      session: this.projectSourceService.withProjectionProjectSource(session, projection),
       projection,
     }
   }

@@ -37,7 +37,7 @@ export type WorkspaceSessionPromptInput = {
   [key: string]: unknown
 }
 
-export type WorkspaceSessionImportResult = {
+type WorkspaceSessionImportResult = {
   session: SessionInfo
   view: SessionView
 }
@@ -112,11 +112,6 @@ export const WORKSPACE_SESSION_PORT_FULL_METHODS = [
   ...WORKSPACE_SESSION_PORT_EXTENDED_METHODS,
 ] as const
 
-export type WorkspaceSessionPortMethod =
-  | (typeof WORKSPACE_SESSION_PORT_CORE_METHODS)[number]
-  | (typeof WORKSPACE_SESSION_PORT_INTERACTION_METHODS)[number]
-  | (typeof WORKSPACE_SESSION_PORT_EXTENDED_METHODS)[number]
-
 /**
  * Type guard for the shared port. Checks core session methods by default.
  * Pass `mode: 'full'` to require the complete CloudWorkspaceAdapter surface
@@ -141,7 +136,7 @@ export function assertWorkspaceSessionPort(
 }
 
 /** Empty policy used by local/memory fixtures when no managed policy applies. */
-export const WORKSPACE_SESSION_PORT_LOCAL_POLICY: WorkspacePolicy = {
+const WORKSPACE_SESSION_PORT_LOCAL_POLICY: WorkspacePolicy = {
   features: {},
   allowedAgents: null,
   allowedTools: null,

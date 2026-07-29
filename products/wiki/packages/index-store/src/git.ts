@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { collectDerivedRecords, derivedContentHash } from "./derived-records.ts";
 import type { GitCommitInfo } from "./types.ts";
 
-export const execFile = promisify(execFileCallback);
+const execFile = promisify(execFileCallback);
 
 export async function currentDerivedContentHash(root: string): Promise<string> {
   const [repo, graph, topics] = await Promise.all([loadRepository(root), listGraphEdges(root), listTopics(root)]);

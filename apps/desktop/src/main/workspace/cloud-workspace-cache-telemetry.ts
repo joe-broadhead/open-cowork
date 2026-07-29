@@ -1,7 +1,7 @@
 import { log } from '@open-cowork/shared/node'
 import type { CloudWorkspaceCacheFileEncoding } from './cloud-workspace-cache-format.ts'
 
-export type CloudWorkspaceCacheTelemetryEvent = {
+type CloudWorkspaceCacheTelemetryEvent = {
   operation: 'read' | 'decrypt' | 'write' | 'quarantine' | 'migrate_v1'
   outcome: 'blocked' | 'failed' | 'completed'
   reason:

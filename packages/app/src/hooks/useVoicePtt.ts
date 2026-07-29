@@ -18,7 +18,7 @@ import { useActiveWorkspaceSupport } from '../stores/workspace-support'
 import { registerVoicePttToggleHandler } from './voice-ptt-hotkey'
 import { stopReadAloud } from './voice-read-aloud'
 
-export type VoicePttUiPhase = 'idle' | 'listening' | 'transcribing' | 'error'
+type VoicePttUiPhase = 'idle' | 'listening' | 'transcribing' | 'error'
 
 export type VoicePttController = {
   /** Feature + authority allow the mic control to appear. */

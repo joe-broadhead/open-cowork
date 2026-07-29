@@ -15,22 +15,22 @@ import {
 } from './work-store.js'
 import type { PendingPermissionRequest, PendingQuestionRequest } from './opencode-requests.js'
 
-export type SupervisorStatus = 'ok' | 'blocked' | 'needs_user' | 'completion_proposed' | 'failed'
-export type SupervisorActionType = 'create_task' | 'ask_question' | 'request_permission' | 'block_roadmap' | 'propose_completion' | 'schedule_next_review' | 'summary' | 'none'
+type SupervisorStatus = 'ok' | 'blocked' | 'needs_user' | 'completion_proposed' | 'failed'
+type SupervisorActionType = 'create_task' | 'ask_question' | 'request_permission' | 'block_roadmap' | 'propose_completion' | 'schedule_next_review' | 'summary' | 'none'
 
-export interface SupervisorTurnRef {
+interface SupervisorTurnRef {
   supervisorId: string
   roadmapId: string
   leaseOwner: string
   cursorEventId: number
 }
 
-export interface SupervisorAction {
+interface SupervisorAction {
   type: SupervisorActionType
   summary: string
 }
 
-export interface SupervisorCompletionRecommendation {
+interface SupervisorCompletionRecommendation {
   recommendation: 'not_done' | 'ready_for_user_approval' | 'done'
   evidence: string[]
   risks: string[]

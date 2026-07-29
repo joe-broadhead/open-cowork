@@ -31,7 +31,7 @@ export async function clearWorkspaceRuntimeRows(sql: PostgresQuery, workspaceId:
   await sql`DELETE FROM workspaces WHERE workspace_id = ${workspaceId}`;
 }
 
-export async function clearWorkspaceGovernanceRows(sql: PostgresQuery, workspaceId: string): Promise<void> {
+async function clearWorkspaceGovernanceRows(sql: PostgresQuery, workspaceId: string): Promise<void> {
   await sql`DELETE FROM source_objects WHERE workspace_id = ${workspaceId}`;
   await sql`DELETE FROM runs WHERE workspace_id = ${workspaceId}`;
   await sql`DELETE FROM events WHERE workspace_id = ${workspaceId}`;
@@ -136,7 +136,7 @@ export async function upsertRuntimeMetadata(sql: PostgresQuery, workspaceId: str
   }
 }
 
-export function chunks<T>(values: T[], size: number): T[][] {
+function chunks<T>(values: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let index = 0; index < values.length; index += size) {
     result.push(values.slice(index, index + size));
@@ -329,7 +329,7 @@ export async function insertSearchDocuments(sql: PostgresQuery, documents: Searc
   await insertSearchChunks(sql, documents, sourceCommit);
 }
 
-export async function insertSearchChunks(sql: PostgresQuery, documents: SearchDocument[], sourceCommit: string): Promise<void> {
+async function insertSearchChunks(sql: PostgresQuery, documents: SearchDocument[], sourceCommit: string): Promise<void> {
   const generatedAt = new Date().toISOString();
   const searchChunks = documents.flatMap((document) => searchChunksFromDocument(document, sourceCommit, generatedAt));
   for (const batch of chunks(searchChunks, POSTGRES_IMPORT_BATCH_SIZE)) {

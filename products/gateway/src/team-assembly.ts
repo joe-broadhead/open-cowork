@@ -21,14 +21,14 @@ import {
 } from './access-inspection.js'
 import { getPromotionState } from './work-store/promotions.js'
 
-export interface TeamAssemblyRoleRequest {
+interface TeamAssemblyRoleRequest {
   role: string
   purpose?: string
   requiredCapabilities?: string[]
   profilePreference?: string
 }
 
-export interface TeamAssemblyGrantRequest {
+interface TeamAssemblyGrantRequest {
   role: string
   skills?: string[]
   mcpServers?: string[]

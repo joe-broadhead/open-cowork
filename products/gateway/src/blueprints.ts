@@ -15,7 +15,7 @@ import { GATEWAY_AGENT_NAMES, GATEWAY_SKILL_NAMES } from './opencode-defaults.js
 import { listOpenCodeAgents, listOpenCodeMcp, listOpenCodeSkills, listOpenCodeTools } from './opencode-assets.js'
 import { isGatewayMcpToolName } from './gateway-tools.js'
 
-export interface BlueprintMetadata {
+interface BlueprintMetadata {
   title?: string
   description?: string
   owner?: string
@@ -24,14 +24,14 @@ export interface BlueprintMetadata {
   updatedAt?: string
 }
 
-export interface BlueprintRollbackMetadata {
+interface BlueprintRollbackMetadata {
   replaces?: string[]
   deprecates?: string[]
   rollbackTargets?: string[]
   notes?: string
 }
 
-export interface BlueprintOpenCodeRequirements {
+interface BlueprintOpenCodeRequirements {
   agents?: string[]
   skills?: string[]
   mcpServers?: string[]
@@ -52,12 +52,12 @@ export interface BlueprintDefinition {
   rollback?: BlueprintRollbackMetadata
 }
 
-export interface BlueprintExpectedState {
+interface BlueprintExpectedState {
   profiles?: Record<string, string>
   teams?: Record<string, string>
 }
 
-export type BlueprintSeverity = 'error' | 'warning'
+type BlueprintSeverity = 'error' | 'warning'
 
 export interface BlueprintValidationIssue {
   severity: BlueprintSeverity
@@ -66,10 +66,10 @@ export interface BlueprintValidationIssue {
   message: string
 }
 
-export type BlueprintDiffAction = 'create' | 'update' | 'noop' | 'missing'
-export type BlueprintDiffTarget = 'profile' | 'agentTeam' | 'opencodeAgent' | 'opencodeSkill' | 'opencodeMcp' | 'opencodeTool'
+type BlueprintDiffAction = 'create' | 'update' | 'noop' | 'missing'
+type BlueprintDiffTarget = 'profile' | 'agentTeam' | 'opencodeAgent' | 'opencodeSkill' | 'opencodeMcp' | 'opencodeTool'
 
-export interface BlueprintDiffEntry {
+interface BlueprintDiffEntry {
   target: BlueprintDiffTarget
   name: string
   action: BlueprintDiffAction
@@ -81,7 +81,7 @@ export interface BlueprintDiffEntry {
   note?: string
 }
 
-export interface BlueprintRollbackRecord {
+interface BlueprintRollbackRecord {
   target: 'profile' | 'agentTeam'
   name: string
   previousVersion?: string
@@ -125,7 +125,7 @@ export interface BlueprintApplyResult {
   receipt: BlueprintApplyReceipt
 }
 
-export interface BlueprintApplyReceipt {
+interface BlueprintApplyReceipt {
   id: string
   blueprint: {
     name: string

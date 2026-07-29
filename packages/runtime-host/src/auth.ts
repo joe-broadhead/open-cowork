@@ -15,6 +15,7 @@ import {
   type SecretStorageMode,
 } from './secure-storage-policy.js'
 import { escapeHtml } from './html-escape.js'
+import { runtimeState } from './runtime-state.js'
 
 
 type SecretStorageAdapter = {
@@ -465,12 +466,7 @@ export async function logoutFromGoogle() {
   // also clear it, but the caller may skip reboot (no active runtime)
   // or the reboot may fail partway — either way we don't want a dead
   // timer firing against a deleted tokens file.
-  try {
-    const { stopTokenRefreshTimer } = await import('./runtime.js')
-    stopTokenRefreshTimer()
-  } catch {
-    // runtime module may not be loaded in some test contexts.
-  }
+  runtimeState.stopTokenRefreshTimer()
   log('auth', 'Google OAuth session cleared')
 }
 

@@ -4,7 +4,7 @@ export type CloudCleanupHandle = {
   deactivate(): void
 }
 
-export class CloudAppShutdownError extends Error {
+class CloudAppShutdownError extends Error {
   readonly failureCount: number
 
   constructor(failureCount: number) {

@@ -5,7 +5,7 @@ function isValidAzureVaultName(value: string) {
   return AZURE_KEY_VAULT_NAME_PATTERN.test(value) && !value.includes('--')
 }
 
-export function isAzureKeyVaultSecretUrl(value: string) {
+function isAzureKeyVaultSecretUrl(value: string) {
   let url: URL
   try {
     url = new URL(value)

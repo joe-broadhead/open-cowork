@@ -1,5 +1,4 @@
 import {
-  DEFAULT_UI_ACCENT_PRESET_ID,
   UI_ACCENT_PRESETS,
   refineThemeTokens,
   UI_THEME_PRESETS,
@@ -13,9 +12,7 @@ import {
 } from '@open-cowork/shared'
 
 export {
-  DEFAULT_UI_ACCENT_PRESET_ID,
   UI_ACCENT_PRESETS,
-  UI_THEME_PRESETS,
   accentActionFillToken,
   isUiAccentPresetId,
 }
@@ -84,7 +81,7 @@ export function isUiTheme(value: string | null | undefined): value is UiTheme {
 // Mercury (the graphite default) leads; the rest are flat operator-console
 // palettes that share the same sharp structure and differ only in colour mood.
 // Order is intentional (calm/neutral first, bolder moods later).
-export const USER_FACING_THEME_ORDER: string[] = [
+const USER_FACING_THEME_ORDER: string[] = [
   'mercury',
   'studio',
   'nord',

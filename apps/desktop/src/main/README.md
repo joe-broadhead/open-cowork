@@ -22,9 +22,10 @@ desktop and cloud paths share one runtime substrate.
 ## Top-Level Prefixes
 
 Top-level files are intentional exceptions. `tests/desktop-main-source-map.test.ts`
-guards the current allowlist; adding a new top-level `.ts` file requires updating
-that test and this source map in the same change. Prefer a domain folder when a
-new behavior has more than one file or clear lifecycle ownership.
+enforces a non-growth budget on the flat layout without preserving a filename
+snapshot. Prefer a domain folder when new behavior has more than one file or
+clear lifecycle ownership; adding a top-level file requires removing or moving
+another one so the ratchet never increases.
 
 - `runtime-*` — OpenCode SDK/server composition and runtime-home isolation.
 - `session-*` — session registry, replay, view projection, and reconciliation.
@@ -50,5 +51,5 @@ These clusters are explicitly too large to keep growing at top level:
 - `chart-*` and `artifact-*` should move into an artifact surface folder if the
   chart pipeline gains more entry points.
 
-Until then, keep changes prefix-grouped and avoid adding new flat files without
-an intentional source-map exception.
+Until then, keep changes prefix-grouped and reduce the flat-file count whenever
+an owned domain seam becomes clear.

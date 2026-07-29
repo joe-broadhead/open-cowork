@@ -734,7 +734,3 @@ export function getVoiceHost(): VoiceHost {
   if (!sharedHost) sharedHost = new VoiceHost()
   return sharedHost
 }
-
-export function resetVoiceHostForTests(host?: VoiceHost | null) {
-  sharedHost = host ?? null
-}

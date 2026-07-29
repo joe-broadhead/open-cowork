@@ -30,8 +30,6 @@ export {
   buildCapabilityMapGroups,
   buildCapabilityMapSections,
   buildCapabilityToolSections,
-  capabilitySkillTier,
-  capabilityToolTier,
   linkedSkillsForTool,
   linkedToolsForSkill,
   mergedRuntimeToolset,
@@ -46,9 +44,6 @@ export {
 export type {
   CapabilityLinkedTool,
   CapabilityMapGroup,
-  CapabilityMapSection,
-  CapabilityMapTier,
-  CapabilityToolSection,
 } from './capability-map-model.ts'
 export { buildCapabilityRelationshipRows } from './capability-relationship-model.ts'
 export type { CapabilityRelationshipRow } from './capability-relationship-model.ts'

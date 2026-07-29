@@ -23,12 +23,10 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
     return true
   }
   if (!artifactId && req.method === 'POST') {
-    // Opt-in direct-to-store upload (begin phase). When the client asks (?transfer=presigned)
-    // AND the configured object store supports presigning, mint a time-limited PUT URL the
-    // client uploads bytes straight to object storage with, then calls the finalize endpoint
-    // below to record the row. When presigning is unavailable (non-S3 / no static creds) we
-    // reply transfer:'unsupported' so the client falls back to the buffered upload below — the
-    // default-safe path. The begin request carries only metadata (no bytes), so it stays small.
+    // Opt-in direct-to-store upload (begin phase). The service mints a URL only when the
+    // object-store adapter explicitly enforces the positive declared expectedSize and its own
+    // maximum. Otherwise reply transfer:'unsupported' so the client uses the bounded buffered
+    // path. The begin request carries only metadata (no bytes), so it stays small.
     if (context.url.searchParams.get('transfer') === 'presigned') {
       const beginBody = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const begun = await options.artifacts.presignSessionArtifactUpload(context.principal, sessionId, {

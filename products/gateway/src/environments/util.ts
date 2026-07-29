@@ -11,10 +11,10 @@ export const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000
 export const DEFAULT_TTL_MS = 60 * 60 * 1000
 export const DEFAULT_CONTAINER_WORKDIR = '/workspace'
 export const SECRET_NAME_PATTERN = /(?:TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|COOKIE|AUTH)/i
-export const SENSITIVE_TEXT_FIELD_PATTERN = /(?:ERROR|REASON|MESSAGE|OUTPUT|STDERR|STDOUT|LOG|EVIDENCE|PAYLOAD)/i
+const SENSITIVE_TEXT_FIELD_PATTERN = /(?:ERROR|REASON|MESSAGE|OUTPUT|STDERR|STDOUT|LOG|EVIDENCE|PAYLOAD)/i
 export const REMOTE_HOST_PROCESS_CONTROL_ENV_PATTERN = /^(?:PATH|HOME|SHELL|TMPDIR|TEMP|TMP|USER|LOGNAME|BASH_ENV|ENV|ZDOTDIR|IFS|CDPATH|SHELLOPTS|BASHOPTS|NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|ELECTRON_RUN_AS_NODE|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|PYTHONHOME|PYTHONPATH|PYTHONSTARTUP|PYTHONINSPECT|PYTHONWARNINGS|RUBYOPT|RUBYLIB|PERL5OPT|PERL5LIB|GCONV_PATH|GLIBC_TUNABLES|OPENSSL_CONF|SSL_CERT_FILE|SSL_CERT_DIR|CURL_CA_BUNDLE|REQUESTS_CA_BUNDLE|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|HOSTALIASES|RES_OPTIONS|LOCALDOMAIN|GIT_SSH|GIT_SSH_COMMAND|SSH_AUTH_SOCK|AWS_PROFILE|AWS_CONFIG_FILE|AWS_SHARED_CREDENTIALS_FILE|GOOGLE_APPLICATION_CREDENTIALS|CLOUDSDK_CONFIG|DOCKER_CONFIG|KUBECONFIG|XDG_.+|LD_.+|DYLD_.+|CRABBOX_.+)$/
 export const SECRET_VALUE_PLACEHOLDER = '<secret-from-environment>'
-export const MAX_ENVIRONMENT_IDEMPOTENCY_KEY_LENGTH = 512
+const MAX_ENVIRONMENT_IDEMPOTENCY_KEY_LENGTH = 512
 
 export function redactEnvironmentRecord<T>(value: T): T {
   return redact(value) as T
@@ -125,7 +125,7 @@ export function durationMs(value: unknown, fallback: number): number {
 }
 
 
-export function redact(value: unknown): unknown {
+function redact(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redact)
   if (!value || typeof value !== 'object') return value
   const out: Record<string, unknown> = {}
@@ -137,7 +137,7 @@ export function redact(value: unknown): unknown {
   return out
 }
 
-export function redactSensitiveValue(value: unknown): unknown {
+function redactSensitiveValue(value: unknown): unknown {
   if (typeof value === 'string') return redactEnvironmentSensitiveText(value)
   if (Array.isArray(value)) return value.map(redactSensitiveValue)
   if (!value || typeof value !== 'object') return value

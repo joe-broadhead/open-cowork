@@ -37,6 +37,8 @@ function cursorNotFound() {
 
 test('session stream manager renders session events once and persists cursor after provider send', async () => {
   const provider = new FakeChannelProvider()
+  provider.capabilities.maxTextLength = 100
+  const freshResponse = 'x'.repeat(205)
   const subscriptions: Array<{
     sessionId: string
     afterSequence: number | undefined
@@ -65,7 +67,8 @@ test('session stream manager renders session events once and persists cursor aft
       }
     },
   } as CloudGateway
-  const manager = createGatewaySessionStreamManager(cloud, createGatewayMetrics())
+  const metrics = createGatewayMetrics()
+  const manager = createGatewaySessionStreamManager(cloud, metrics)
 
   manager.ensure({
     provider,
@@ -122,17 +125,22 @@ test('session stream manager renders session events once and persists cursor aft
     eventId: 'event-5',
     sequence: 5,
     type: 'assistant.message',
-    payload: { content: 'fresh response' },
+    payload: { content: freshResponse },
   })
   await waitFor(() => cursorUpdates.length === 1)
 
-  assert.deepEqual(provider.sent.map((entry) => entry.text), ['fresh response'])
+  assert.equal(provider.sent.length, 3)
+  assert.equal(provider.sent.map((entry) => entry.text).join(''), freshResponse)
   assert.deepEqual(cursorUpdates, [{
     bindingId: 'binding-1',
     lastEventSequence: 5,
     lastWorkspaceSequence: 8,
-    lastChatMessageId: '1',
+    lastChatMessageId: '3',
   }])
+  const telemetry = metrics.channelTelemetry.renderPrometheus()
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(telemetry, /open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="success",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
 
   subscriptions[0].onEvent({
     eventId: 'event-5-again',
@@ -141,7 +149,7 @@ test('session stream manager renders session events once and persists cursor aft
     payload: { content: 'duplicate response' },
   })
   await new Promise((resolve) => setTimeout(resolve, 10))
-  assert.deepEqual(provider.sent.map((entry) => entry.text), ['fresh response'])
+  assert.equal(provider.sent.length, 3)
   manager.closeAll()
 })
 
@@ -491,6 +499,9 @@ test('session stream manager retries transient poison events before skipping the
   assert.equal(metrics.sessionRenderRetries, 1)
   assert.equal(metrics.sessionRenderDeadLetters, 1)
   assert.equal(metrics.droppedSessionEvents, 1)
+  const telemetry = metrics.channelTelemetry.renderPrometheus()
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="error",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
   assert.deepEqual(cursorUpdates, [{
     bindingId: 'binding-1',
     lastEventSequence: 1,

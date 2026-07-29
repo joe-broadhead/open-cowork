@@ -34,7 +34,7 @@
     "build:cli": "pnpm build:web && node packages/cli/scripts/build.mjs",
     "build:web": "node --no-warnings --import tsx packages/web/scripts/build.mjs",
     "check:bundle": "node --no-warnings --import tsx packages/web/scripts/check-bundle.mjs",
-    "check:dead-code": "knip --directory ../.. --config knip.jsonc --workspace products/wiki --workspace 'products/wiki/packages/*' --production --files --exports",
+    "check:dead-code": "pnpm --dir ../.. lint:dead-code",
     "knip": "pnpm check:dead-code",
     "check:deploy-docs": "node --no-warnings scripts/openwiki-validate-deploy-docs.mjs",
     "check:modules": "node --no-warnings scripts/openwiki-module-size-report.mjs --check",

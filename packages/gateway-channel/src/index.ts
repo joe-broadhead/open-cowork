@@ -6,6 +6,7 @@ export * from "./guards.js";
 export * from "./provider.js";
 export * from "./retry.js";
 export * from "./scope.js";
+export * from "./stack-telemetry.js";
 export * from "./text.js";
 export * from "./tokens.js";
 export { GatewayWebhookRateLimiter, WebhookRateLimiter } from './webhook-rate-limiter.js'

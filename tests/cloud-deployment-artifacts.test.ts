@@ -1254,6 +1254,7 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   const catalog = readRepoFile('deploy/observability/metrics-catalog.json')
   const alerts = readRepoFile('deploy/observability/prometheus-alerts.yaml')
   const dashboard = readRepoFile('deploy/observability/grafana-open-cowork-overview.json')
+  const channelTelemetry = readRepoFile('docs/channel-stack-telemetry.md')
   const backup = readRepoFile('docs/runbooks/backup-restore.md')
   const drill = readRepoFile('docs/runbooks/restore-drill-report.md')
 
@@ -1263,6 +1264,7 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   assert.match(validator, /open_cowork_gateway_delivery_dead_letters_total/)
   assert.doesNotMatch(dashboard, /url_path/)
   assert.match(catalog, /Raw routes are never metric labels/)
+  assert.match(catalog, /Comparable outbound egress-request latency/)
 
   for (const metric of [
     'open_cowork_cloud_http_requests_total',
@@ -1303,10 +1305,70 @@ test('operations observability assets define metrics, dashboards, alerts, and re
     'open_cowork_gateway_delivery_retries_total',
     'open_cowork_gateway_delivery_dead_letters_total',
     'open_cowork_gateway_session_streams',
+    'open_cowork_channel_stack_info',
+    'open_cowork_channel_bindings',
+    'open_cowork_channel_messages_total',
+    'open_cowork_channel_operation_latency_ms',
   ]) {
     assert.match(catalog, new RegExp(metric))
     assert.match(alerts + dashboard, new RegExp(metric))
   }
+  const parsedDashboard = JSON.parse(dashboard) as {
+    panels?: Array<{
+      title?: string
+      targets?: Array<{ expr?: string }>
+    }>
+  }
+  const panelExpressions = (title: string) =>
+    parsedDashboard.panels
+      ?.find((panel) => panel.title === title)
+      ?.targets
+      ?.flatMap((target) => typeof target.expr === 'string' ? [target.expr] : []) || []
+
+  const adoptionExpressions = panelExpressions('Channel stack adoption and inventory')
+  for (const surface of [
+    'cloud-channel-gateway',
+    'standalone-gateway',
+    'durable-gateway',
+  ]) {
+    assert.ok(
+      adoptionExpressions.includes(`absent(open_cowork_channel_stack_info{surface="${surface}"})`),
+      `dashboard must distinguish missing telemetry for ${surface}`,
+    )
+  }
+
+  const outcomeExpressions = panelExpressions('Channel stack success, retry, and error rates')
+  for (const outcome of ['success', 'retry', 'error']) {
+    const ratio = outcomeExpressions.find((expression) =>
+      expression.includes(`{outcome="${outcome}"}`))
+    assert.ok(ratio, `dashboard must define the ${outcome} ratio`)
+    assert.match(ratio, /\[\$__range\]/)
+    assert.match(ratio, /provider_kind/)
+    assert.match(ratio, /clamp_min\(/)
+    assert.match(ratio, /outcome=~"success\|retry\|error"/)
+  }
+  assert.ok(outcomeExpressions.some((expression) =>
+    expression.includes('by (surface, stack, provider_kind, direction, outcome)')
+    && expression.includes('increase(')))
+
+  const latencyExpressions = panelExpressions('Channel stack outbound egress p50 and p95 latency')
+  for (const quantile of ['0.50', '0.95']) {
+    const expression = latencyExpressions.find((candidate) =>
+      candidate.includes(`histogram_quantile(${quantile}`))
+    assert.ok(expression, `dashboard must define p${quantile.slice(2)} latency`)
+    assert.match(expression, /direction="outbound"/)
+    assert.match(expression, /outcome="success"/)
+    assert.match(expression, /provider_kind/)
+    assert.match(expression, /increase\(/)
+    assert.match(expression, /\[\$__range\]/)
+  }
+  assert.match(channelTelemetry, /process-local and reset on restart/)
+  assert.match(channelTelemetry, /retention are controlled by the operator/)
+  assert.match(channelTelemetry, /An absent `stack_info` series/)
+  assert.match(channelTelemetry, /never records prompts, message bodies/)
+  assert.match(channelTelemetry, /outbound egress-request latency/)
+  assert.match(channelTelemetry, /Every egress request emits exactly one `attempt`/)
+  assert.match(channelTelemetry, /Inbound latency is deliberately absent/)
 
   for (const alert of [
     'OpenCoworkCloudHighHttpErrorRate',

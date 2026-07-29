@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { redactEnvironmentNetworkTargets, redactEnvironmentSensitiveText, type EnvironmentRunRecord, type EnvironmentSpec } from './environments.js'
 import { summarizeRuntimeCapabilityGrant, type RuntimeCapabilityGrant, type RuntimeCapabilityGrantSummary } from './runtime-capability-grants.js'
 
-export interface RuntimeIsolationReviewGate {
+interface RuntimeIsolationReviewGate {
   active: boolean
   deniedTools: string[]
   allowedBashCommandCount: number
@@ -13,7 +13,7 @@ export interface RuntimeIsolationReviewGate {
   changedPermissions: string[]
 }
 
-export interface RuntimeIsolationProfileAccess {
+interface RuntimeIsolationProfileAccess {
   tools: string[]
   mcpServers: string[]
   skills: string[]
@@ -109,8 +109,8 @@ export interface RuntimeIsolationValidation {
   warnings: string[]
 }
 
-export type RuntimeLifecycleDiagnosticSeverity = 'info' | 'warning' | 'critical'
-export type RuntimeLifecycleDiagnosticCode =
+type RuntimeLifecycleDiagnosticSeverity = 'info' | 'warning' | 'critical'
+type RuntimeLifecycleDiagnosticCode =
   | 'preflight_blocked'
   | 'stale_active_environment'
   | 'retained_resource'
@@ -395,7 +395,7 @@ export function runtimeIsolationPromptContext(profile: RuntimeIsolationProfile):
   return lines.filter(Boolean).join('\n')
 }
 
-export function redactRuntimePath(value: string | undefined): string | undefined {
+function redactRuntimePath(value: string | undefined): string | undefined {
   if (!value) return value
   if (value.startsWith('~') || value.startsWith('<tmp>') || value.startsWith('<path:')) return value
   if (!path.isAbsolute(value)) return value

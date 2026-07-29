@@ -85,9 +85,7 @@ test('small model changes are runtime-sensitive settings updates', () => {
   assert.equal(hasRuntimeSensitiveSettingsUpdate({
     runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
   }), true)
-  assert.equal(hasRuntimeSensitiveSettingsUpdate({ requireApprovalBeforeSending: false }), false)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ notificationVoiceReplies: false }), false)
-  assert.equal(hasRuntimeSensitiveSettingsUpdate({ privacyKeepConversationHistory: false }), false)
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ workflowDesktopNotifications: false }), false)
 })
 

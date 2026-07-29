@@ -101,7 +101,7 @@ function metadata(record: DesktopPairingCredentialRecord): DesktopPairingCredent
   }
 }
 
-export class FileDesktopPairingCredentialStore implements DesktopPairingCredentialStore {
+class FileDesktopPairingCredentialStore implements DesktopPairingCredentialStore {
   private readonly path: string
   private readonly secretStorage: SecretStorageAdapter | null
   // Cache of the decrypted+normalized records, keyed on the file's mtime.

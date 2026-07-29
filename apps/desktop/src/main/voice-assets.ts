@@ -12,8 +12,6 @@ import { join } from 'node:path'
 import {
   AURUM_DEFAULT_MODEL,
   AURUM_DEFAULT_MODEL_FILE,
-  isAurumModelAvailable,
-  isAurumModelCached,
   resolveAurumBinPath,
   resolveDefaultAurumCacheDir,
 } from './voice-stt.ts'
@@ -21,7 +19,7 @@ import { createDefaultVoiceTts } from './voice-tts.ts'
 
 export type VoiceAssetIntegrity = 'ok' | 'missing' | 'unverified' | 'mismatch' | 'too_small'
 
-export type VoiceSttAssetStatus = {
+type VoiceSttAssetStatus = {
   model: string
   modelFile: string
   ready: boolean
@@ -37,7 +35,7 @@ export type VoiceSttAssetStatus = {
   detail: string | null
 }
 
-export type VoiceTtsAssetStatus = {
+type VoiceTtsAssetStatus = {
   ready: boolean
   backend: 'system_os' | 'fake' | 'unavailable'
   detail: string | null
@@ -57,7 +55,7 @@ export type VoiceAssetEnsureResult = {
 }
 
 /** ggml tiny-q5_1 is ~30MB; reject obvious empty stubs. */
-export const AURUM_MIN_MODEL_BYTES: Record<string, number> = {
+const AURUM_MIN_MODEL_BYTES: Record<string, number> = {
   'tiny-q5_1': 10_000_000,
   tiny: 10_000_000,
   'base-q5_1': 20_000_000,
@@ -71,7 +69,7 @@ const MODEL_FILES: Record<string, string> = {
   base: 'ggml-base.bin',
 }
 
-export function aurumModelFilename(model: string): string {
+function aurumModelFilename(model: string): string {
   return MODEL_FILES[model] || `ggml-${model}.bin`
 }
 
@@ -81,7 +79,7 @@ export function isAurumDownloadAllowed(
   return env.OPEN_COWORK_AURUM_ALLOW_DOWNLOAD === '1'
 }
 
-export function listSystemAurumCacheDirs(
+function listSystemAurumCacheDirs(
   platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
@@ -99,7 +97,7 @@ export function listSystemAurumCacheDirs(
 }
 
 /** Candidate absolute paths for a model file (OC cache + system Aurum caches). */
-export function resolveAurumModelCandidates(
+function resolveAurumModelCandidates(
   model: string,
   cacheDir: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -308,10 +306,4 @@ export function voiceAssetStatusForLog(status: VoiceAssetStatus): Record<string,
     cacheDir: status.stt.cacheDir,
     hasModelPath: Boolean(status.stt.modelPath),
   }
-}
-
-/** Helper used by tests / host: is the default STT model available offline? */
-export function isDefaultSttOfflineReady(cacheDir = resolveDefaultAurumCacheDir()): boolean {
-  return isAurumModelAvailable(AURUM_DEFAULT_MODEL, cacheDir)
-    || isAurumModelCached(cacheDir, AURUM_DEFAULT_MODEL)
 }

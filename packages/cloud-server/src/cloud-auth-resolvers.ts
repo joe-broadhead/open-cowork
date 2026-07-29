@@ -8,7 +8,7 @@ import {
   CloudHttpError,
   type CloudAuthResolver,
   type CloudDesktopAuthConfig,
-} from './http-server.ts'
+} from './http-contracts.ts'
 import {
   createOidcCloudAuthResolver,
   type OidcCloudAuthResolverOptions,

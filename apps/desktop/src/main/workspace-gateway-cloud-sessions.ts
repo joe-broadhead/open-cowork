@@ -12,12 +12,12 @@ import type { CloudPromptInput, CloudWorkspaceSessionAdapter } from './cloud-wor
 
 type WorkspaceEventLike = { sender?: { id?: number } } | null | undefined
 
-export type ResolveCloudAdapter = (
+type ResolveCloudAdapter = (
   event: WorkspaceEventLike,
   workspaceIdInput?: string | null,
 ) => Promise<CloudWorkspaceSessionAdapter>
 
-export type ResolveCloudWorkspaceAndAdapter = (
+type ResolveCloudWorkspaceAndAdapter = (
   event: WorkspaceEventLike,
   workspaceIdInput?: string | null,
 ) => Promise<{ workspaceId: string; adapter: CloudWorkspaceSessionAdapter }>

@@ -24,7 +24,7 @@ import { ensureLocalHttpAdminTokenFile } from './security.js'
 
 // -- Preflight -------------------------------------------------------------
 
-export interface PreflightCheck {
+interface PreflightCheck {
   id: string
   ok: boolean
   title: string
@@ -39,13 +39,13 @@ export interface PreflightReport {
 }
 
 /** Result of probing the configured OpenCode server. Injectable for tests. */
-export interface OpencodeProbeResult {
+interface OpencodeProbeResult {
   ok: boolean
   version?: string
   detail?: string
 }
 
-export type OpencodeProbe = (config: GatewayConfig) => Promise<OpencodeProbeResult>
+type OpencodeProbe = (config: GatewayConfig) => Promise<OpencodeProbeResult>
 
 export interface QuickstartPreflightOptions {
   config?: GatewayConfig
@@ -206,7 +206,7 @@ const SILENT_NARRATOR: QuickstartNarrator = { step() {}, detail() {}, success() 
 
 // -- Gateway port ----------------------------------------------------------
 
-export interface QuickstartDispatchResult {
+interface QuickstartDispatchResult {
   schedulerPaused?: boolean
   dispatchedTotal?: number
   requestedDispatched?: boolean
@@ -214,7 +214,7 @@ export interface QuickstartDispatchResult {
   counts?: Record<string, number>
 }
 
-export interface QuickstartRunView {
+interface QuickstartRunView {
   id: string
   status: string
   stage?: string
@@ -273,7 +273,7 @@ export interface QuickstartOptions {
   sleep?: (ms: number) => Promise<void>
 }
 
-export type QuickstartOutcome = 'completed' | 'failed' | 'timeout' | 'preflight_failed' | 'daemon_not_running' | 'scheduler_paused' | 'write_forbidden' | 'dispatch_failed'
+type QuickstartOutcome = 'completed' | 'failed' | 'timeout' | 'preflight_failed' | 'daemon_not_running' | 'scheduler_paused' | 'write_forbidden' | 'dispatch_failed'
 
 export interface QuickstartResult {
   ok: boolean

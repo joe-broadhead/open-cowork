@@ -127,6 +127,9 @@ export function createDiscordMonorepoChannelAdapter(): DiscordBridgeChannel {
       provider = null
       if (current) await current.stop()
     },
+    isActive() {
+      return provider !== null && (provider.health?.().ok ?? true)
+    },
     async sendMessage(chatId, text, options) {
       if (!provider) throw new Error('Discord monorepo bridge is not started')
       const limit = Math.max(1, Math.min(provider.capabilities.maxTextLength || 2000, 2000))
@@ -191,4 +194,3 @@ export function createDiscordMonorepoChannelAdapter(): DiscordBridgeChannel {
   }
   return adapter
 }
-

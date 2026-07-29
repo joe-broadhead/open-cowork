@@ -1,8 +1,8 @@
 import { listHumanGates, listRoadmapCompletionProposals, listWorkEvents, loadWorkState, type RoadmapSupervisorRecord, type WorkEventRecord, type WorkState } from './work-store.js'
 
-export type SupervisorHealth = 'ok' | 'due' | 'leased' | 'stale' | 'paused' | 'blocked' | 'completed'
+type SupervisorHealth = 'ok' | 'due' | 'leased' | 'stale' | 'paused' | 'blocked' | 'completed'
 
-export interface SupervisorObservabilityRow {
+interface SupervisorObservabilityRow {
   supervisorId: string
   roadmapId: string
   roadmapTitle: string

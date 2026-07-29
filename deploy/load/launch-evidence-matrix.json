@@ -155,7 +155,7 @@
         "docs/runbooks/managed-byok-saas-boundary.md",
         "deploy/private-beta/managed-byok-readiness-contract.template.json",
         "tests/byok-boundary-regression.test.ts",
-        "tests/cloud-http-server.test.ts",
+        "tests/cloud-http-browser-edge-contracts.test.ts",
         "tests/cloud-modularity-boundaries.test.ts",
         "tests/opencode-sdk-boundary.test.ts"
       ],

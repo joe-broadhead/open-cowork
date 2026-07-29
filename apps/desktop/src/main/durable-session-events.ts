@@ -26,7 +26,7 @@ import { log } from '@open-cowork/shared/node'
 // JOE-839: durable tails are long-lived SSE streams. Cap hubs (one per project
 // directory client) and sessions per hub so a long-running desktop cannot pin
 // unbounded OpenCode event streams.
-export const MAX_DURABLE_DIRECTORY_HUBS = 64
+const MAX_DURABLE_DIRECTORY_HUBS = 64
 export const MAX_DURABLE_SESSIONS_PER_DIRECTORY = 256
 
 export type DurableRawEventHandler = (raw: unknown) => void | Promise<void>

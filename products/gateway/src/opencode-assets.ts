@@ -187,7 +187,7 @@ export function deleteOpenCodeTool(name: string, configDir?: string): boolean {
   return deleted
 }
 
-export function resolveOpenCodeConfigDir(configDir?: string): string {
+function resolveOpenCodeConfigDir(configDir?: string): string {
   const configured = configDir || process.env['OPENCODE_CONFIG_DIR'] || getConfig().opencodeConfigDir
   const resolved = path.resolve(expandHome(configured || path.join(os.homedir(), '.config', 'opencode')))
   assertAllowedConfigDir(resolved)

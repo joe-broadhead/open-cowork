@@ -120,6 +120,16 @@ function providerEventRecord(input: {
   } as never
 }
 
+function inboundTelemetryCount(
+  telemetry: string,
+  outcome: 'attempt' | 'success' | 'retry' | 'error',
+): number {
+  const match = telemetry.match(new RegExp(
+    `open_cowork_channel_messages_total\\{direction="inbound",outcome="${outcome}",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\\} (\\d+)`,
+  ))
+  return Number(match?.[1] ?? 0)
+}
+
 test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake webhook', async () => {
   const prompted: string[] = []
   const cloud: CloudGateway = {
@@ -405,8 +415,75 @@ test('gateway runtime claims provider events before prompting and skips duplicat
     ])
     assert.equal(runtime.metrics.incomingMessages, 2)
     assert.equal(runtime.metrics.promptedMessages, 1)
+    const telemetry = runtime.metrics.channelTelemetry.renderPrometheus()
+    assert.match(telemetry, /open_cowork_channel_bindings\{provider_kind="other",stack="monorepo-provider",status="active",surface="cloud-channel-gateway"\} 1/)
+    assert.match(telemetry, /open_cowork_channel_messages_total\{direction="inbound",outcome="attempt",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
+    assert.match(telemetry, /open_cowork_channel_messages_total\{direction="inbound",outcome="success",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
   } finally {
     await runtime.stop()
+  }
+})
+
+test('gateway runtime applies the common bounded classifier to inbound failures', async () => {
+  const cases = [
+    { name: '429', error: Object.assign(new Error('limited'), { status: 429 }), outcome: 'retry' },
+    { name: '5xx', error: Object.assign(new Error('unavailable'), { statusCode: 503 }), outcome: 'retry' },
+    { name: 'network', error: Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }), outcome: 'retry' },
+    { name: '4xx', error: Object.assign(new Error('bad request'), { status: 400 }), outcome: 'error' },
+  ] as const
+
+  for (const scenario of cases) {
+    const completed: Array<{ status: string, retryable?: boolean }> = []
+    const cloud = {
+      async claimProviderEvent(input: { providerEventId: string, providerInstanceId: string, eventType: string, claimedBy: string }) {
+        return { event: providerEventRecord(input), claimed: true, duplicate: false }
+      },
+      async resolveIdentity() { throw scenario.error },
+      async completeProviderEvent(_eventId: string, input: { status: string, retryable?: boolean, claimedBy: string }) {
+        completed.push({ status: input.status, retryable: input.retryable })
+        return providerEventRecord({
+          provider: 'fake',
+          providerInstanceId: 'fake',
+          providerEventId: 'e',
+          eventType: 'message',
+          claimedBy: input.claimedBy,
+          status: input.status,
+        })
+      },
+      subscribeDeliveries() { return { close() {} } },
+    } as unknown as CloudGateway
+    const config = resolveGatewayConfig({
+      providers: [{ id: 'fake', kind: 'fake', channelBindingId: 'fake-binding' }],
+    }, {
+      OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    })
+    const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+
+    await runtime.start()
+    try {
+      await assert.rejects(() => runtime.providers.emitFake('fake', {
+        id: `provider-event-${scenario.name}`,
+        text: 'classify me',
+        chatId: 'chat-1',
+        userId: 'user-1',
+      }))
+
+      assert.deepEqual(
+        completed,
+        [{ status: 'failed', retryable: false }],
+        scenario.name,
+      )
+      const telemetry = runtime.metrics.channelTelemetry.renderPrometheus()
+      assert.equal(inboundTelemetryCount(telemetry, 'attempt'), 1, scenario.name)
+      assert.equal(inboundTelemetryCount(telemetry, scenario.outcome), 1, scenario.name)
+      assert.equal(
+        inboundTelemetryCount(telemetry, scenario.outcome === 'retry' ? 'error' : 'retry'),
+        0,
+        scenario.name,
+      )
+    } finally {
+      await runtime.stop()
+    }
   }
 })
 
@@ -676,6 +753,12 @@ test('gateway runtime marks claimed provider events failed when prompting fails'
     }])
     assert.equal(runtime.metrics.promptedMessages, 0)
     assert.equal(runtime.metrics.errors, 1)
+    // Scheduling remains Cloud-policy-specific (retryable: false above), while
+    // the cross-stack metric uses the common bounded classifier.
+    assert.match(
+      runtime.metrics.channelTelemetry.renderPrometheus(),
+      /open_cowork_channel_messages_total\{direction="inbound",outcome="retry",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+    )
   } finally {
     await runtime.stop()
   }
@@ -1916,6 +1999,116 @@ test('gateway runtime propagates stable Cloud delivery ids to provider sends', a
     ])
     assert.equal(provider.sent.slice(1).every((entry) => (entry.text?.length ?? 0) <= 100), true)
     assert.equal(acks[1]?.input.status, 'sent')
+  } finally {
+    await runtime.stop()
+  }
+})
+
+test('gateway legacy delivery latency completes only after a successful Cloud acknowledgement', async () => {
+  let onDelivery: ((delivery: unknown) => void) | null = null
+  const acks: Array<{ deliveryId: string, status: unknown }> = []
+  let releaseSuccessfulAck: (() => void) | null = null
+  const cloud = {
+    subscribeDeliveries(input: { onDelivery: (delivery: unknown) => void }) {
+      onDelivery = input.onDelivery
+      return { close() {} }
+    },
+    async ackDelivery(deliveryId: string, input: Record<string, unknown>) {
+      acks.push({ deliveryId, status: input.status })
+      if (deliveryId === 'delivery-success' && input.status === 'sent') {
+        await new Promise<void>((resolve) => {
+          releaseSuccessfulAck = resolve
+        })
+      }
+      if (deliveryId === 'delivery-ack-failure' && input.status === 'sent') {
+        throw new Error('Cloud delivery acknowledgement unavailable')
+      }
+      return { deliveryId, ...input } as never
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud)
+
+  await runtime.start()
+  try {
+    onDelivery?.(deliveryRecord({ deliveryId: 'delivery-success' }))
+    await waitFor(() => releaseSuccessfulAck !== null)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    assert.equal(runtime.metrics.deliveryLatency.count, 0)
+    assert.equal(runtime.metrics.providerMetrics.fake?.deliveryLatency.count, 0)
+    assert.match(
+      runtime.metrics.channelTelemetry.renderPrometheus(),
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+    )
+
+    releaseSuccessfulAck?.()
+    await waitFor(() => runtime.metrics.deliveriesSent === 1)
+    assert.equal(runtime.metrics.deliveryLatency.count, 1)
+    assert.equal(runtime.metrics.providerMetrics.fake?.deliveryLatency.count, 1)
+    assert.ok(runtime.metrics.deliveryLatency.sum >= 20)
+
+    onDelivery?.(deliveryRecord({ deliveryId: 'delivery-ack-failure' }))
+    await waitFor(() => acks.some((ack) => ack.deliveryId === 'delivery-ack-failure' && ack.status === 'dead'))
+    assert.equal(runtime.metrics.deliveryLatency.count, 1)
+    assert.equal(runtime.metrics.providerMetrics.fake?.deliveryLatency.count, 1)
+    assert.match(
+      runtime.metrics.channelTelemetry.renderPrometheus(),
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/,
+    )
+  } finally {
+    releaseSuccessfulAck?.()
+    await runtime.stop()
+  }
+})
+
+test('gateway runtime closes missing-provider telemetry before a dead-letter ack failure', async () => {
+  let onDelivery: ((delivery: unknown) => void) | null = null
+  const cloud = {
+    subscribeDeliveries(input: { onDelivery: (delivery: unknown) => void }) {
+      onDelivery = input.onDelivery
+      return { close() {} }
+    },
+    async ackDelivery() {
+      throw new Error('Cloud delivery acknowledgement unavailable')
+    },
+  } as unknown as CloudGateway
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud)
+
+  await runtime.start()
+  try {
+    onDelivery?.(deliveryRecord({
+      deliveryId: 'missing-provider-delivery',
+      channelBindingId: 'missing-binding',
+    }))
+    await waitFor(() => runtime.metrics.deliveryDeadLetters === 1)
+
+    const telemetry = runtime.metrics.channelTelemetry.renderPrometheus()
+    assert.match(
+      telemetry,
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+    )
+    assert.match(
+      telemetry,
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="error",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+    )
   } finally {
     await runtime.stop()
   }

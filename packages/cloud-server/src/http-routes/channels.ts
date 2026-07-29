@@ -3,7 +3,7 @@ import { sanitizeLogMessage } from '@open-cowork/shared'
 import { handleChannelDirectoryRoute } from './channel-directory.ts'
 import { handleChannelDeliveriesSse, type ChannelDeliverySseTools } from './channel-delivery-sse.ts'
 import type { ChannelProviderId, SessionCommandRecord } from '../control-plane-store.ts'
-import type { CloudHttpServerOptions } from '../http-server.ts'
+import type { CloudHttpServerOptions } from '../http-contracts.ts'
 import { publicChannelIdentity } from '../public-channel-records.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 

@@ -11,7 +11,7 @@ export type TaskCounts = {
   archived?: number
 }
 
-export const ACTIVE_TASK_STATUSES = ['pending', 'running', 'blocked', 'paused'] as const satisfies readonly WorkStatus[]
+const ACTIVE_TASK_STATUSES = ['pending', 'running', 'blocked', 'paused'] as const satisfies readonly WorkStatus[]
 
 export function isActiveTaskStatus(status: unknown): boolean {
   return (ACTIVE_TASK_STATUSES as readonly string[]).includes(String(status || ''))

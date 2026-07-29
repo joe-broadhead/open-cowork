@@ -472,7 +472,7 @@ export function boundedOperationalNumber(value: number, min: number, max: number
   return Math.trunc(value);
 }
 
-export function numberFromEnv(name: string): number | undefined {
+function numberFromEnv(name: string): number | undefined {
   const value = process.env[name];
   if (value === undefined || value.trim() === "") {
     return undefined;
@@ -480,7 +480,7 @@ export function numberFromEnv(name: string): number | undefined {
   return Number(value);
 }
 
-export function booleanFromEnv(name: string): boolean | undefined {
+function booleanFromEnv(name: string): boolean | undefined {
   const value = process.env[name]?.trim().toLowerCase();
   if (value === undefined || value === "") {
     return undefined;

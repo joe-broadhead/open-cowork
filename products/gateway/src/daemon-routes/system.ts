@@ -26,6 +26,7 @@ import { buildEvidenceBundle } from '../evidence-export.js'
 import { buildIncidentBundle } from '../incident-bundle.js'
 import { buildObservabilitySnapshot, type ObservabilitySnapshot } from '../observability-snapshot.js'
 import { getRuntimeMetricsSnapshot, renderPrometheusMetrics } from '../runtime-metrics.js'
+import { syncChannelBindingTelemetry } from '../channels/runtime-composition.js'
 import { applyOperatorActiveRunControl, applyOperatorSafetyAction, buildOperatorSafetyReport } from '../operator-safety.js'
 import { buildLiveStateHygieneReport } from '../live-state-hygiene.js'
 import { getCurrentDaemonLeadershipStatus, recoverCurrentDaemonLeadership, redactDaemonLeadershipSnapshot } from '../daemon-leadership.js'
@@ -108,7 +109,7 @@ export const SYSTEM_API_ROUTE_CONTRACTS = defineApiRouteContracts([
 ] as const)
 
 export function systemRoutes(): RouteHandler[] {
-  return [async ({ req, url, client }) => {
+  return [async ({ req, url, client, channels }) => {
     if (req.method === 'GET' && url.pathname === '/health') {
       return json({ status: 'ok', uptime: process.uptime() })
     }
@@ -310,6 +311,7 @@ export function systemRoutes(): RouteHandler[] {
       const leadership = getCurrentDaemonLeadershipStatus()
       const queueDepth = snapshot.state.tasks.filter(task => task.status === 'pending' || task.status === 'running' || task.status === 'blocked').length
       const activeRuns = snapshot.state.runs.filter(run => run.status === 'running').length
+      syncChannelBindingTelemetry(channels)
       const body = renderPrometheusMetrics({
         queueDepth,
         activeRuns,
@@ -528,7 +530,7 @@ function buildReadOnlyAlertMetrics(
   }
 }
 
-export async function buildDoctorReport(client: any): Promise<Record<string, unknown>> {
+async function buildDoctorReport(client: any): Promise<Record<string, unknown>> {
   const cfg = getConfig()
   const snapshot = getWorkQueueSnapshot()
   let opencode: Record<string, unknown> = { ok: false }
@@ -587,7 +589,7 @@ function fileStatus(file: string): Record<string, unknown> {
   }
 }
 
-export function redactGatewayConfig(config: any): any {
+function redactGatewayConfig(config: any): any {
   return redactSensitiveObject(JSON.parse(JSON.stringify(config)), config)
 }
 

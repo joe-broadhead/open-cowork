@@ -1,12 +1,12 @@
 import type { GatewayWorkspaceConnectionRecord } from './gateway-workspace-registry.ts'
 
-export type GatewayWorkspaceHealth = {
+type GatewayWorkspaceHealth = {
   ok: boolean
   productMode?: string | null
   error?: string | null
 }
 
-export type GatewayWorkspaceReadiness = {
+type GatewayWorkspaceReadiness = {
   ok: boolean
   error?: string | null
 }

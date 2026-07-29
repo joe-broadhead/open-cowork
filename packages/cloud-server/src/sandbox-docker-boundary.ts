@@ -125,7 +125,7 @@ export function validSandboxControlBridgeUrl(value: string) {
   }
 }
 
-export async function inspectRestrictedNetwork(
+async function inspectRestrictedNetwork(
   options: CloudSandboxIsolationProviderOptions,
 ) {
   const network = options.policy.network

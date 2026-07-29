@@ -1,12 +1,12 @@
 import type { WorkEventRecord } from './work-store.js'
 
-export const GATEWAY_EVENT_TAXONOMY_VERSION = 1
+const GATEWAY_EVENT_TAXONOMY_VERSION = 1
 
-export type GatewayEventVisibility = 'operator' | 'support' | 'evidence' | 'internal'
-export type GatewayEventAudience = 'dashboard' | 'channel' | 'support_bundle' | 'evidence_ledger' | 'supervisor' | 'scheduler'
-export type GatewayEventSourceKind = 'work_store' | 'scheduler' | 'channel' | 'supervisor' | 'human_loop' | 'evidence' | 'security' | 'system'
+type GatewayEventVisibility = 'operator' | 'support' | 'evidence' | 'internal'
+type GatewayEventAudience = 'dashboard' | 'channel' | 'support_bundle' | 'evidence_ledger' | 'supervisor' | 'scheduler'
+type GatewayEventSourceKind = 'work_store' | 'scheduler' | 'channel' | 'supervisor' | 'human_loop' | 'evidence' | 'security' | 'system'
 
-export type GatewayEventName =
+type GatewayEventName =
   | 'alert.lifecycle.detected'
   | 'alert.lifecycle.resolved'
   | 'attention.human_decision.recorded'
@@ -105,7 +105,7 @@ export type GatewayEventName =
   | 'workflow.demo.created'
   | 'workflow.project_wizard.created'
 
-export interface GatewayEventCorrelation {
+interface GatewayEventCorrelation {
   eventId: number
   legacyType: string
   subjectId?: string
@@ -173,7 +173,7 @@ interface GatewayEventDescriptor {
   audience: GatewayEventAudience[]
 }
 
-export const LEGACY_WORK_EVENT_TO_GATEWAY_EVENT: Record<string, GatewayEventDescriptor> = {
+const LEGACY_WORK_EVENT_TO_GATEWAY_EVENT: Record<string, GatewayEventDescriptor> = {
   'alert.detected': descriptor('alert.lifecycle.detected', 'system', 'support', ['dashboard', 'support_bundle', 'supervisor']),
   'alert.resolved': descriptor('alert.lifecycle.resolved', 'system', 'support', ['dashboard', 'support_bundle']),
   'audit.human_decision': descriptor('attention.human_decision.recorded', 'human_loop', 'support', ['dashboard', 'support_bundle', 'evidence_ledger']),

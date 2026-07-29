@@ -43,7 +43,7 @@ function nullableList(value: unknown): string[] | null {
   return value === null || value === undefined ? null : jsonStringArray(value)
 }
 
-export function managedPolicyFromRow(row: QueryRow): ManagedPolicyRecord {
+function managedPolicyFromRow(row: QueryRow): ManagedPolicyRecord {
   const fields: ManagedDesktopPolicy = {
     allowedProviders: nullableList(row.allowed_providers),
     deniedProviders: jsonStringArray(row.denied_providers),

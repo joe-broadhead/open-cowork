@@ -8,7 +8,7 @@ import { Skeleton } from './Skeleton.js'
 import { StudioApprovalCard, CoworkerAvatar, type StudioAction, type StudioTone } from './StudioPrimitives.js'
 import { cn } from './utils.js'
 
-export type ApprovalsQueueOption = {
+type ApprovalsQueueOption = {
   label: string
   description?: string
 }
@@ -21,7 +21,7 @@ export type ApprovalsQueueQuestionPrompt = {
   custom?: boolean
 }
 
-export type ApprovalsQueueBaseItem = {
+type ApprovalsQueueBaseItem = {
   id: string
   sessionId: string
   workspaceId?: string | null

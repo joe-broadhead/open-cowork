@@ -21,7 +21,7 @@ import { withDeadline } from './deadlines.js'
 import { loadDistributedOwnershipProvingRegistry } from './distributed-ownership-registry.js'
 
 export type ReadinessState = 'ready' | 'degraded' | 'not_ready'
-export type ReadinessCheckStatus = 'pass' | 'warn' | 'fail'
+type ReadinessCheckStatus = 'pass' | 'warn' | 'fail'
 const OPENCODE_READINESS_TIMEOUT_MS = 2000
 
 export interface ReadinessCheck {

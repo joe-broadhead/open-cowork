@@ -1,5 +1,6 @@
-import type {
-  ChannelProvider,
+import {
+  classifyChannelTelemetryError,
+  type ChannelProvider,
 } from '@open-cowork/gateway-channel'
 import type {
   ChannelSessionBindingRecord,
@@ -66,6 +67,15 @@ type StreamState = {
   retryTimer?: ReturnType<typeof setTimeout>
   retryAttempts: number
 }
+
+const SESSION_EGRESS_METHODS = new Set<PropertyKey>([
+  'sendText',
+  'editText',
+  'sendFile',
+  'sendButtons',
+  'setTyping',
+  'answerInteraction',
+])
 
 export function createGatewaySessionStreamManager(
   cloud: CloudGateway,
@@ -260,10 +270,11 @@ export function createGatewaySessionStreamManager(
     }
     if (event.sequence <= state.lastEventSequence) return
 
+    const egress = createSessionEgressTelemetry(state.provider, metrics, now)
     try {
       const rendered = await renderGatewaySessionEvent({
         cloud,
-        provider: state.provider,
+        provider: egress.provider,
         binding: {
           ...state.binding,
           lastEventSequence: state.lastEventSequence,
@@ -273,6 +284,7 @@ export function createGatewaySessionStreamManager(
         event,
         state: state.renderState,
       })
+      egress.complete()
       const lastChatMessageId = rendered.lastChatMessageId ?? state.lastChatMessageId
       const updated = await persistCursor(state, {
         bindingId: state.binding.bindingId,
@@ -286,6 +298,7 @@ export function createGatewaySessionStreamManager(
       state.renderFailures.delete(event.sequence)
       state.binding = updated
     } catch (error) {
+      egress.fail(error)
       metrics.errors += 1
       const attempts = (state.renderFailures.get(event.sequence) ?? 0) + 1
       state.renderFailures.set(event.sequence, attempts)
@@ -360,6 +373,55 @@ export function createGatewaySessionStreamManager(
   }
 
   return manager
+}
+
+function createSessionEgressTelemetry(
+  provider: ChannelProvider,
+  metrics: GatewayMetrics,
+  now: () => number,
+) {
+  let startedAt: number | null = null
+  let terminal = false
+  const wrappers = new Map<PropertyKey, (...args: unknown[]) => Promise<unknown>>()
+  const instrumented = new Proxy(provider, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target)
+      if (typeof value !== 'function') return value
+      if (!SESSION_EGRESS_METHODS.has(property)) return value.bind(target)
+      const cached = wrappers.get(property)
+      if (cached) return cached
+      const wrapped = async (...args: unknown[]) => {
+        if (startedAt === null) {
+          startedAt = now()
+          metrics.channelTelemetry.recordOperation({
+            stack: 'monorepo-provider',
+            providerKind: target.kind,
+            direction: 'outbound',
+            outcome: 'attempt',
+          })
+        }
+        return Reflect.apply(value, target, args)
+      }
+      wrappers.set(property, wrapped)
+      return wrapped
+    },
+  })
+  const recordTerminal = (outcome: 'success' | 'retry' | 'error') => {
+    if (startedAt === null || terminal) return
+    terminal = true
+    metrics.channelTelemetry.recordOperation({
+      stack: 'monorepo-provider',
+      providerKind: provider.kind,
+      direction: 'outbound',
+      outcome,
+      latencyMs: now() - startedAt,
+    })
+  }
+  return {
+    provider: instrumented,
+    complete: () => recordTerminal('success'),
+    fail: (error: unknown) => recordTerminal(classifyChannelTelemetryError(error)),
+  }
 }
 
 function numberField(payload: Record<string, unknown>, key: string): number {

@@ -83,7 +83,7 @@ export function badRequest(message: string): HttpRouteResult {
   };
 }
 
-export function unauthorized(message: string): HttpRouteResult {
+function unauthorized(message: string): HttpRouteResult {
   return {
     status: 401,
     headers: { "www-authenticate": "Bearer" },
@@ -491,7 +491,7 @@ export function httpTrustsRequestHeaders(defaultPolicy: HttpPolicyOptions, reque
   return timingSafeStringEquals(firstHeader(request.headers["x-openwiki-proxy-secret"]), secret);
 }
 
-export function timingSafeStringEquals(actual: string | undefined, expected: string): boolean {
+function timingSafeStringEquals(actual: string | undefined, expected: string): boolean {
   if (actual === undefined) {
     return false;
   }

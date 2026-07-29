@@ -5,8 +5,8 @@ import { getConfig, type GatewayConfig } from './config.js'
 import { redactSensitiveText } from './security.js'
 import { defaultRunner, type CommandRunner } from './service-manager.js'
 
-export const SERVICE_LOG_MAX_BYTES = 10 * 1024 * 1024
-export const SERVICE_LOG_KEEP = 5
+const SERVICE_LOG_MAX_BYTES = 10 * 1024 * 1024
+const SERVICE_LOG_KEEP = 5
 
 export function serviceLogPath(): string {
   return process.platform === 'darwin'
@@ -14,7 +14,7 @@ export function serviceLogPath(): string {
     : path.join(os.homedir(), '.local', 'share', 'opencode-gateway.log')
 }
 
-export function serviceLogCandidates(): string[] {
+function serviceLogCandidates(): string[] {
   return [
     path.join(os.homedir(), 'Library', 'Logs', 'opencode-gateway.log'),
     path.join(os.homedir(), '.local', 'share', 'opencode-gateway.log'),

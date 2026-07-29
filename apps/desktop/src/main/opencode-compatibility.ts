@@ -13,7 +13,7 @@ export interface OpencodeCompatibilityCheckOptions {
   runtimeContractFixture?: OpencodeRuntimeContractFixture | null
 }
 
-export interface OpencodeCompatibilityCheckIssue {
+interface OpencodeCompatibilityCheckIssue {
   assumptionId?: string
   code: string
   message: string
@@ -33,28 +33,28 @@ export interface OpencodeCompatibilityCheckResult {
   issues: OpencodeCompatibilityCheckIssue[]
 }
 
-export interface OpencodeRuntimeContractProof {
+interface OpencodeRuntimeContractProof {
   id: string
   owner: string
   tests: string[]
 }
 
-export interface OpencodeRuntimeConfigContract extends OpencodeRuntimeContractProof {
+interface OpencodeRuntimeConfigContract extends OpencodeRuntimeContractProof {
   key: string
   evidence: string
 }
 
-export interface OpencodeRuntimeEventContract extends OpencodeRuntimeContractProof {
+interface OpencodeRuntimeEventContract extends OpencodeRuntimeContractProof {
   fixturePath: string
   events: string[]
 }
 
-export interface OpencodeRuntimeHttpRouteContract extends OpencodeRuntimeContractProof {
+interface OpencodeRuntimeHttpRouteContract extends OpencodeRuntimeContractProof {
   method: string
   path: string
 }
 
-export interface OpencodeRuntimeClientMethodContract extends OpencodeRuntimeContractProof {
+interface OpencodeRuntimeClientMethodContract extends OpencodeRuntimeContractProof {
   method: string
   evidence: string
 }
@@ -69,7 +69,7 @@ export interface OpencodeRuntimeContractFixture {
   clientMethods: OpencodeRuntimeClientMethodContract[]
 }
 
-export const OPENCODE_COMPATIBILITY_REGISTRY = [
+const OPENCODE_COMPATIBILITY_REGISTRY = [
   {
     id: 'opencode-sdk-v2-import-boundary',
     category: 'sdk-import',
@@ -123,7 +123,7 @@ export const OPENCODE_COMPATIBILITY_REGISTRY = [
   },
 ] as const satisfies readonly RuntimeCompatibilityAssumption[]
 
-export function getOpencodeCompatibilityRegistry(): RuntimeCompatibilityAssumption[] {
+function getOpencodeCompatibilityRegistry(): RuntimeCompatibilityAssumption[] {
   return OPENCODE_COMPATIBILITY_REGISTRY.map((entry) => ({ ...entry, tests: [...entry.tests], productModes: entry.productModes ? [...entry.productModes] : undefined }))
 }
 

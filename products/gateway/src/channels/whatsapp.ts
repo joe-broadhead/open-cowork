@@ -15,6 +15,7 @@ const WHATSAPP_LIST_ROW_LIMIT = 10
 const WHATSAPP_SEND_TIMEOUT_MS = 10_000
 
 let handler: ((msg: ChannelMessage) => Promise<void>) | null = null
+let started = false
 
 export const whatsappChannel: ChannelAdapter & {
   verifyWebhook(url: URL): string | null
@@ -25,11 +26,13 @@ export const whatsappChannel: ChannelAdapter & {
   capabilities: WHATSAPP_CAPABILITIES,
 
   async start() {
+    started = false
     const cfg = getWhatsAppConfig()
     if (!cfg.accessToken || !cfg.phoneNumberId || !cfg.verifyToken) {
       console.error('[whatsapp] access token, phone number id, or verify token not set — channel disabled')
       return
     }
+    started = true
     if (!cfg.appSecret) {
       console.error('[whatsapp] app secret not set — inbound POST webhooks will be rejected')
       console.error('[whatsapp] Outbound channel configured; inbound webhook signature verification is blocked')
@@ -40,7 +43,13 @@ export const whatsappChannel: ChannelAdapter & {
     queueEvent('WhatsApp channel ready: outbound and signed inbound webhooks configured')
   },
 
-  async stop() {},
+  async stop() {
+    started = false
+  },
+
+  isActive() {
+    return started
+  },
 
   async sendMessage(chatId: string, text: string) {
     await sendTextMessage(chatId, text)

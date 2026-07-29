@@ -9,7 +9,7 @@ import type { DurableOpencodeClient as OpencodeClient } from './opencode-session
 
 const log = createLogger({ component: 'heartbeat' })
 
-export type HeartbeatRunStatus = 'never' | 'running' | 'ok' | 'error' | 'skipped'
+type HeartbeatRunStatus = 'never' | 'running' | 'ok' | 'error' | 'skipped'
 
 export interface HeartbeatStatus {
   enabled: boolean

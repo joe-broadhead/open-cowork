@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 const MAIN_DIR = join(process.cwd(), 'apps/desktop/src/main')
 
-const EXPECTED_DOMAIN_FOLDERS = [
+const REQUIRED_DOMAIN_FOLDERS = [
   'desktop-pairing',
   'ipc',
   'update',
@@ -13,100 +13,10 @@ const EXPECTED_DOMAIN_FOLDERS = [
   'workspace',
 ]
 
-const ALLOWED_TOP_LEVEL_TYPESCRIPT = [
-  'app-menu.ts',
-  'app-protocol-schemes.ts',
-  'app-reset.ts',
-  'artifact-attachments.ts',
-  'artifact-path-policy.ts',
-  'branding-protocol.ts',
-  'built-in-agent-details.ts',
-  'capability-tool-discovery.ts',
-  'chart-artifact-access.ts',
-  'chart-artifacts.ts',
-  'chart-frame-assets.ts',
-  'chart-renderer.ts',
-  'chart-spec-safety.ts',
-  'cloud-subscription-manager.ts',
-  'cloud-workspace-adapter.ts',
-  'cloud-workspace-auth.ts',
-  'cloud-workspace-cache.ts',
-  'cloud-workspace-credentials.ts',
-  'cloud-workspace-registry.ts',
-  'content-security-policy.ts',
-  'custom-skill-integrity.ts',
-  'desktop-electron-hosts.ts',
-  'destructive-actions.ts',
-  'diagnostics-export.ts',
-  'directory-grants.ts',
-  'durable-session-events.ts',
-  'event-message-handlers.ts',
-  'event-message-native-handlers.ts',
-  'event-runtime-handlers.ts',
-  'event-subscriptions.ts',
-  'event-task-run-dispatch.ts',
-  'event-task-state.ts',
-  'event-task-timing.ts',
-  'events.ts',
-  'explorer-normalizers.ts',
-  'gateway-workspace-adapter.ts',
-  'gateway-workspace-credentials.ts',
-  'gateway-workspace-registry.ts',
-  'headless-host.ts',
-  'index.ts',
-  'ipc-artifact-access.ts',
-  'ipc-handlers.ts',
-  'ipc-runtime-context.ts',
-  'keyed-serializer.ts',
-  'local-workspace-session.ts',
-  'main-window-controller.ts',
-  'main-window-lifecycle.ts',
-  'main-window-security.ts',
-  'mcp-preflight.ts',
-  'native-confirmation.ts',
-  'opencode-compatibility.ts',
-  'permission-inheritance.ts',
-  'permission-tracker.ts',
-  'pricing.ts',
-  'project-registry.ts',
-  'project-source-snapshot.ts',
-  'promise-chain.ts',
-  'question-normalization.ts',
-  'queue-map.ts',
-  'runtime-initialization.ts',
-  'runtime-input-diagnostics.ts',
-  'runtime-mcp-recovery.ts',
-  'runtime-mcp-status-polling.ts',
-  'runtime-reconnect-policy.ts',
-  'sandbox-storage.ts',
-  'semantic-ui-local-actions.ts',
-  'semver.d.ts',
-  'session-artifact-access.ts',
-  'session-import.ts',
-  'session-status-coordinator.ts',
-  'session-status-reconciler.ts',
-  'session-task-state-store.ts',
-  'startup-splash.ts',
-  'voice-assets.ts',
-  'voice-capture.ts',
-  'voice-host.ts',
-  'voice-packaging.ts',
-  'voice-partial-window.ts',
-  'voice-pcm-buffer.ts',
-  'voice-permission-policy.ts',
-  'voice-security.ts',
-  'voice-stt.ts',
-  'voice-tts.ts',
-  'voice-vad.ts',
-  'window-state.ts',
-  'window-zoom.ts',
-  'workspace-gateway-cloud-artifacts.ts',
-  'workspace-gateway-cloud-sessions.ts',
-  'workspace-gateway-cloud-threads.ts',
-  'workspace-gateway-cloud-workflows.ts',
-  'workspace-gateway.ts',
-  'workspace-session-port.ts',
-]
+// Downward-only pressure on the legacy flat layout. File identity is governed
+// by imports and the canonical dead-code gate; this budget only prevents new
+// top-level sprawl while cohesive behavior moves into owned domain folders.
+const TOP_LEVEL_TYPESCRIPT_BUDGET = 91
 
 function listDomainFolders() {
   return readdirSync(MAIN_DIR, { withFileTypes: true })
@@ -123,15 +33,27 @@ function listTopLevelTypescript() {
 }
 
 test('desktop main-process domain folders stay reflected in the source map', () => {
-  assert.deepEqual(listDomainFolders(), EXPECTED_DOMAIN_FOLDERS)
-
+  const domainFolders = listDomainFolders()
   const readme = readFileSync(join(MAIN_DIR, 'README.md'), 'utf8')
-  for (const folder of EXPECTED_DOMAIN_FOLDERS) {
+
+  for (const folder of REQUIRED_DOMAIN_FOLDERS) {
+    assert.ok(domainFolders.includes(folder), `${folder}/ is a required desktop main-process domain`)
+  }
+  for (const folder of domainFolders) {
+    assert.match(folder, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, `${folder}/ must use a stable kebab-case domain name`)
     assert.match(readme, new RegExp(`\`${folder}/\``), `${folder}/ must be described in the source map`)
   }
   assert.doesNotMatch(readme, /`thread-index\/`/, 'thread-index moved to runtime-host and must not be listed as a desktop main folder')
 })
 
-test('desktop main-process top-level TypeScript files require an explicit source-map exception', () => {
-  assert.deepEqual(listTopLevelTypescript(), ALLOWED_TOP_LEVEL_TYPESCRIPT)
+test('desktop main-process top-level TypeScript stays within the flat-file ratchet', () => {
+  const files = listTopLevelTypescript()
+  assert.ok(
+    files.length <= TOP_LEVEL_TYPESCRIPT_BUDGET,
+    `desktop main has ${files.length} top-level TypeScript files (max ${TOP_LEVEL_TYPESCRIPT_BUDGET}); move cohesive behavior into an owned domain folder instead of growing the flat layout`,
+  )
+  for (const file of files) {
+    assert.match(file, /^(?:index|[a-z0-9]+(?:-[a-z0-9]+)*)(?:\.d)?\.ts$/, `${file} must use a stable kebab-case module name`)
+    assert.doesNotMatch(file, /\.(?:test|spec)\.ts$/, `${file} belongs beside its domain or in a test directory`)
+  }
 })

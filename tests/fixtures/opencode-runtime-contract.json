@@ -78,21 +78,21 @@
       "owner": "desktop-runtime",
       "method": "v2.session.question.reply",
       "evidence": "Open Cowork preserves OpenCode-native question replies at execution while projecting user-facing state.",
-      "tests": ["tests/question-normalization.test.ts", "tests/cloud-app.test.ts"]
+      "tests": ["tests/question-normalization.test.ts", "tests/cloud-app-runtime-routing.test.ts"]
     },
     {
       "id": "client-method-question-reject",
       "owner": "desktop-runtime",
       "method": "v2.session.question.reject",
       "evidence": "Open Cowork forwards rejections through durable commands without replacing OpenCode question handling.",
-      "tests": ["tests/question-normalization.test.ts", "tests/cloud-app.test.ts"]
+      "tests": ["tests/question-normalization.test.ts", "tests/cloud-app-runtime-routing.test.ts"]
     },
     {
       "id": "client-method-permission-respond",
       "owner": "desktop-runtime",
       "method": "v2.session.permission.reply",
       "evidence": "Open Cowork gates remote approval responses but leaves permission execution semantics with OpenCode.",
-      "tests": ["tests/permission-config.test.ts", "tests/cloud-app.test.ts"]
+      "tests": ["tests/permission-config.test.ts", "tests/cloud-app-runtime-routing.test.ts"]
     }
   ]
 }

@@ -28,7 +28,7 @@ export interface UsageWindow {
   endDate: string
 }
 
-export interface UsageTotals {
+interface UsageTotals {
   sessions: number
   messages: number
   cost: number
@@ -57,7 +57,7 @@ export interface UsageSessionRow extends UsageTotals {
   webUrl?: string
 }
 
-export interface UsageSeriesPoint {
+interface UsageSeriesPoint {
   date: string
   cost: number
   tokens: number
@@ -152,7 +152,7 @@ export function getOpenCodeUsage(input: { window?: UsageWindow; dbPath?: string;
   }
 }
 
-export function resolveOpenCodeDbPath(): string {
+function resolveOpenCodeDbPath(): string {
   if (process.env['OPENCODE_DB_PATH']) return process.env['OPENCODE_DB_PATH']
   if (cachedDbPath) return cachedDbPath
   try {

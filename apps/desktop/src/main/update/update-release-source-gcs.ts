@@ -7,7 +7,7 @@ function encodePathSegment(value: string) {
   return encodeURIComponent(value).replace(/%2F/gi, '/')
 }
 
-export function normalizeGcsPrefix(prefix?: string | null) {
+function normalizeGcsPrefix(prefix?: string | null) {
   const trimmed = prefix?.trim().replace(/^\/+|\/+$/g, '') || ''
   if (!trimmed) return ''
   const segments = trimmed.split('/').filter(Boolean)

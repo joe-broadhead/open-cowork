@@ -1,6 +1,6 @@
 import type { RunStatus, WorkStatus } from './workflow.js'
 
-export type RuntimeStateMachineId =
+type RuntimeStateMachineId =
   | 'task.lifecycle'
   | 'dispatch.receipt'
   | 'run.lifecycle'
@@ -8,7 +8,7 @@ export type RuntimeStateMachineId =
   | 'worker.result'
   | 'delegation.progress'
 
-export type RuntimeTransitionOwner =
+type RuntimeTransitionOwner =
   | 'scheduler'
   | 'work-store/run-lease-port'
   | 'workflow'
@@ -16,7 +16,7 @@ export type RuntimeTransitionOwner =
   | 'worker-fleet-coordinator'
   | 'delegation-progress'
 
-export type RuntimeMutationEntryPoint =
+type RuntimeMutationEntryPoint =
   | 'work_state_transaction'
   | 'domain_port'
   | 'domain_transaction'
@@ -35,7 +35,7 @@ export interface RuntimeStateTransition {
   invariantIds: string[]
 }
 
-export interface RuntimeStateInvariant {
+interface RuntimeStateInvariant {
   id: string
   severity: 'critical' | 'warning'
   owner: RuntimeTransitionOwner
@@ -54,14 +54,14 @@ export interface RuntimeStateMachineValidation {
   releaseClaimEffect: 'runtime_quality_only_no_release_claim_expansion'
 }
 
-export const RUN_STATUSES = ['running', 'passed', 'failed', 'blocked', 'errored'] as const satisfies readonly RunStatus[]
+const RUN_STATUSES = ['running', 'passed', 'failed', 'blocked', 'errored'] as const satisfies readonly RunStatus[]
 export const ACTIVE_RUN_STATUSES = ['running'] as const
 export const TERMINAL_RUN_STATUSES = ['passed', 'failed', 'blocked', 'errored'] as const
 
 export const ACTIVE_TASK_STATUSES = ['running'] as const
 export const TASK_RUN_OWNERSHIP_TERMINAL_STATUSES = ['done', 'blocked', 'cancelled', 'archived'] as const
 
-export const RUNTIME_STATE_INVARIANTS: readonly RuntimeStateInvariant[] = [
+const RUNTIME_STATE_INVARIANTS: readonly RuntimeStateInvariant[] = [
   {
     id: 'RT_INV_001_SINGLE_ACTIVE_RUN_PER_TASK',
     severity: 'critical',

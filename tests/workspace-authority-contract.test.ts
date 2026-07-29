@@ -11,11 +11,13 @@ function read(relativePath: string) {
 
 test('workspace support contract is shared instead of duplicated by Desktop surfaces', () => {
   const gatewaySource = read('apps/desktop/src/main/workspace-gateway.ts')
+  const gatewaySupportSource = read('apps/desktop/src/main/workspace/workspace-support-matrix.ts')
   const rendererSupport = read('packages/app/src/stores/workspace-support.ts')
   const sharedWorkspace = read('packages/shared/src/workspace.ts')
 
-  assert.match(gatewaySource, /WORKSPACE_SUPPORT_APIS/)
-  assert.doesNotMatch(gatewaySource, /const WORKSPACE_SUPPORT_APIS = \[/)
+  assert.match(gatewaySource, /workspaceSupportMatrix/)
+  assert.match(gatewaySupportSource, /WORKSPACE_SUPPORT_APIS/)
+  assert.doesNotMatch(gatewaySupportSource, /const WORKSPACE_SUPPORT_APIS = \[/)
   assert.match(rendererSupport, /export \{ WORKSPACE_SUPPORT_APIS \} from '@open-cowork\/shared'/)
   assert.match(rendererSupport, /supportContext/)
   assert.match(rendererSupport, /canExposeLocalPaths/)
@@ -29,7 +31,7 @@ test('workspace support contract is shared instead of duplicated by Desktop surf
     'coordination.delegation',
   ]) {
     assert.match(sharedWorkspace, new RegExp(api.replace('.', '\\.')))
-    assert.match(gatewaySource, new RegExp(api.replace('.', '\\.')))
+    assert.match(gatewaySupportSource, new RegExp(api.replace('.', '\\.')))
   }
 })
 

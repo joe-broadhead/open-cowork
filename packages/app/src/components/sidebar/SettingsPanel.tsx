@@ -25,7 +25,6 @@ import { StoragePanel } from './SettingsStoragePanel'
 import { SettingsPairingPanel } from './SettingsPairingPanel'
 import { VoiceAssetsPanel } from './SettingsVoiceAssetsPanel'
 import { RuntimeToolingBridgeConsentPanel } from '../RuntimeToolingBridgeConsent'
-
 type SettingsTab = 'appearance' | 'model' | 'advanced' | 'permissions' | 'notifications' | 'privacy' | 'workflows' | 'storage' | 'pairing'
 type SettingsSearchEntry = {
   id: string
@@ -244,12 +243,6 @@ function SettingsPrivacyPanel({
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="text-xs font-semibold text-text">{t('settings.privacy.conversationHistory', 'Conversation history')}</div>
-          <div className="text-xs leading-relaxed text-text-muted">
-            {t('settings.privacy.conversationHistoryManaged', 'Session retention stays managed by OpenCode runtime history and explicit storage cleanup until a verified retention policy is available.')}
-          </div>
-        </div>
         <SettingsToggleRow
           title={t('settings.privacy.shareUsage', 'Help improve the product')}
           description={t(
@@ -450,7 +443,6 @@ export function SettingsPanel({
         { id: 'settings-permissions-files', tab: 'permissions' as const, label: t('settings.permissions.fileWriteTitle', 'File editing'), keywords: 'files write edit permission approve deny allow' },
         { id: 'settings-permissions-web', tab: 'permissions' as const, label: t('settings.permissions.webTitle', 'Open web pages'), keywords: 'web fetch code search webfetch codesearch permission approve deny allow' },
         { id: 'settings-permissions-task', tab: 'permissions' as const, label: t('settings.permissions.taskTitle', 'Delegate to coworkers'), keywords: 'task delegation coworkers subagent permission approve deny allow' },
-        { id: 'settings-permissions-review-send', tab: 'permissions' as const, label: t('settings.permissions.reviewSendTitle', 'Require approval before sending'), keywords: 'approval review send channel email message post' },
       ] : []),
       { id: 'settings-notifications', tab: 'notifications', label: t('settings.tab.notifications', 'Notifications'), keywords: 'notifications voice suggestions digest sounds chime' },
       { id: 'settings-privacy', tab: 'privacy', label: t('settings.tab.privacy', 'Privacy'), keywords: 'privacy history usage anonymized policy security legal data' },

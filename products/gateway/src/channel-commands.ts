@@ -43,7 +43,6 @@ export {
   parseChannelCommand,
   isChannelCommandMenuRequest,
   isPreTrustChannelCommandText,
-  channelPreTrustHelpText,
   channelBindingSystemContext,
 } from './channel-commands-helpers.js'
 
@@ -203,7 +202,7 @@ export async function handleChannelCommand(client: ChannelCommandClient, msg: Ch
   return reply
 }
 
-export function channelCommandHelpText(): string {
+function channelCommandHelpText(): string {
   return [
     'Gateway Command Center',
     '',

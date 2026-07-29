@@ -20,8 +20,8 @@ export type ChannelRenderMode = 'rich' | 'markdown' | 'plainText'
 /** JOE-994 Phase 1: lockstep with `@open-cowork/shared` dual-stack contract. */
 export type ChannelAdapterCapability = ChannelAdapterCapabilityKey
 
-export type ChannelCapabilityStatus = 'supported' | 'partial' | 'planned' | 'unsupported'
-export type ChannelSurfaceStage = 'production' | 'alpha' | 'planned'
+type ChannelCapabilityStatus = 'supported' | 'partial' | 'planned' | 'unsupported'
+type ChannelSurfaceStage = 'production' | 'alpha' | 'planned'
 export type ChannelConnectorState =
   | 'not_configured'
   | 'credentials_needed'
@@ -44,8 +44,8 @@ export type ChannelOnboardingAction =
   | 'disconnect'
 
 export type ChannelSetupMode = 'polling' | 'webhook' | 'local' | 'embeddedSignup' | 'providerManaged'
-export type ChannelCredentialSource = 'environment' | 'config' | 'operatorGenerated' | 'providerConsole' | 'oauth'
-export type ChannelTrustMode = 'manualAllowlist' | 'claimCode' | 'localSession' | 'providerInstall'
+type ChannelCredentialSource = 'environment' | 'config' | 'operatorGenerated' | 'providerConsole' | 'oauth'
+type ChannelTrustMode = 'manualAllowlist' | 'claimCode' | 'localSession' | 'providerInstall'
 export type ChannelSetupDiagnosticSeverity = 'info' | 'warning' | 'blocked'
 export type ChannelSetupPathStatus = 'implemented' | 'scaffolded' | 'documented_only'
 export type ChannelSetupDiagnosticCode =
@@ -84,14 +84,14 @@ export interface ChannelWebhookRouteRequirement {
   purpose: string
 }
 
-export interface ChannelWebhookRequirement {
+interface ChannelWebhookRequirement {
   routes: ChannelWebhookRouteRequirement[]
   signature: ChannelCapabilityStatus
   challenge?: string
   publicExposure: string
 }
 
-export interface ChannelTrustRequirement {
+interface ChannelTrustRequirement {
   summary: string
   allowlistConfigKey?: string
   targetIdRedaction: 'required' | 'notApplicable'
@@ -124,7 +124,7 @@ export interface ChannelSetupPathDefinition {
   docs?: Array<{ label: string; url: string }>
 }
 
-export interface ChannelOnboardingCapabilities {
+interface ChannelOnboardingCapabilities {
   modes: ChannelSetupMode[]
   states: ChannelConnectorState[]
   actions: ChannelOnboardingAction[]
@@ -142,9 +142,9 @@ export interface ChannelCapabilityDefinition {
   fallback?: string
 }
 
-export type ChannelCapabilityMatrix = Record<ChannelAdapterCapability, ChannelCapabilityDefinition>
+type ChannelCapabilityMatrix = Record<ChannelAdapterCapability, ChannelCapabilityDefinition>
 
-export interface ChannelFallbackBehavior {
+interface ChannelFallbackBehavior {
   order: ChannelRenderMode[]
   maxChars?: number
   semantics: string[]
@@ -224,7 +224,7 @@ export const CHANNEL_ADAPTER_CAPABILITY_KEYS: ChannelAdapterCapability[] = [
   ...SHARED_CHANNEL_ADAPTER_CAPABILITY_KEYS,
 ]
 
-export const DEFAULT_RENDER_CAPABILITIES: Required<ChannelRenderCapabilities> = {
+const DEFAULT_RENDER_CAPABILITIES: Required<ChannelRenderCapabilities> = {
   plainText: true,
   markdown: false,
   richBlocks: false,
@@ -252,7 +252,7 @@ export function normalizeChannelRenderCapabilities(capabilities: ChannelRenderCa
   return { ...DEFAULT_RENDER_CAPABILITIES, ...capabilities, plainText: capabilities.plainText ?? true }
 }
 
-export function defineChannelCapabilities(input: CapabilityDeclarationInput): ChannelCapabilities {
+function defineChannelCapabilities(input: CapabilityDeclarationInput): ChannelCapabilities {
   const render = normalizeChannelRenderCapabilities(input.render)
   return {
     provider: input.provider,
@@ -266,7 +266,7 @@ export function defineChannelCapabilities(input: CapabilityDeclarationInput): Ch
   }
 }
 
-export function channelCapabilityState(capabilities: ChannelCapabilities | ChannelRenderCapabilities | undefined, capability: ChannelAdapterCapability): ChannelCapabilityStatus {
+function channelCapabilityState(capabilities: ChannelCapabilities | ChannelRenderCapabilities | undefined, capability: ChannelAdapterCapability): ChannelCapabilityStatus {
   const full = asChannelCapabilities(capabilities)
   if (full?.categories?.[capability]) return full.categories[capability].status
   if (capability === 'fallbackBehavior') return capabilities?.plainText === false ? 'unsupported' : 'supported'

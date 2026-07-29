@@ -29,7 +29,7 @@ export type ProviderRegistration = {
   lastError: string | null
 }
 
-export type GatewayWebhookResponse = {
+type GatewayWebhookResponse = {
   challenge?: string
 }
 

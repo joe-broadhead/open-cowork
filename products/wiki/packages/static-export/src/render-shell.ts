@@ -103,11 +103,11 @@ function adjacentPages(page: PageRecord, pages: PageRecord[]): { previous?: Page
   };
 }
 
-export function pageNavigationLink(label: string, title: string, href: string): string {
+function pageNavigationLink(label: string, title: string, href: string): string {
   return `<a class="ow-page-nav__item" href="${escapeHtml(href)}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(title)}</strong></a>`;
 }
 
-export function pageNavigationPlaceholder(label: string): string {
+function pageNavigationPlaceholder(label: string): string {
   return `<span class="ow-page-nav__item is-disabled"><span>${escapeHtml(label)}</span><strong>None</strong></span>`;
 }
 
@@ -252,7 +252,7 @@ function normalizeWikiTarget(value: string): string {
   return value.toLowerCase().trim().replace(/\.md$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-export function slugFromPageId(id: string): string {
+function slugFromPageId(id: string): string {
   return id.split(":").slice(2).join(":") || id;
 }
 

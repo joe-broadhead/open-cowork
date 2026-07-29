@@ -26,19 +26,19 @@ export type GatewayWorkspaceCredentialInput = {
   token: string
 }
 
-export type GatewayWorkspaceCredentialMetadata = {
+type GatewayWorkspaceCredentialMetadata = {
   workspaceId: string
   hasToken: boolean
   updatedAt: string
 }
 
-export type GatewayWorkspaceCredentialUnavailableReason =
+type GatewayWorkspaceCredentialUnavailableReason =
   | 'secure-storage-unavailable'
   | 'read-failed'
   | 'decrypt-failed'
   | 'recovery-failed'
 
-export type GatewayWorkspaceCredentialCorruptReason =
+type GatewayWorkspaceCredentialCorruptReason =
   | 'invalid-payload'
   | 'invalid-record'
 

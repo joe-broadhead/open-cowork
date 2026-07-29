@@ -1,4 +1,4 @@
-// Import-cycle gate for the renderer (and the shared UI kit).
+// Import-cycle gate for first-party application and runtime packages.
 //
 // Statically scans first-party *relative* imports inside the configured roots
 // and fails if any circular import chain exists. Circular module graphs are a
@@ -31,18 +31,8 @@ const root = process.cwd()
 export const SCAN_ROOTS = [
   'packages/app/src',
   'packages/ui/src',
-  // post-#959: widen ratchet toward runtime packages once proven cycle-free
   'packages/shared/src',
-  // post-#961 hardening: packages/runtime-host/src intentionally NOT added —
-  // known value-import cycle (not cycle-free at widen time):
-  //   runtime.ts
-  //     -> runtime-config-builder.ts
-  //       -> custom-agents-utils.ts
-  //         -> runtime-tools.ts
-  //           -> runtime.ts
-  // Break that cycle (e.g. extract pure tool-id helpers from runtime-tools, or
-  // move getClientForDirectory consumers off the runtime composition root)
-  // before ratcheting SCAN_ROOTS to include runtime-host.
+  'packages/runtime-host/src',
 ]
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx']

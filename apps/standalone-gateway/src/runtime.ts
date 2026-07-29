@@ -1,5 +1,12 @@
-import { chunkText } from "@open-cowork/gateway-channel";
-import type { ChannelProvider, IncomingChannelMessage } from "@open-cowork/gateway-channel";
+import {
+  classifyChannelTelemetryError,
+  chunkText,
+} from "@open-cowork/gateway-channel";
+import type {
+  ChannelProvider,
+  ChannelStackTelemetry,
+  IncomingChannelMessage,
+} from "@open-cowork/gateway-channel";
 import {
   sanitizeRuntimeEventRecord,
   sanitizeRuntimeEventValue,
@@ -18,8 +25,9 @@ export interface StandaloneGatewayRuntime {
 export function createStandaloneGatewayRuntime(input: {
   repository: StandaloneGatewayRepository;
   opencode: StandaloneOpenCodeAdapter;
+  telemetry?: ChannelStackTelemetry;
 }): StandaloneGatewayRuntime {
-  const { repository, opencode } = input;
+  const { repository, opencode, telemetry } = input;
   const sessionQueues = new Map<string, Promise<void>>();
 
   function runSerialized<T>(key: string, action: () => Promise<T>): Promise<T> {
@@ -102,106 +110,143 @@ export function createStandaloneGatewayRuntime(input: {
 
   return {
     async handleMessage(provider, providerConfig, message) {
+      telemetry?.recordOperation({
+        stack: "monorepo-provider",
+        providerKind: providerConfig.kind,
+        direction: "inbound",
+        outcome: "attempt",
+      });
       const text = message.text.trim();
-      if (!text) return;
+      if (!text) {
+        telemetry?.recordOperation({
+          stack: "monorepo-provider",
+          providerKind: providerConfig.kind,
+          direction: "inbound",
+          outcome: "success",
+        });
+        return;
+      }
       const providerWorkspaceId = providerWorkspaceIdFromMessage(message);
       const externalThreadId = message.target.threadId || message.target.chatId;
       const sessionQueueKey = `${provider.id}\0${providerWorkspaceId || ""}\0${message.target.chatId}\0${externalThreadId}`;
-      await runSerialized(sessionQueueKey, async () => {
-        const identity = await repository.findChannelIdentity({
-          provider: provider.id,
-          externalUserId: message.sender.providerUserId,
-          providerWorkspaceId,
-        });
-        if (!identity || !canIdentityPrompt(identity)) {
-          await repository.recordAudit("standalone.prompt.denied", message.sender.providerUserId, {
+      try {
+        await runSerialized(sessionQueueKey, async () => {
+          const identity = await repository.findChannelIdentity({
             provider: provider.id,
-            providerKind: provider.kind,
-            channelBindingId: providerConfig.channelBindingId,
+            externalUserId: message.sender.providerUserId,
             providerWorkspaceId,
-            reason: identity ? promptDenyReason(identity) : "identity_not_found",
-            identityId: identity?.identityId,
-            identityRole: identity?.role,
-            identityStatus: identity?.status,
           });
-          return;
-        }
-        const session = await repository.findOrCreateSession({
-          provider: provider.id,
-          providerKind: provider.kind,
-          providerWorkspaceId,
-          channelBindingId: providerConfig.channelBindingId,
-          target: message.target,
-          externalUserId: message.sender.providerUserId,
-          text,
-        });
-        await repository.appendEvent({ sessionId: session.sessionId, type: "user.message", payload: { text, providerMessageId: message.providerMessageId } });
-        let runtimeSession = session;
-        let projectedRuntimeFailure = false;
-        try {
-          if (!runtimeSession.opencodeSessionId) {
-            runtimeSession = await repository.updateSessionRuntime({
-              sessionId: session.sessionId,
-              opencodeSessionId: (await opencode.createSession({ title: session.title })).opencodeSessionId,
-              status: "running",
+          if (!identity || !canIdentityPrompt(identity)) {
+            await repository.recordAudit("standalone.prompt.denied", message.sender.providerUserId, {
+              provider: provider.id,
+              providerKind: provider.kind,
+              channelBindingId: providerConfig.channelBindingId,
+              providerWorkspaceId,
+              reason: identity ? promptDenyReason(identity) : "identity_not_found",
+              identityId: identity?.identityId,
+              identityRole: identity?.role,
+              identityStatus: identity?.status,
             });
+            return;
           }
-          const assistantTexts: string[] = [];
-          let runtimeFailure: string | null = null;
-          await opencode.prompt({
-            opencodeSessionId: runtimeSession.opencodeSessionId || session.sessionId,
-            admissionId: `standalone:channel:${provider.id}:${providerWorkspaceId || ""}:${message.providerEventId || message.id}`,
+          const session = await repository.findOrCreateSession({
+            provider: provider.id,
+            providerKind: provider.kind,
+            providerWorkspaceId,
+            channelBindingId: providerConfig.channelBindingId,
+            target: message.target,
+            externalUserId: message.sender.providerUserId,
             text,
-            onEvent: async (event) => {
-              runtimeFailure ||= runtimeFailureFromEvent(event);
-              projectedRuntimeFailure ||= event.type === "session.error";
-              if (event.type === "assistant.message") {
-                const assistantText = stringField(objectRecord(event.payload), "text");
-                if (assistantText) assistantTexts.push(assistantText);
-              }
-              await appendRuntimeEvent(repository, session.sessionId, event);
-            },
           });
-          if (runtimeFailure) throw new Error(runtimeFailure);
-          await repository.updateSessionRuntime({
-            sessionId: session.sessionId,
-            opencodeSessionId: runtimeSession.opencodeSessionId,
-            status: "idle",
-          });
-          // Deliver the final assistant output back into the originating channel. Persisting the
-          // event alone is not a reply — without this the appliance only ever answers via the
-          // admin dashboard. Delivery failures are audited but never fail the prompt itself.
-          await sendChannelReply({ repository, provider, session, message, text: coalesceAssistantText(assistantTexts) });
-          await repository.recordAudit("standalone.prompt", message.sender.providerUserId, {
-            provider: provider.id,
-            providerKind: provider.kind,
-            channelBindingId: providerConfig.channelBindingId,
-            sessionId: session.sessionId,
-          });
-        } catch (error) {
-          const errorMessage = sanitizeRuntimeErrorMessage(error);
-          if (!projectedRuntimeFailure) {
-            await repository.appendEvent({
-              sessionId: session.sessionId,
-              type: "session.error",
-              payload: { message: errorMessage },
+          await repository.appendEvent({ sessionId: session.sessionId, type: "user.message", payload: { text, providerMessageId: message.providerMessageId } });
+          let runtimeSession = session;
+          let projectedRuntimeFailure = false;
+          try {
+            if (!runtimeSession.opencodeSessionId) {
+              runtimeSession = await repository.updateSessionRuntime({
+                sessionId: session.sessionId,
+                opencodeSessionId: (await opencode.createSession({ title: session.title })).opencodeSessionId,
+                status: "running",
+              });
+            }
+            const assistantTexts: string[] = [];
+            let runtimeFailure: string | null = null;
+            await opencode.prompt({
+              opencodeSessionId: runtimeSession.opencodeSessionId || session.sessionId,
+              admissionId: `standalone:channel:${provider.id}:${providerWorkspaceId || ""}:${message.providerEventId || message.id}`,
+              text,
+              onEvent: async (event) => {
+                runtimeFailure ||= runtimeFailureFromEvent(event);
+                projectedRuntimeFailure ||= event.type === "session.error";
+                if (event.type === "assistant.message") {
+                  const assistantText = stringField(objectRecord(event.payload), "text");
+                  if (assistantText) assistantTexts.push(assistantText);
+                }
+                await appendRuntimeEvent(repository, session.sessionId, event);
+              },
             });
+            if (runtimeFailure) throw new Error(runtimeFailure);
+            await repository.updateSessionRuntime({
+              sessionId: session.sessionId,
+              opencodeSessionId: runtimeSession.opencodeSessionId,
+              status: "idle",
+            });
+            // Deliver the final assistant output back into the originating channel. Persisting the
+            // event alone is not a reply — without this the appliance only ever answers via the
+            // admin dashboard. Delivery failures are audited but never fail the prompt itself.
+            await sendChannelReply({
+              repository,
+              provider,
+              session,
+              message,
+              text: coalesceAssistantText(assistantTexts),
+              telemetry,
+            });
+            await repository.recordAudit("standalone.prompt", message.sender.providerUserId, {
+              provider: provider.id,
+              providerKind: provider.kind,
+              channelBindingId: providerConfig.channelBindingId,
+              sessionId: session.sessionId,
+            });
+          } catch (error) {
+            const errorMessage = sanitizeRuntimeErrorMessage(error);
+            if (!projectedRuntimeFailure) {
+              await repository.appendEvent({
+                sessionId: session.sessionId,
+                type: "session.error",
+                payload: { message: errorMessage },
+              });
+            }
+            await repository.updateSessionRuntime({
+              sessionId: session.sessionId,
+              opencodeSessionId: runtimeSession.opencodeSessionId,
+              status: "failed",
+            });
+            await repository.recordAudit("standalone.prompt.failed", message.sender.providerUserId, {
+              provider: provider.id,
+              providerKind: provider.kind,
+              channelBindingId: providerConfig.channelBindingId,
+              sessionId: session.sessionId,
+              error: errorMessage,
+            });
+            throw error;
           }
-          await repository.updateSessionRuntime({
-            sessionId: session.sessionId,
-            opencodeSessionId: runtimeSession.opencodeSessionId,
-            status: "failed",
-          });
-          await repository.recordAudit("standalone.prompt.failed", message.sender.providerUserId, {
-            provider: provider.id,
-            providerKind: provider.kind,
-            channelBindingId: providerConfig.channelBindingId,
-            sessionId: session.sessionId,
-            error: errorMessage,
-          });
-          throw error;
-        }
-      });
+        });
+        telemetry?.recordOperation({
+          stack: "monorepo-provider",
+          providerKind: providerConfig.kind,
+          direction: "inbound",
+          outcome: "success",
+        });
+      } catch (error) {
+        telemetry?.recordOperation({
+          stack: "monorepo-provider",
+          providerKind: providerConfig.kind,
+          direction: "inbound",
+          outcome: classifyChannelTelemetryError(error),
+        });
+        throw error;
+      }
     },
     async runDueJobs(claimedBy, options = {}) {
       let processed = 0;
@@ -251,10 +296,18 @@ async function sendChannelReply(input: {
   session: { sessionId: string };
   message: IncomingChannelMessage;
   text: string;
+  telemetry?: ChannelStackTelemetry;
 }): Promise<void> {
   const replyText = input.text.trim();
   if (!replyText || !input.message.target.chatId) return;
   const deliveryBase = `standalone:${input.session.sessionId}:${input.message.providerEventId || input.message.id}:reply`;
+  const startedAt = Date.now();
+  input.telemetry?.recordOperation({
+    stack: "monorepo-provider",
+    providerKind: input.provider.kind,
+    direction: "outbound",
+    outcome: "attempt",
+  });
   try {
     const chunks = splitReplyToLimit(replyText, input.provider.capabilities.maxTextLength);
     for (const [index, chunk] of chunks.entries()) {
@@ -262,7 +315,21 @@ async function sendChannelReply(input: {
         deliveryId: chunks.length === 1 ? deliveryBase : `${deliveryBase}:chunk:${index + 1}`,
       });
     }
+    input.telemetry?.recordOperation({
+      stack: "monorepo-provider",
+      providerKind: input.provider.kind,
+      direction: "outbound",
+      outcome: "success",
+      latencyMs: Date.now() - startedAt,
+    });
   } catch (error) {
+    input.telemetry?.recordOperation({
+      stack: "monorepo-provider",
+      providerKind: input.provider.kind,
+      direction: "outbound",
+      outcome: classifyChannelTelemetryError(error),
+      latencyMs: Date.now() - startedAt,
+    });
     await input.repository.recordAudit("standalone.reply.failed", input.message.sender.providerUserId, {
       provider: input.provider.id,
       providerKind: input.provider.kind,

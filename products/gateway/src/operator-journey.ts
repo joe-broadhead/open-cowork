@@ -1,4 +1,4 @@
-export type OperatorJourneySurface =
+type OperatorJourneySurface =
   | 'opencode_web_tui'
   | 'trusted_channel'
   | 'cli_mcp'
@@ -6,9 +6,9 @@ export type OperatorJourneySurface =
   | 'channel_controls'
   | 'support_diagnosis'
 
-export type OperatorJourneyWaitOwner = 'none' | 'operator' | 'opencode' | 'gateway' | 'channel' | 'provider'
+type OperatorJourneyWaitOwner = 'none' | 'operator' | 'opencode' | 'gateway' | 'channel' | 'provider'
 
-export type OperatorJourneyPermissionState =
+type OperatorJourneyPermissionState =
   | 'not_required'
   | 'opencode_permission_required'
   | 'opencode_request_required'
@@ -17,11 +17,11 @@ export type OperatorJourneyPermissionState =
   | 'operator_attention_required'
   | 'blocked'
 
-export type OperatorJourneyRecoveryState = 'ready' | 'recoverable' | 'fallback' | 'blocked' | 'deferred'
-export type OperatorJourneyCapabilityState = 'supported' | 'partial' | 'fallback' | 'blocked' | 'deferred'
-export type OperatorJourneyProofState = 'passed' | 'partial' | 'missing' | 'blocked' | 'deferred' | 'waived'
+type OperatorJourneyRecoveryState = 'ready' | 'recoverable' | 'fallback' | 'blocked' | 'deferred'
+type OperatorJourneyCapabilityState = 'supported' | 'partial' | 'fallback' | 'blocked' | 'deferred'
+type OperatorJourneyProofState = 'passed' | 'partial' | 'missing' | 'blocked' | 'deferred' | 'waived'
 
-export interface OperatorJourneyRecoveryPath {
+interface OperatorJourneyRecoveryPath {
   state: OperatorJourneyRecoveryState
   summary: string
   safeNextAction: string

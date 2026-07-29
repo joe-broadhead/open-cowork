@@ -1,7 +1,7 @@
-export type ValidationGateSeverity = 'required' | 'advisory'
-export type ValidationGateSelectionStatus = 'pass' | 'fail_closed'
+type ValidationGateSeverity = 'required' | 'advisory'
+type ValidationGateSelectionStatus = 'pass' | 'fail_closed'
 
-export interface ValidationGateCommand {
+interface ValidationGateCommand {
   id: string
   command: string
   severity: ValidationGateSeverity
@@ -10,7 +10,7 @@ export interface ValidationGateCommand {
   budgetKind?: 'warning_only'
 }
 
-export interface ValidationGateSurfaceMatch {
+interface ValidationGateSurfaceMatch {
   id: string
   title: string
   files: string[]

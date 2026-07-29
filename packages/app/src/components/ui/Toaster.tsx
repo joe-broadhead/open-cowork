@@ -3,10 +3,6 @@ import { useSessionStore } from '../../stores/session'
 
 export {
   toast,
-  type ToastAction,
-  type ToastOptions,
-  type ToastSourceError,
-  type ToastTone,
 } from '@open-cowork/ui'
 
 export function Toaster() {

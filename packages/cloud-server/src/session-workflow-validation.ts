@@ -24,7 +24,7 @@ export const WORKFLOW_VALID_TRIGGER_TYPES = new Set<WorkflowTriggerType>(['manua
 
 type WorkflowIdFactory = { randomUUID: () => string }
 
-export function normalizeWorkflowStringList(value: unknown, label: string) {
+function normalizeWorkflowStringList(value: unknown, label: string) {
   if (value === undefined || value === null) return []
   if (!Array.isArray(value)) throw new Error(`${label} must be an array.`)
   return [...new Set(value.slice(0, WORKFLOW_MAX_LIST_VALUES).map((entry) => boundedText(entry, label, 256)))]
@@ -58,7 +58,7 @@ export function normalizeWorkflowDraft(draft: WorkflowDraft, ids: WorkflowIdFact
   }
 }
 
-export function normalizeWorkflowTriggers(value: unknown, ids: WorkflowIdFactory, now: Date): WorkflowTrigger[] {
+function normalizeWorkflowTriggers(value: unknown, ids: WorkflowIdFactory, now: Date): WorkflowTrigger[] {
   // Empty/missing triggers are allowed here so normalizeWorkflowDraft can inject a
   // default manual trigger. Non-array values remain invalid.
   if (value === undefined || value === null) return []

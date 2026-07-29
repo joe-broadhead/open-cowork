@@ -212,7 +212,7 @@ export function storageSourceSpecs(stateDir: string): StorageSourceSpec[] {
     },
   ]
 }
-export function sourceRecord(spec: StorageSourceSpec, stateDir: string): StorageSourceRecord {
+function sourceRecord(spec: StorageSourceSpec, stateDir: string): StorageSourceRecord {
   const stat = safeStat(spec.rawPath)
   return {
     id: spec.id,
@@ -229,7 +229,7 @@ export function sourceRecord(spec: StorageSourceSpec, stateDir: string): Storage
     ...(stat ? { updatedAt: stat.mtime.toISOString() } : {}),
   }
 }
-export function safeStat(filePath: string): fs.Stats | undefined {
+function safeStat(filePath: string): fs.Stats | undefined {
   try { return fs.statSync(filePath) } catch { return undefined }
 }
 export function openSqliteReadOnly(filePath: string): DatabaseSync {
@@ -293,7 +293,7 @@ export function sqliteTableExists(db: DatabaseSync, table: string): boolean {
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) as any
   return row?.name === table
 }
-export function channelSyncKeyFromParts(sessionId: unknown, provider: unknown, chatId: unknown, threadId: unknown): string | undefined {
+function channelSyncKeyFromParts(sessionId: unknown, provider: unknown, chatId: unknown, threadId: unknown): string | undefined {
   const session = cleanDoctorString(sessionId)
   const channelProvider = cleanDoctorString(provider)
   const chat = cleanDoctorString(chatId)
@@ -365,7 +365,7 @@ export function redactPath(filePath: string, rootDir: string, label: string): st
   if (!relative.startsWith('..') && !path.isAbsolute(relative)) return `${label}/${relative}`
   return `<redacted:path:${createHash('sha256').update(resolved).digest('hex').slice(0, 12)}>`
 }
-export function cleanDoctorString(value: unknown): string | undefined {
+function cleanDoctorString(value: unknown): string | undefined {
   const text = String(value ?? '').trim()
   return text || undefined
 }
@@ -408,7 +408,7 @@ export function backupFilePath(backupPath: string, name: string): string {
   assertChildPath(backupPath, target, `backup file escapes backup directory: ${name}`)
   return target
 }
-export function assertChildPath(parent: string, target: string, message: string): void {
+function assertChildPath(parent: string, target: string, message: string): void {
   const root = path.resolve(parent)
   const resolved = path.resolve(target)
   if (path.dirname(resolved) !== root) throw new Error(message)

@@ -26,15 +26,7 @@ type AppShellNoticesProps = {
 
 const CLOUD_WEB_CAPABILITY_DISMISSED_KEY = 'open-cowork.cloud-web.capability-banner.dismissed'
 
-export function isCloudWebCapabilityBannerDismissed(storage: Pick<Storage, 'getItem'> | null | undefined = typeof window !== 'undefined' ? window.localStorage : null) {
-  try {
-    return storage?.getItem(CLOUD_WEB_CAPABILITY_DISMISSED_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-export function dismissCloudWebCapabilityBanner(storage: Pick<Storage, 'setItem'> | null | undefined = typeof window !== 'undefined' ? window.localStorage : null) {
+function dismissCloudWebCapabilityBanner(storage: Pick<Storage, 'setItem'> | null | undefined = typeof window !== 'undefined' ? window.localStorage : null) {
   try {
     storage?.setItem(CLOUD_WEB_CAPABILITY_DISMISSED_KEY, 'true')
   } catch {

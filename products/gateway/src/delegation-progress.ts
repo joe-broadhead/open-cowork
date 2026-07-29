@@ -17,9 +17,9 @@ import {
   type WorkState,
 } from './work-store.js'
 
-export type DelegationProgressDelivery = 'immediate' | 'digest' | 'deferred' | 'muted' | 'deduped' | 'session'
+type DelegationProgressDelivery = 'immediate' | 'digest' | 'deferred' | 'muted' | 'deduped' | 'session'
 
-export interface DelegationProgressTarget {
+interface DelegationProgressTarget {
   key: string
   sessionId?: string
   provider?: string
@@ -58,7 +58,7 @@ export interface DelegationProgressRoutingOptions {
   timeoutRetryDelayMs?: number
 }
 
-export interface DelegationProgressSessionClient {
+interface DelegationProgressSessionClient {
   session?: {
     prompt(args: { path: { id: string }; body: { agent?: string; parts: Array<{ type: 'text'; text: string }> } }): Promise<unknown>
   }
@@ -198,7 +198,7 @@ export async function deliverDelegationProgress(channels: Map<string, Pick<Chann
   return { routes, sent, failed, suppressed }
 }
 
-export function delegationProgressTargets(event: WorkEventRecord, state: WorkState): DelegationProgressTarget[] {
+function delegationProgressTargets(event: WorkEventRecord, state: WorkState): DelegationProgressTarget[] {
   const byKey = new Map<string, DelegationProgressTarget>()
   const payload = event.payload || {}
   const parentSessionId = typeof payload['parentSessionId'] === 'string' ? payload['parentSessionId'] : undefined
@@ -232,7 +232,7 @@ export function delegationProgressTargets(event: WorkEventRecord, state: WorkSta
   return [...byKey.values()].sort((a, b) => Number(Boolean(b.provider)) - Number(Boolean(a.provider)) || a.key.localeCompare(b.key))
 }
 
-export function formatDelegationProgressNotification(event: WorkEventRecord): string {
+function formatDelegationProgressNotification(event: WorkEventRecord): string {
   return renderStructuredMessage(delegationProgressMessage(event), { plainText: true }).plainText.substring(0, 4000)
 }
 

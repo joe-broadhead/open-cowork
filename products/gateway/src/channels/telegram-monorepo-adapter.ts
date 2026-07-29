@@ -135,6 +135,10 @@ export function createTelegramMonorepoChannelAdapter(): ChannelAdapter {
       }
     },
 
+    isActive() {
+      return provider !== null && (provider.health?.().ok ?? true)
+    },
+
     async sendMessage(chatId, text, options) {
       const active = requireProvider(provider)
       const limit = Math.max(1, Math.min(active.capabilities.maxTextLength || 4096, 4000))

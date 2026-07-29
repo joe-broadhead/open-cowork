@@ -26,12 +26,10 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     taskPermission: 'allow',
     externalDirectoryPermission: 'allow',
     mcpPermission: 'allow',
-    requireApprovalBeforeSending: true,
     notificationVoiceReplies: true,
     notificationSmartSuggestions: true,
     notificationDailyDigest: false,
     notificationSounds: true,
-    privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
     runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     windowZoomFactor: 1,
@@ -220,7 +218,7 @@ describe('SettingsPanel', () => {
     }))
   })
 
-  it('persists explicit Studio permission modes and review gates', async () => {
+  it('persists explicit Studio permission modes', async () => {
     const settingsSet = vi.mocked(window.coworkApi.settings.set)
     const user = userEvent.setup()
 
@@ -236,8 +234,6 @@ describe('SettingsPanel', () => {
     await user.click(within(screen.getByRole('radiogroup', { name: 'Delegate to coworkers' })).getByRole('radio', { name: 'Ask' }))
     await user.click(within(screen.getByRole('radiogroup', { name: 'Managed external directories' })).getByRole('radio', { name: 'Ask' }))
     await user.click(within(screen.getByRole('radiogroup', { name: 'MCP tools' })).getByRole('radio', { name: 'Off' }))
-    expect(screen.getByText('External-send review will be controlled here when Gateway delivery policy enforcement is wired. Existing provider and tool approval policies remain in force.')).toBeInTheDocument()
-
     const toolingBridge = await screen.findByRole('switch', { name: 'Allow Git configuration' })
     expect(toolingBridge).toHaveAttribute('aria-checked', 'false')
 
@@ -276,7 +272,6 @@ describe('SettingsPanel', () => {
     await user.click(screen.getByRole('switch', { name: 'Smart suggestions' }))
     await user.click(screen.getByRole('switch', { name: 'Sounds' }))
     await user.click(screen.getByRole('button', { name: /Privacy/ }))
-    expect(screen.getByText('Session retention stays managed by OpenCode runtime history and explicit storage cleanup until a verified retention policy is available.')).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: 'Help improve the product' }))
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 

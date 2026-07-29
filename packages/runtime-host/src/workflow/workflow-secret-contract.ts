@@ -12,7 +12,7 @@ export interface InternalWorkflowDraft extends Omit<WorkflowDraft, 'triggers'> {
   triggers: InternalWorkflowTrigger[]
 }
 
-export function toPublicWorkflowTrigger(trigger: InternalWorkflowTrigger): WorkflowTrigger {
+function toPublicWorkflowTrigger(trigger: InternalWorkflowTrigger): WorkflowTrigger {
   const {
     webhookSecret: _webhookSecret,
     ...publicTrigger

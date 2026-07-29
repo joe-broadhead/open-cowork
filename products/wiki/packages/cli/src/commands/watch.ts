@@ -4,9 +4,9 @@ import { atomicWriteFile, isoNow } from "@openwiki/core";
 import { OpenWikiWriteInProgressError } from "@openwiki/workflows";
 
 export type AutomationKind = "sync" | "backup" | "inbox";
-export type AutomationRunStatus = "success" | "failed" | "skipped_busy" | "skipped_backoff";
+type AutomationRunStatus = "success" | "failed" | "skipped_busy" | "skipped_backoff";
 
-export interface AutomationStateEntry {
+interface AutomationStateEntry {
   status: AutomationRunStatus;
   started_at: string;
   finished_at: string;

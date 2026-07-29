@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { FakeChannelProvider } from "@open-cowork/gateway-testing";
-import type { IncomingChannelMessage } from "@open-cowork/gateway-channel";
+import { ChannelStackTelemetry, type IncomingChannelMessage } from "@open-cowork/gateway-channel";
 
 import { FakeStandaloneOpenCodeAdapter, type StandaloneOpenCodeAdapter } from "../dist/opencode.js";
 import { InMemoryStandaloneGatewayRepository } from "../dist/repository.js";
@@ -36,6 +36,17 @@ const providerConfig = {
   settings: {},
 };
 
+function telemetryCount(
+  telemetry: ChannelStackTelemetry,
+  direction: "inbound" | "outbound",
+  outcome: "attempt" | "success" | "retry" | "error",
+): number {
+  const match = telemetry.renderPrometheus().match(new RegExp(
+    `open_cowork_channel_messages_total\\{direction="${direction}",outcome="${outcome}",provider_kind="cli",stack="monorepo-provider",surface="standalone-gateway"\\} (\\d+)`,
+  ));
+  return Number(match?.[1] ?? 0);
+}
+
 async function authorize(
   repository: InMemoryStandaloneGatewayRepository,
   input: { role?: StandaloneGatewayIdentityRole; status?: StandaloneGatewayIdentityStatus; externalUserId?: string; providerWorkspaceId?: string } = {},
@@ -53,7 +64,8 @@ test("standalone runtime prompts private OpenCode and persists projected events"
   const repository = new InMemoryStandaloneGatewayRepository();
   await authorize(repository);
   const opencode = new FakeStandaloneOpenCodeAdapter();
-  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const telemetry = new ChannelStackTelemetry("standalone-gateway", ["monorepo-provider"]);
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode, telemetry });
   const provider = new FakeChannelProvider({ id: "cli-standalone" });
 
   await runtime.handleMessage(provider, providerConfig, message("message-1", "build the thing"));
@@ -64,13 +76,73 @@ test("standalone runtime prompts private OpenCode and persists projected events"
   const snapshot = await repository.dashboardSnapshot();
   assert.equal(snapshot.sessions[0]?.provider, "cli-standalone");
   assert.equal(snapshot.audits[0]?.action, "standalone.prompt");
+  const metrics = telemetry.renderPrometheus();
+  assert.match(metrics, /direction="inbound",outcome="attempt",provider_kind="cli"/);
+  assert.match(metrics, /direction="inbound",outcome="success",provider_kind="cli"/);
+  assert.match(metrics, /direction="outbound",outcome="attempt",provider_kind="cli"/);
+  assert.match(metrics, /direction="outbound",outcome="success",provider_kind="cli"/);
+});
+
+test("standalone runtime counts an empty inbound message as one completed no-op", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const telemetry = new ChannelStackTelemetry("standalone-gateway", ["monorepo-provider"]);
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode, telemetry });
+  const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+  await runtime.handleMessage(provider, providerConfig, message("empty", "   "));
+
+  assert.equal(opencode.prompts.length, 0);
+  assert.equal(telemetryCount(telemetry, "inbound", "attempt"), 1);
+  assert.equal(telemetryCount(telemetry, "inbound", "success"), 1);
+  assert.equal(telemetryCount(telemetry, "outbound", "attempt"), 0);
+});
+
+test("standalone runtime applies the common bounded classifier to inbound failures", async () => {
+  const cases = [
+    { name: "429", error: Object.assign(new Error("limited"), { status: 429 }), outcome: "retry" },
+    { name: "5xx", error: Object.assign(new Error("unavailable"), { statusCode: 503 }), outcome: "retry" },
+    { name: "network", error: Object.assign(new Error("socket failed"), { code: "ECONNRESET" }), outcome: "retry" },
+    { name: "4xx", error: Object.assign(new Error("bad request"), { status: 400 }), outcome: "error" },
+  ] as const;
+
+  for (const scenario of cases) {
+    const repository = new InMemoryStandaloneGatewayRepository();
+    repository.findChannelIdentity = async () => {
+      throw scenario.error;
+    };
+    const telemetry = new ChannelStackTelemetry("standalone-gateway", ["monorepo-provider"]);
+    const runtime = createStandaloneGatewayRuntime({
+      repository,
+      opencode: new FakeStandaloneOpenCodeAdapter(),
+      telemetry,
+    });
+
+    await assert.rejects(
+      () => runtime.handleMessage(
+        new FakeChannelProvider({ id: "cli-standalone" }),
+        providerConfig,
+        message(`inbound-${scenario.name}`, "classify me"),
+      ),
+      scenario.error,
+    );
+
+    assert.equal(telemetryCount(telemetry, "inbound", "attempt"), 1, scenario.name);
+    assert.equal(telemetryCount(telemetry, "inbound", scenario.outcome), 1, scenario.name);
+    assert.equal(
+      telemetryCount(telemetry, "inbound", scenario.outcome === "retry" ? "error" : "retry"),
+      0,
+      scenario.name,
+    );
+  }
 });
 
 test("standalone runtime replies in-channel with the assistant output", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();
   await authorize(repository);
   const opencode = new FakeStandaloneOpenCodeAdapter();
-  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const telemetry = new ChannelStackTelemetry("standalone-gateway", ["monorepo-provider"]);
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode, telemetry });
   const provider = new FakeChannelProvider({ id: "cli-standalone" });
 
   await runtime.handleMessage(provider, providerConfig, message("message-1", "build the thing"));
@@ -117,7 +189,8 @@ test("standalone runtime chunks long replies to the provider text limit", async 
       return { ok: true, detail: "ready" };
     },
   };
-  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const telemetry = new ChannelStackTelemetry("standalone-gateway", ["monorepo-provider"]);
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode, telemetry });
   const provider = new FakeChannelProvider({ id: "cli-standalone", capabilities: { maxTextLength: 100 } });
 
   await runtime.handleMessage(provider, providerConfig, message("message-1", "write a lot"));
@@ -128,6 +201,15 @@ test("standalone runtime chunks long replies to the provider text limit", async 
   }
   const deliveryIds = provider.sent.map((entry) => entry.options?.deliveryId);
   assert.equal(new Set(deliveryIds).size, deliveryIds.length);
+  const metrics = telemetry.renderPrometheus();
+  assert.match(
+    metrics,
+    /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",stack="monorepo-provider",surface="standalone-gateway"\} 1/,
+  );
+  assert.match(
+    metrics,
+    /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="cli",stack="monorepo-provider",surface="standalone-gateway"\} 1/,
+  );
 });
 
 test("standalone runtime coalesces streamed assistant snapshots into one reply", async () => {
@@ -172,6 +254,38 @@ test("standalone runtime audits reply delivery failures without failing the prom
   assert.equal(snapshot.audits[0]?.action, "standalone.prompt");
   const replyAudit = snapshot.audits.find((audit) => audit.action === "standalone.reply.failed");
   assert.equal(replyAudit?.metadata.error, "provider offline");
+});
+
+test("standalone runtime applies the common bounded classifier to one logical reply", async () => {
+  const cases = [
+    { name: "429", error: Object.assign(new Error("limited"), { status: 429 }), outcome: "retry" },
+    { name: "5xx", error: Object.assign(new Error("unavailable"), { statusCode: 503 }), outcome: "retry" },
+    { name: "network", error: Object.assign(new Error("socket failed"), { code: "ECONNRESET" }), outcome: "retry" },
+    { name: "4xx", error: Object.assign(new Error("bad request"), { status: 400 }), outcome: "error" },
+    { name: "unknown", error: new Error("provider offline"), outcome: "error" },
+  ] as const;
+
+  for (const scenario of cases) {
+    const repository = new InMemoryStandaloneGatewayRepository();
+    await authorize(repository);
+    const opencode = new FakeStandaloneOpenCodeAdapter();
+    const telemetry = new ChannelStackTelemetry("standalone-gateway", ["monorepo-provider"]);
+    const runtime = createStandaloneGatewayRuntime({ repository, opencode, telemetry });
+    const provider = new FakeChannelProvider({ id: "cli-standalone" });
+    provider.sendText = async () => {
+      throw scenario.error;
+    };
+
+    await runtime.handleMessage(provider, providerConfig, message(`failure-${scenario.name}`, "reply"));
+
+    assert.equal(telemetryCount(telemetry, "outbound", "attempt"), 1, scenario.name);
+    assert.equal(telemetryCount(telemetry, "outbound", scenario.outcome), 1, scenario.name);
+    assert.equal(
+      telemetryCount(telemetry, "outbound", scenario.outcome === "retry" ? "error" : "retry"),
+      0,
+      scenario.name,
+    );
+  }
 });
 
 test("standalone runtime stops claiming jobs the instant the lease is inactive", async () => {

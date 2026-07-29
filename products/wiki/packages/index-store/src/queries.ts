@@ -1,5 +1,5 @@
 import { indexStoreRecordFromJson, indexStoreWorkspaceConfigFromJson } from "./records.ts";
-import { boundedOpenWikiListLimit, idToUri, type OpenWikiDerivedRecordType, openWikiProposalSectionIds, openWikiProposalTargetsPath, openWikiProposalTargetPaths, openWikiProposalUpdatedAt, type OpenWikiWorkspaceRegistry, type ProposalRecord } from "@openwiki/core";
+import { boundedOpenWikiListLimit, idToUri, type OpenWikiDerivedRecordType, openWikiProposalSectionIds, openWikiProposalTargetsPath, openWikiProposalUpdatedAt, type OpenWikiWorkspaceRegistry, type ProposalRecord } from "@openwiki/core";
 import { listGraphEdges, listTopics, loadRepository } from "@openwiki/repo";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -372,7 +372,7 @@ export async function openCurrentIndexStore(root: string): Promise<DatabaseSync 
   }
 }
 
-export function recordTypeCount(db: DatabaseSync, type: string): number {
+function recordTypeCount(db: DatabaseSync, type: string): number {
   const row = db.prepare("SELECT COUNT(*) AS count FROM records WHERE record_type = ?").get(type) as { count: number | bigint };
   return Number(row.count);
 }
@@ -470,23 +470,11 @@ function proposalFromIndexStoreRow(row: Record<string, unknown>): ProposalRecord
   return indexStoreRecordFromJson<ProposalRecord>(stringField(row, "json"), "proposal");
 }
 
-export function proposalTargetsPath(proposal: ProposalRecord, targetPath: string): boolean {
-  return openWikiProposalTargetsPath(proposal, targetPath);
-}
-
-export function proposalSectionIds(proposal: ProposalRecord, sections: Array<{ id: string; paths: string[] }>): string[] {
-  return openWikiProposalSectionIds(proposal, sections);
-}
-
-export function proposalTargetPaths(proposal: ProposalRecord): string[] {
-  return openWikiProposalTargetPaths(proposal);
-}
-
 export function proposalUpdatedAt(proposal: ProposalRecord): string {
   return openWikiProposalUpdatedAt(proposal);
 }
 
-export function parseJsonStringArray(value: string | undefined): string[] {
+function parseJsonStringArray(value: string | undefined): string[] {
   if (!value) {
     return [];
   }
@@ -499,7 +487,7 @@ function readMetadata(db: DatabaseSync): Map<string, string> {
   return new Map(rows.map((row) => [row.key, row.value]));
 }
 
-export function countRows(db: DatabaseSync, table: IndexStoreCountTable): number {
+function countRows(db: DatabaseSync, table: IndexStoreCountTable): number {
   let row: { count: number | bigint } | undefined;
   switch (table) {
     case "records":

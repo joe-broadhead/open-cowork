@@ -84,6 +84,10 @@ export const telegramChannel: ChannelAdapter = {
     polling = false
   },
 
+  isActive() {
+    return polling
+  },
+
   async sendMessage(chatId: string, text: string, options?: { threadId?: string; idempotencyKey?: string }) {
     const token = getToken()
     if (!token) throw new Error('Telegram outbound delivery is not configured: bot token is missing')

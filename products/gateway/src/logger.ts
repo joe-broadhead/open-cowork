@@ -127,7 +127,7 @@ export function formatLogLine(level: LogLevel, message: string, fields: LogField
   return parts.join(' ')
 }
 
-export function logAt(level: LogLevel, message: string, fields?: LogFields): void {
+function logAt(level: LogLevel, message: string, fields?: LogFields): void {
   if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[configuredLevel()]) return
   sink(formatLogLine(level, message, fields || {}))
 }

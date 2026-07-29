@@ -15,7 +15,7 @@ import type { AgentTemplate } from './agent-builder-utils'
 // The array is seeded into a mutable registry; downstream config can
 // append or override via `registerExtraStarterTemplates()`.
 
-export const STARTER_TEMPLATES: AgentTemplate[] = [
+const STARTER_TEMPLATES: AgentTemplate[] = [
   {
     id: 'data-analyst',
     label: 'Data Analyst',

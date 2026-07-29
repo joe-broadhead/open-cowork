@@ -57,13 +57,13 @@ export interface ChannelSyncClient {
   }
 }
 
-export interface ChannelDeliveryReceipt {
+interface ChannelDeliveryReceipt {
   receiptId?: string
   messageId?: string
   id?: string
 }
 
-export interface ChannelDeliveryAdapter {
+interface ChannelDeliveryAdapter {
   sendMessage(chatId: string, text: string, options?: { threadId?: string; idempotencyKey?: string }): Promise<undefined | string | ChannelDeliveryReceipt>
   reconcileDelivery?(input: {
     chatId: string
@@ -559,7 +559,7 @@ export class ChannelSyncBridge {
     }
   }
 
-  private failOutboxDelivery(link: ChannelSessionLink, message: any, reason: string): void {
+  private failOutboxDelivery(link: ChannelSessionLink, message: any, reason: string): { deadLetter: boolean } {
     const db = this.openOutboxDb()
     try {
       const now = new Date(this.now()).toISOString()
@@ -582,6 +582,7 @@ export class ChannelSyncBridge {
       const target = redactedChannelTargetLabel(link.provider, link.chatId, link.threadId)
       if (policy.deadLetter) queueEvent(`Channel sync delivery dead-lettered after ${attempts} attempt(s) to ${target}: ${cleanError(reason)}`)
       else if (policy.retryAfter) queueEvent(`Channel sync backing off ${link.provider} delivery until ${policy.retryAfter}: ${cleanError(reason)}`)
+      return { deadLetter: policy.deadLetter }
     } finally {
       db.close()
     }
@@ -684,7 +685,7 @@ export function clearChannelSyncForTest(filePath = defaultStateFile()): void {
   try { fs.rmSync(`${defaultOutboxFile(filePath)}-shm`, { force: true }) } catch {}
 }
 
-export function extractMessageText(message: any): string {
+function extractMessageText(message: any): string {
   return (Array.isArray(message?.parts) ? message.parts : [])
     .filter((part: any) => part?.type === 'text' && typeof part.text === 'string')
     .map((part: any) => part.text)
