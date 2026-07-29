@@ -34,6 +34,14 @@ export interface StandaloneGatewayProviderConfig {
   settings: Record<string, unknown>;
 }
 
+export type StandaloneInboundDeliveryContext = {
+  /**
+   * `provider-redelivery` is set only when a failed handler propagates through
+   * an HTTP ingress that releases its replay claim and returns non-2xx.
+   */
+  failureHandoff: "provider-redelivery" | "none";
+};
+
 export interface StandaloneGatewayConfig {
   productMode: "standalone";
   deploymentMode: "solo" | "team" | "enterprise";

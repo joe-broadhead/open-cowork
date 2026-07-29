@@ -4,7 +4,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import {
   channelTelemetryBindingConfigured,
-  channelTelemetryFailureOutcome,
+  channelInboundFailureOutcome,
   channelTelemetryStack,
 } from '../channel-telemetry.js'
 import { clearConfigCacheForTest, updateConfig } from '../config.js'
@@ -88,16 +88,9 @@ describe('channel stack telemetry binding state', () => {
     expect(channelTelemetryBindingConfigured('discord', 'monorepo-provider')).toBe(true)
   })
 
-  it('applies the common bounded classifier to durable inbound failures', () => {
-    const cases = [
-      { name: '429', error: Object.assign(new Error('limited'), { status: 429 }), outcome: 'retry' },
-      { name: '5xx', error: Object.assign(new Error('unavailable'), { statusCode: 503 }), outcome: 'retry' },
-      { name: 'network', error: Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }), outcome: 'retry' },
-      { name: '4xx', error: Object.assign(new Error('bad request'), { status: 400 }), outcome: 'error' },
-    ] as const
-
-    for (const scenario of cases) {
-      expect(channelTelemetryFailureOutcome(scenario.error), scenario.name).toBe(scenario.outcome)
-    }
+  it('records retry only when a transient inbound failure has a provider redelivery handoff', () => {
+    expect(channelInboundFailureOutcome({ transientFailureHandoff: 'provider-redelivery' }, true)).toBe('retry')
+    expect(channelInboundFailureOutcome({}, true)).toBe('error')
+    expect(channelInboundFailureOutcome({ transientFailureHandoff: 'provider-redelivery' }, false)).toBe('error')
   })
 })

@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   ChannelStackTelemetry,
   boundedProviderKind,
-  classifyChannelTelemetryError,
 } from "@open-cowork/gateway-channel";
 
 test("channel stack telemetry exposes bounded parity metrics and real zeroes", () => {
@@ -26,10 +25,10 @@ test("channel stack telemetry exposes bounded parity metrics and real zeroes", (
   });
 
   const text = telemetry.renderPrometheus();
-  assert.match(text, /open_cowork_channel_stack_info\{schema_version="1",stack="monorepo-provider",surface="standalone-gateway"\} 1/);
+  assert.match(text, /open_cowork_channel_stack_info\{schema_version="2",stack="monorepo-provider",surface="standalone-gateway"\} 1/);
   assert.match(text, /open_cowork_channel_bindings\{provider_kind="telegram",stack="monorepo-provider",status="configured",surface="standalone-gateway"\} 2/);
   assert.match(text, /direction="outbound",outcome="retry".*\} 0/);
-  assert.match(text, /open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="success",provider_kind="telegram"/);
+  assert.match(text, /open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="success",provider_kind="telegram",schema_version="2"/);
 });
 
 test("channel stack telemetry never renders ids, tenant data, content, or secrets as labels", () => {
@@ -66,11 +65,11 @@ test("an undeployed stack is absent while a deployed unused stack reports zero",
   assert.match(rendered, /direction="outbound",outcome="success",provider_kind="signal".*\} 0/);
 });
 
-test("latency is accepted only for terminal outbound egress requests", () => {
+test("latency covers terminal inbound and outbound composition operations", () => {
   const telemetry = new ChannelStackTelemetry("cloud-channel-gateway", ["monorepo-provider"]);
   for (const operation of [
     { direction: "inbound", outcome: "success" },
-    { direction: "outbound", outcome: "attempt" },
+    { direction: "outbound", outcome: "ignored" },
   ] as const) {
     telemetry.recordOperation({
       stack: "monorepo-provider",
@@ -80,34 +79,45 @@ test("latency is accepted only for terminal outbound egress requests", () => {
     });
   }
 
-  assert.doesNotMatch(telemetry.renderPrometheus(), /open_cowork_channel_operation_latency_ms_count/);
-});
-
-test("provider failures share one bounded retryability matrix", () => {
-  const cases: Array<[string, unknown, "retry" | "error"]> = [
-    ["429 status", Object.assign(new Error("limited"), { status: 429 }), "retry"],
-    ["5xx status", Object.assign(new Error("unavailable"), { statusCode: 503 }), "retry"],
-    ["nested 5xx status", { response: { status: 502 } }, "retry"],
-    ["network code", Object.assign(new Error("socket failed"), { code: "ECONNRESET" }), "retry"],
-    ["network message", new Error("fetch failed"), "retry"],
-    ["4xx status", Object.assign(new Error("bad request"), { status: 400 }), "error"],
-    ["unknown error", new Error("provider exploded in a novel way"), "error"],
-  ];
-
-  for (const [name, error, outcome] of cases) {
-    assert.equal(classifyChannelTelemetryError(error), outcome, name);
-  }
-});
-
-test("failure classification returns no provider error details", () => {
-  const secret = "tenant-123-secret-destination";
-  const outcome = classifyChannelTelemetryError(
-    Object.assign(new Error(`network error for ${secret}`), {
-      code: "ECONNRESET",
-      destination: secret,
-    }),
+  const rendered = telemetry.renderPrometheus();
+  assert.match(
+    rendered,
+    /open_cowork_channel_operation_latency_ms_count\{direction="inbound",outcome="success",provider_kind="telegram",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
   );
+  assert.match(
+    rendered,
+    /open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="ignored",provider_kind="telegram",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+  );
+});
 
-  assert.equal(outcome, "retry");
-  assert.doesNotMatch(JSON.stringify({ outcome }), new RegExp(secret));
+test("reset clears process-local telemetry until the stack is explicitly declared again", () => {
+  const telemetry = new ChannelStackTelemetry("standalone-gateway", ["monorepo-provider"]);
+  telemetry.setBindingCount("monorepo-provider", "telegram", "configured", 1);
+  telemetry.recordOperation({
+    stack: "monorepo-provider",
+    providerKind: "telegram",
+    direction: "inbound",
+    outcome: "success",
+    latencyMs: 12,
+  });
+
+  const before = telemetry.renderPrometheus();
+  assert.match(before, /open_cowork_channel_stack_info\{/);
+  assert.match(before, /open_cowork_channel_bindings\{/);
+  assert.match(before, /open_cowork_channel_messages_total\{/);
+  assert.match(before, /open_cowork_channel_operation_latency_ms_count\{/);
+
+  telemetry.reset();
+
+  const reset = telemetry.renderPrometheus();
+  assert.doesNotMatch(reset, /open_cowork_channel_stack_info\{/);
+  assert.doesNotMatch(reset, /open_cowork_channel_bindings\{/);
+  assert.doesNotMatch(reset, /open_cowork_channel_messages_total\{/);
+  assert.doesNotMatch(reset, /open_cowork_channel_operation_latency_ms_count\{/);
+
+  telemetry.declareStack("monorepo-provider");
+  assert.match(
+    telemetry.renderPrometheus(),
+    /open_cowork_channel_stack_info\{schema_version="2",stack="monorepo-provider",surface="standalone-gateway"\} 1/,
+  );
 });

@@ -372,6 +372,7 @@ async function handleTelegramInboundMessage(update: any, rawMessage: any, text: 
     text,
     attachments: [],
     timestamp: new Date(timestampSeconds * 1000).toISOString(),
+    transientFailureHandoff: 'provider-redelivery',
   }
   await processDurableTelegramInbound(msg, {
     deliver: (accepted) => inboundHandler(accepted),

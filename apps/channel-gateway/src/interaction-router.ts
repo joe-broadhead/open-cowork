@@ -1,5 +1,4 @@
 import {
-  classifyChannelTelemetryError,
   type ChannelProvider,
   type IncomingChannelMessage,
 } from '@open-cowork/gateway-channel'
@@ -57,12 +56,12 @@ export async function routeGatewayInteraction(input: RouteGatewayInteractionInpu
         outcome: 'success',
         latencyMs: Date.now() - startedAt,
       })
-    } catch (error) {
+    } catch {
       input.metrics.channelTelemetry.recordOperation({
         stack: 'monorepo-provider',
         providerKind: input.providerConfig.kind,
         direction: 'outbound',
-        outcome: classifyChannelTelemetryError(error),
+        outcome: 'error',
         latencyMs: Date.now() - startedAt,
       })
       input.metrics.errors += 1

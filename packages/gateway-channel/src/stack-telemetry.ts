@@ -4,7 +4,7 @@ import {
   type ChannelProviderKind,
 } from "./provider.js";
 
-export const CHANNEL_STACK_TELEMETRY_SCHEMA_VERSION = "1";
+export const CHANNEL_STACK_TELEMETRY_SCHEMA_VERSION = "2";
 
 export type ChannelTelemetrySurface =
   | "cloud-channel-gateway"
@@ -13,12 +13,8 @@ export type ChannelTelemetrySurface =
 
 export type ChannelTelemetryStack = "monorepo-provider" | "durable-native";
 export type ChannelTelemetryDirection = "inbound" | "outbound";
-export type ChannelTelemetryOutcome = "attempt" | "success" | "retry" | "error";
+export type ChannelTelemetryOutcome = "attempt" | "success" | "retry" | "error" | "ignored";
 export type ChannelTelemetryBindingStatus = "configured" | "active";
-export type ChannelTelemetryFailureOutcome = Extract<
-  ChannelTelemetryOutcome,
-  "retry" | "error"
->;
 
 type OperationInput = {
   stack: ChannelTelemetryStack;
@@ -36,7 +32,7 @@ type Histogram = {
 
 const LATENCY_BUCKETS_MS = [25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000];
 const DIRECTIONS: ChannelTelemetryDirection[] = ["inbound", "outbound"];
-const OUTCOMES: ChannelTelemetryOutcome[] = ["attempt", "success", "retry", "error"];
+const OUTCOMES: ChannelTelemetryOutcome[] = ["attempt", "success", "retry", "error", "ignored"];
 
 export class ChannelStackTelemetry {
   readonly surface: ChannelTelemetrySurface;
@@ -79,8 +75,7 @@ export class ChannelStackTelemetry {
     const key = operationKey(input.stack, kind, input.direction, input.outcome);
     this.messages.set(key, (this.messages.get(key) || 0) + 1);
     if (
-      input.direction !== "outbound"
-      || input.outcome === "attempt"
+      input.outcome === "attempt"
       || input.latencyMs === undefined
       || !Number.isFinite(input.latencyMs)
     ) return;
@@ -125,18 +120,20 @@ export class ChannelStackTelemetry {
         return `open_cowork_channel_messages_total${labels({
           surface: this.surface,
           stack,
+          schema_version: CHANNEL_STACK_TELEMETRY_SCHEMA_VERSION,
           provider_kind: providerKind,
           direction,
           outcome,
         })} ${value}`;
       }),
-      "# HELP open_cowork_channel_operation_latency_ms Outbound egress-request latency in milliseconds for terminal outcomes.",
+      "# HELP open_cowork_channel_operation_latency_ms Composition-boundary latency in milliseconds for terminal outcomes.",
       "# TYPE open_cowork_channel_operation_latency_ms histogram",
       ...renderMap(this.latencies, (key, histogram) => {
         const [stack, providerKind, direction, outcome] = key.split("\u001f");
         return renderHistogram(histogram, {
           surface: this.surface,
           stack,
+          schema_version: CHANNEL_STACK_TELEMETRY_SCHEMA_VERSION,
           provider_kind: providerKind,
           direction,
           outcome,
@@ -150,48 +147,6 @@ export class ChannelStackTelemetry {
 export function boundedProviderKind(value: unknown): ChannelProviderKind | "other" {
   if (isChannelProviderKind(value)) return value;
   return channelProviderKindFromId(value) || "other";
-}
-
-/**
- * Reduce provider failures to the bounded telemetry outcome vocabulary.
- * Error text and metadata are inspected only for retryability and are never
- * returned, so callers cannot accidentally promote them to metric labels.
- */
-export function classifyChannelTelemetryError(
-  error: unknown,
-): ChannelTelemetryFailureOutcome {
-  const record = objectRecord(error);
-  if (record?.["name"] === "TransientInboundError") return "retry";
-
-  const status = numericStatus(record);
-  if (status !== null) {
-    if (
-      status === 408
-      || status === 409
-      || status === 425
-      || status === 429
-      || status >= 500
-    ) return "retry";
-    return "error";
-  }
-
-  const code = typeof record?.["code"] === "string"
-    ? record["code"].toUpperCase()
-    : "";
-  if ([
-    "ECONNABORTED",
-    "ECONNREFUSED",
-    "ECONNRESET",
-    "EHOSTUNREACH",
-    "ENETDOWN",
-    "ENETUNREACH",
-    "ETIMEDOUT",
-  ].includes(code)) return "retry";
-
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return /\b(?:http\s*5\d\d|429|rate[ -]?limit|too many requests|retry[_ -]?after|timed? out|timeout|temporar(?:y|ily)|unavailable|fetch failed|network error|circuit open)\b/.test(message)
-    ? "retry"
-    : "error";
 }
 
 function bindingKey(
@@ -257,24 +212,4 @@ function labels(values: Record<string, string | undefined>): string {
 
 function escapeLabel(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/"/g, '\\"');
-}
-
-function objectRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object"
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function numericStatus(record: Record<string, unknown> | null): number | null {
-  for (const value of [
-    record?.["status"],
-    record?.["statusCode"],
-    objectRecord(record?.["response"])?.["status"],
-    objectRecord(record?.["cause"])?.["status"],
-    objectRecord(record?.["cause"])?.["statusCode"],
-  ]) {
-    const number = Number(value);
-    if (Number.isInteger(number) && number >= 100 && number <= 599) return number;
-  }
-  return null;
 }

@@ -268,7 +268,7 @@ for (const surface of [
   'standalone-gateway',
   'durable-gateway',
 ]) {
-  const expected = `absent(open_cowork_channel_stack_info{surface="${surface}"})`
+  const expected = `absent(open_cowork_channel_stack_info{surface="${surface}",schema_version="2"})`
   if (!adoptionExpressions.includes(expected)) {
     throw new Error(`${dashboardPath} must check stack-info absence for ${surface}`)
   }
@@ -277,13 +277,14 @@ for (const surface of [
 const outcomeExpressions = channelPanelExpressions('Channel stack success, retry, and error rates')
 for (const outcome of ['success', 'retry', 'error']) {
   const ratio = outcomeExpressions.find((expression) =>
-    expression.includes(`{outcome="${outcome}"}`))
+    expression.includes(`outcome="${outcome}"`))
   if (
     !ratio
+    || !ratio.includes('schema_version="2"')
     || !ratio.includes('[$__range]')
     || !ratio.includes('provider_kind')
     || !ratio.includes('clamp_min(')
-    || !ratio.includes('{outcome=~"success|retry|error"}')
+    || !ratio.includes('outcome=~"success|retry|error"')
   ) {
     throw new Error(`${dashboardPath} must define a range-aware, per-provider ${outcome} ratio over terminal outcomes`)
   }
@@ -291,23 +292,26 @@ for (const outcome of ['success', 'retry', 'error']) {
 if (!outcomeExpressions.some((expression) =>
   expression.includes('by (surface, stack, provider_kind, direction, outcome)')
   && expression.includes('increase(')
+  && expression.includes('schema_version="2"')
+  && expression.includes('outcome=~"success|retry|error|ignored"')
   && expression.includes('[$__range]'))) {
   throw new Error(`${dashboardPath} must define range-aware terminal volume by surface, stack, provider, direction, and outcome`)
 }
 
-const latencyExpressions = channelPanelExpressions('Channel stack outbound egress p50 and p95 latency')
+const latencyExpressions = channelPanelExpressions('Channel stack p50 and p95 successful-operation latency')
 for (const quantile of ['0.50', '0.95']) {
   const expression = latencyExpressions.find((candidate) =>
     candidate.includes(`histogram_quantile(${quantile}`))
   if (
     !expression
-    || !expression.includes('direction="outbound"')
+    || !expression.includes('schema_version="2"')
     || !expression.includes('outcome="success"')
     || !expression.includes('provider_kind')
+    || !expression.includes('direction)')
     || !expression.includes('increase(')
     || !expression.includes('[$__range]')
   ) {
-    throw new Error(`${dashboardPath} must define range-aware outbound egress-request p${quantile.slice(2)} latency by provider`)
+    throw new Error(`${dashboardPath} must define range-aware p${quantile.slice(2)} latency by provider and direction`)
   }
 }
 for (const phrase of [
@@ -315,10 +319,12 @@ for (const phrase of [
   'retention are controlled by the operator',
   'An absent `stack_info` series',
   'never records prompts, message bodies',
-  'outbound egress-request latency',
+  'Composition-boundary latency',
   '`active` means a configured provider',
-  'Every egress request emits exactly one `attempt`',
-  'Inbound latency is deliberately absent',
+  'Every operation emits exactly one `attempt`',
+  'concretely preserves or schedules',
+  'Duplicate events, empty messages',
+  '`schema_version="2"`',
 ]) {
   assertIncludes(channelTelemetryDocsPath, phrase)
 }

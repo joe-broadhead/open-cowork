@@ -107,10 +107,15 @@ if (command === "smoke") {
       telemetry: providers.telemetry,
     });
     const leaseRef = { leaseId: daemonLeaseId, ownerId, get leaseToken() { return leaseToken; } };
-    await providers.start((providerConfig, message) => {
+    await providers.start((providerConfig, message, delivery) => {
       // Don't prompt OpenCode once the lease is lost — a successor daemon owns the workspace.
       if (!leaseActive) return Promise.resolve();
-      return runtime.handleMessage(providers.get(providerConfig.id)!.provider, providerConfig, message);
+      return runtime.handleMessage(
+        providers.get(providerConfig.id)!.provider,
+        providerConfig,
+        message,
+        delivery,
+      );
     });
     let maintenanceRunning = false;
     let nextRetentionAt = 0;

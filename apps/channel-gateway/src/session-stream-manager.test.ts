@@ -138,9 +138,9 @@ test('session stream manager renders session events once and persists cursor aft
     lastChatMessageId: '3',
   }])
   const telemetry = metrics.channelTelemetry.renderPrometheus()
-  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
-  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
-  assert.match(telemetry, /open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="success",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(telemetry, /open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="success",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
 
   subscriptions[0].onEvent({
     eventId: 'event-5-again',
@@ -427,6 +427,11 @@ test('session stream manager leaves failed provider sends retryable', async () =
   subscriptions[1].onEvent(event)
   await waitFor(() => cursorUpdates.length === 1)
   assert.deepEqual(provider.sent.map((entry) => entry.text), ['retry me'])
+  const telemetry = metrics.channelTelemetry.renderPrometheus()
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="retry",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(telemetry, /open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="retry",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
   manager.closeAll()
 })
 
@@ -500,8 +505,9 @@ test('session stream manager retries transient poison events before skipping the
   assert.equal(metrics.sessionRenderDeadLetters, 1)
   assert.equal(metrics.droppedSessionEvents, 1)
   const telemetry = metrics.channelTelemetry.renderPrometheus()
-  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
-  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="error",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="retry",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(telemetry, /open_cowork_channel_messages_total\{direction="outbound",outcome="error",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
   assert.deepEqual(cursorUpdates, [{
     bindingId: 'binding-1',
     lastEventSequence: 1,

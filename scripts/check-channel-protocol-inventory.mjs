@@ -52,7 +52,7 @@ mustContain('docs/channel-stack-telemetry.md', 'open_cowork_channel_stack_info')
 for (const surface of ['cloud-channel-gateway', 'standalone-gateway', 'durable-gateway']) {
   mustContain(
     'docs/channel-stack-telemetry.md',
-    `absent(open_cowork_channel_stack_info{surface="${surface}"})`,
+    `absent(open_cowork_channel_stack_info{surface="${surface}",schema_version="2"})`,
   )
 }
 

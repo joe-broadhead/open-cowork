@@ -4,10 +4,7 @@ import type {
   IncomingChannelMessage,
   SentMessage,
 } from '@open-cowork/gateway-channel'
-import {
-  classifyChannelTelemetryError,
-  chunkText,
-} from '@open-cowork/gateway-channel'
+import { chunkText } from '@open-cowork/gateway-channel'
 import type { ChannelDeliveryRecord, CloudChannelProviderId } from '@open-cowork/cloud-client/domains/channels'
 import { isCloudTransportError } from '@open-cowork/cloud-client/domains/transport'
 
@@ -445,6 +442,7 @@ async function handleMessage(
   metrics: GatewayMetrics,
   claimedBy: string,
 ) {
+  const inboundStartedAt = Date.now()
   metrics.incomingMessages += 1
   const providerMetrics = ensureGatewayProviderMetrics(metrics, providerConfig)
   providerMetrics.incomingMessages += 1
@@ -459,7 +457,7 @@ async function handleMessage(
   const externalUserId = message.sender.providerUserId
   let claimedEvent: { eventId: string } | null = null
   let sideEffectCommitted = false
-  let inboundOutcome: 'success' | 'retry' | 'error' = 'success'
+  let inboundOutcome: 'success' | 'retry' | 'error' | 'ignored' = 'ignored'
 
   try {
     const registration = providers.get(providerConfig.id)
@@ -488,6 +486,7 @@ async function handleMessage(
         claimedBy,
         status: 'processed',
       })
+      inboundOutcome = 'success'
       return
     }
 
@@ -540,17 +539,25 @@ async function handleMessage(
       claimedBy,
       status: 'processed',
     })
+    inboundOutcome = 'success'
   } catch (error) {
     const retryable = providerEventFailureIsRetryable(error)
-    inboundOutcome = classifyChannelTelemetryError(error)
+    inboundOutcome = 'error'
     if (claimedEvent && !sideEffectCommitted) {
-      await cloud.completeProviderEvent(claimedEvent.eventId, {
+      const retryRecord = await cloud.completeProviderEvent(claimedEvent.eventId, {
         channelBindingId: providerConfig.channelBindingId,
         claimedBy,
         status: 'failed',
         retryable,
         lastError: error instanceof Error ? error.message : String(error),
-      }).catch(() => {})
+      })
+        .catch(() => null)
+      const retryPersisted = Boolean(
+        retryable
+        && retryRecord?.status === 'failed'
+        && retryRecord.retryable,
+      )
+      if (retryPersisted) inboundOutcome = 'retry'
       // Don't SILENTLY drop a permanently-failed inbound message (audit P2-15). A retryable failure
       // will be re-attempted (and the cloud dedups the re-prompt on commandId == eventId), so stay
       // quiet for those; but a non-retryable failure means the message is dropped for good, so tell
@@ -574,6 +581,7 @@ async function handleMessage(
       providerKind: providerConfig.kind,
       direction: 'inbound',
       outcome: inboundOutcome,
+      latencyMs: Date.now() - inboundStartedAt,
     })
   }
 }
@@ -615,7 +623,7 @@ async function notifyChannelOfDroppedMessage(
       stack: 'monorepo-provider',
       providerKind: providerConfig.kind,
       direction: 'outbound',
-      outcome: classifyChannelTelemetryError(error),
+      outcome: 'error',
       latencyMs: Date.now() - startedAt,
     })
     throw error
@@ -646,6 +654,7 @@ async function handleDelivery(
       providerKind: delivery.provider,
       direction: 'outbound',
       outcome: 'error',
+      latencyMs: Date.now() - deliveryStartedAt,
     })
     await cloud.ackDelivery(delivery.deliveryId, {
       status: 'dead',
@@ -700,21 +709,26 @@ async function handleDelivery(
       metrics.deliveryDeadLetters += 1
       providerMetrics.deliveryDeadLetters += 1
     }
-    if (!terminalOutcomeRecorded) {
-      metrics.channelTelemetry.recordOperation({
-        stack: 'monorepo-provider',
-        providerKind: registration.config.kind,
-        direction: 'outbound',
-        outcome: classifyChannelTelemetryError(error),
-        latencyMs: Date.now() - providerStartedAt,
+    let observedOutcome: 'retry' | 'error' = 'error'
+    try {
+      await cloud.ackDelivery(delivery.deliveryId, {
+        status: shouldRetry ? 'failed' : 'dead',
+        claimedBy: delivery.claimedBy,
+        lastError: failure.message,
+        nextAttemptAt: shouldRetry ? new Date(Date.now() + deliveryRetryDelayMs(delivery.attemptCount, failure.retryAfterMs)).toISOString() : null,
       })
+      if (shouldRetry) observedOutcome = 'retry'
+    } finally {
+      if (!terminalOutcomeRecorded) {
+        metrics.channelTelemetry.recordOperation({
+          stack: 'monorepo-provider',
+          providerKind: registration.config.kind,
+          direction: 'outbound',
+          outcome: observedOutcome,
+          latencyMs: Date.now() - providerStartedAt,
+        })
+      }
     }
-    await cloud.ackDelivery(delivery.deliveryId, {
-      status: shouldRetry ? 'failed' : 'dead',
-      claimedBy: delivery.claimedBy,
-      lastError: failure.message,
-      nextAttemptAt: shouldRetry ? new Date(Date.now() + deliveryRetryDelayMs(delivery.attemptCount, failure.retryAfterMs)).toISOString() : null,
-    })
   }
 }
 

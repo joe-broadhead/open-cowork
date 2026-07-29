@@ -10,6 +10,7 @@ import { renderDashboard } from './dashboard.js'
 import { subscribeToOpenCodeEvents, addLiveClient, closeAllLiveClients, stopLiveEvents } from './live.js'
 import { getWhatsAppChannel, isWhatsAppMonorepoBridge } from './channels/whatsapp-protocol-stack.js'
 import { getDiscordChannel, isDiscordMonorepoBridge } from './channels/discord-protocol-stack.js'
+import { channelInboundFailureOutcome } from './channel-telemetry.js'
 import {
   composedChannelTelemetryStack,
   createDaemonChannelComposition,
@@ -47,7 +48,6 @@ import {
   startRuntimeMetricsSampler,
   stopRuntimeMetricsSampler,
 } from './runtime-metrics.js'
-import { channelTelemetryFailureOutcome } from './channel-telemetry.js'
 import { createGatewayOpenCodeClient, openCodeFetch } from './opencode-client.js'
 import { safeOpenCodeBaseUrlString } from './opencode-url-policy.js'
 import { withDeadline } from './deadlines.js'
@@ -200,11 +200,12 @@ export async function serve() {
   })
 
   const handleChannelMessage = async (msg: any) => {
+    const telemetryStartedAt = Date.now()
     const telemetryStack = composedChannelTelemetryStack(
       msg.provider,
       channelByName.get(msg.provider),
     )
-    let telemetryOutcome: 'success' | 'retry' | 'error' = 'success'
+    let telemetryOutcome: 'success' | 'retry' | 'error' | 'ignored' = 'ignored'
     recordChannelMessageIn(msg.provider, telemetryStack)
     try {
       if (!canCurrentDaemonWrite()) {
@@ -242,6 +243,7 @@ export async function serve() {
             recordChannelMessageOut(msg.provider)
             if (parsedCommand) recordChannelCommandEvent(commandFailed ? 'channel.command.failed' : 'channel.command.replied', msg, parsedCommand, { delivery: 'message', replyLength: commandReply.length })
           }
+          telemetryOutcome = !commandFailed && channel ? 'success' : 'error'
         } catch (err: any) {
           if (parsedCommand) recordChannelCommandEvent('channel.command.failed', msg, parsedCommand, { delivery: 'message', error: redactSensitiveText(err?.message || String(err)) })
           throw err
@@ -325,6 +327,7 @@ export async function serve() {
           })
           syncBridge.markInboundSubmitted(msg.provider, msg.chatId, msg.text, msg.threadId, msg.messageId)
         }
+        telemetryOutcome = 'success'
       } catch (err: any) {
         syncBridge?.forgetInbound(msg.provider, msg.chatId, msg.text, msg.threadId, msg.messageId)
         const detail = redactSensitiveText(err?.message || String(err))
@@ -332,7 +335,11 @@ export async function serve() {
         throw new TransientInboundError('channel prompt submission failed transiently; retry inbound delivery')
       }
     } catch (error) {
-      telemetryOutcome = channelTelemetryFailureOutcome(error)
+      // A transient error is a retry only when this adapter invocation carries
+      // proof that its delivery boundary preserves the message for redelivery.
+      // Native Discord interactions acknowledge before async dispatch, and its
+      // gateway events have no redelivery contract, so both correctly stay error.
+      telemetryOutcome = channelInboundFailureOutcome(msg, isTransientInboundError(error))
       throw error
     } finally {
       recordChannelOperation(
@@ -340,6 +347,7 @@ export async function serve() {
         telemetryStack,
         'inbound',
         telemetryOutcome,
+        Date.now() - telemetryStartedAt,
       )
     }
   }

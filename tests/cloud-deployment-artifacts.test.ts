@@ -1264,7 +1264,7 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   assert.match(validator, /open_cowork_gateway_delivery_dead_letters_total/)
   assert.doesNotMatch(dashboard, /url_path/)
   assert.match(catalog, /Raw routes are never metric labels/)
-  assert.match(catalog, /Comparable outbound egress-request latency/)
+  assert.match(catalog, /Comparable composition-boundary latency/)
 
   for (const metric of [
     'open_cowork_cloud_http_requests_total',
@@ -1332,7 +1332,7 @@ test('operations observability assets define metrics, dashboards, alerts, and re
     'durable-gateway',
   ]) {
     assert.ok(
-      adoptionExpressions.includes(`absent(open_cowork_channel_stack_info{surface="${surface}"})`),
+      adoptionExpressions.includes(`absent(open_cowork_channel_stack_info{surface="${surface}",schema_version="2"})`),
       `dashboard must distinguish missing telemetry for ${surface}`,
     )
   }
@@ -1340,8 +1340,9 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   const outcomeExpressions = panelExpressions('Channel stack success, retry, and error rates')
   for (const outcome of ['success', 'retry', 'error']) {
     const ratio = outcomeExpressions.find((expression) =>
-      expression.includes(`{outcome="${outcome}"}`))
+      expression.includes(`outcome="${outcome}"`))
     assert.ok(ratio, `dashboard must define the ${outcome} ratio`)
+    assert.match(ratio, /schema_version="2"/)
     assert.match(ratio, /\[\$__range\]/)
     assert.match(ratio, /provider_kind/)
     assert.match(ratio, /clamp_min\(/)
@@ -1349,16 +1350,19 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   }
   assert.ok(outcomeExpressions.some((expression) =>
     expression.includes('by (surface, stack, provider_kind, direction, outcome)')
-    && expression.includes('increase(')))
+    && expression.includes('increase(')
+    && expression.includes('schema_version="2"')
+    && expression.includes('outcome=~"success|retry|error|ignored"')))
 
-  const latencyExpressions = panelExpressions('Channel stack outbound egress p50 and p95 latency')
+  const latencyExpressions = panelExpressions('Channel stack p50 and p95 successful-operation latency')
   for (const quantile of ['0.50', '0.95']) {
     const expression = latencyExpressions.find((candidate) =>
       candidate.includes(`histogram_quantile(${quantile}`))
     assert.ok(expression, `dashboard must define p${quantile.slice(2)} latency`)
-    assert.match(expression, /direction="outbound"/)
+    assert.match(expression, /schema_version="2"/)
     assert.match(expression, /outcome="success"/)
     assert.match(expression, /provider_kind/)
+    assert.match(expression, /direction\)/)
     assert.match(expression, /increase\(/)
     assert.match(expression, /\[\$__range\]/)
   }
@@ -1366,9 +1370,11 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   assert.match(channelTelemetry, /retention are controlled by the operator/)
   assert.match(channelTelemetry, /An absent `stack_info` series/)
   assert.match(channelTelemetry, /never records prompts, message bodies/)
-  assert.match(channelTelemetry, /outbound egress-request latency/)
-  assert.match(channelTelemetry, /Every egress request emits exactly one `attempt`/)
-  assert.match(channelTelemetry, /Inbound latency is deliberately absent/)
+  assert.match(channelTelemetry, /Composition-boundary latency/)
+  assert.match(channelTelemetry, /Every operation emits exactly one `attempt`/)
+  assert.match(channelTelemetry, /concretely preserves or schedules/)
+  assert.match(channelTelemetry, /Duplicate events, empty messages/)
+  assert.match(channelTelemetry, /`schema_version="2"`/)
 
   for (const alert of [
     'OpenCoworkCloudHighHttpErrorRate',

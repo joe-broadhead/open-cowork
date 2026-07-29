@@ -6,6 +6,7 @@ import {
   WebhookCircuitOpenError,
   WebhookDeliveryPolicyError,
 } from '@open-cowork/gateway-provider-webhook'
+import { CloudTransportError } from '@open-cowork/cloud-client/domains/transport'
 import { FakeChannelProvider } from '@open-cowork/gateway-testing'
 import type { CloudGateway } from '../dist/index.js'
 import {
@@ -122,10 +123,10 @@ function providerEventRecord(input: {
 
 function inboundTelemetryCount(
   telemetry: string,
-  outcome: 'attempt' | 'success' | 'retry' | 'error',
+  outcome: 'attempt' | 'success' | 'retry' | 'error' | 'ignored',
 ): number {
   const match = telemetry.match(new RegExp(
-    `open_cowork_channel_messages_total\\{direction="inbound",outcome="${outcome}",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\\} (\\d+)`,
+    `open_cowork_channel_messages_total\\{direction="inbound",outcome="${outcome}",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\\} (\\d+)`,
   ))
   return Number(match?.[1] ?? 0)
 }
@@ -417,19 +418,22 @@ test('gateway runtime claims provider events before prompting and skips duplicat
     assert.equal(runtime.metrics.promptedMessages, 1)
     const telemetry = runtime.metrics.channelTelemetry.renderPrometheus()
     assert.match(telemetry, /open_cowork_channel_bindings\{provider_kind="other",stack="monorepo-provider",status="active",surface="cloud-channel-gateway"\} 1/)
-    assert.match(telemetry, /open_cowork_channel_messages_total\{direction="inbound",outcome="attempt",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
-    assert.match(telemetry, /open_cowork_channel_messages_total\{direction="inbound",outcome="success",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
+    assert.match(telemetry, /open_cowork_channel_messages_total\{direction="inbound",outcome="attempt",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/)
+    assert.match(telemetry, /open_cowork_channel_messages_total\{direction="inbound",outcome="success",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+    assert.match(telemetry, /open_cowork_channel_messages_total\{direction="inbound",outcome="ignored",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+    assert.match(telemetry, /open_cowork_channel_operation_latency_ms_count\{direction="inbound",outcome="success",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+    assert.match(telemetry, /open_cowork_channel_operation_latency_ms_count\{direction="inbound",outcome="ignored",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
   } finally {
     await runtime.stop()
   }
 })
 
-test('gateway runtime applies the common bounded classifier to inbound failures', async () => {
+test('gateway runtime records generic inbound failures as errors without a retry handoff', async () => {
   const cases = [
-    { name: '429', error: Object.assign(new Error('limited'), { status: 429 }), outcome: 'retry' },
-    { name: '5xx', error: Object.assign(new Error('unavailable'), { statusCode: 503 }), outcome: 'retry' },
-    { name: 'network', error: Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }), outcome: 'retry' },
-    { name: '4xx', error: Object.assign(new Error('bad request'), { status: 400 }), outcome: 'error' },
+    { name: '429', error: Object.assign(new Error('limited'), { status: 429 }) },
+    { name: '5xx', error: Object.assign(new Error('unavailable'), { statusCode: 503 }) },
+    { name: 'network', error: Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }) },
+    { name: '4xx', error: Object.assign(new Error('bad request'), { status: 400 }) },
   ] as const
 
   for (const scenario of cases) {
@@ -475,11 +479,69 @@ test('gateway runtime applies the common bounded classifier to inbound failures'
       )
       const telemetry = runtime.metrics.channelTelemetry.renderPrometheus()
       assert.equal(inboundTelemetryCount(telemetry, 'attempt'), 1, scenario.name)
-      assert.equal(inboundTelemetryCount(telemetry, scenario.outcome), 1, scenario.name)
+      assert.equal(inboundTelemetryCount(telemetry, 'error'), 1, scenario.name)
+      assert.equal(inboundTelemetryCount(telemetry, 'retry'), 0, scenario.name)
+    } finally {
+      await runtime.stop()
+    }
+  }
+})
+
+test('gateway runtime records retry only after Cloud persists the retry handoff', async () => {
+  for (const completion of ['persisted', 'lost-claim'] as const) {
+    const completed: Array<{ status: string, retryable?: boolean }> = []
+    const cloud = {
+      async claimProviderEvent(input: { providerEventId: string, providerInstanceId: string, eventType: string, claimedBy: string }) {
+        return { event: providerEventRecord(input), claimed: true, duplicate: false }
+      },
+      async resolveIdentity() {
+        throw new CloudTransportError({
+          kind: 'network',
+          message: 'Cloud identity transport unavailable',
+        })
+      },
+      async completeProviderEvent(_eventId: string, input: { status: string, retryable?: boolean, claimedBy: string }) {
+        completed.push({ status: input.status, retryable: input.retryable })
+        if (completion === 'lost-claim') return null
+        return providerEventRecord({
+          provider: 'fake',
+          providerInstanceId: 'fake',
+          providerEventId: 'e',
+          eventType: 'message',
+          claimedBy: input.claimedBy,
+          status: input.status,
+        })
+      },
+      subscribeDeliveries() { return { close() {} } },
+    } as unknown as CloudGateway
+    const config = resolveGatewayConfig({
+      providers: [{ id: 'fake', kind: 'fake', channelBindingId: 'fake-binding' }],
+    }, {
+      OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    })
+    const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+
+    await runtime.start()
+    try {
+      await assert.rejects(() => runtime.providers.emitFake('fake', {
+        id: `provider-event-${completion}`,
+        text: 'retry only after persistence',
+        chatId: 'chat-1',
+        userId: 'user-1',
+      }))
+
+      assert.deepEqual(completed, [{ status: 'failed', retryable: true }], completion)
+      const telemetry = runtime.metrics.channelTelemetry.renderPrometheus()
+      assert.equal(inboundTelemetryCount(telemetry, 'attempt'), 1, completion)
       assert.equal(
-        inboundTelemetryCount(telemetry, scenario.outcome === 'retry' ? 'error' : 'retry'),
+        inboundTelemetryCount(telemetry, completion === 'persisted' ? 'retry' : 'error'),
+        1,
+        completion,
+      )
+      assert.equal(
+        inboundTelemetryCount(telemetry, completion === 'persisted' ? 'error' : 'retry'),
         0,
-        scenario.name,
+        completion,
       )
     } finally {
       await runtime.stop()
@@ -753,11 +815,10 @@ test('gateway runtime marks claimed provider events failed when prompting fails'
     }])
     assert.equal(runtime.metrics.promptedMessages, 0)
     assert.equal(runtime.metrics.errors, 1)
-    // Scheduling remains Cloud-policy-specific (retryable: false above), while
-    // the cross-stack metric uses the common bounded classifier.
+    // No retry was scheduled: this generic prompt failure is terminal telemetry.
     assert.match(
       runtime.metrics.channelTelemetry.renderPrometheus(),
-      /open_cowork_channel_messages_total\{direction="inbound",outcome="retry",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+      /open_cowork_channel_messages_total\{direction="inbound",outcome="error",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
     )
   } finally {
     await runtime.stop()
@@ -2047,7 +2108,7 @@ test('gateway legacy delivery latency completes only after a successful Cloud ac
     assert.equal(runtime.metrics.providerMetrics.fake?.deliveryLatency.count, 0)
     assert.match(
       runtime.metrics.channelTelemetry.renderPrometheus(),
-      /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
     )
 
     releaseSuccessfulAck?.()
@@ -2062,7 +2123,7 @@ test('gateway legacy delivery latency completes only after a successful Cloud ac
     assert.equal(runtime.metrics.providerMetrics.fake?.deliveryLatency.count, 1)
     assert.match(
       runtime.metrics.channelTelemetry.renderPrometheus(),
-      /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/,
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="success",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 2/,
     )
   } finally {
     releaseSuccessfulAck?.()
@@ -2103,11 +2164,15 @@ test('gateway runtime closes missing-provider telemetry before a dead-letter ack
     const telemetry = runtime.metrics.channelTelemetry.renderPrometheus()
     assert.match(
       telemetry,
-      /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="attempt",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
     )
     assert.match(
       telemetry,
-      /open_cowork_channel_messages_total\{direction="outbound",outcome="error",provider_kind="cli",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="error",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+    )
+    assert.match(
+      telemetry,
+      /open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="error",provider_kind="cli",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
     )
   } finally {
     await runtime.stop()
@@ -2167,6 +2232,15 @@ test('gateway runtime retries transient deliveries and marks permanent failures 
     assert.equal(acks[1]?.input.status, 'dead')
     assert.equal(acks[1]?.input.nextAttemptAt, null)
     assert.doesNotMatch(String(acks[1]?.input.lastError), /super-secret-token/)
+    const telemetry = runtime.metrics.channelTelemetry.renderPrometheus()
+    assert.match(
+      telemetry,
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="retry",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+    )
+    assert.match(
+      telemetry,
+      /open_cowork_channel_messages_total\{direction="outbound",outcome="error",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/,
+    )
   } finally {
     await runtime.stop()
   }

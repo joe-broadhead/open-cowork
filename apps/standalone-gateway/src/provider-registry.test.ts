@@ -4,14 +4,18 @@ import assert from "node:assert/strict";
 import { loadStandaloneGatewayConfig } from "../dist/config.js";
 import { createStandaloneProviderRegistry } from "../dist/provider-registry.js";
 
-function providerConfig(input: { webhook?: boolean } = {}) {
+function providerConfig(input: {
+  webhook?: boolean;
+  telegramMode?: "webhook" | "polling";
+} = {}) {
+  const telegramMode = input.telegramMode || "webhook";
   return loadStandaloneGatewayConfig({
     OPEN_COWORK_STANDALONE_GATEWAY_STORE: "memory",
     OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-test-token",
     OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
     OPEN_COWORK_STANDALONE_GATEWAY_RUNTIME_ROOT: "/var/lib/open-cowork/standalone-gateway",
     OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_BOT_TOKEN: "telegram-test-token",
-    OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_MODE: "webhook",
+    OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_MODE: telegramMode,
     OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_PUBLIC_URL: "https://gateway.example.test",
     OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_WEBHOOK_SECRET: "telegram-webhook-test-secret",
     ...(input.webhook
@@ -254,4 +258,65 @@ test("provider registry blocks restart after partial startup without double invo
   await registry.stop();
   assert.equal(telegramStops, 2);
   assert.equal(webhookStops, 1);
+});
+
+test("provider registry marks webhook ingress for redelivery but not Telegram polling", async () => {
+  for (const mode of ["webhook", "polling"] as const) {
+    const registry = createStandaloneProviderRegistry(providerConfig({ telegramMode: mode }));
+    const registration = registry.registrations[0];
+    assert.ok(registration);
+    let providerHandler: ((message: unknown) => Promise<void>) | null = null;
+    registration.provider.start = async (handler) => {
+      providerHandler = handler;
+    };
+    registration.provider.stop = async () => undefined;
+    const telegram = registration.provider as typeof registration.provider & {
+      configureWebhook(): Promise<void>;
+    };
+    telegram.configureWebhook = async () => undefined;
+    const contexts: unknown[] = [];
+
+    await registry.start(async (_config, _message, context) => {
+      contexts.push(context);
+    });
+    assert.ok(providerHandler);
+    await providerHandler({} as never);
+
+    assert.deepEqual(contexts, [{
+      failureHandoff: mode === "webhook" ? "provider-redelivery" : "none",
+    }], mode);
+    await registry.stop();
+  }
+});
+
+test("provider registry marks signed generic webhooks for provider redelivery", async () => {
+  const registry = createStandaloneProviderRegistry(providerConfig({ webhook: true }));
+  const handlers = new Map<string, (message: unknown) => Promise<void>>();
+  for (const registration of registry.registrations) {
+    registration.provider.start = async (handler) => {
+      handlers.set(registration.config.id, handler);
+    };
+    registration.provider.stop = async () => undefined;
+    if (registration.config.kind === "telegram") {
+      const telegram = registration.provider as typeof registration.provider & {
+        configureWebhook(): Promise<void>;
+      };
+      telegram.configureWebhook = async () => undefined;
+    }
+  }
+  const contexts = new Map<string, unknown>();
+
+  await registry.start(async (config, _message, context) => {
+    contexts.set(config.kind, context);
+  });
+  const webhook = registry.registrations.find((registration) => registration.config.kind === "webhook");
+  assert.ok(webhook);
+  const webhookHandler = handlers.get(webhook.config.id);
+  assert.ok(webhookHandler);
+  await webhookHandler({} as never);
+
+  assert.deepEqual(contexts.get("webhook"), {
+    failureHandoff: "provider-redelivery",
+  });
+  await registry.stop();
 });

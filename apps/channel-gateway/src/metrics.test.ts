@@ -77,8 +77,8 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   assert.match(text, /open_cowork_gateway_provider_state\{provider_id="fake",provider_kind="fake",state="healthy"\} 1/)
   assert.match(text, /open_cowork_gateway_provider_webhook_requests_total\{provider_id="fake",provider_kind="fake"\} 4/)
   assert.match(text, /open_cowork_gateway_provider_interactions_resolved_total\{provider_id="fake",provider_kind="fake"\} 1/)
-  assert.match(text, /open_cowork_channel_stack_info\{schema_version="1",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
-  assert.match(text, /open_cowork_channel_messages_total\{direction="outbound",outcome="retry",provider_kind="telegram",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(text, /open_cowork_channel_stack_info\{schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
+  assert.match(text, /open_cowork_channel_messages_total\{direction="outbound",outcome="retry",provider_kind="telegram",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\} 1/)
   assert.doesNotMatch(
     text.split('# HELP open_cowork_channel_stack_info')[1] || '',
     /provider_id|telegram-instance-a|binding_id|tenant|content|secret="/,

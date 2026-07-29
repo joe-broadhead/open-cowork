@@ -1,6 +1,4 @@
 import {
-  classifyChannelTelemetryError,
-  type ChannelTelemetryFailureOutcome,
   type ChannelTelemetryOutcome,
   type ChannelTelemetryStack,
 } from '@open-cowork/gateway-channel'
@@ -24,7 +22,6 @@ export interface ChannelEgressTelemetryOptions {
   stack: ChannelTelemetryStack
   now?: () => number
   record?: (record: ChannelEgressTelemetryRecord) => void
-  classifyError?: (error: unknown) => ChannelTelemetryFailureOutcome
 }
 
 const EGRESS_METHODS = new Set<PropertyKey>([
@@ -45,7 +42,6 @@ export function withChannelEgressTelemetry<T extends ChannelAdapter>(
 ): T {
   const now = options.now || Date.now
   const record = options.record || recordRuntimeOperation
-  const classifyError = options.classifyError || classifyChannelTelemetryError
   const wrappers = new Map<PropertyKey, (...args: unknown[]) => Promise<unknown>>()
   const boundMethods = new Map<PropertyKey, (...args: unknown[]) => unknown>()
 
@@ -79,7 +75,9 @@ export function withChannelEgressTelemetry<T extends ChannelAdapter>(
               provider: target.name,
               stack: options.stack,
               direction: 'outbound',
-              outcome: classifyError(error),
+              // This wrapper does not schedule retries. Retry telemetry is
+              // emitted only by the owner that actually defers an operation.
+              outcome: 'error',
               latencyMs: Math.max(0, now() - startedAt),
             })
             throw error

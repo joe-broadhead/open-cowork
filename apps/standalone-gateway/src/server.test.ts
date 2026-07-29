@@ -86,7 +86,7 @@ test("standalone server exposes health, readiness, and admin-gated dashboard", a
     assert.equal(metrics.status, 200);
     const metricsText = await metrics.text();
     assert.match(metricsText, /open_cowork_standalone_gateway_sessions/);
-    assert.match(metricsText, /open_cowork_channel_stack_info\{schema_version="1",stack="monorepo-provider",surface="standalone-gateway"\}/);
+    assert.match(metricsText, /open_cowork_channel_stack_info\{schema_version="2",stack="monorepo-provider",surface="standalone-gateway"\}/);
     assert.match(metricsText, /open_cowork_channel_bindings\{provider_kind="webhook",stack="monorepo-provider",status="configured",surface="standalone-gateway"\} 1/);
     assert.doesNotMatch(metricsText, /provider_id|binding_id|tenant|content|secret="/);
 

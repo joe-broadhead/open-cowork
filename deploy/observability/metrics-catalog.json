@@ -408,13 +408,13 @@
       "name": "open_cowork_channel_messages_total",
       "type": "counter",
       "owner": "gateway-channels",
-      "description": "Comparable inbound and outbound channel operation counts by bounded surface, stack, provider kind, direction, and mutually exclusive attempt, success, retry, or error outcome."
+      "description": "Comparable inbound and outbound channel operation counts by bounded schema version, surface, stack, provider kind, direction, and mutually exclusive attempt, success, retry, error, or ignored outcome. Retry means an observed retry handoff, while ignored excludes duplicates, no-ops, and policy denials from adoption."
     },
     {
       "name": "open_cowork_channel_operation_latency_ms",
       "type": "histogram",
       "owner": "gateway-channels",
-      "description": "Comparable outbound egress-request latency in milliseconds for terminal outcomes, by bounded surface, stack, provider kind, direction, and outcome. One logical request remains one sample across text chunking or structured-message delegation. Inbound operations do not emit latency samples. Use histogram_quantile over the _bucket series; no message content or customer identifiers are collected."
+      "description": "Comparable composition-boundary latency in milliseconds for terminal inbound and outbound outcomes, by bounded schema version, surface, stack, provider kind, direction, and outcome. One logical request remains one sample across text chunking or structured-message delegation. Inbound latency spans handler invocation to a committed, deferred, ignored, or failed decision; outbound latency spans the composed egress request. Use histogram_quantile over the _bucket series; no message content or customer identifiers are collected."
     }
   ]
 }

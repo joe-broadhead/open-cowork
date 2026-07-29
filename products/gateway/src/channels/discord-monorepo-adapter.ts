@@ -46,6 +46,7 @@ function mapIncoming(incoming: IncomingChannelMessage): ChannelMessage {
       mimeType: a.mimeType || 'application/octet-stream',
     })),
     timestamp: (incoming.receivedAt instanceof Date ? incoming.receivedAt : new Date()).toISOString(),
+    transientFailureHandoff: 'provider-redelivery',
   }
 }
 

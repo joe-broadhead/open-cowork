@@ -17,6 +17,11 @@ export interface ChannelMessage {
   text: string         // normalized message text
   attachments?: Array<{ name: string; url: string; mimeType: string }>
   timestamp: string
+  /**
+   * Set only by an adapter whose delivery boundary demonstrably preserves a
+   * transiently failed inbound for provider redelivery.
+   */
+  transientFailureHandoff?: 'provider-redelivery'
 }
 
 export interface ChannelAdapter {

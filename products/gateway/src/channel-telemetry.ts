@@ -1,12 +1,20 @@
 import {
-  classifyChannelTelemetryError,
-  type ChannelTelemetryFailureOutcome,
   type ChannelTelemetryStack,
 } from '@open-cowork/gateway-channel'
+import type { ChannelMessage } from './channels/provider.js'
 import { getConfig } from './config.js'
 import { peekDiscordProtocolStack } from './channels/discord-protocol-stack.js'
 import { peekTelegramProtocolStack } from './channels/telegram-protocol-stack.js'
 import { peekWhatsAppProtocolStack } from './channels/whatsapp-protocol-stack.js'
+
+export function channelInboundFailureOutcome(
+  message: Pick<ChannelMessage, 'transientFailureHandoff'>,
+  isTransientFailure: boolean,
+): 'retry' | 'error' {
+  return isTransientFailure && message.transientFailureHandoff === 'provider-redelivery'
+    ? 'retry'
+    : 'error'
+}
 
 export function channelTelemetryStack(provider: string): ChannelTelemetryStack {
   const protocolStack = provider === 'telegram'
@@ -17,10 +25,6 @@ export function channelTelemetryStack(provider: string): ChannelTelemetryStack {
         ? peekWhatsAppProtocolStack()
         : 'durable'
   return protocolStack === 'monorepo' ? 'monorepo-provider' : 'durable-native'
-}
-
-export function channelTelemetryFailureOutcome(error: unknown): ChannelTelemetryFailureOutcome {
-  return classifyChannelTelemetryError(error)
 }
 
 export function channelTelemetryBindingConfigured(

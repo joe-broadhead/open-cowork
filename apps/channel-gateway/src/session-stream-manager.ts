@@ -1,5 +1,4 @@
 import {
-  classifyChannelTelemetryError,
   type ChannelProvider,
 } from '@open-cowork/gateway-channel'
 import type {
@@ -298,14 +297,15 @@ export function createGatewaySessionStreamManager(
       state.renderFailures.delete(event.sequence)
       state.binding = updated
     } catch (error) {
-      egress.fail(error)
       metrics.errors += 1
       const attempts = (state.renderFailures.get(event.sequence) ?? 0) + 1
       state.renderFailures.set(event.sequence, attempts)
       // Re-rendering is idempotent (cursor-gated), so retry unknown/transient failures rather than
       // dropping the event — unlike the outbound delivery path's no-idempotency-key conservatism.
       const failure = classifyProviderFailure(error, { defaultTransient: true })
-      if (failure.transient && attempts < maxRenderAttempts) {
+      const shouldRetry = failure.transient && attempts < maxRenderAttempts
+      egress.fail(shouldRetry ? 'retry' : 'error')
+      if (shouldRetry) {
         metrics.sessionRenderRetries += 1
         metrics.streamReconnects += 1
         reconnect(state)
@@ -420,7 +420,7 @@ function createSessionEgressTelemetry(
   return {
     provider: instrumented,
     complete: () => recordTerminal('success'),
-    fail: (error: unknown) => recordTerminal(classifyChannelTelemetryError(error)),
+    fail: (outcome: 'retry' | 'error') => recordTerminal(outcome),
   }
 }
 

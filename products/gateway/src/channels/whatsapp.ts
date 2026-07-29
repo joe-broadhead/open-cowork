@@ -202,6 +202,7 @@ export function mapWhatsAppMessages(payload: any, now = new Date()): ChannelMess
           text,
           attachments: messageAttachments(message),
           timestamp: message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : now.toISOString(),
+          transientFailureHandoff: 'provider-redelivery',
         })
       }
     }

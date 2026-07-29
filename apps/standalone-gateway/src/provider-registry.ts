@@ -9,7 +9,11 @@ import {
 import { TelegramProvider } from "@open-cowork/gateway-provider-telegram";
 import { WebhookProvider } from "@open-cowork/gateway-provider-webhook";
 
-import type { StandaloneGatewayConfig, StandaloneGatewayProviderConfig } from "./types.js";
+import type {
+  StandaloneGatewayConfig,
+  StandaloneGatewayProviderConfig,
+  StandaloneInboundDeliveryContext,
+} from "./types.js";
 
 export interface StandaloneProviderRegistration {
   config: StandaloneGatewayProviderConfig;
@@ -20,7 +24,11 @@ export interface StandaloneProviderRegistration {
 export interface StandaloneProviderRegistry {
   readonly registrations: StandaloneProviderRegistration[];
   readonly telemetry?: ChannelStackTelemetry;
-  start(handler: (config: StandaloneGatewayProviderConfig, message: IncomingChannelMessage) => Promise<void>): Promise<void>;
+  start(handler: (
+    config: StandaloneGatewayProviderConfig,
+    message: IncomingChannelMessage,
+    delivery: StandaloneInboundDeliveryContext,
+  ) => Promise<void>): Promise<void>;
   stop(): Promise<void>;
   refreshTelemetry(): void;
   get(id: string): StandaloneProviderRegistration | null;
@@ -77,7 +85,9 @@ export function createStandaloneProviderRegistry(config: StandaloneGatewayConfig
           );
         }
         for (const registration of registrations) {
-          await registration.provider.start((message) => handler(registration.config, message));
+          const delivery = inboundDeliveryContext(registration.config);
+          await registration.provider.start((message) =>
+            handler(registration.config, message, delivery));
           registration.started = true;
           syncTelemetry();
           try {
@@ -143,6 +153,16 @@ export function createStandaloneProviderRegistry(config: StandaloneGatewayConfig
       }
       throw new WebhookProviderNotFoundError(`Standalone provider ${id} does not expose webhook ingress.`);
     },
+  };
+}
+
+function inboundDeliveryContext(
+  config: StandaloneGatewayProviderConfig,
+): StandaloneInboundDeliveryContext {
+  const webhookIngress = config.kind === "webhook"
+    || (config.kind === "telegram" && config.settings.mode === "webhook");
+  return {
+    failureHandoff: webhookIngress ? "provider-redelivery" : "none",
   };
 }
 

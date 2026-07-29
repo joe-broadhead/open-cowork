@@ -23,10 +23,10 @@ function resolveGatewayConfig(
 
 function telemetryCount(
   metrics: ReturnType<typeof createGatewayMetrics>,
-  outcome: 'attempt' | 'success' | 'retry' | 'error',
+  outcome: 'attempt' | 'success' | 'retry' | 'error' | 'ignored',
 ): number {
   const match = metrics.channelTelemetry.renderPrometheus().match(new RegExp(
-    `open_cowork_channel_messages_total\\{direction="outbound",outcome="${outcome}",provider_kind="other",stack="monorepo-provider",surface="cloud-channel-gateway"\\} (\\d+)`,
+    `open_cowork_channel_messages_total\\{direction="outbound",outcome="${outcome}",provider_kind="other",schema_version="2",stack="monorepo-provider",surface="cloud-channel-gateway"\\} (\\d+)`,
   ))
   return Number(match?.[1] ?? 0)
 }
@@ -107,13 +107,13 @@ test('interaction router resolves channel button tokens through cloud and acknow
   assert.equal(telemetryCount(metrics, 'success'), 1)
 })
 
-test('interaction router applies the common classifier to acknowledgement failures', async () => {
+test('interaction router records acknowledgement failures as errors without retrying them', async () => {
   const cases = [
-    { name: '429', error: Object.assign(new Error('limited'), { status: 429 }), outcome: 'retry' },
-    { name: '5xx', error: Object.assign(new Error('unavailable'), { statusCode: 503 }), outcome: 'retry' },
-    { name: 'network', error: Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }), outcome: 'retry' },
-    { name: '4xx', error: Object.assign(new Error('bad request'), { status: 400 }), outcome: 'error' },
-    { name: 'unknown', error: new Error('provider offline'), outcome: 'error' },
+    { name: '429', error: Object.assign(new Error('limited'), { status: 429 }) },
+    { name: '5xx', error: Object.assign(new Error('unavailable'), { statusCode: 503 }) },
+    { name: 'network', error: Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }) },
+    { name: '4xx', error: Object.assign(new Error('bad request'), { status: 400 }) },
+    { name: 'unknown', error: new Error('provider offline') },
   ] as const
   const config = resolveGatewayConfig({
     server: { adminToken: 'admin-token' },
@@ -161,12 +161,8 @@ test('interaction router applies the common classifier to acknowledgement failur
 
     assert.equal(handled, true, scenario.name)
     assert.equal(telemetryCount(metrics, 'attempt'), 1, scenario.name)
-    assert.equal(telemetryCount(metrics, scenario.outcome), 1, scenario.name)
-    assert.equal(
-      telemetryCount(metrics, scenario.outcome === 'retry' ? 'error' : 'retry'),
-      0,
-      scenario.name,
-    )
+    assert.equal(telemetryCount(metrics, 'error'), 1, scenario.name)
+    assert.equal(telemetryCount(metrics, 'retry'), 0, scenario.name)
   }
 })
 

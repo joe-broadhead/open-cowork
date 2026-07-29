@@ -1,7 +1,4 @@
-import {
-  classifyChannelTelemetryError,
-  chunkText,
-} from "@open-cowork/gateway-channel";
+import { chunkText } from "@open-cowork/gateway-channel";
 import type {
   ChannelProvider,
   ChannelStackTelemetry,
@@ -15,10 +12,20 @@ import {
 import type { StandaloneOpenCodeAdapter } from "./opencode.js";
 import { canIdentityPrompt } from "./repository.js";
 import type { StandaloneGatewayRepository, StandaloneGatewayLeaseRef } from "./repository.js";
-import type { StandaloneGatewayJobRecord, StandaloneGatewayProviderConfig, StandaloneRuntimeEvent } from "./types.js";
+import type {
+  StandaloneGatewayJobRecord,
+  StandaloneGatewayProviderConfig,
+  StandaloneInboundDeliveryContext,
+  StandaloneRuntimeEvent,
+} from "./types.js";
 
 export interface StandaloneGatewayRuntime {
-  handleMessage(provider: ChannelProvider, providerConfig: StandaloneGatewayProviderConfig, message: IncomingChannelMessage): Promise<void>;
+  handleMessage(
+    provider: ChannelProvider,
+    providerConfig: StandaloneGatewayProviderConfig,
+    message: IncomingChannelMessage,
+    delivery?: StandaloneInboundDeliveryContext,
+  ): Promise<void>;
   runDueJobs(claimedBy: string, options?: { lease?: StandaloneGatewayLeaseRef | null; isActive?: () => boolean }): Promise<number>;
 }
 
@@ -109,7 +116,13 @@ export function createStandaloneGatewayRuntime(input: {
   }
 
   return {
-    async handleMessage(provider, providerConfig, message) {
+    async handleMessage(
+      provider,
+      providerConfig,
+      message,
+      delivery = { failureHandoff: "none" },
+    ) {
+      const inboundStartedAt = Date.now();
       telemetry?.recordOperation({
         stack: "monorepo-provider",
         providerKind: providerConfig.kind,
@@ -122,13 +135,15 @@ export function createStandaloneGatewayRuntime(input: {
           stack: "monorepo-provider",
           providerKind: providerConfig.kind,
           direction: "inbound",
-          outcome: "success",
+          outcome: "ignored",
+          latencyMs: Date.now() - inboundStartedAt,
         });
         return;
       }
       const providerWorkspaceId = providerWorkspaceIdFromMessage(message);
       const externalThreadId = message.target.threadId || message.target.chatId;
       const sessionQueueKey = `${provider.id}\0${providerWorkspaceId || ""}\0${message.target.chatId}\0${externalThreadId}`;
+      let successfulUse = false;
       try {
         await runSerialized(sessionQueueKey, async () => {
           const identity = await repository.findChannelIdentity({
@@ -208,6 +223,7 @@ export function createStandaloneGatewayRuntime(input: {
               channelBindingId: providerConfig.channelBindingId,
               sessionId: session.sessionId,
             });
+            successfulUse = true;
           } catch (error) {
             const errorMessage = sanitizeRuntimeErrorMessage(error);
             if (!projectedRuntimeFailure) {
@@ -236,14 +252,16 @@ export function createStandaloneGatewayRuntime(input: {
           stack: "monorepo-provider",
           providerKind: providerConfig.kind,
           direction: "inbound",
-          outcome: "success",
+          outcome: successfulUse ? "success" : "ignored",
+          latencyMs: Date.now() - inboundStartedAt,
         });
       } catch (error) {
         telemetry?.recordOperation({
           stack: "monorepo-provider",
           providerKind: providerConfig.kind,
           direction: "inbound",
-          outcome: classifyChannelTelemetryError(error),
+          outcome: delivery.failureHandoff === "provider-redelivery" ? "retry" : "error",
+          latencyMs: Date.now() - inboundStartedAt,
         });
         throw error;
       }
@@ -327,7 +345,7 @@ async function sendChannelReply(input: {
       stack: "monorepo-provider",
       providerKind: input.provider.kind,
       direction: "outbound",
-      outcome: classifyChannelTelemetryError(error),
+      outcome: "error",
       latencyMs: Date.now() - startedAt,
     });
     await input.repository.recordAudit("standalone.reply.failed", input.message.sender.providerUserId, {

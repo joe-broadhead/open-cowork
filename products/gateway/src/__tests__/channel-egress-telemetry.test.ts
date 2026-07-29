@@ -11,7 +11,6 @@ import {
   clearRuntimeMetricsForTest,
   renderPrometheusMetrics,
 } from '../runtime-metrics.js'
-import { TransientInboundError } from '../security.js'
 
 function adapter(overrides: Partial<ChannelAdapter> = {}): ChannelAdapter {
   return {
@@ -111,11 +110,11 @@ describe('ChannelAdapter egress telemetry', () => {
     ])
   })
 
-  it('classifies retryable and terminal provider failures with one terminal outcome', async () => {
+  it('records provider failures as errors because the wrapper does not schedule retries', async () => {
     const transientTelemetry = recorder()
     const transient = withChannelEgressTelemetry(adapter({
       async sendCommandMenu() {
-        throw new TransientInboundError('provider temporarily unavailable')
+        throw Object.assign(new Error('provider temporarily unavailable'), { status: 503 })
       },
     }), {
       stack: 'durable-native',
@@ -128,7 +127,7 @@ describe('ChannelAdapter egress telemetry', () => {
     )
     expect(transientTelemetry.records.map(({ outcome }) => outcome)).toEqual([
       'attempt',
-      'retry',
+      'error',
     ])
 
     const terminalTelemetry = recorder()
@@ -151,16 +150,16 @@ describe('ChannelAdapter egress telemetry', () => {
     ])
   })
 
-  it('uses the shared bounded failure matrix without recording provider error details', async () => {
-    const cases: Array<[unknown, 'retry' | 'error']> = [
-      [Object.assign(new Error('secret rate limit detail'), { status: 429 }), 'retry'],
-      [Object.assign(new Error('secret outage detail'), { statusCode: 503 }), 'retry'],
-      [Object.assign(new Error('secret socket detail'), { code: 'ECONNRESET' }), 'retry'],
-      [Object.assign(new Error('secret request detail'), { status: 400 }), 'error'],
-      [new Error('secret novel provider detail'), 'error'],
+  it('never infers a retry from provider error details or records those details', async () => {
+    const cases: unknown[] = [
+      Object.assign(new Error('secret rate limit detail'), { status: 429 }),
+      Object.assign(new Error('secret outage detail'), { statusCode: 503 }),
+      Object.assign(new Error('secret socket detail'), { code: 'ECONNRESET' }),
+      Object.assign(new Error('secret request detail'), { status: 400 }),
+      new Error('secret novel provider detail'),
     ]
 
-    for (const [failure, outcome] of cases) {
+    for (const failure of cases) {
       const telemetry = recorder()
       const channel = withChannelEgressTelemetry(adapter({
         async sendMessage() {
@@ -173,7 +172,7 @@ describe('ChannelAdapter egress telemetry', () => {
       })
 
       await expect(channel.sendMessage('private-chat-id', 'private body')).rejects.toBe(failure)
-      expect(telemetry.records.map((record) => record.outcome)).toEqual(['attempt', outcome])
+      expect(telemetry.records.map((record) => record.outcome)).toEqual(['attempt', 'error'])
       expect(JSON.stringify(telemetry.records)).not.toMatch(
         /secret|private-chat-id|private body|status|code|message/,
       )
@@ -194,9 +193,9 @@ describe('ChannelAdapter egress telemetry', () => {
     await monorepo.sendMessage('private-monorepo-id', 'another private body')
 
     const metrics = renderPrometheusMetrics()
-    expect(metrics).toContain('direction="outbound",outcome="attempt",provider_kind="telegram",stack="durable-native"')
-    expect(metrics).toContain('direction="outbound",outcome="success",provider_kind="discord",stack="monorepo-provider"')
-    expect(metrics).toMatch(/open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="success",provider_kind="telegram"[^}]*\} 1/)
+    expect(metrics).toContain('direction="outbound",outcome="attempt",provider_kind="telegram",schema_version="2",stack="durable-native"')
+    expect(metrics).toContain('direction="outbound",outcome="success",provider_kind="discord",schema_version="2",stack="monorepo-provider"')
+    expect(metrics).toMatch(/open_cowork_channel_operation_latency_ms_count\{direction="outbound",outcome="success",provider_kind="telegram",schema_version="2"[^}]*\} 1/)
     expect(metrics).not.toMatch(/private-native-id|private-monorepo-id|private body|another private body/)
   })
 
