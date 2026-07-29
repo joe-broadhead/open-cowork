@@ -77,63 +77,63 @@
     },
     {
       "path": "packages/cloud-server/src/http-server.ts",
-      "maxLines": 1298,
+      "maxLines": 1297,
       "ratchetTargetLines": 1250,
       "owner": "cloud-server",
       "reason": "Cloud HTTP composition facade is below the soft target after JOE-1200 route and stream extraction and must not regrow."
     },
     {
       "path": "packages/cloud-server/src/session-service.ts",
-      "maxLines": 1151,
+      "maxLines": 1145,
       "ratchetTargetLines": 1100,
       "owner": "cloud-server",
       "reason": "Cloud session facade stays bounded after BYOK policy and orchestration behavior moved to domain services."
     },
     {
       "path": "products/gateway/src/channel-commands.ts",
-      "maxLines": 1450,
-      "ratchetTargetLines": 1301,
+      "maxLines": 1300,
+      "ratchetTargetLines": 1250,
       "owner": "gateway-channels",
       "reason": "Channel command facade stays bounded after channel-commands-helpers extraction."
     },
     {
       "path": "products/gateway/src/channel-sync.ts",
-      "maxLines": 1100,
+      "maxLines": 871,
       "ratchetTargetLines": 870,
       "owner": "gateway-channels",
       "reason": "Channel synchronization remains a narrow provider edge while multi-writer migration work is deferred."
     },
     {
       "path": "products/gateway/src/config.ts",
-      "maxLines": 1500,
+      "maxLines": 1486,
       "ratchetTargetLines": 1400,
       "owner": "gateway-config",
       "reason": "Gateway configuration facade is capped after parsing and validation helpers moved to leaf modules."
     },
     {
       "path": "products/gateway/src/daemon-routes/work.ts",
-      "maxLines": 1550,
+      "maxLines": 1495,
       "ratchetTargetLines": 1450,
       "owner": "gateway-scheduler-replay",
       "reason": "Work route facade remains bounded after presentation behavior moved to work-presentation."
     },
     {
       "path": "products/gateway/src/environments.ts",
-      "maxLines": 1300,
-      "ratchetTargetLines": 1262,
+      "maxLines": 1260,
+      "ratchetTargetLines": 1250,
       "owner": "gateway-environments",
       "reason": "Environment facade stays bounded after lifecycle, container, and remote execution seams were extracted."
     },
     {
       "path": "products/gateway/src/scheduler.ts",
-      "maxLines": 1500,
+      "maxLines": 1461,
       "ratchetTargetLines": 1400,
       "owner": "gateway-scheduler-replay",
       "reason": "Scheduler facade stays bounded after orchestration calculations and helpers moved to lower layers."
     },
     {
       "path": "products/gateway/src/work-store.ts",
-      "maxLines": 1550,
+      "maxLines": 1472,
       "ratchetTargetLines": 1471,
       "owner": "gateway-work-store",
       "reason": "Durable work-store facade remains capped while repositories, queries, validation, and ports own implementation detail."

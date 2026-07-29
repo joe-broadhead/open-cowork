@@ -266,6 +266,11 @@ export function evaluateLocBudget(modules, budget) {
     const ratchet = ratchetByPath.get(module.path)
     if (ratchet && module.lines > ratchet.maxLines) {
       failures.push(`${module.path} has ${module.lines} lines (ratchet max ${ratchet.maxLines})`)
+    } else if (ratchet && module.lines < ratchet.maxLines) {
+      failures.push(
+        `${module.path} ratchet is stale at ${module.lines} lines `
+        + `(max ${ratchet.maxLines}); lower maxLines to preserve the improvement`,
+      )
     }
   }
 

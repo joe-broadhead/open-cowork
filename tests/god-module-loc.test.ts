@@ -220,6 +220,29 @@ test('the repository hard cap and file ratchets are blocking', () => {
   assert.ok(overRatchet.failures.some((failure) => /ratchet max 1/.test(failure)))
 })
 
+test('ratchet caps must equal the current file size so improvements cannot silently regrow', () => {
+  const path = 'packages/example/src/facade.ts'
+  const exact = evaluateLocBudget(
+    [{ path, lines: 2 }],
+    fixtureBudget({
+      ratchets: [registryEntry(path, 2)],
+    }),
+  )
+  assert.deepEqual(exact.failures, [])
+
+  const improvedWithoutLoweringCap = evaluateLocBudget(
+    [{ path, lines: 1 }],
+    fixtureBudget({
+      ratchets: [registryEntry(path, 2)],
+    }),
+  )
+  assert.ok(
+    improvedWithoutLoweringCap.failures.some(
+      (failure) => /ratchet is stale at 1 lines \(max 2\); lower maxLines/.test(failure),
+    ),
+  )
+})
+
 test('committed production LOC registry covers the live workspace inventory', () => {
   const result = runLocBudgetCheck(root, 'docs/development/god-module-loc-budgets.json')
   assert.deepEqual(result.failures, [])
@@ -229,5 +252,10 @@ test('committed production LOC registry covers the live workspace inventory', ()
   assert.equal(
     result.report?.oversized.length,
     result.report?.tracked.filter((entry) => entry.type === 'exception').length,
+  )
+  assert.ok(
+    result.report?.tracked
+      .filter((entry) => entry.type === 'ratchet')
+      .every((entry) => entry.lines === entry.maxLines),
   )
 })
