@@ -257,12 +257,6 @@ function cloudSupportMatrix(
     allowed ? cloudSupport(api, 'supported') : cloudSupport(api, 'blocked_by_policy', reason)
   )
   const chatEnabled = feature('chat', feature('sessions', true))
-  const capabilityCatalogEnabled = (
-    feature('capabilities')
-    || feature('agents')
-    || feature('customSkills')
-    || feature('customMcps')
-  )
   return [
     supportedIf('sessions.list', chatEnabled, 'Cloud chat is disabled by this workspace policy.'),
     supportedIf('sessions.create', chatEnabled, 'Cloud chat is disabled by this workspace policy.'),
@@ -290,10 +284,10 @@ function cloudSupportMatrix(
     supportedIf('artifacts.download', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
     cloudSupport('artifacts.reveal', 'not_supported', 'Cloud artifacts cannot be revealed in the local filesystem. Export the artifact instead.'),
     supportedIf('settings.portable', feature('settings'), 'Cloud portable settings are disabled by this workspace policy.'),
-    supportedIf('customContent.agents', feature('agents'), 'Cloud custom agents are disabled by this workspace policy.'),
+    supportedIf('customContent.agents', feature('customAgents'), 'Cloud custom agents are disabled by this workspace policy.'),
     supportedIf('customContent.skills', feature('customSkills'), 'Cloud custom skills are disabled by this workspace policy.'),
     supportedIf('customContent.mcps', feature('customMcps'), 'Cloud custom MCPs are disabled by this workspace policy.'),
-    supportedIf('capabilities.catalog', capabilityCatalogEnabled, 'Cloud capability catalog is disabled by this workspace policy.'),
+    supportedIf('capabilities.catalog', feature('agents'), 'Cloud capability catalog is disabled by this workspace policy.'),
     cloudSupport('localFiles', 'not_supported', 'Cloud workspaces do not implicitly upload local files.'),
     cloudSupport('localStdioMcps', 'not_supported', 'Cloud workspaces do not execute arbitrary local stdio MCPs.'),
     cloudSupport('machineRuntimeConfig', 'not_supported', 'Cloud workspaces do not use machine-native runtime config.'),

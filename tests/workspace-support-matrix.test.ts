@@ -317,50 +317,36 @@ test('explicit Cloud chat policy overrides the legacy sessions fallback', () => 
   assert.equal(supportEntry(matrix, 'threads.search').status, 'supported')
 })
 
-test('Cloud support matrix honors canonical custom-content and capability policy flags', () => {
-  const policyWithCustomBundle: WorkspacePolicy = {
-    ...workspacePolicyForKind('cloud'),
-    features: {
-      customMcps: true,
-      customSkills: true,
-      agents: true,
-    },
-  }
-  const customBundle = workspaceSupportMatrix(registration('cloud'), policyWithCustomBundle)
-
-  assert.equal(supportEntry(customBundle, 'settings.portable').status, 'blocked_by_policy')
-  assert.equal(supportEntry(customBundle, 'customContent.agents').status, 'supported')
-  assert.equal(supportEntry(customBundle, 'customContent.skills').status, 'supported')
-  assert.equal(supportEntry(customBundle, 'customContent.mcps').status, 'supported')
-  assert.equal(supportEntry(customBundle, 'capabilities.catalog').status, 'supported')
-
-  const legacyCustomAgentsOnly: WorkspacePolicy = {
+test('Cloud support matrix keeps custom-content and catalog feature flags independent', () => {
+  const customAgentsOnly: WorkspacePolicy = {
     ...workspacePolicyForKind('cloud'),
     features: { customAgents: true },
   }
-  assert.equal(
-    supportEntry(
-      workspaceSupportMatrix(registration('cloud'), legacyCustomAgentsOnly),
-      'customContent.agents',
-    ).status,
-    'blocked_by_policy',
-  )
+  const customAgents = workspaceSupportMatrix(registration('cloud'), customAgentsOnly)
+  assert.equal(supportEntry(customAgents, 'customContent.agents').status, 'supported')
+  assert.equal(supportEntry(customAgents, 'customContent.skills').status, 'blocked_by_policy')
+  assert.equal(supportEntry(customAgents, 'customContent.mcps').status, 'blocked_by_policy')
+  assert.equal(supportEntry(customAgents, 'capabilities.catalog').status, 'blocked_by_policy')
 
-  const canonicalCapabilities: WorkspacePolicy = {
+  const agentsOnly: WorkspacePolicy = {
     ...workspacePolicyForKind('cloud'),
-    features: { capabilities: true },
+    features: { agents: true },
   }
-  assert.equal(
-    supportEntry(
-      workspaceSupportMatrix(registration('cloud'), canonicalCapabilities),
-      'capabilities.catalog',
-    ).status,
-    'supported',
-  )
+  const agents = workspaceSupportMatrix(registration('cloud'), agentsOnly)
+  assert.equal(supportEntry(agents, 'customContent.agents').status, 'blocked_by_policy')
+  assert.equal(supportEntry(agents, 'capabilities.catalog').status, 'supported')
 
-  const noCapabilities = workspaceSupportMatrix(
-    registration('cloud'),
-    workspacePolicyForKind('cloud'),
-  )
-  assert.equal(supportEntry(noCapabilities, 'capabilities.catalog').status, 'blocked_by_policy')
+  const neighboringFlagsOnly: WorkspacePolicy = {
+    ...workspacePolicyForKind('cloud'),
+    features: {
+      capabilities: true,
+      customSkills: true,
+      customMcps: true,
+    },
+  }
+  const neighboringFlags = workspaceSupportMatrix(registration('cloud'), neighboringFlagsOnly)
+  assert.equal(supportEntry(neighboringFlags, 'customContent.agents').status, 'blocked_by_policy')
+  assert.equal(supportEntry(neighboringFlags, 'customContent.skills').status, 'supported')
+  assert.equal(supportEntry(neighboringFlags, 'customContent.mcps').status, 'supported')
+  assert.equal(supportEntry(neighboringFlags, 'capabilities.catalog').status, 'blocked_by_policy')
 })

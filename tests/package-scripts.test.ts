@@ -622,6 +622,26 @@ test('dead-code gate covers every source workspace package', () => {
     'root scripts must be discovered from real package/CI callers instead of catch-all entries',
   )
   assert.equal(
+    workspaces['.']?.entry?.includes('.github/scripts/*.mjs'),
+    false,
+    'GitHub scripts must be enumerated from real workflow callers instead of a catch-all entry',
+  )
+  assert.deepEqual(
+    workspaces['.']?.entry?.filter((entry) => entry.startsWith('tests/')),
+    ['tests/*.test.ts'],
+    'root test entries must exactly match the top-level files run by scripts/run-node-tests.mjs',
+  )
+  assert.equal(
+    workspaces['apps/desktop']?.entry?.some((entry) => entry.startsWith('src/') && entry.includes('.test.')),
+    false,
+    'desktop source tests must not be treated as live without a source-test runner',
+  )
+  assert.deepEqual(
+    workspaces['products/wiki/packages/*']?.entry?.filter((entry) => entry.startsWith('test/')),
+    ['test/*.test.ts'],
+    'Wiki package test entries must exactly match the shallow files run by its test script',
+  )
+  assert.equal(
     knipJson.ignore?.some((pattern) => pattern.startsWith('products/gateway') || pattern.startsWith('products/wiki')),
     false,
     'the canonical inventory must not exclude Gateway or Wiki',
@@ -629,18 +649,19 @@ test('dead-code gate covers every source workspace package', () => {
 
   const expectedExternalEntrypoints: Record<string, string[]> = {
     '.': [
+      '.github/scripts/release-signing-mode.mjs',
+      '.github/scripts/release-windows-signing-mode.mjs',
       'scripts/compose-config-schema.mjs',
       'scripts/desktop-after-sign.mjs',
       'scripts/prune-cloud-runtime.mjs',
       'scripts/prune-gateway-runtime.mjs',
     ],
-    'apps/desktop': ['src/**/*.test.ts'],
     'products/gateway': [
       'scripts/docker-auth-smoke.mjs',
       'scripts/docker-compose-auth-smoke.mjs',
     ],
     'products/wiki': ['scripts/openwiki-packaged-cli-smoke.mjs'],
-    'products/wiki/packages/*': ['test/**/*.test.ts'],
+    'products/wiki/packages/*': ['test/*.test.ts'],
   }
   for (const [workspace, entries] of Object.entries(expectedExternalEntrypoints)) {
     for (const entry of entries) {

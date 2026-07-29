@@ -32,7 +32,8 @@
   "workspaces": {
     ".": {
       "entry": [
-        ".github/scripts/*.mjs",
+        ".github/scripts/release-signing-mode.mjs",
+        ".github/scripts/release-windows-signing-mode.mjs",
         // Owner: Build & Release. Docker build stages and the desktop signing
         // hook invoke these files outside package.json, so Knip cannot infer
         // their execution edges.
@@ -40,7 +41,7 @@
         "scripts/desktop-after-sign.mjs",
         "scripts/prune-cloud-runtime.mjs",
         "scripts/prune-gateway-runtime.mjs",
-        "tests/**/*.test.ts"
+        "tests/*.test.ts"
       ],
       "project": [
         "scripts/**/*.{js,mjs,ts}",
@@ -72,7 +73,6 @@
       "entry": [
         "src/main/index.ts",
         "src/preload/index.ts",
-        "src/**/*.test.ts",
         "tests/*.smoke.test.ts",
         "tests/*.packaged.test.ts",
         "tests/*.eval.test.ts",
@@ -354,7 +354,7 @@
       "entry": [
         "src/index.ts",
         "src/main.ts",
-        "test/**/*.test.ts"
+        "test/*.test.ts"
       ],
       "project": [
         "**/*.{ts,mjs}"

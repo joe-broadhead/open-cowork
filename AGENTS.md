@@ -9,7 +9,8 @@ Open Cowork is an Electron + TypeScript monorepo: desktop product layer on **Ope
 ```bash
 pnpm install                          # install (frozen lockfile in CI)
 pnpm dev                              # desktop dev
-pnpm lint                             # eslint + design tokens + cycles + knip + boundaries
+pnpm lint                             # eslint + design tokens + cycles + boundaries
+pnpm lint:dead-code                   # canonical all-workspace Knip gate
 pnpm typecheck                        # packages + desktop (slow; prefer scoped below)
 pnpm test                             # monorepo unit/integration (excludes full gateway suite path in some flows)
 pnpm test:gateway                     # Durable Gateway (cowork-gateway) vitest
