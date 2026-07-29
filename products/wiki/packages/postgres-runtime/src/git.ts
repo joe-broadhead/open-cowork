@@ -3,7 +3,7 @@ import { normalizeRepoPath } from "@openwiki/repo";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 
-export const execFile = promisify(execFileCallback);
+const execFile = promisify(execFileCallback);
 
 export async function gitDirtyPaths(root: string): Promise<string[] | undefined> {
   try {
@@ -54,7 +54,7 @@ export async function changedGitPaths(root: string, fromCommit: string, toCommit
   }
 }
 
-export function parseGitNameStatusPathsZ(stdout: string): string[] {
+function parseGitNameStatusPathsZ(stdout: string): string[] {
   const entries = stdout.split("\0").filter(Boolean);
   const paths: string[] = [];
   for (let index = 0; index < entries.length; index += 1) {

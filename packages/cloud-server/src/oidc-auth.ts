@@ -2,7 +2,11 @@ import { createHash, createHmac, createPublicKey, randomBytes, type JsonWebKey, 
 import { constantTimeEquals } from '@open-cowork/shared/node'
 import type { IncomingMessage } from 'node:http'
 import type { CloudAuthConfig } from '@open-cowork/shared'
-import { CloudHttpError, type CloudAuthResolver, type CloudBrowserAuthProvider } from './http-server.ts'
+import {
+  CloudHttpError,
+  type CloudAuthResolver,
+  type CloudBrowserAuthProvider,
+} from './http-contracts.ts'
 
 type OidcFetchResponse = {
   ok: boolean

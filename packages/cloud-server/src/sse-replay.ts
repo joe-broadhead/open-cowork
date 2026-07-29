@@ -49,26 +49,31 @@ export class CloudSseStreamRegistry {
 
   track(req: IncomingMessage, res: ServerResponse, cleanup: () => void, scope: SseStreamScope = {}) {
     if (this.closing) {
-      const socket = res.socket || req.socket || null
       cleanup()
-      if (!res.writableEnded && !res.destroyed) res.end()
-      if (!res.destroyed) res.destroy()
-      if (socket && !socket.destroyed) socket.destroy()
+      if (!res.writableEnded && !res.destroyed) {
+        res.writeHead(503, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+          connection: 'close',
+          'retry-after': '1',
+        })
+        res.end(JSON.stringify({ error: 'SSE service is shutting down.' }))
+      }
       return false
     }
 
     const orgKey = scope.orgKey || null
     if (orgKey && scope.maxPerOrg && scope.maxPerOrg > 0 && (this.perOrgCounts.get(orgKey) || 0) >= scope.maxPerOrg) {
-      // Over the per-org cap. Headers are already sent (SSE 200) by the time we get here,
-      // so signal via an SSE error event then drop the connection.
-      const socket = res.socket || req.socket || null
       cleanup()
       if (!res.writableEnded && !res.destroyed) {
-        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Too many concurrent streams for this organization.' })}\n\n`)
-        res.end()
+        res.writeHead(429, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+          connection: 'close',
+          'retry-after': '1',
+        })
+        res.end(JSON.stringify({ error: 'Too many concurrent streams for this organization.' }))
       }
-      if (!res.destroyed) res.destroy()
-      if (socket && !socket.destroyed) socket.destroy()
       return false
     }
 

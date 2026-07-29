@@ -14,7 +14,11 @@ import {
   type ArtifactStatusUpdateRequest,
 } from '@open-cowork/shared'
 import type { CloudArtifactIndexRecord } from './control-plane-store.ts'
-import type { ObjectStoreAdapter, ObjectStorePresignedRequest } from './object-store.ts'
+import type {
+  ObjectStoreAdapter,
+  ObjectStorePresignedRequest,
+  ObjectStorePresignedUploadCapability,
+} from './object-store.ts'
 import { artifactObjectKey } from './object-store.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
 
@@ -85,9 +89,8 @@ export type CloudArtifactPresignUploadInput = {
   filename: string
   contentType?: string | null
   expiresSeconds?: number
-  // Client-declared expected upload size, in bytes. Used only to size the speculative
-  // billing/quota reservation at BEGIN (SEC-1); finalize settles the actual stored size.
-  // Absent ⇒ a minimal speculative reservation that still runs the billing/over-quota gate.
+  // Client-declared exact upload size, in bytes. Size-enforced object-store adapters bind
+  // their direct PUT request to this value; begin reserves it and finalize settles actual size.
   expectedSize?: number
 }
 
@@ -148,17 +151,30 @@ function boundedNullableIsoDate(value: unknown, label: string) {
 }
 
 // Bound the client-declared expected upload size used to size the presign BEGIN
-// reservation (SEC-1). A declared size over the hard cap is rejected up front (mirrors
-// the buffered path's 413). An absent size reserves a minimal speculative byte so the
-// billing + over-quota gate still runs without materially double-counting against the
-// actual-size charge that finalize records.
+// reservation (SEC-1). Direct upload requires a positive exact size so quota cannot fall
+// back to a token reservation smaller than the bytes accepted by object storage.
 function boundedExpectedSize(value: unknown): number {
-  if (value === null || value === undefined) return 1
-  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
     throw new CloudServiceError(400, 'Artifact expectedSize is invalid.')
   }
   if (value > MAX_ARTIFACT_BYTES) throw new CloudServiceError(413, 'Artifact is too large.')
-  return Math.max(1, value)
+  return value
+}
+
+function sizeEnforcedPresignedUpload(
+  objectStore: ObjectStoreAdapter,
+): ObjectStorePresignedUploadCapability | null {
+  const capability = objectStore.presignedUpload
+  if (
+    !capability
+    || capability.enforcement !== 'exact-content-length'
+    || !Number.isSafeInteger(capability.maxBytes)
+    || capability.maxBytes <= 0
+    || typeof capability.presignPut !== 'function'
+  ) {
+    return null
+  }
+  return capability
 }
 
 function boundedKind(value: unknown, fallback: ArtifactKind) {
@@ -208,6 +224,17 @@ function decodeBase64(value: unknown) {
   if (buffer.byteLength === 0) throw new CloudServiceError(400, 'Artifact dataBase64 is empty.')
   if (buffer.byteLength > MAX_ARTIFACT_BYTES) throw new CloudServiceError(413, 'Artifact is too large.')
   return buffer
+}
+
+export function validateCloudArtifactUploadInput(input: unknown, createdAt = new Date().toISOString()) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new CloudServiceError(400, 'Artifact upload must be an object.')
+  }
+  const upload = input as CloudArtifactUploadInput
+  return {
+    meta: resolveArtifactMetadataFields(upload, createdAt),
+    body: decodeBase64(upload.dataBase64),
+  }
 }
 
 function asArtifactRecord(value: unknown): CloudArtifactRecord | null {
@@ -389,8 +416,7 @@ export class CloudArtifactService {
     await this.sessionService.getSessionView(principal, sessionId)
     const artifactId = this.ids.randomUUID()
     const createdAt = new Date().toISOString()
-    const meta = resolveArtifactMetadataFields(input, createdAt)
-    const body = decodeBase64(input.dataBase64)
+    const { meta, body } = validateCloudArtifactUploadInput(input, createdAt)
     await this.sessionService.domains.usage.assertArtifactUploadAllowed(principal, body.byteLength)
     const key = artifactObjectKey({
       tenantId: principal.tenantId,
@@ -417,22 +443,22 @@ export class CloudArtifactService {
     })
   }
 
-  // Begin a direct-to-store upload. When the configured object store can presign (S3 with static
-  // credentials), authorize the principal/session, mint the artifact id + object key, and return a
-  // time-limited PUT URL the client uploads bytes straight to — keeping them off the pod heap. The
-  // client then calls finalizeSessionArtifactUpload to record the metadata row. Returns null when
-  // presigning is unavailable (absent capability or no static credentials) so the route signals
-  // "unsupported" and the client falls back to the buffered uploadSessionArtifact path.
+  // Begin a direct-to-store upload only for an adapter that explicitly enforces both the declared
+  // exact content length and a maximum. The client then calls finalizeSessionArtifactUpload to
+  // record the metadata row. An unqualified adapter returns null so the route signals "unsupported"
+  // and the client falls back to the bounded buffered uploadSessionArtifact path.
   async presignSessionArtifactUpload(
     principal: CloudPrincipal,
     sessionId: string,
     input: CloudArtifactPresignUploadInput,
   ): Promise<{ artifactId: string, key: string, presigned: ObjectStorePresignedRequest } | null> {
-    if (!this.objectStore.presignPut) return null
+    const uploadCapability = sizeEnforcedPresignedUpload(this.objectStore)
+    if (!uploadCapability) return null
     await this.sessionService.getSessionView(principal, sessionId)
     const filename = boundedFilename(input.filename)
     const contentType = boundedContentType(input.contentType)
     const expectedBytes = boundedExpectedSize(input.expectedSize)
+    if (expectedBytes > uploadCapability.maxBytes) throw new CloudServiceError(413, 'Artifact is too large.')
     const artifactId = this.ids.randomUUID()
     const key = artifactObjectKey({
       tenantId: principal.tenantId,
@@ -440,8 +466,13 @@ export class CloudArtifactService {
       artifactId,
       filename,
     })
-    const presigned = await this.objectStore.presignPut({ key, contentType, expiresSeconds: input.expiresSeconds })
-    if (!presigned) return null
+    const presigned = await uploadCapability.presignPut({
+      key,
+      contentType,
+      expectedSize: expectedBytes,
+      expiresSeconds: input.expiresSeconds,
+    })
+    if (!presigned || presigned.method !== 'PUT') return null
     // SEC-1: the minted PUT URL writes bytes STRAIGHT to the object store, bypassing the
     // pod. Reserve quota before returning it; finalize settles only the delta between this
     // expected-size reservation and the authoritative stored size.
@@ -749,19 +780,24 @@ export class CloudArtifactService {
     })
   }
 
-  // SEC-2: the serialized origin (scheme://host[:port]) the object store's presigned PUT/GET
-  // URLs target, so the served renderer's CSP connect-src can allow the browser shim's direct
-  // F4 transfer to that cross-origin store. Derived by signing a throwaway probe key and
+  // SEC-2: the serialized origin (scheme://host[:port]) the object store's size-enforced
+  // presigned PUT URLs target, so the served renderer's CSP connect-src can allow the browser
+  // shim's direct transfer to that cross-origin store. Derived by signing a throwaway probe key and
   // reading its URL origin (presigning is a local, side-effect-free computation; the probe
-  // URL is never used). Returns null when the store cannot presign (buffered-only / no static
-  // credentials) — the caller then leaves connect-src 'self'. Cached: the store config is fixed.
+  // URL is never used). Returns null without the qualified capability, so the caller leaves
+  // connect-src 'self'. Cached because the store configuration is fixed for the server lifetime.
   async presignedUploadOrigin(): Promise<string | null> {
     if (this.cachedPresignedUploadOrigin !== undefined) return this.cachedPresignedUploadOrigin
     let origin: string | null = null
-    if (this.objectStore.presignPut) {
+    const uploadCapability = sizeEnforcedPresignedUpload(this.objectStore)
+    if (uploadCapability) {
       try {
-        const probe = await this.objectStore.presignPut({ key: 'csp-origin-probe', contentType: null })
-        origin = probe ? new URL(probe.url).origin : null
+        const probe = await uploadCapability.presignPut({
+          key: 'csp-origin-probe',
+          contentType: null,
+          expectedSize: 1,
+        })
+        origin = probe?.method === 'PUT' ? new URL(probe.url).origin : null
       } catch {
         origin = null
       }

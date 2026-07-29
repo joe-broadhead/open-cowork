@@ -1,10 +1,19 @@
 import type { IncomingHttpHeaders } from "node:http";
 
-import { type ChannelProvider, type IncomingChannelMessage, WebhookProviderNotFoundError } from "@open-cowork/gateway-channel";
+import {
+  ChannelStackTelemetry,
+  type ChannelProvider,
+  type IncomingChannelMessage,
+  WebhookProviderNotFoundError,
+} from "@open-cowork/gateway-channel";
 import { TelegramProvider } from "@open-cowork/gateway-provider-telegram";
 import { WebhookProvider } from "@open-cowork/gateway-provider-webhook";
 
-import type { StandaloneGatewayConfig, StandaloneGatewayProviderConfig } from "./types.js";
+import type {
+  StandaloneGatewayConfig,
+  StandaloneGatewayProviderConfig,
+  StandaloneInboundDeliveryContext,
+} from "./types.js";
 
 export interface StandaloneProviderRegistration {
   config: StandaloneGatewayProviderConfig;
@@ -14,8 +23,14 @@ export interface StandaloneProviderRegistration {
 
 export interface StandaloneProviderRegistry {
   readonly registrations: StandaloneProviderRegistration[];
-  start(handler: (config: StandaloneGatewayProviderConfig, message: IncomingChannelMessage) => Promise<void>): Promise<void>;
+  readonly telemetry?: ChannelStackTelemetry;
+  start(handler: (
+    config: StandaloneGatewayProviderConfig,
+    message: IncomingChannelMessage,
+    delivery: StandaloneInboundDeliveryContext,
+  ) => Promise<void>): Promise<void>;
   stop(): Promise<void>;
+  refreshTelemetry(): void;
   get(id: string): StandaloneProviderRegistration | null;
   handleWebhook(id: string, payload: unknown, headers: IncomingHttpHeaders, rawBody?: string): Promise<void>;
 }
@@ -28,24 +43,93 @@ export function createStandaloneProviderRegistry(config: StandaloneGatewayConfig
       provider: createProvider(provider),
       started: false,
     }));
+  const telemetry = new ChannelStackTelemetry("standalone-gateway", ["monorepo-provider"]);
+  const syncTelemetry = () => {
+    const kinds = new Set(registrations.map((registration) => registration.config.kind));
+    for (const kind of kinds) {
+      telemetry.setBindingCount(
+        "monorepo-provider",
+        kind,
+        "configured",
+        registrations.filter((registration) => registration.config.kind === kind).length,
+      );
+      telemetry.setBindingCount(
+        "monorepo-provider",
+        kind,
+        "active",
+        registrations.filter((registration) =>
+          registration.config.kind === kind && isActive(registration)).length,
+      );
+    }
+  };
+  syncTelemetry();
+  let lifecycleTail = Promise.resolve();
+  const runLifecycleOperation = (operation: () => Promise<void>) => {
+    const result = lifecycleTail.then(operation);
+    lifecycleTail = result.catch(() => undefined);
+    return result;
+  };
 
   return {
     registrations,
-    async start(handler) {
-      for (const registration of registrations) {
-        await registration.provider.start((message) => handler(registration.config, message));
-        registration.started = true;
-        if (registration.config.kind === "telegram") {
-          await (registration.provider as TelegramProvider).configureWebhook();
+    telemetry,
+    refreshTelemetry: syncTelemetry,
+    start(handler) {
+      return runLifecycleOperation(async () => {
+        const liveProviderIds = registrations
+          .filter((registration) => registration.started)
+          .map((registration) => registration.config.id);
+        if (liveProviderIds.length > 0) {
+          throw new Error(
+            `Standalone provider registry is already started for ${liveProviderIds.join(", ")}. Call stop() and retry start().`,
+          );
         }
-      }
+        for (const registration of registrations) {
+          const delivery = inboundDeliveryContext(registration.config);
+          await registration.provider.start((message) =>
+            handler(registration.config, message, delivery));
+          registration.started = true;
+          syncTelemetry();
+          try {
+            if (registration.config.kind === "telegram") {
+              await (registration.provider as TelegramProvider).configureWebhook();
+            }
+          } catch (configureError) {
+            try {
+              await registration.provider.stop();
+              registration.started = false;
+            } catch (cleanupError) {
+              throw new AggregateError(
+                [configureError, cleanupError],
+                `Standalone provider ${registration.config.id} configuration and cleanup both failed.`,
+                { cause: cleanupError },
+              );
+            } finally {
+              syncTelemetry();
+            }
+            throw configureError;
+          }
+        }
+      });
     },
-    async stop() {
-      for (const registration of [...registrations].reverse()) {
-        if (!registration.started) continue;
-        await registration.provider.stop();
-        registration.started = false;
-      }
+    stop() {
+      return runLifecycleOperation(async () => {
+        const failures: unknown[] = [];
+        for (const registration of [...registrations].reverse()) {
+          if (!registration.started) continue;
+          try {
+            await registration.provider.stop();
+            registration.started = false;
+          } catch (error) {
+            failures.push(error);
+          } finally {
+            syncTelemetry();
+          }
+        }
+        if (failures.length > 0) {
+          throw new AggregateError(failures, `Failed to stop ${failures.length} standalone provider(s).`);
+        }
+      });
     },
     get(id) {
       return registrations.find((registration) => registration.config.id === id) || null;
@@ -70,6 +154,25 @@ export function createStandaloneProviderRegistry(config: StandaloneGatewayConfig
       throw new WebhookProviderNotFoundError(`Standalone provider ${id} does not expose webhook ingress.`);
     },
   };
+}
+
+function inboundDeliveryContext(
+  config: StandaloneGatewayProviderConfig,
+): StandaloneInboundDeliveryContext {
+  const webhookIngress = config.kind === "webhook"
+    || (config.kind === "telegram" && config.settings.mode === "webhook");
+  return {
+    failureHandoff: webhookIngress ? "provider-redelivery" : "none",
+  };
+}
+
+function isActive(registration: StandaloneProviderRegistration): boolean {
+  if (!registration.started) return false;
+  try {
+    return registration.provider.health?.().ok ?? true;
+  } catch {
+    return false;
+  }
 }
 
 function createProvider(config: StandaloneGatewayProviderConfig): ChannelProvider {

@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import type {
   CustomAgentPermissionAction, CustomAgentPermissionKey, CustomAgentPermissionOverride, CustomAgentPermissionRule, } from '@open-cowork/shared'
 import { Badge, Button, Card, Input, SegmentedControl, Select } from '@open-cowork/ui'
-
 type Props = {
   value?: CustomAgentPermissionOverride[] | null
   onChange: (next: CustomAgentPermissionOverride[]) => void
@@ -78,7 +77,7 @@ function rowSupportsRules(key: CustomAgentPermissionKey) {
   return PERMISSION_ROWS.find((row) => row.key === key)?.supportsRules !== false
 }
 
-export function normalizeAgentPermissionOverrides(
+function normalizeAgentPermissionOverrides(
   value?: CustomAgentPermissionOverride[] | null,
 ): PermissionEditorRow[] {
   const byKey = new Map((value || []).map((entry) => [entry.key, entry]))

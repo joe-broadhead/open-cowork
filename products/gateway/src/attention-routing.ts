@@ -15,9 +15,9 @@ import {
   type WorkState,
 } from './work-store.js'
 
-export type ProjectNotificationDelivery = 'immediate' | 'digest' | 'deferred' | 'muted' | 'deduped' | 'session'
+type ProjectNotificationDelivery = 'immediate' | 'digest' | 'deferred' | 'muted' | 'deduped' | 'session'
 
-export interface ProjectNotificationTarget {
+interface ProjectNotificationTarget {
   key: string
   sessionId: string
   provider?: string
@@ -130,7 +130,7 @@ export async function deliverProjectAttention(channels: Map<string, Pick<Channel
   return { routes, sent, failed, suppressed }
 }
 
-export function notificationTargetsForProject(group: ProjectAttentionGroup, state: WorkState): ProjectNotificationTarget[] {
+function notificationTargetsForProject(group: ProjectAttentionGroup, state: WorkState): ProjectNotificationTarget[] {
   const byKey = new Map<string, ProjectNotificationTarget>()
   const bindings = state.projectBindings.filter(binding => group.roadmapId ? binding.roadmapId === group.roadmapId : !binding.roadmapId)
   for (const binding of bindings) addTarget(byKey, targetFromBinding(binding))
@@ -142,7 +142,7 @@ export function notificationTargetsForProject(group: ProjectAttentionGroup, stat
   return [...byKey.values()].sort((a, b) => Number(Boolean(b.provider)) - Number(Boolean(a.provider)) || a.key.localeCompare(b.key))
 }
 
-export function formatProjectAttentionNotification(group: ProjectAttentionGroup, delivery: { delivery: ProjectNotificationDelivery; reason: string }): string {
+function formatProjectAttentionNotification(group: ProjectAttentionGroup, delivery: { delivery: ProjectNotificationDelivery; reason: string }): string {
   const heading = delivery.delivery === 'digest' ? 'Project Digest' : 'Project Attention'
   const lines = [`${heading}: ${group.roadmapTitle}`, `Severity: ${group.severity}${group.roadmapId ? ` · Roadmap: ${group.roadmapId}` : ''}`]
   for (const item of group.items.slice(0, 6)) lines.push(`- [${item.severity}] ${item.title}: ${item.summary}`, `  Action: ${item.action}`)

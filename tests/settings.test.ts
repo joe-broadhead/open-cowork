@@ -137,7 +137,6 @@ test('native permission ask defaults initialize fresh profiles with toggles enab
     assert.equal(settings.taskPermission, 'allow')
     assert.equal(settings.externalDirectoryPermission, 'ask')
     assert.equal(settings.mcpPermission, 'ask')
-    assert.equal(settings.requireApprovalBeforeSending, true)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
@@ -172,7 +171,6 @@ test('default public config initializes native permission toggles enabled', asyn
     assert.equal(settings.mcpPermission, 'ask')
     assert.equal(settings.notificationVoiceReplies, true)
     assert.equal(settings.notificationDailyDigest, false)
-    assert.equal(settings.privacyKeepConversationHistory, true)
     assert.equal(settings.privacyShareAnonymizedUsage, false)
     assert.equal(settings.runtimeConfigSource, 'app')
     assert.deepEqual(
@@ -300,6 +298,7 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
       externalDirectoryPermission: 'ask',
       mcpPermission: 'deny',
       requireApprovalBeforeSending: false,
+      privacyKeepConversationHistory: false,
       notificationDailyDigest: true,
       privacyShareAnonymizedUsage: true,
       runtimeConfigSource: 'machine',
@@ -316,11 +315,57 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     assert.equal(after.taskPermission, 'deny')
     assert.equal(after.externalDirectoryPermission, 'ask')
     assert.equal(after.mcpPermission, 'deny')
-    assert.equal(after.requireApprovalBeforeSending, false)
+    assert.equal(after.requireApprovalBeforeSending, undefined)
+    assert.equal(after.privacyKeepConversationHistory, undefined)
     assert.equal(after.notificationDailyDigest, true)
     assert.equal(after.privacyShareAnonymizedUsage, true)
     assert.equal(after.runtimeConfigSource, 'machine')
     assert.equal(after.unexpectedTopLevel, undefined)
+    const persisted = readFileSync(join(userDataDir, 'settings.json'), 'utf-8')
+    assert.doesNotMatch(persisted, /requireApprovalBeforeSending|privacyKeepConversationHistory/)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('current-schema disk settings discard removed keys on the next unrelated save', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-removed-keys-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  mkdirSync(userDataDir, { recursive: true })
+  writeFileSync(join(userDataDir, 'settings.json'), JSON.stringify({
+    _schemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+    selectedProviderId: 'openrouter',
+    selectedModelId: 'openrouter/auto',
+    notificationSounds: true,
+    requireApprovalBeforeSending: false,
+    privacyKeepConversationHistory: false,
+  }))
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const { loadSettings, saveSettings } = await importFreshSettingsModule('removed-disk-keys')
+    const loaded = loadSettings() as any
+    assert.equal(loaded.requireApprovalBeforeSending, undefined)
+    assert.equal(loaded.privacyKeepConversationHistory, undefined)
+
+    saveSettings({ notificationSounds: false })
+
+    const persisted = JSON.parse(readFileSync(join(userDataDir, 'settings.json'), 'utf-8'))
+    assert.equal(persisted.notificationSounds, false)
+    assert.equal(persisted.requireApprovalBeforeSending, undefined)
+    assert.equal(persisted.privacyKeepConversationHistory, undefined)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

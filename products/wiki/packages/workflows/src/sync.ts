@@ -65,13 +65,13 @@ export interface PostEventAutomationResult {
   backup?: PostEventBackupResult | PostEventSkipResult;
 }
 
-export interface PostEventSkipResult {
+interface PostEventSkipResult {
   status: "skipped";
   reason: string;
   trigger_event: OpenWikiAutomationEvent;
 }
 
-export interface PostEventBackupResult {
+interface PostEventBackupResult {
   status: "created" | "failed";
   trigger_event: OpenWikiAutomationEvent;
   backup_id?: string;

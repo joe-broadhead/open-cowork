@@ -119,7 +119,9 @@ function mockSseConn() {
     writableEnded: false,
     destroyed: false,
     writes: [] as string[],
+    statusCode: null as number | null,
     write(s: string) { this.writes.push(s); return true },
+    writeHead(status: number) { this.statusCode = status },
     end() { this.writableEnded = true },
     destroy() { this.destroyed = true },
     once(ev: string, h: () => void) { const a = handlers.get(ev) || []; a.push(h); handlers.set(ev, a) },
@@ -136,10 +138,11 @@ test('SSE stream registry enforces a per-org concurrent-connection cap', () => {
   const a = mockSseConn(); const b = mockSseConn(); const c = mockSseConn()
   assert.equal(registry.track(a.req, a.res, () => {}, scope), true)
   assert.equal(registry.track(b.req, b.res, () => {}, scope), true)
-  // Third over the cap is rejected with an SSE error and dropped.
+  // Third over the cap is rejected before opening an SSE stream.
   assert.equal(registry.track(c.req, c.res, () => {}, scope), false)
-  assert.ok(c.raw.writes.some((w: string) => w.includes('Too many concurrent streams')))
-  assert.equal(c.raw.destroyed, true)
+  assert.equal(c.raw.statusCode, 429)
+  assert.equal(c.raw.writableEnded, true)
+  assert.equal(c.raw.destroyed, false)
   // A different org is unaffected.
   const other = mockSseConn()
   assert.equal(registry.track(other.req, other.res, () => {}, { orgKey: 'org-b', maxPerOrg: 2 }), true)

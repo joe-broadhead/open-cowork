@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 // Capability and resource vocabularies (formerly re-exported from the deleted authz-model.ts).
-export type AuthzCapability =
+type AuthzCapability =
   | 'read_state'
   | 'session_control'
   | 'task_mutate'
@@ -16,7 +16,7 @@ export type AuthzCapability =
   | 'audit_read'
   | 'secret_reference'
 
-export type ResourceKind =
+type ResourceKind =
   | 'organization'
   | 'workspace'
   | 'project'
@@ -34,7 +34,7 @@ export type ResourceKind =
   | 'remote_environment'
 import type { HttpCapability } from './security.js'
 
-export type SecurityPolicySurface =
+type SecurityPolicySurface =
   | 'http'
   | 'mcp'
   | 'channel_command'
@@ -43,7 +43,7 @@ export type SecurityPolicySurface =
   | 'secret_reference'
   | 'evidence_export'
 
-export type SecurityPolicyActorType =
+type SecurityPolicyActorType =
   | 'local'
   | 'http_token'
   | 'webhook'
@@ -55,7 +55,7 @@ export type SecurityPolicyActorType =
   | 'agent'
   | 'unknown'
 
-export type SecurityPolicyTrustTier =
+type SecurityPolicyTrustTier =
   | 'local_trusted'
   | 'trusted_channel'
   | 'gateway_shipped'
@@ -65,11 +65,11 @@ export type SecurityPolicyTrustTier =
   | 'blocked'
   | 'unknown'
 
-export type SecurityPolicyCapability = AuthzCapability | HttpCapability | 'trusted_channel' | 'local_cli' | 'unknown'
+type SecurityPolicyCapability = AuthzCapability | HttpCapability | 'trusted_channel' | 'local_cli' | 'unknown'
 
 export type SecurityPolicyDecisionKind = 'allow' | 'deny' | 'preview_only' | 'requires_human' | 'degraded'
 
-export type SecurityPolicyProductMode =
+type SecurityPolicyProductMode =
   | 'local_public_beta'
   | 'public_local_release_candidate'
   | 'self_hosted_single_operator_preview'
@@ -106,19 +106,19 @@ export type SecurityPolicyReasonCode =
   | 'preview_only_policy'
   | 'degraded_policy_source'
 
-export interface SecurityPolicyPrincipal {
+interface SecurityPolicyPrincipal {
   actorType: SecurityPolicyActorType
   trustTier?: SecurityPolicyTrustTier
   ref?: string
 }
 
-export interface SecurityPolicyScope {
+interface SecurityPolicyScope {
   organizationId?: string
   workspaceId?: string
   projectId?: string
 }
 
-export interface SecurityPolicyResource extends SecurityPolicyScope {
+interface SecurityPolicyResource extends SecurityPolicyScope {
   kind: ResourceKind | SecurityPolicySurface | 'http_route'
   id?: string
 }
@@ -199,7 +199,7 @@ export interface ChannelCommandSecurityPolicyInput {
 }
 
 
-export type HttpSecurityPolicyActor = 'local' | 'webhook' | 'http-token' | 'unsafe-public' | 'rejected'
+type HttpSecurityPolicyActor = 'local' | 'webhook' | 'http-token' | 'unsafe-public' | 'rejected'
 
 export interface HttpSecurityPolicyInput {
   requiredCapability: HttpCapability

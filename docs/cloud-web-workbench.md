@@ -286,8 +286,8 @@ suite.
 | `shared-product-vocabulary` | Desktop and Cloud Web use the same user-facing vocabulary for shared concepts. | `docs/desktop-app.md`, `docs/cloud-web-workbench.md`, single renderer at `packages/app/src` |
 | `cloud-api-client-only` | Cloud Web remains a Cloud API client and does not own execution, projection semantics, or OpenCode runtime behavior. | `packages/app/src/browser/cowork-api.ts`, `tests/cloud-modularity-boundaries.test.ts`, `docs/architecture.md` |
 | `admin-not-default-path` | Admin/setup controls are explicit secondary surfaces and do not dominate the default user path. | `packages/app/src` admin/settings surfaces, `docs/cloud-web-workbench.md` |
-| `safe-redaction` | No raw secrets, signed URLs, object-store internals, local paths, command lines, environment variables, or provider payloads render outside intentional safe reveal flows. | `packages/cloud-server/src/http-routes`, `packages/app/src/browser/cowork-api.ts`, `tests/cloud-http-server.test.ts` |
-| `honest-performance-budgets` | Performance budgets stay honest for added routes, surfaces, large fixtures, and responsive layouts. | renderer vitest suite, `tests/cloud-http-server.test.ts`, `docs/cloud-web-workbench.md` |
+| `safe-redaction` | No raw secrets, signed URLs, object-store internals, local paths, command lines, environment variables, or provider payloads render outside intentional safe reveal flows. | `packages/cloud-server/src/http-routes`, `packages/app/src/browser/cowork-api.ts`, `tests/cloud-http-artifact-audit-contracts.test.ts` |
+| `honest-performance-budgets` | Performance budgets stay honest for added routes, surfaces, large fixtures, and responsive layouts. | renderer vitest suite, `tests/cloud-http-*-contracts.test.ts`, `docs/cloud-web-workbench.md` |
 | `docs-match-shipped-behavior` | Docs describe shipped behavior and explicit boundaries, not aspirational runtime behavior. | `docs/cloud-web-workbench.md`, `docs/release-checklist.md`, renderer + cloud HTTP suites |
 
 ## Knowledge/OpenWiki Integration

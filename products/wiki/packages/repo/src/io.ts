@@ -71,7 +71,7 @@ export async function readOptionalTextArtifact(root: string, repoPath: string): 
   };
 }
 
-export function safeRepoPath(root: string, repoPath: string): string {
+function safeRepoPath(root: string, repoPath: string): string {
   if (path.isAbsolute(repoPath)) {
     throw new Error(`Path escapes OpenWiki workspace: ${repoPath}`);
   }
@@ -294,7 +294,7 @@ function isMissingFileError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT";
 }
 
-export async function listFiles(root: string): Promise<string[]> {
+async function listFiles(root: string): Promise<string[]> {
   const entries = await fs.readdir(root, { withFileTypes: true });
   const files = await Promise.all(
     entries.map(async (entry) => {

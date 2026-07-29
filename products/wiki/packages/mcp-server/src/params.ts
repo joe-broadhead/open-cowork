@@ -243,7 +243,7 @@ export function optionalSearchFiltersParam(params: Record<string, unknown>): Pic
   return Object.keys(filters).length === 0 ? {} : { filters };
 }
 
-export function searchPersona(value: string): SearchPersona {
+function searchPersona(value: string): SearchPersona {
   if (
     value === "default" ||
     value === "researcher" ||

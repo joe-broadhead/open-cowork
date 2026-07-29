@@ -19,11 +19,11 @@ import {
   type WorkState,
 } from './work-store.js'
 
-export type TeamProgressKind = 'started' | 'gate_waiting' | 'blocked' | 'resumed' | 'completed' | 'failed' | 'scheduled_digest'
-export type TeamProgressDelivery = 'immediate' | 'digest' | 'deferred' | 'muted' | 'deduped' | 'session'
-export type TeamProgressAttention = 'monitor' | 'needs_attention' | 'critical'
+type TeamProgressKind = 'started' | 'gate_waiting' | 'blocked' | 'resumed' | 'completed' | 'failed' | 'scheduled_digest'
+type TeamProgressDelivery = 'immediate' | 'digest' | 'deferred' | 'muted' | 'deduped' | 'session'
+type TeamProgressAttention = 'monitor' | 'needs_attention' | 'critical'
 
-export interface TeamProgressTarget {
+interface TeamProgressTarget {
   key: string
   sessionId?: string
   provider?: string
@@ -65,7 +65,7 @@ export interface TeamProgressRoutingOptions {
   channelDeliveryTimeoutMs?: number
 }
 
-export interface TeamProgressSessionClient {
+interface TeamProgressSessionClient {
   session?: {
     prompt(args: { path: { id: string }; body: { agent?: string; parts: Array<{ type: 'text'; text: string }> } }): Promise<unknown>
   }
@@ -189,7 +189,7 @@ export async function deliverTeamProgressBriefings(channels: Map<string, Pick<Ch
   return { routes, sent, failed, suppressed }
 }
 
-export function formatTeamProgressBriefing(route: Pick<TeamProgressRoute, 'event' | 'assignment' | 'receipt' | 'progress' | 'attention'>): string {
+function formatTeamProgressBriefing(route: Pick<TeamProgressRoute, 'event' | 'assignment' | 'receipt' | 'progress' | 'attention'>): string {
   return renderStructuredMessage(teamProgressMessage(route), { plainText: true }).plainText.substring(0, 4000)
 }
 

@@ -282,7 +282,7 @@ export function opencodeRoutes(): RouteHandler[] {
   }]
 }
 
-export function boundedIntegerQuery(url: URL, name: string, defaultValue: number, max: number): number {
+function boundedIntegerQuery(url: URL, name: string, defaultValue: number, max: number): number {
   const raw = url.searchParams.get(name)
   if (raw === null) return defaultValue
   if (!/^\d+$/.test(raw)) throw new HttpError(400, `${name} must be an integer between 1 and ${max}`)

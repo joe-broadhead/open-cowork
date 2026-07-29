@@ -17,6 +17,11 @@ export interface ChannelMessage {
   text: string         // normalized message text
   attachments?: Array<{ name: string; url: string; mimeType: string }>
   timestamp: string
+  /**
+   * Set only by an adapter whose delivery boundary demonstrably preserves a
+   * transiently failed inbound for provider redelivery.
+   */
+  transientFailureHandoff?: 'provider-redelivery'
 }
 
 export interface ChannelAdapter {
@@ -24,6 +29,8 @@ export interface ChannelAdapter {
   capabilities: ChannelCapabilities
   start(): Promise<void>
   stop(): Promise<void>
+  /** Runtime readiness after start; used for low-cardinality binding telemetry. */
+  isActive?(): boolean
   sendMessage(chatId: string, text: string, options?: { threadId?: string; idempotencyKey?: string }): Promise<void>
   sendStructuredMessage?(chatId: string, message: StructuredGatewayMessage, options?: { threadId?: string }): Promise<void>
   sendCommandMenu?(chatId: string, text: string, actions: Array<{ label: string; command: string; description?: string }>, options?: { threadId?: string }): Promise<void>

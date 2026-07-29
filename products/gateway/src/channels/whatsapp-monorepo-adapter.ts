@@ -37,6 +37,7 @@ function mapIncoming(incoming: IncomingChannelMessage): ChannelMessage {
       mimeType: a.mimeType || 'application/octet-stream',
     })),
     timestamp: (incoming.receivedAt instanceof Date ? incoming.receivedAt : new Date()).toISOString(),
+    transientFailureHandoff: 'provider-redelivery',
   }
 }
 
@@ -86,6 +87,9 @@ export function createWhatsAppMonorepoChannelAdapter(): WhatsAppBridgeChannel {
       provider = null
       if (current) await current.stop()
     },
+    isActive() {
+      return provider !== null && (provider.health?.().ok ?? true)
+    },
     async sendMessage(chatId, text) {
       if (!provider) throw new Error('WhatsApp monorepo bridge is not started')
       const limit = Math.max(1, Math.min(provider.capabilities.maxTextLength || 4096, 4096))
@@ -134,4 +138,3 @@ export function createWhatsAppMonorepoChannelAdapter(): WhatsAppBridgeChannel {
   }
   return adapter
 }
-

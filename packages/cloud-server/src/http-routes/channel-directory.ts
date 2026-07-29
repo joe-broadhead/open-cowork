@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { buildChannelProviderStatuses } from '@open-cowork/shared'
-import type { CloudHttpServerOptions } from '../http-server.ts'
+import type { CloudHttpServerOptions } from '../http-contracts.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 import type { ChannelRouteTools } from './channels.ts'
 

@@ -94,7 +94,7 @@ import {
 } from './cowork-api-transport'
 export type { BrowserCoworkApiBootstrap } from './cowork-api-transport'
 export { createTransport } from './cowork-api-transport'
-export { createCloudTranscriptProjector, type CloudTranscriptProjector } from './cowork-api-transcript'
+export { createCloudTranscriptProjector } from './cowork-api-transcript'
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -482,10 +482,16 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
         // base64-buffer through the web pod. A begin failure is a real API failure and must remain
         // visible; buffered fallback is reserved for an explicit unsupported response or a failed
         // object-store PUT. (Electron implements `upload` over IPC and never reaches this code.)
+        const uploadBytes = base64ToBytes(req.dataBase64)
+        if (uploadBytes.byteLength === 0) return bufferedUpload()
         const begun = unwrap<PresignedUploadBegin | null>(
           await request(withQuery(endpoint('sessionArtifacts', { sessionId: req.sessionId }), { transfer: 'presigned' }), {
             method: 'POST',
-            body: { filename: req.filename, contentType: req.contentType ?? null },
+            body: {
+              filename: req.filename,
+              contentType: req.contentType ?? null,
+              expectedSize: uploadBytes.byteLength,
+            },
           }),
           'upload',
           null,
@@ -501,7 +507,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
             headers: begun.uploadHeaders || {},
             // Uint8Array is a valid runtime BodyInit; the cast bridges the typed-array generics
             // friction in the DOM lib's BufferSource definition.
-            body: base64ToBytes(req.dataBase64) as unknown as BodyInit,
+            body: uploadBytes as unknown as BodyInit,
           })
           putOk = putResponse.ok
         } catch {

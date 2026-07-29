@@ -33,7 +33,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsc && node ../../scripts/check-shared-dist.mjs",
+    "build": "node ../../scripts/clean-shared-dist.mjs && tsc && node ../../scripts/check-shared-dist.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

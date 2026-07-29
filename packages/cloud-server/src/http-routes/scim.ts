@@ -18,7 +18,7 @@ import {
 // and renders SCIM resources/errors. Mounted top-level (pre-user-auth) like the webhook
 // routes, because the IdP presents the org's SCIM token, not a user session.
 
-export type ScimRouteTools = {
+type ScimRouteTools = {
   readJsonBody(req: IncomingMessage, maxBodyBytes: number): Promise<Record<string, unknown>>
 }
 

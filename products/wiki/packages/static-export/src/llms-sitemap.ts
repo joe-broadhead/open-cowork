@@ -125,6 +125,6 @@ export function boundedPositiveInteger(value: number, label: string): number {
   return value;
 }
 
-export function escapeXml(value: string): string {
+function escapeXml(value: string): string {
   return escapeHtml(value).replace(/'/g, "&apos;");
 }

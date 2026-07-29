@@ -109,7 +109,7 @@ export async function restoreStorageBackupToStateDir(inputPath: string, targetSt
   })
 }
 
-export function recoverStorageRestoreToStateDir(targetStateDir: string): StorageRestoreRecoveryResult {
+function recoverStorageRestoreToStateDir(targetStateDir: string): StorageRestoreRecoveryResult {
   const stateDir = path.resolve(targetStateDir)
   const dbPath = workStatePathForStateDir(stateDir)
   if (!fs.existsSync(storageRestoreJournalPath(stateDir))) return { recovered: false, installed: [] }

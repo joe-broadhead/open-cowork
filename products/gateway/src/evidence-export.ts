@@ -23,7 +23,7 @@ import {
 } from './work-store.js'
 import { getRunArtifactManifestView } from './artifacts.js'
 
-export type EvidenceExportMode = 'redacted' | 'unredacted'
+type EvidenceExportMode = 'redacted' | 'unredacted'
 
 const EVIDENCE_HASH_LENGTH = 12
 
@@ -48,7 +48,7 @@ export interface EvidenceExportOptions {
   stateDir?: string
 }
 
-export interface EvidenceExportArtifact {
+interface EvidenceExportArtifact {
   ref: string
   hash: string
   manifestId?: string
@@ -64,7 +64,7 @@ export interface EvidenceExportArtifact {
   omittedReason?: string
 }
 
-export interface EvidenceExportManifest {
+interface EvidenceExportManifest {
   schemaVersion: 1
   id: string
   generatedAt: string
@@ -326,7 +326,7 @@ export function defaultEvidenceBundleDir(bundleId: string): string {
   return path.join(process.env['OPENCODE_GATEWAY_STATE_DIR'] || getConfigDir(), 'evidence-bundles', bundleId)
 }
 
-export function formatEvidenceBundleMarkdown(manifest: EvidenceExportManifest): string {
+function formatEvidenceBundleMarkdown(manifest: EvidenceExportManifest): string {
   const lines = [
     '# Redacted Evidence Bundle',
     '',

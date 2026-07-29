@@ -20,12 +20,12 @@ import {
   type WorkState,
 } from './work-store.js'
 
-export type LiveStateHygieneStatus = 'clean' | 'attention'
-export type LiveStateHygieneItemKind = 'expired_claim_code' | 'stale_human_gate' | 'stale_session_link' | 'stale_parent_receipt' | 'session_source_unavailable'
-export type LiveStateHygieneSeverity = 'info' | 'warning' | 'critical'
-export type LiveStateHygieneResetAction = 'expire_claim_code' | 'apply_human_gate_timeout'
+type LiveStateHygieneStatus = 'clean' | 'attention'
+type LiveStateHygieneItemKind = 'expired_claim_code' | 'stale_human_gate' | 'stale_session_link' | 'stale_parent_receipt' | 'session_source_unavailable'
+type LiveStateHygieneSeverity = 'info' | 'warning' | 'critical'
+type LiveStateHygieneResetAction = 'expire_claim_code' | 'apply_human_gate_timeout'
 
-export interface LiveStateHygieneItem {
+interface LiveStateHygieneItem {
   id: string
   kind: LiveStateHygieneItemKind
   severity: LiveStateHygieneSeverity

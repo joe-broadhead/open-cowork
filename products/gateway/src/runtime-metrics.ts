@@ -15,6 +15,12 @@
  * so an always-on daemon cannot grow it unbounded.
  */
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks'
+import {
+  ChannelStackTelemetry,
+  type ChannelTelemetryDirection,
+  type ChannelTelemetryOutcome,
+  type ChannelTelemetryStack,
+} from '@open-cowork/gateway-channel'
 import type { ObservabilitySloResult } from './observability-contract.js'
 
 export interface RuntimeSample {
@@ -179,14 +185,43 @@ const gauges = {
 const sloLatency = new Histogram('gateway_slo_latency_ms', 'Observed SLO latency observations in milliseconds, labeled by budget id.', LATENCY_BUCKETS_MS)
 const seenSloObservations = new Set<string>()
 const MAX_SEEN_SLO_OBSERVATIONS = 50_000
+const channelStackTelemetry = new ChannelStackTelemetry('durable-gateway')
 
 // ---------------------------------------------------------------------------
 // Public counter/gauge instrumentation
 // ---------------------------------------------------------------------------
 
 export function recordSchedulerCycle(): void { counters.schedulerCycles.inc() }
-export function recordChannelMessageIn(provider?: string): void { counters.channelMessagesIn.inc(provider ? { provider } : {}) }
-export function recordChannelMessageOut(provider?: string): void { counters.channelMessagesOut.inc(provider ? { provider } : {}) }
+export function recordChannelMessageIn(provider?: string, stack: ChannelTelemetryStack = 'durable-native'): void {
+  counters.channelMessagesIn.inc(provider ? { provider } : {})
+  recordChannelOperation(provider || 'other', stack, 'inbound', 'attempt')
+}
+export function recordChannelMessageOut(provider?: string): void {
+  counters.channelMessagesOut.inc(provider ? { provider } : {})
+}
+export function recordChannelOperation(
+  provider: string,
+  stack: ChannelTelemetryStack,
+  direction: ChannelTelemetryDirection,
+  outcome: ChannelTelemetryOutcome,
+  latencyMs?: number,
+): void {
+  channelStackTelemetry.recordOperation({
+    stack,
+    providerKind: provider,
+    direction,
+    outcome,
+    latencyMs,
+  })
+}
+export function setChannelBindingTelemetry(
+  provider: string,
+  stack: ChannelTelemetryStack,
+  status: 'configured' | 'active',
+  count: number,
+): void {
+  channelStackTelemetry.setBindingCount(stack, provider, status, count)
+}
 export function recordAuthFailure(): void { counters.authFailures.inc() }
 export function setLiveSseActive(value: number): void { gauges.liveSseActive.set(Math.max(0, value)) }
 export function recordLiveSseRejected(scope: 'global' | 'principal'): void { counters.liveSseRejected.inc({ scope }) }
@@ -204,7 +239,7 @@ export function setLiveSseReplayCache(snapshots: number, bytes: number): void {
 }
 
 /** Record SLO latency observations into histograms for retained trend answers. */
-export function observeSloResults(results: ObservabilitySloResult[] = []): void {
+function observeSloResults(results: ObservabilitySloResult[] = []): void {
   for (const row of results) {
     if (typeof row.observedMs === 'number' && Number.isFinite(row.observedMs)) {
       const key = sloObservationKey(row)
@@ -233,11 +268,11 @@ function sloObservationKey(row: ObservabilitySloResult): string {
 const seenDispatched = new Set<string>()
 const seenTerminal = new Set<string>()
 
-export interface RunCounterInput {
+interface RunCounterInput {
   runs: Array<{ id: string; status: string }>
 }
 
-export function reconcileRunCountersFromState(state: RunCounterInput): void {
+function reconcileRunCountersFromState(state: RunCounterInput): void {
   for (const run of state.runs || []) {
     if (!seenDispatched.has(run.id)) {
       seenDispatched.add(run.id)
@@ -265,14 +300,14 @@ function boundSet(set: Set<string>, max = 50_000): void {
   }
 }
 
-export interface RuntimeGaugeInput {
+interface RuntimeGaugeInput {
   queueDepth?: number
   activeRuns?: number
   leadershipWriter?: boolean
   alertsActive?: number
 }
 
-export function setRuntimeGauges(input: RuntimeGaugeInput): void {
+function setRuntimeGauges(input: RuntimeGaugeInput): void {
   if (input.queueDepth !== undefined) gauges.queueDepth.set(input.queueDepth)
   if (input.activeRuns !== undefined) gauges.activeRuns.set(input.activeRuns)
   if (input.leadershipWriter !== undefined) gauges.leadershipWriter.set(input.leadershipWriter ? 1 : 0)
@@ -362,6 +397,7 @@ export function clearRuntimeMetricsForTest(): void {
   for (const counter of Object.values(counters)) counter.reset()
   for (const gauge of Object.values(gauges)) gauge.reset()
   sloLatency.reset()
+  channelStackTelemetry.reset()
   stopRuntimeMetricsSampler()
 }
 
@@ -428,6 +464,7 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
     gauges.liveSseReplaySnapshots.render(),
     gauges.liveSseReplayBytes.render(),
     sloLatency.render(),
+    channelStackTelemetry.renderPrometheus().trimEnd().split('\n'),
   ]
   return blocks.map(block => block.join('\n')).join('\n') + '\n'
 }

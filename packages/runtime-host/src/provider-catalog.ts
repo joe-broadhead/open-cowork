@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ProviderModelDescriptor } from '@open-cowork/shared'
 import { evaluateHttpMcpUrl } from './mcp-url-policy.js'
-import { getAppDataDir } from './config-loader-core.js'
+import { getAppDataDir } from './app-data-dir.js'
 import { dedupByKey } from './inflight-dedup.js'
 
 // Config-driven dynamic model catalog. A provider descriptor opts in by

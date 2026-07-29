@@ -1,17 +1,17 @@
-export type AssistantStreamRenderState = {
+type AssistantStreamRenderState = {
   sourceMessageId: string
   providerMessageId: string | null
   renderedText: string
 }
 
-export type ToolProgressRenderState = {
+type ToolProgressRenderState = {
   toolCallId: string
   providerMessageId: string | null
   renderedSummary: string
   status: string
 }
 
-export type ArtifactRenderState = {
+type ArtifactRenderState = {
   artifactId: string
   providerMessageId: string | null
   renderedSequence: number

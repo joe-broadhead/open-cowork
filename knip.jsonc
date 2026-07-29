@@ -16,10 +16,24 @@
   "ignoreDependencies": [
     "opencode-ai"
   ],
+  "ignoreIssues": {
+    // Owner: Cloud Client. Knip does not credit exports consumed only from a
+    // configured public entry file. These two exact implementation seams are
+    // imported by the published artifacts and transport modules; neither file
+    // is itself treated as a public entrypoint.
+    "packages/cloud-client/src/domains/artifact-normalizers.ts": [
+      "exports"
+    ],
+    "packages/cloud-client/src/domains/shared.ts": [
+      "exports",
+      "types"
+    ]
+  },
   "workspaces": {
     ".": {
       "entry": [
-        ".github/scripts/*.mjs",
+        ".github/scripts/release-signing-mode.mjs",
+        ".github/scripts/release-windows-signing-mode.mjs",
         // Owner: Build & Release. Docker build stages and the desktop signing
         // hook invoke these files outside package.json, so Knip cannot infer
         // their execution edges.
@@ -27,7 +41,7 @@
         "scripts/desktop-after-sign.mjs",
         "scripts/prune-cloud-runtime.mjs",
         "scripts/prune-gateway-runtime.mjs",
-        "tests/**/*.{ts,mjs}"
+        "tests/*.test.ts"
       ],
       "project": [
         "scripts/**/*.{js,mjs,ts}",
@@ -42,7 +56,10 @@
         "gcloud",
         "gh",
         "mkfifo",
-        "ps"
+        "ps",
+        // Owner: Desktop Test. Windows process cleanup uses the operating-system
+        // taskkill command from a cross-platform smoke harness.
+        "taskkill"
       ],
       // Owner: Cloud Runtime. The pruned production closure installs generated
       // bundle externals from this root manifest; their source imports live in
@@ -56,7 +73,6 @@
       "entry": [
         "src/main/index.ts",
         "src/preload/index.ts",
-        "src/**/*.test.ts",
         "tests/*.smoke.test.ts",
         "tests/*.packaged.test.ts",
         "tests/*.eval.test.ts",
@@ -152,8 +168,36 @@
       ]
     },
     "packages/cloud-client": {
+      // Owner: Cloud Client. These exact source files map one-for-one to the
+      // reviewed public subpaths in package.json; a wildcard would hide new,
+      // accidentally exported modules.
       "entry": [
         "src/index.ts",
+        "src/adapter.ts",
+        "src/domains/admin.ts",
+        "src/domains/admin-governance.ts",
+        "src/domains/artifacts.ts",
+        "src/domains/billing.ts",
+        "src/domains/byok.ts",
+        "src/domains/capabilities.ts",
+        "src/domains/channels.ts",
+        "src/domains/config.ts",
+        "src/domains/identity.ts",
+        "src/domains/launchpad.ts",
+        "src/domains/sessions.ts",
+        "src/domains/settings.ts",
+        "src/domains/threads.ts",
+        "src/domains/transport.ts",
+        "src/domains/workflows.ts",
+        // These declaration sources are re-exported by the exact public
+        // subpaths above. Listing them individually preserves those existing
+        // APIs without turning the implementation tree into an entry glob.
+        "src/contracts.ts",
+        "src/domain-clients/channels.ts",
+        "src/domain-clients/sessions.ts",
+        "src/domain-clients/threads.ts",
+        "src/domain-clients/transport.ts",
+        "src/errors.ts",
         "test/public-import-smoke.mjs"
       ],
       "project": [
@@ -266,7 +310,11 @@
         "src/daemon.ts",
         "src/mcp.ts",
         "src/__tests__/**/*.test.ts",
-        "src/__tests__/helpers/*.ts",
+        // Owner: Durable Gateway Test. These two helpers are launched as
+        // subprocess programs by filename; other helpers must stay reachable
+        // through imports so Knip can detect orphaned support code.
+        "src/__tests__/helpers/leadership-holder.ts",
+        "src/__tests__/helpers/store-contender.ts",
         // Owner: Durable Gateway. Release artifact validation reads and ships
         // these Docker smoke programs by filename; that edge is not an import.
         "scripts/docker-auth-smoke.mjs",
@@ -276,7 +324,6 @@
         "src/**/*.ts",
         "scripts/**/*.mjs"
       ],
-      "ignoreExportsUsedInFile": true,
       "includeEntryExports": false,
       // Owner: Durable Gateway. OpenCode and process inspection are explicit
       // subprocess boundaries exercised by integration tests.
@@ -307,7 +354,7 @@
       "entry": [
         "src/index.ts",
         "src/main.ts",
-        "test/**/*.test.ts"
+        "test/*.test.ts"
       ],
       "project": [
         "**/*.{ts,mjs}"

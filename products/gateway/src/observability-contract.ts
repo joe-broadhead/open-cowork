@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto'
 import { channelTargetFingerprint } from './security.js'
 import type { AlertRecord, AuditLedgerRecord, ChannelBindingRecord, RunRecord, WorkEventRecord, WorkState, WorkTaskRecord } from './work-store.js'
 
-export type ObservabilitySloStatus = 'pass' | 'warn' | 'fail'
+type ObservabilitySloStatus = 'pass' | 'warn' | 'fail'
 
-export interface ObservabilitySloBudget {
+interface ObservabilitySloBudget {
   id: 'scheduler_latency' | 'run_dispatch' | 'channel_delivery' | 'progress_freshness' | 'dashboard_render' | 'recovery_time'
   label: string
   thresholdMs: number
@@ -33,12 +33,12 @@ export interface TraceCorrelationIndex {
   auditLedger: Array<{ eventId: string; traceId: string; action: string; result: string; retentionClass: string; correlationId?: string; evidenceRefs: string[] }>
 }
 
-export type SupportOperationsStatus = 'ready' | 'degraded' | 'blocked'
+type SupportOperationsStatus = 'ready' | 'degraded' | 'blocked'
 export type SupportServiceMode = 'local_public_beta' | 'local_release_candidate' | 'self_hosted_preview' | 'team_preview' | 'hosted_deferred' | 'unsupported'
-export type SupportSourceHealthStatus = 'ready' | 'empty' | 'degraded' | 'unavailable' | 'not_measured'
-export type SupportOperatorActionId = 'pause' | 'resume' | 'retry' | 'rollback' | 'evidence_export' | 'incident_bundle'
+type SupportSourceHealthStatus = 'ready' | 'empty' | 'degraded' | 'unavailable' | 'not_measured'
+type SupportOperatorActionId = 'pause' | 'resume' | 'retry' | 'rollback' | 'evidence_export' | 'incident_bundle'
 
-export interface SupportServiceLevel {
+interface SupportServiceLevel {
   mode: SupportServiceMode
   label: string
   releaseStatus: 'supported' | 'preview' | 'deferred' | 'unsupported'
@@ -48,7 +48,7 @@ export interface SupportServiceLevel {
   incidentResponseBoundary: string
 }
 
-export interface SupportOperatorAction {
+interface SupportOperatorAction {
   id: SupportOperatorActionId
   label: string
   command: string
@@ -66,7 +66,7 @@ export interface SupportSourceHealth {
   staleAfterMs?: number
 }
 
-export interface SupportTraceCoverage {
+interface SupportTraceCoverage {
   scheduler: number
   workers: number
   channels: number
@@ -75,10 +75,10 @@ export interface SupportTraceCoverage {
   alerts: number
 }
 
-export type SupportSignalStatus = 'pass' | 'attention' | 'blocked'
-export type SupportSignalSeverity = 'info' | 'warning' | 'critical'
+type SupportSignalStatus = 'pass' | 'attention' | 'blocked'
+type SupportSignalSeverity = 'info' | 'warning' | 'critical'
 
-export interface SupportSignal {
+interface SupportSignal {
   id: string
   status: SupportSignalStatus
   severity: SupportSignalSeverity
@@ -124,7 +124,7 @@ export interface ObservabilityCliSummary {
   line: string
 }
 
-export const OBSERVABILITY_SLO_BUDGETS: ObservabilitySloBudget[] = [
+const OBSERVABILITY_SLO_BUDGETS: ObservabilitySloBudget[] = [
   { id: 'scheduler_latency', label: 'Scheduler latency', thresholdMs: 5 * 60_000, warningMs: 2 * 60_000, description: 'Oldest pending high/medium priority task should not wait indefinitely before dispatch or explicit blocking.' },
   { id: 'run_dispatch', label: 'Run dispatch', thresholdMs: 2 * 60_000, warningMs: 60_000, description: 'Time from task creation to first run start should remain bounded for runnable work.' },
   { id: 'channel_delivery', label: 'Channel delivery', thresholdMs: 5 * 60_000, warningMs: 2 * 60_000, description: 'Channel delivery failures should settle as sent, retry/backoff, or dead-letter within a bounded window.' },
@@ -209,7 +209,7 @@ export function buildTraceCorrelationIndex(input: {
   }
 }
 
-export const SUPPORT_SERVICE_LEVELS: SupportServiceLevel[] = [
+const SUPPORT_SERVICE_LEVELS: SupportServiceLevel[] = [
   {
     mode: 'local_public_beta',
     label: 'Local public beta',
@@ -266,7 +266,7 @@ export const SUPPORT_SERVICE_LEVELS: SupportServiceLevel[] = [
   },
 ]
 
-export const SUPPORT_OPERATOR_ACTIONS: SupportOperatorAction[] = [
+const SUPPORT_OPERATOR_ACTIONS: SupportOperatorAction[] = [
   { id: 'pause', label: 'Pause dispatch', command: 'opencode-gateway operator pause', httpRoute: 'POST /operator/actions action=pause', auditOperation: 'operator.pause', safeByDefault: true, summary: 'Stop new scheduler dispatch while current OpenCode sessions finish.' },
   { id: 'resume', label: 'Resume dispatch', command: 'opencode-gateway operator resume', httpRoute: 'POST /operator/actions action=resume', auditOperation: 'operator.resume', safeByDefault: true, summary: 'Resume scheduler dispatch after degraded state is understood.' },
   { id: 'retry', label: 'Recover and retry', command: 'opencode-gateway operator recover', httpRoute: 'POST /operator/actions action=recover', auditOperation: 'operator.recover', safeByDefault: true, summary: 'Recover expired leases and missing OpenCode runs using bounded retry policy.' },
@@ -367,7 +367,7 @@ export function countChannelFailureEvents(events: WorkEventRecord[] = []): numbe
   return events.filter(isChannelFailureEvent).length
 }
 
-export function isChannelFailureEvent(event: WorkEventRecord): boolean {
+function isChannelFailureEvent(event: WorkEventRecord): boolean {
   const text = `${event.type} ${JSON.stringify(event.payload || {})}`
   return /channel|telegram|whatsapp|discord/i.test(text) && /fail|error|denied/i.test(text)
 }

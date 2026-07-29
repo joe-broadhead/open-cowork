@@ -207,6 +207,19 @@ function readCloudProjectSourceOption(input: unknown): CloudProjectSourceInput |
   return normalized
 }
 
+function cloudProjectionRefreshSequence(event: CloudTransportSessionEvent) {
+  const eventSequence = Number.isSafeInteger(event.sequence) && event.sequence >= 0
+    ? event.sequence
+    : 0
+  if (event.type !== 'snapshot.required') return eventSequence
+  const latestSequence = event.payload.latestSequence
+  return typeof latestSequence === 'number'
+    && Number.isSafeInteger(latestSequence)
+    && latestSequence >= 0
+    ? Math.max(eventSequence, latestSequence)
+    : eventSequence
+}
+
 function dispatchCloudWorkspaceSessionEvent(
   context: IpcHandlerContext,
   event: CloudTransportSessionEvent,
@@ -218,14 +231,14 @@ function dispatchCloudWorkspaceSessionEvent(
   const win = context.getMainWindow()
   if (!win || win.isDestroyed()) return
   if (!cloudWorkspaceIsStillActive(context, sourceEvent, workspaceId)) return
-  if (!isCloudProjectedSessionEventType(event.type)) return
+  if (event.type !== 'snapshot.required' && !isCloudProjectedSessionEventType(event.type)) return
   queueCloudProjectionRefresh({
     context,
     win,
     sourceEvent,
     sessionId,
     workspaceId,
-    sequence: typeof event.sequence === 'number' && Number.isFinite(event.sequence) ? event.sequence : 0,
+    sequence: cloudProjectionRefreshSequence(event),
   })
 }
 

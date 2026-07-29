@@ -1,4 +1,4 @@
-import { DEFAULT_OPENWIKI_SEARCH_CONFIG, fuseSearchRetrieverRuns, idToUri, openWikiOffsetCursor, openWikiProposalSectionIds, openWikiProposalTargetsPath, openWikiProposalTargetPaths, openWikiProposalUpdatedAt, openWikiSearchFacetsFromItems, openWikiSearchResponse, type ProposalRecord, type SearchBackendCapabilities, type SearchFacets, type SearchRequest, type SearchResponse, type SearchResult, type SearchRetriever } from "@openwiki/core";
+import { DEFAULT_OPENWIKI_SEARCH_CONFIG, fuseSearchRetrieverRuns, idToUri, openWikiOffsetCursor, openWikiProposalSectionIds, openWikiProposalTargetsPath, openWikiProposalUpdatedAt, openWikiSearchFacetsFromItems, openWikiSearchResponse, type ProposalRecord, type SearchBackendCapabilities, type SearchFacets, type SearchRequest, type SearchResponse, type SearchResult, type SearchRetriever } from "@openwiki/core";
 import { canReadRecordReference, type PolicyContext } from "@openwiki/policy";
 import type { LoadedOpenWikiRepo } from "@openwiki/repo";
 import { postgresRuntimeSearchEnabled } from "./config.ts";
@@ -291,7 +291,7 @@ async function postgresSearchRows(
   `;
 }
 
-export async function postgresSearchRowsVisibleToPolicy(
+async function postgresSearchRowsVisibleToPolicy(
   sql: PostgresSql,
   repo: LoadedOpenWikiRepo,
   input: {
@@ -347,7 +347,7 @@ export function escapePostgresLikePattern(query: string): string {
   return `%${escaped}%`;
 }
 
-export function postgresSearchRowAllowedForPolicy(
+function postgresSearchRowAllowedForPolicy(
   repo: LoadedOpenWikiRepo,
   row: Record<string, unknown>,
   context: PolicyContext,
@@ -466,7 +466,7 @@ function tokenizeSearchQuery(query: string): string[] {
   return query.toLowerCase().split(/[^a-z0-9:_-]+/u).map((token) => token.trim()).filter(Boolean);
 }
 
-export function typeAllowed(type: string, types: string[] | undefined): boolean {
+function typeAllowed(type: string, types: string[] | undefined): boolean {
   return types === undefined || types.length === 0 || types.includes(type);
 }
 
@@ -497,10 +497,6 @@ export function proposalTargetsPath(proposal: ProposalRecord, targetPath: string
 
 export function proposalSectionIds(proposal: ProposalRecord, sections: Array<{ id: string; paths: string[] }>): string[] {
   return openWikiProposalSectionIds(proposal, sections);
-}
-
-export function proposalTargetPaths(proposal: ProposalRecord): string[] {
-  return openWikiProposalTargetPaths(proposal);
 }
 
 export function proposalUpdatedAt(proposal: ProposalRecord): string {

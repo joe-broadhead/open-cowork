@@ -24,7 +24,7 @@ function routingPath(): string {
   return path.join(getConfigDir(), 'routing.json')
 }
 
-export interface Route {
+interface Route {
   provider?: string
   chatId?: string
   pattern?: string

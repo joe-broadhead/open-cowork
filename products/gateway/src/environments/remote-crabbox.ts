@@ -111,7 +111,7 @@ export function prepareRemoteCrabboxEnvironment(spec: EnvironmentSpec, options: 
   }
 }
 
-export function preflightRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string, base: EnvironmentPreflightResult): { preflight: EnvironmentPreflightResult; results: CrabboxCommandResult[] } {
+function preflightRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string, base: EnvironmentPreflightResult): { preflight: EnvironmentPreflightResult; results: CrabboxCommandResult[] } {
   const checked = base.checked.slice()
   const missing = base.missing.slice()
   const warnings = base.warnings.slice()
@@ -236,7 +236,7 @@ export function releaseRemoteCrabboxEnvironmentByKey(spec: EnvironmentSpec, idem
   }
 }
 
-export function releaseRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string): CrabboxCommandResult {
+function releaseRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string): CrabboxCommandResult {
   let release = runCrabboxCli(spec, crabboxReleaseArgs(spec, leaseId, 'stop'), 'release')
   if (!release.ok && isUnknownCrabboxCommand(release.output)) {
     release = runCrabboxCli(spec, crabboxReleaseArgs(spec, leaseId, 'release'), 'release')
@@ -258,14 +258,14 @@ interface CrabboxCommandResult {
   error?: string
 }
 
-export function runCrabboxRemoteCommand(spec: EnvironmentSpec, leaseId: string, phase: string, command: string | string[]): CrabboxCommandResult {
+function runCrabboxRemoteCommand(spec: EnvironmentSpec, leaseId: string, phase: string, command: string | string[]): CrabboxCommandResult {
   const args = crabboxRunArgs(spec, leaseId)
   if (Array.isArray(command)) args.push('--', ...command)
   else args.push('--shell', command)
   return runCrabboxCli(spec, args, phase)
 }
 
-export function runCrabboxCli(spec: EnvironmentSpec, args: string[], phase: string): CrabboxCommandResult {
+function runCrabboxCli(spec: EnvironmentSpec, args: string[], phase: string): CrabboxCommandResult {
   const started = Date.now()
   const cli = spec.crabbox?.cli || 'crabbox'
   const result = spawnSync(cli, args, {
@@ -296,7 +296,7 @@ export function runCrabboxCli(spec: EnvironmentSpec, args: string[], phase: stri
   }
 }
 
-export function runCrabboxReleaseCommand(cli: string, provider: string | undefined, leaseId: string, command: 'stop' | 'release'): CrabboxCommandResult {
+function runCrabboxReleaseCommand(cli: string, provider: string | undefined, leaseId: string, command: 'stop' | 'release'): CrabboxCommandResult {
   const args: string[] = [command]
   if (provider) args.push('--provider', provider)
   args.push(leaseId)
@@ -318,7 +318,7 @@ export function runCrabboxReleaseCommand(cli: string, provider: string | undefin
   }
 }
 
-export function inspectRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string): { ok: true; record: Record<string, unknown> } | { ok: false; reason: string } {
+function inspectRemoteCrabboxLease(spec: EnvironmentSpec, leaseId: string): { ok: true; record: Record<string, unknown> } | { ok: false; reason: string } {
   const args = ['inspect', '--id', leaseId, '--json']
   if (spec.crabbox?.provider) args.splice(1, 0, '--provider', spec.crabbox.provider)
   const result = runCrabboxCli(spec, args, 'inspect')
@@ -351,7 +351,7 @@ export function reconcileRemoteCrabboxEnvironmentRuns(environments: EnvironmentR
   return { ...base, evidence }
 }
 
-export function crabboxWarmupArgs(spec: EnvironmentSpec, idempotencyKey?: string): string[] {
+function crabboxWarmupArgs(spec: EnvironmentSpec, idempotencyKey?: string): string[] {
   const args = ['warmup', '--timing-json']
   if (idempotencyKey) args.push('--slug', remoteCrabboxAcquisitionSlug(idempotencyKey))
   if (spec.crabbox?.profile) args.push('--profile', spec.crabbox.profile)
@@ -362,14 +362,14 @@ export function crabboxWarmupArgs(spec: EnvironmentSpec, idempotencyKey?: string
   return args
 }
 
-export function crabboxReleaseArgs(spec: EnvironmentSpec, leaseId: string, command: 'stop' | 'release'): string[] {
+function crabboxReleaseArgs(spec: EnvironmentSpec, leaseId: string, command: 'stop' | 'release'): string[] {
   const args: string[] = [command]
   if (spec.crabbox?.provider) args.push('--provider', spec.crabbox.provider)
   args.push(leaseId)
   return args
 }
 
-export function crabboxRunArgs(spec: EnvironmentSpec, leaseId: string): string[] {
+function crabboxRunArgs(spec: EnvironmentSpec, leaseId: string): string[] {
   const args = ['run', '--id', leaseId, '--timing-json']
   if (spec.crabbox?.provider) args.push('--provider', spec.crabbox.provider)
   if (spec.crabbox?.keepOnFailure) args.push('--keep-on-failure')
@@ -382,7 +382,7 @@ export function remoteCrabboxCommandPrefix(spec: EnvironmentSpec, environment: P
   return [spec.crabbox?.cli || 'crabbox', ...crabboxRunArgs(spec, leaseId), '--']
 }
 
-export function crabboxProcessEnv(spec: EnvironmentSpec): NodeJS.ProcessEnv {
+function crabboxProcessEnv(spec: EnvironmentSpec): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {}
   for (const name of ['PATH', 'HOME', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME']) {
     if (process.env[name]) env[name] = process.env[name]
@@ -397,11 +397,11 @@ export function crabboxProcessEnv(spec: EnvironmentSpec): NodeJS.ProcessEnv {
   return env
 }
 
-export function crabboxAllowedEnvNames(spec: EnvironmentSpec): string[] {
+function crabboxAllowedEnvNames(spec: EnvironmentSpec): string[] {
   return uniqueStrings([...Object.keys(spec.env), ...spec.secrets.allow])
 }
 
-export function redactCrabboxText(text: string, spec: EnvironmentSpec): string {
+function redactCrabboxText(text: string, spec: EnvironmentSpec): string {
   let out = text
   for (const name of crabboxAllowedEnvNames(spec)) {
     if (!SECRET_NAME_PATTERN.test(name) && !spec.secrets.allow.includes(name)) continue
@@ -411,7 +411,7 @@ export function redactCrabboxText(text: string, spec: EnvironmentSpec): string {
   return out
 }
 
-export function crabboxTimingRecord(output: string): Record<string, unknown> | undefined {
+function crabboxTimingRecord(output: string): Record<string, unknown> | undefined {
   let found: Record<string, unknown> | undefined
   for (const line of output.split(/\r?\n/)) {
     const text = line.trim()
@@ -424,23 +424,23 @@ export function crabboxTimingRecord(output: string): Record<string, unknown> | u
   return found
 }
 
-export function crabboxLeaseId(result: CrabboxCommandResult): string | undefined {
+function crabboxLeaseId(result: CrabboxCommandResult): string | undefined {
   return stringField(result.timing, 'leaseId') || stringField(result.timing, 'lease_id') || result.stdout.match(/\b(cbx_[a-zA-Z0-9_-]+)/)?.[1] || result.output.match(/\b(cbx_[a-zA-Z0-9_-]+)/)?.[1]
 }
 
-export function crabboxLeaseIdFromRecord(record: Record<string, unknown>): string | undefined {
+function crabboxLeaseIdFromRecord(record: Record<string, unknown>): string | undefined {
   return stringField(record, 'id') || stringField(record, 'leaseId') || stringField(record, 'lease_id')
 }
 
-export function crabboxSlug(result: CrabboxCommandResult): string | undefined {
+function crabboxSlug(result: CrabboxCommandResult): string | undefined {
   return stringField(result.timing, 'slug') || result.stdout.match(/\bslug=([^\s]+)/)?.[1] || result.output.match(/\bslug=([^\s]+)/)?.[1]
 }
 
-export function crabboxRunId(result: CrabboxCommandResult): string | undefined {
+function crabboxRunId(result: CrabboxCommandResult): string | undefined {
   return stringField(result.timing, 'runId') || stringField(result.timing, 'run_id')
 }
 
-export function crabboxArtifacts(timing: Record<string, unknown> | undefined): string[] {
+function crabboxArtifacts(timing: Record<string, unknown> | undefined): string[] {
   if (!timing) return []
   const values = [timing['artifacts'], timing['artifactRefs'], timing['artifact_refs'], timing['captures'], timing['downloads']]
   const refs: string[] = []
@@ -451,7 +451,7 @@ export function crabboxArtifacts(timing: Record<string, unknown> | undefined): s
   return uniqueStrings(refs.map(ref => shortText(ref, 500)))
 }
 
-export function crabboxCommandSummary(result: CrabboxCommandResult): Record<string, unknown> {
+function crabboxCommandSummary(result: CrabboxCommandResult): Record<string, unknown> {
   return {
     ok: result.ok,
     commandRef: result.commandRef,
@@ -464,11 +464,11 @@ export function crabboxCommandSummary(result: CrabboxCommandResult): Record<stri
   }
 }
 
-export function crabboxCommandRef(cli: string, args: string[]): string {
+function crabboxCommandRef(cli: string, args: string[]): string {
   return [cli, ...args].join(' ')
 }
 
-export function classifyCrabboxFailure(output: string, phase: string, timing: Record<string, unknown> | undefined, timedOut = false): CrabboxCommandResult['failureClass'] {
+function classifyCrabboxFailure(output: string, phase: string, timing: Record<string, unknown> | undefined, timedOut = false): CrabboxCommandResult['failureClass'] {
   const text = `${output} ${stringField(timing, 'blockedStage') || ''} ${stringField(timing, 'failureClass') || ''}`.toLowerCase()
   if (timedOut || /\b(timeout|timed out|deadline)\b/.test(text)) return 'timeout'
   if (/\b(auth|unauthorized|forbidden|login|credential|credentials|token|api key|permission denied)\b/.test(text)) return 'auth'
@@ -481,16 +481,16 @@ export function classifyCrabboxFailure(output: string, phase: string, timing: Re
   return 'unknown'
 }
 
-export function stringField(value: unknown, key: string): string | undefined {
+function stringField(value: unknown, key: string): string | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
   const raw = (value as Record<string, unknown>)[key]
   return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined
 }
 
-export function isUnknownCrabboxCommand(output: string): boolean {
+function isUnknownCrabboxCommand(output: string): boolean {
   return /unknown command|unrecognized command|not a crabbox command/i.test(output)
 }
 
-export function isMissingCrabboxLease(output: string): boolean {
+function isMissingCrabboxLease(output: string): boolean {
   return /\b(not found|no such|unknown lease|missing lease|does not exist|404)\b/i.test(output)
 }

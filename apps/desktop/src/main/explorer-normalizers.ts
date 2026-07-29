@@ -12,7 +12,7 @@ import type {
 // optional-everywhere SDK shapes. One place to update when SDK file/find
 // response types drift.
 
-export function normalizeFileNode(value: unknown): FileNode | null {
+function normalizeFileNode(value: unknown): FileNode | null {
   const record = asRecord(value)
   const name = readRecordString(record, ['name'])
   const path = readRecordString(record, ['path'])
@@ -71,7 +71,7 @@ function flattenPatch(value: unknown): string | null {
   return out.join('\n')
 }
 
-export function normalizeFileStatus(value: unknown): FileStatus | null {
+function normalizeFileStatus(value: unknown): FileStatus | null {
   const record = asRecord(value)
   const path = readRecordString(record, ['path'])
   if (!path) return null
@@ -99,7 +99,7 @@ function normalizeRangePos(value: unknown) {
   }
 }
 
-export function normalizeExplorerSymbol(value: unknown): ExplorerSymbol | null {
+function normalizeExplorerSymbol(value: unknown): ExplorerSymbol | null {
   const record = asRecord(value)
   const name = readRecordString(record, ['name'])
   if (!name) return null
@@ -124,7 +124,7 @@ export function normalizeExplorerSymbols(value: unknown): ExplorerSymbol[] {
     .filter((entry): entry is ExplorerSymbol => entry !== null)
 }
 
-export function normalizeTextMatch(value: unknown): TextMatch | null {
+function normalizeTextMatch(value: unknown): TextMatch | null {
   const record = asRecord(value)
   const pathRec = asRecord(record.path)
   const path = readRecordString(pathRec, ['text'])

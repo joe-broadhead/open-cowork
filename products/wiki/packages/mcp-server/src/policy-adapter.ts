@@ -20,12 +20,11 @@ import { loadRepository } from "@openwiki/repo";
 import { type ProposalRecord, type SearchResponse } from "@openwiki/core";
 import { inboxProcessAuthorizationPath } from "@openwiki/workflows";
 import { TOOL_DEFINITIONS } from "./tool-definitions.ts";
-import { optionalStringParam } from "./params.ts";
 import type { McpPolicyContext, McpServerOptions, McpToolMode } from "./types.ts";
 
 export const DEFAULT_LOCAL_MCP_ACTOR_ID = "actor:agent:openwiki-mcp";
 
-export function toolsForMode(toolMode: McpToolMode): typeof TOOL_DEFINITIONS {
+function toolsForMode(toolMode: McpToolMode): typeof TOOL_DEFINITIONS {
   const allowedOperations = new Set<string>(mcpToolOperationsForMode(toolMode));
   return TOOL_DEFINITIONS.filter((tool) => allowedOperations.has(tool.name));
 }
@@ -159,17 +158,6 @@ export async function policyContextForMcp(
 
 function optionalMcpBounds(bounds: PolicyBounds | undefined): { bounds?: PolicyBounds } {
   return bounds === undefined ? {} : { bounds };
-}
-
-export function optionalGraphDirectionParam(args: Record<string, unknown>, name: string): "in" | "out" | "both" | undefined {
-  const value = optionalStringParam(args, name);
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === "in" || value === "out" || value === "both") {
-    return value;
-  }
-  throw new Error("Expected " + name + " to be in, out, or both");
 }
 
 function optionalMcpPrincipals(principals: string[]): { principals?: string[] } {

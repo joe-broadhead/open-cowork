@@ -2,7 +2,7 @@ import { IpcSecurityError } from '@open-cowork/shared/ipc-security-errors'
 import { realpathSync, statSync } from 'fs'
 import { resolve } from 'path'
 
-export type ProjectDirectoryTrustSource = 'dialog' | 'session-record' | 'workflow-record'
+type ProjectDirectoryTrustSource = 'dialog' | 'session-record' | 'workflow-record'
 
 export type ProjectDirectoryTrustLookup = (
   directory: string,
@@ -41,7 +41,7 @@ export class ProjectDirectoryGrantRegistry {
   }
 }
 
-export function normalizeProjectDirectory(directory: string) {
+function normalizeProjectDirectory(directory: string) {
   const resolved = resolve(directory)
   // JOE-834: always realpath and refuse missing paths so grants cannot be
   // booked against a path that later appears as a symlink to an untrusted tree.

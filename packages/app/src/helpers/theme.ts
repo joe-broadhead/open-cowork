@@ -3,7 +3,6 @@ import {
   getThemeTokens,
   getUserFacingThemes,
   isUiTheme,
-  isUserFacingTheme,
   isUiAccentPresetId,
   accentActionFillToken,
   UI_ACCENT_PRESETS,
@@ -11,7 +10,7 @@ import {
   type UiTheme,
 } from './theme-presets'
 
-export { getThemeTokens, getDefaultThemeId, getUserFacingThemes, isUserFacingTheme, UI_ACCENT_PRESETS }
+export { getUserFacingThemes, UI_ACCENT_PRESETS }
 export type { UiTheme, UiAccentPresetId }
 
 // "Match theme" (the default) uses each theme's own accent; the named presets are

@@ -3,7 +3,7 @@ import type { TaskRun } from '../../stores/session'
 // Task transcript is a sequence of text segments; a segment has no content
 // until the model streams something in. Filter empties and sort by order so
 // the UI renders a clean stream.
-export function transcriptSegments(taskRun: TaskRun) {
+function transcriptSegments(taskRun: TaskRun) {
   return taskRun.transcript
     .slice()
     .sort((a, b) => a.order - b.order)

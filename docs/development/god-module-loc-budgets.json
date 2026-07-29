@@ -1,24 +1,142 @@
 {
-  "schemaVersion": 1,
-  "description": "Hard per-file LOC budgets for monorepo god modules outside products/gateway (JOE-919 / audit P1-4). Soft target 1500; hard max must ratchet down toward 2000.",
-  "files": [
+  "schemaVersion": 2,
+  "description": "Authoritative production TypeScript/TSX LOC pressure gate (JOE-1182). Every workspace module at or above the soft target needs a reviewed exception; the hard cap is absolute.",
+  "discovery": {
+    "workspaceManifest": "pnpm-workspace.yaml",
+    "sourceDirectory": "src",
+    "extensions": [
+      ".ts",
+      ".tsx"
+    ],
+    "excludedDirectoryNames": [
+      ".generated",
+      "__fixtures__",
+      "__tests__",
+      "coverage",
+      "dist",
+      "dist-browser",
+      "generated",
+      "node_modules",
+      "test",
+      "tests"
+    ],
+    "excludedFileSuffixes": [
+      ".d.ts",
+      ".spec.ts",
+      ".spec.tsx",
+      ".test.ts",
+      ".test.tsx"
+    ]
+  },
+  "softTargetLines": 1500,
+  "hardCapLines": 2000,
+  "exceptions": [
     {
-      "path": "packages/cloud-server/src/http-server.ts",
-      "maxLines": 1970,
+      "path": "packages/cloud-server/src/in-memory-control-plane-store.ts",
+      "maxLines": 1620,
+      "ratchetTargetLines": 1499,
       "owner": "cloud-server",
-      "note": "HTTP edge + SSE"
+      "reason": "In-memory control-plane compatibility store retained for deterministic local and contract execution."
+    },
+    {
+      "path": "packages/cloud-server/src/postgres-control-plane-store.ts",
+      "maxLines": 1970,
+      "ratchetTargetLines": 1499,
+      "owner": "cloud-server",
+      "reason": "Postgres control-plane facade delegates to domain repositories but remains the transaction composition boundary."
+    },
+    {
+      "path": "packages/cloud-server/src/worker-scoped-runtime-adapter.ts",
+      "maxLines": 1600,
+      "ratchetTargetLines": 1499,
+      "owner": "cloud-server",
+      "reason": "Worker-scoped runtime adapter currently owns the bounded Cloud-to-OpenCode execution translation seam."
+    },
+    {
+      "path": "products/gateway/src/mcp.ts",
+      "maxLines": 1600,
+      "ratchetTargetLines": 1499,
+      "owner": "gateway-daemon-edge",
+      "reason": "Durable Gateway MCP facade retained while operations and formatter seams continue moving to leaf modules."
+    }
+  ],
+  "ratchets": [
+    {
+      "path": "apps/desktop/src/main/workspace-gateway.ts",
+      "maxLines": 1341,
+      "ratchetTargetLines": 1300,
+      "owner": "desktop",
+      "reason": "Desktop workspace composition bridge is below the soft target after JOE-1210 extraction and must not regrow."
     },
     {
       "path": "packages/cloud-server/src/app.ts",
-      "maxLines": 1900,
+      "maxLines": 1472,
+      "ratchetTargetLines": 1400,
       "owner": "cloud-server",
-      "note": "App composition + runtime routing"
+      "reason": "Cloud application composition root is below the soft target after JOE-1208 extraction and must not regrow."
     },
     {
-      "path": "apps/desktop/src/main/workspace-gateway.ts",
-      "maxLines": 1730,
-      "owner": "desktop",
-      "note": "Desktop workspace bridge; prefer WorkspaceSessionPort extraction"
+      "path": "packages/cloud-server/src/http-server.ts",
+      "maxLines": 1297,
+      "ratchetTargetLines": 1250,
+      "owner": "cloud-server",
+      "reason": "Cloud HTTP composition facade is below the soft target after JOE-1200 route and stream extraction and must not regrow."
+    },
+    {
+      "path": "packages/cloud-server/src/session-service.ts",
+      "maxLines": 1145,
+      "ratchetTargetLines": 1100,
+      "owner": "cloud-server",
+      "reason": "Cloud session facade stays bounded after BYOK policy and orchestration behavior moved to domain services."
+    },
+    {
+      "path": "products/gateway/src/channel-commands.ts",
+      "maxLines": 1300,
+      "ratchetTargetLines": 1250,
+      "owner": "gateway-channels",
+      "reason": "Channel command facade stays bounded after channel-commands-helpers extraction."
+    },
+    {
+      "path": "products/gateway/src/channel-sync.ts",
+      "maxLines": 871,
+      "ratchetTargetLines": 870,
+      "owner": "gateway-channels",
+      "reason": "Channel synchronization remains a narrow provider edge while multi-writer migration work is deferred."
+    },
+    {
+      "path": "products/gateway/src/config.ts",
+      "maxLines": 1486,
+      "ratchetTargetLines": 1400,
+      "owner": "gateway-config",
+      "reason": "Gateway configuration facade is capped after parsing and validation helpers moved to leaf modules."
+    },
+    {
+      "path": "products/gateway/src/daemon-routes/work.ts",
+      "maxLines": 1495,
+      "ratchetTargetLines": 1450,
+      "owner": "gateway-scheduler-replay",
+      "reason": "Work route facade remains bounded after presentation behavior moved to work-presentation."
+    },
+    {
+      "path": "products/gateway/src/environments.ts",
+      "maxLines": 1260,
+      "ratchetTargetLines": 1250,
+      "owner": "gateway-environments",
+      "reason": "Environment facade stays bounded after lifecycle, container, and remote execution seams were extracted."
+    },
+    {
+      "path": "products/gateway/src/scheduler.ts",
+      "maxLines": 1461,
+      "ratchetTargetLines": 1400,
+      "owner": "gateway-scheduler-replay",
+      "reason": "Scheduler facade stays bounded after orchestration calculations and helpers moved to lower layers."
+    },
+    {
+      "path": "products/gateway/src/work-store.ts",
+      "maxLines": 1472,
+      "ratchetTargetLines": 1471,
+      "owner": "gateway-work-store",
+      "reason": "Durable work-store facade remains capped while repositories, queries, validation, and ports own implementation detail."
     }
   ]
 }

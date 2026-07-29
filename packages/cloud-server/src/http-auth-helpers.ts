@@ -5,7 +5,7 @@ import type { IncomingMessage } from 'node:http'
 // extracted from http-server.ts. No server state — read a request header, compare
 // two strings in constant time, and validate the internal service token.
 
-export function readHeader(req: IncomingMessage, name: string) {
+function readHeader(req: IncomingMessage, name: string) {
   const value = req.headers[name.toLowerCase()]
   if (Array.isArray(value)) return value[0] || null
   return value || null

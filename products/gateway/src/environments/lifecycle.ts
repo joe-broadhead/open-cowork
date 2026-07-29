@@ -80,7 +80,7 @@ export function cleanupFailedEnvironmentRun(environment: EnvironmentRunRecord, r
   }
 }
 
-export function updateEnvironmentLifecycle(environment: EnvironmentRunRecord, status: EnvironmentRunRecord['status'], state: EnvironmentRunRecord['cleanup']['state']): EnvironmentRunRecord {
+function updateEnvironmentLifecycle(environment: EnvironmentRunRecord, status: EnvironmentRunRecord['status'], state: EnvironmentRunRecord['cleanup']['state']): EnvironmentRunRecord {
   return {
     ...environment,
     status,

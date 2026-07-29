@@ -282,15 +282,6 @@ export function PermissionsPanel({
 
       <span className={sectionLabelCls}>{t('settings.permissions.reviewGateHeader', 'Review gates')}</span>
       <Card className="flex flex-col gap-4">
-        <div id="settings-permissions-review-send" className="flex items-start justify-between gap-4 scroll-mt-4">
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-text">{t('settings.permissions.reviewSendTitle', 'Require approval before sending')}</div>
-            <div className="text-xs text-text-muted mt-1 leading-relaxed">{t('settings.permissions.reviewSendDeferredDescription', 'External-send review will be controlled here when Gateway delivery policy enforcement is wired. Existing provider and tool approval policies remain in force.')}</div>
-          </div>
-          <Badge tone="neutral" className="shrink-0">
-            {t('settings.permissions.deferred', 'Deferred')}
-          </Badge>
-        </div>
         <Card variant="flat" padding="sm" className="text-xs leading-relaxed text-text-muted">
           {t('settings.permissions.knowledgeReviewDeferred', 'Knowledge review gates will appear here when the Knowledge/Wiki phase is enabled.')}
         </Card>

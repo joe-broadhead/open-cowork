@@ -6,7 +6,7 @@ import type { ApiTokenScope, ChannelProviderId, ControlPlaneSessionStatus } from
 // http-server.ts so the input-validation concern is separate from the route
 // wiring. No side effects, no server state — each maps raw query/body/header
 // input to a validated value (or null/undefined). (Parsers that depend on the
-// server-local CloudHttpError stay in http-server.ts.)
+// HTTP error construction stay in the HTTP composition layer.)
 
 export function readString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null

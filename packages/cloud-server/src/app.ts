@@ -1,15 +1,13 @@
 import { createPostgresKnowledgeStore } from '@open-cowork/runtime-host/knowledge/postgres-knowledge-store'
 import type { WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { resolve } from 'node:path'
-import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
-import { createServer } from 'node:http'
 import {
   normalizeCloudProjectSource,
   splitTrustedProxyCidrs,
   type KnowledgeStore,
 } from '@open-cowork/shared'
-import { DEFAULT_CONFIG, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '@open-cowork/shared'
+import { DEFAULT_CONFIG, type CloudAuthConfig, type OpenCoworkConfig } from '@open-cowork/shared'
 import { CloudArtifactService } from './artifact-service.ts'
 import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
 import {
@@ -41,8 +39,6 @@ import {
   createCloudObservabilityFromEnv,
   recordCloudLog,
   recordCloudMetric,
-  recordCloudSchedulerMetric,
-  recordCloudWorkerMetric,
   type CloudObservabilityAdapter,
 } from './observability.ts'
 import { createObjectStoreForCloud, instrumentObjectStore, resolveCloudObjectStoreConfig, type ObjectStoreAdapter } from './object-store.ts'
@@ -55,7 +51,7 @@ import {
   createOidcBrowserAuthProvider,
 } from './oidc-auth.ts'
 import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvider } from './path-provider.ts'
-import { createPostgresControlPlaneStore, loadPgPool } from './postgres-control-plane-store.ts'
+import { loadPgPool } from './postgres-control-plane-store.ts'
 import { createCloudProjectSourceService } from './project-source-service.ts'
 import { createCloudReadinessCheck } from './readiness.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
@@ -74,8 +70,6 @@ import {
   createRuntimeDeltaCoalescer,
   type RuntimeDeltaCoalescer,
 } from './runtime-delta-coalescer.ts'
-import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
-import { createStubBillingAdapter } from './stub-billing-adapter.ts'
 import { resolveEntitlementResolver } from './entitlements/entitlement-provider.ts'
 import { CloudWorker } from './worker.ts'
 import { createWorkerScopedRuntimeAdapter } from './worker-scoped-runtime-adapter.ts'
@@ -117,6 +111,31 @@ import {
   createCompositeCloudAuthResolver,
   createManagedWorkerCloudAuthResolver,
 } from './cloud-auth-resolvers.ts'
+import {
+  createBillingAdapterForCloud,
+  createControlPlaneStoreForCloud,
+  resolveCloudAuthRuntimeSecrets,
+  resolveCloudControlPlaneUrl,
+  resolveCloudCookieSecretForRuntime,
+  resolveCloudInternalToken,
+  resolveCloudOidcClientSecretForRuntime,
+  RUN_MIGRATIONS_ENV,
+  SSE_PG_NOTIFY_ENV,
+  type CloudControlPlaneStoreFactory,
+  type CloudObjectStoreFactory,
+} from './cloud-adapter-factories.ts'
+import {
+  createRetryingRuntimeEventRouter,
+  createSessionSerializedRuntimeEventRouter,
+  routeRuntimeEvent,
+} from './cloud-runtime-event-router.ts'
+import {
+  createLoopHeartbeat,
+  recordLoopError,
+  startCloudLivenessServer,
+  startSchedulerLoop,
+  startWorkerLoop,
+} from './cloud-role-loops.ts'
 export { resolveCloudPublicBranding } from './cloud-branding-config.ts'
 export {
   createApiTokenCloudAuthResolver,
@@ -141,34 +160,28 @@ export type {
   CloudRuntimeFactory,
   KnowledgeAgentSpawnOptions,
 } from './cloud-runtime-composition.ts'
+export {
+  createControlPlaneStoreForCloud,
+  resolveCloudControlPlaneUrl,
+  resolveCloudCookieSecret,
+  resolveCloudInternalToken,
+  resolveCloudOidcClientSecret,
+} from './cloud-adapter-factories.ts'
+export type {
+  CloudControlPlaneStoreFactory,
+  CloudControlPlaneStoreFactoryInput,
+  CloudObjectStoreFactory,
+  CloudObjectStoreFactoryInput,
+} from './cloud-adapter-factories.ts'
+export {
+  DEFAULT_RUNTIME_EVENT_ROUTE_ATTEMPTS,
+  createRetryingRuntimeEventRouter,
+  createSessionSerializedRuntimeEventRouter,
+} from './cloud-runtime-event-router.ts'
 
 const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
 const ALLOW_EPHEMERAL_STORAGE_ENV = 'OPEN_COWORK_CLOUD_ALLOW_EPHEMERAL_STORAGE'
 const CLOUD_PUBLISHED_ADDR_ENV = 'OPEN_COWORK_CLOUD_PUBLISHED_ADDR'
-const RUN_MIGRATIONS_ENV = 'OPEN_COWORK_CLOUD_RUN_MIGRATIONS'
-// Opt-in Postgres LISTEN/NOTIFY accelerator for SSE delivery (audit F1b). Default OFF:
-// with it unset, no LISTEN connection is opened and no NOTIFY is issued — SSE delivery is
-// the unchanged poll loop. ON only wakes the matching SSE topic earlier; polling remains
-// the guaranteed backstop. Postgres-only (the in-memory store path ignores it).
-const SSE_PG_NOTIFY_ENV = 'OPEN_COWORK_CLOUD_SSE_PG_NOTIFY'
-export type CloudControlPlaneStoreFactoryInput = {
-  config: OpenCoworkConfig
-  env: Env
-}
-
-export type CloudControlPlaneStoreFactory = (
-  input: CloudControlPlaneStoreFactoryInput,
-) => Promise<ControlPlaneStore> | ControlPlaneStore
-
-export type CloudObjectStoreFactoryInput = {
-  config: OpenCoworkConfig
-  env: Env
-  paths: PathProvider
-}
-
-export type CloudObjectStoreFactory = (
-  input: CloudObjectStoreFactoryInput,
-) => Promise<ObjectStoreAdapter> | ObjectStoreAdapter
 
 export type CloudAppOptions = {
   config?: OpenCoworkConfig
@@ -235,120 +248,6 @@ export type CloudApp = {
 }
 
 const DEFAULT_CLOUD_ROOT = '.open-cowork-cloud'
-
-async function resolveConfiguredSecretRef(ref: string | null | undefined, env: Env) {
-  const value = ref?.trim()
-  if (!value) return null
-  if (value.startsWith('env:') || secretRefIsManaged(value)) {
-    return resolveCloudSecretRef(value, { env })
-  }
-  return resolveEnvRef(value, env)
-}
-
-async function resolveCloudSecretMaterial(input: {
-  value?: string | null
-  ref?: string | null
-  env: Env
-}) {
-  const direct = input.value?.trim()
-  if (direct) return direct
-  return resolveConfiguredSecretRef(input.ref, input.env)
-}
-
-async function resolveCloudAuthRuntimeSecrets(auth: CloudAuthConfig, env: Env): Promise<CloudAuthConfig> {
-  if (auth.mode !== 'header') return auth
-  const headerSecret = await resolveCloudSecretMaterial({
-    value: auth.headerSecret,
-    ref: auth.headerSecretRef,
-    env,
-  })
-  return {
-    ...auth,
-    headerSecret: headerSecret || auth.headerSecret,
-  }
-}
-
-export function resolveCloudControlPlaneUrl(config: OpenCoworkConfig, env: Env = process.env) {
-  return envValue(env, 'OPEN_COWORK_CLOUD_CONTROL_PLANE_URL')
-    || resolveEnvRef(config.cloud.storage.controlPlane.urlRef, env)
-}
-
-export function resolveCloudCookieSecret(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
-  const cookieSecretRef = envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef
-  return envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET')
-    || resolveEnvRef(cookieSecretRef, env)
-    || envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
-}
-
-async function resolveCloudCookieSecretForRuntime(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
-  const cookieSecret = envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET')
-  if (cookieSecret) return cookieSecret
-  const cookieSecretRef = envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef
-  const resolvedCookieSecret = await resolveConfiguredSecretRef(cookieSecretRef, env)
-  if (resolvedCookieSecret) return resolvedCookieSecret
-  const cloudSecret = envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
-  if (cloudSecret) return cloudSecret
-  return resolveConfiguredSecretRef(envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY_REF'), env)
-}
-
-async function createBillingAdapterForCloud(input: {
-  config: CloudBillingConfig
-  env: Env
-}): Promise<BillingAdapter | null> {
-  if (!input.config.enabled || input.config.provider === 'none') return null
-  if (input.config.provider === 'stub') return createStubBillingAdapter(input.config)
-  if (input.config.provider === 'stripe') {
-    const apiKey = envValue(input.env, 'OPEN_COWORK_CLOUD_STRIPE_API_KEY')
-      || resolveEnvRef(input.config.stripe?.apiKeyRef, input.env)
-    const webhookSecret = envValue(input.env, 'OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET')
-      || resolveEnvRef(input.config.stripe?.webhookSecretRef, input.env)
-    return createStripeBillingAdapter({
-      config: input.config,
-      apiKey,
-      webhookSecret,
-    })
-  }
-  return null
-}
-
-export function resolveCloudOidcClientSecret(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
-  const clientSecretRef = envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef
-  return envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET')
-    || resolveEnvRef(clientSecretRef, env)
-}
-
-async function resolveCloudOidcClientSecretForRuntime(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
-  const clientSecret = envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET')
-  if (clientSecret) return clientSecret
-  const clientSecretRef = envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef
-  return resolveConfiguredSecretRef(clientSecretRef, env)
-}
-
-export function resolveCloudInternalToken(env: Env = process.env) {
-  return envValue(env, 'OPEN_COWORK_CLOUD_INTERNAL_TOKEN')
-    || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF') || undefined, env)
-}
-
-export async function createControlPlaneStoreForCloud(
-  input: CloudControlPlaneStoreFactoryInput,
-): Promise<ControlPlaneStore> {
-  const url = resolveCloudControlPlaneUrl(input.config, input.env)
-  if (input.config.cloud.storage.controlPlane.kind === 'postgres' || url) {
-    if (!url) {
-      throw new Error('Cloud control plane is configured for Postgres but no connection URL is available.')
-    }
-    // Allow change-managed rollouts to boot instances with embedded migrations
-    // disabled (OPEN_COWORK_CLOUD_RUN_MIGRATIONS=false) and run `cloud:migrate`
-    // as a separate step. Defaults to true so the embedded path is unchanged.
-    return createPostgresControlPlaneStore({
-      connectionString: url,
-      runMigrations: parseBoolean(envValue(input.env, RUN_MIGRATIONS_ENV), true),
-      // Opt-in NOTIFY-on-write for the SSE LISTEN/NOTIFY accelerator (default off).
-      ssePgNotify: parseBoolean(envValue(input.env, SSE_PG_NOTIFY_ENV), false),
-    })
-  }
-  return new InMemoryControlPlaneStore()
-}
 
 export function shouldRunCloudWeb(role: CloudRuntimePolicy['role']) {
   return role === 'all-in-one' || role === 'web'
@@ -796,266 +695,12 @@ function assertCloudProductionRoleRuntimeSafe(input: {
   }
 }
 
-async function routeRuntimeEvent(
-  store: ControlPlaneStore,
-  worker: CloudWorker,
-  event: CloudRuntimeEvent,
-) {
-  const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
-  if (!sessionId) return
-  const session = await store.findSession(sessionId)
-  if (!session) return
-  await worker.appendRuntimeEvent(session.tenantId, session.sessionId, event)
-}
-
-// Per-session serialization for runtime-event routing (issue #855). routeRuntimeEvent →
-// worker.appendRuntimeEvent crosses multiple awaits with no per-session locking, and the
-// store assigns the durable sequence at append time — so two overlapping route() calls
-// for the SAME session can interleave and persist out of arrival order (e.g. a boundary
-// tool/idle event landing before the delta the coalescer flushed ahead of it), and can
-// race the projection read-modify-write into the 'Projection sequence must be monotonic'
-// guard. This wrapper chains every call for a session onto a per-session promise tail:
-// enqueueing is synchronous, so CALL order (which the coalescer issues in transcript
-// order) is exactly the order appends run and persist. Distinct sessions stay concurrent.
-export function createSessionSerializedRuntimeEventRouter(
-  route: (event: CloudRuntimeEvent) => Promise<void>,
-): (event: CloudRuntimeEvent) => Promise<void> {
-  const tailBySession = new Map<string, Promise<void>>()
-  return (event) => {
-    const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
-    if (!sessionId) return route(event)
-    const tail = tailBySession.get(sessionId) ?? Promise.resolve()
-    const next = tail.then(() => route(event))
-    // The stored tail must never reject, or one failed route would wedge every later
-    // event on the session. Callers awaiting `next` still observe the route's rejection.
-    const guarded = next.then(() => {}, () => {})
-    tailBySession.set(sessionId, guarded)
-    void guarded.then(() => {
-      // Drop the tail once idle so the map does not grow with every session ever seen.
-      if (tailBySession.get(sessionId) === guarded) tailBySession.delete(sessionId)
-    })
-    return next
-  }
-}
-
-export const DEFAULT_RUNTIME_EVENT_ROUTE_ATTEMPTS = 6
-
-/**
- * Runtime stream events are not replayable after the OpenCode process exits.
- * Retry transient durable-boundary failures in place, using one generated id
- * for every attempt so a commit followed by a response failure is idempotent.
- */
-export function createRetryingRuntimeEventRouter(options: {
-  route: (event: CloudRuntimeEvent) => Promise<void>
-  maxAttempts?: number
-  baseDelayMs?: number
-  sleep?: (delayMs: number) => Promise<void>
-}): (event: CloudRuntimeEvent) => Promise<void> {
-  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? DEFAULT_RUNTIME_EVENT_ROUTE_ATTEMPTS))
-  const baseDelayMs = Math.max(0, Math.floor(options.baseDelayMs ?? 50))
-  const sleep = options.sleep ?? ((delayMs: number) => new Promise<void>((resolveSleep) => {
-    setTimeout(resolveSleep, delayMs)
-  }))
-  return async (event) => {
-    const sessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : 'unscoped'
-    const retryableEvent = event.eventId
-      ? event
-      : { ...event, eventId: `runtime:${sessionId}:${randomUUID()}` }
-    let lastError: unknown = null
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        await options.route(retryableEvent)
-        return
-      } catch (error) {
-        lastError = error
-        if (attempt === maxAttempts) break
-        await sleep(Math.min(1_000, baseDelayMs * (2 ** (attempt - 1))))
-      }
-    }
-    throw lastError
-  }
-}
 // JOE-870: delta coalescer lives in runtime-delta-coalescer.ts (out of bootstrap).
 export {
   DEFAULT_RUNTIME_DELTA_FLUSH_MS,
   createRuntimeDeltaCoalescer,
   type RuntimeDeltaCoalescer,
 }
-
-
-function loopErrorAttributes(error: unknown) {
-  return {
-    error_name: error instanceof Error ? error.name : 'Error',
-    error_message: error instanceof Error ? error.message : String(error),
-  }
-}
-
-async function recordLoopError(
-  observability: CloudObservabilityAdapter | null,
-  name: string,
-  error: unknown,
-  attributes: Record<string, string | number | boolean | null | undefined> = {},
-) {
-  await recordCloudMetric(observability, {
-    name: 'open_cowork_cloud_loop_errors_total',
-    value: 1,
-    unit: '1',
-  })
-  await recordCloudLog(observability, {
-    level: 'error',
-    name,
-    message: error instanceof Error ? error.message : String(error),
-    attributes: {
-      ...attributes,
-      ...loopErrorAttributes(error),
-    },
-  })
-}
-
-type LoopStopper = () => Promise<boolean>
-
-async function waitForLoopDrain(
-  loopName: 'worker' | 'scheduler',
-  current: Promise<void> | null,
-  graceMs: number,
-  observability: CloudObservabilityAdapter | null,
-) {
-  if (!current) return true
-  let timeout: ReturnType<typeof setTimeout> | null = null
-  const timeoutMarker = Symbol('shutdown-timeout')
-  const result = await Promise.race([
-    current.then(() => null),
-    new Promise<symbol>((resolveTimeout) => {
-      timeout = setTimeout(() => resolveTimeout(timeoutMarker), graceMs)
-    }),
-  ])
-  if (timeout) clearTimeout(timeout)
-  if (result === timeoutMarker) {
-    await recordCloudLog(observability, {
-      level: 'warn',
-      name: `cloud.${loopName}.shutdown_timeout`,
-      message: `Cloud ${loopName} loop did not finish before shutdown grace elapsed.`,
-      attributes: { grace_ms: graceMs },
-    })
-    return false
-  }
-  return true
-}
-
-// Liveness heartbeat for the worker/scheduler loops. Beaten at the TOP of each timer
-// fire (independent of the async work), so it stays fresh through long legitimate
-// command execution and only goes stale when the event loop itself stalls — the failure
-// a liveness probe must catch on roles that run no HTTP server.
-type LoopHeartbeat = { beat(): void; ageMs(): number }
-
-function createLoopHeartbeat(): LoopHeartbeat {
-  let lastBeatMs = Date.now()
-  return {
-    beat() { lastBeatMs = Date.now() },
-    ageMs() { return Date.now() - lastBeatMs },
-  }
-}
-
-// Minimal /livez server for the worker + scheduler roles (which otherwise expose no HTTP
-// surface), so a wedged-event-loop pod is restarted instead of silently processing nothing.
-function startCloudLivenessServer(
-  port: number,
-  hostname: string,
-  isLive: () => boolean,
-): { close(): Promise<void> } {
-  const server = createServer((req, res) => {
-    if (req.url === '/livez') {
-      const live = isLive()
-      res.writeHead(live ? 200 : 503, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ ok: live }))
-      return
-    }
-    res.writeHead(404, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ ok: false }))
-  })
-  server.requestTimeout = 10_000
-  server.headersTimeout = 8_000
-  server.maxConnections = 64
-  // A liveness server must never crash the role it protects; tolerate a bind failure.
-  server.on('error', () => undefined)
-  server.listen(port, hostname)
-  return {
-    async close() {
-      await new Promise<void>((done) => server.close(() => done()))
-    },
-  }
-}
-
-function startWorkerLoop(
-  worker: CloudWorker,
-  pollMs: number,
-  observability: CloudObservabilityAdapter | null,
-  shutdownGraceMs: number,
-  heartbeat?: LoopHeartbeat,
-): LoopStopper {
-  let active = false
-  let stopping = false
-  let current: Promise<void> | null = null
-  const timer = setInterval(() => {
-    heartbeat?.beat()
-    if (active || stopping) return
-    active = true
-    current = worker.processAllSessionCommands()
-      .then(() => undefined)
-      .catch(async (error) => {
-        await recordCloudWorkerMetric(observability, {
-          name: 'open_cowork_cloud_worker_loop_failures_total',
-          status: 'error',
-        })
-        await recordLoopError(observability, 'cloud.worker.loop.error', error)
-      })
-      .finally(() => {
-        active = false
-        current = null
-      })
-  }, pollMs)
-  return async () => {
-    stopping = true
-    clearInterval(timer)
-    return waitForLoopDrain('worker', current, shutdownGraceMs, observability)
-  }
-}
-
-function startSchedulerLoop(
-  scheduler: CloudScheduler,
-  pollMs: number,
-  observability: CloudObservabilityAdapter | null,
-  shutdownGraceMs: number,
-  heartbeat?: LoopHeartbeat,
-): LoopStopper {
-  let active = false
-  let stopping = false
-  let current: Promise<void> | null = null
-  const timer = setInterval(() => {
-    heartbeat?.beat()
-    if (active || stopping) return
-    active = true
-    current = scheduler.processDueWorkflows()
-      .then(() => undefined)
-      .catch(async (error) => {
-        await recordCloudSchedulerMetric(observability, {
-          name: 'open_cowork_cloud_scheduler_failures_total',
-          status: 'error',
-        })
-        await recordLoopError(observability, 'cloud.scheduler.loop.error', error)
-      })
-      .finally(() => {
-        active = false
-        current = null
-      })
-  }, pollMs)
-  return async () => {
-    stopping = true
-    clearInterval(timer)
-    return waitForLoopDrain('scheduler', current, shutdownGraceMs, observability)
-  }
-}
-
 function isMissingCheckpointError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   return /checkpoint manifest was not found/i.test(message)
@@ -1662,7 +1307,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   // Unset (local/test runs) ⇒ no server, so the fixed port can't conflict across them.
   const livenessPort = parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_LIVENESS_PORT'), 0)
   const livenessServer = loopHeartbeat && livenessPort > 0
-    ? startCloudLivenessServer(
+    ? await startCloudLivenessServer(
       livenessPort,
       options.hostname || envOptions.hostname,
       () => loopHeartbeat.ageMs() < Math.max(30_000, Math.max(workerPollMs, schedulerPollMs) * 10),

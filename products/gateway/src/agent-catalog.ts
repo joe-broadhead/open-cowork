@@ -24,11 +24,11 @@ import {
   type ChannelConnectorStatus,
 } from './channel-connectors.js'
 
-export type AgentCatalogStatus = 'valid' | 'warning' | 'blocked'
-export type LocalReadinessStatus = 'supported' | 'partial' | 'waived' | 'blocked' | 'unknown'
-export type LocalReadinessCategory = 'runtime' | 'channel' | 'mcp' | 'setup_probe'
+type AgentCatalogStatus = 'valid' | 'warning' | 'blocked'
+type LocalReadinessStatus = 'supported' | 'partial' | 'waived' | 'blocked' | 'unknown'
+type LocalReadinessCategory = 'runtime' | 'channel' | 'mcp' | 'setup_probe'
 
-export interface LocalReadinessCapability {
+interface LocalReadinessCapability {
   id: string
   label: string
   status: LocalReadinessStatus
@@ -36,7 +36,7 @@ export interface LocalReadinessCapability {
   remediation?: string
 }
 
-export interface LocalReadinessEntry {
+interface LocalReadinessEntry {
   id: string
   category: LocalReadinessCategory
   label: string
@@ -66,7 +66,7 @@ export interface LocalReadinessCatalog {
   }
 }
 
-export interface AgentCatalogPermissionSummary {
+interface AgentCatalogPermissionSummary {
   allow: number
   ask: number
   deny: number
@@ -74,7 +74,7 @@ export interface AgentCatalogPermissionSummary {
   risky: string[]
 }
 
-export interface AgentCatalogCapabilitySummary {
+interface AgentCatalogCapabilitySummary {
   skills: string[]
   mcpServers: string[]
   tools: string[]
@@ -82,7 +82,7 @@ export interface AgentCatalogCapabilitySummary {
   permissions: AgentCatalogPermissionSummary
 }
 
-export interface AgentCatalogPromotionSummary {
+interface AgentCatalogPromotionSummary {
   state: string
   scorecardId?: string
   recommendation?: string
@@ -90,7 +90,7 @@ export interface AgentCatalogPromotionSummary {
   updatedAt?: string
 }
 
-export interface AgentCatalogProfileEntry {
+interface AgentCatalogProfileEntry {
   id: string
   kind: 'profile'
   name: string
@@ -109,7 +109,7 @@ export interface AgentCatalogProfileEntry {
   warnings: string[]
 }
 
-export interface AgentCatalogTeamEntry {
+interface AgentCatalogTeamEntry {
   id: string
   kind: 'team'
   name: string
@@ -129,7 +129,7 @@ export interface AgentCatalogTeamEntry {
   warnings: string[]
 }
 
-export interface AgentCatalogBlueprintEntry {
+interface AgentCatalogBlueprintEntry {
   id: string
   kind: 'blueprint'
   name: string
@@ -152,12 +152,12 @@ export interface AgentCatalogBlueprintEntry {
   warnings: string[]
 }
 
-export interface AgentCatalogSource {
+interface AgentCatalogSource {
   type: 'config' | 'blueprint_file'
   path?: string
 }
 
-export interface AgentCatalogSourceState {
+interface AgentCatalogSourceState {
   path: string
   status: 'ok' | 'missing' | 'error'
   count: number

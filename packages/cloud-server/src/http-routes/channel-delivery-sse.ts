@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { principalHasGatewayAccess } from './access-policy.ts'
 import { SSE_MAX_BUFFERED_BYTES } from './sse-limits.ts'
-import type { CloudHttpServerOptions } from '../http-server.ts'
+import type { CloudHttpServerOptions } from '../http-contracts.ts'
 import { CloudServiceError, type CloudPrincipal } from '../session-service.ts'
 
 type RouteContext = {
@@ -52,11 +52,6 @@ export async function handleChannelDeliveriesSse(
     return
   }
   tools.writeCorsHeaders(res, options.corsOrigin)
-  res.writeHead(200, {
-    'content-type': 'text/event-stream',
-    'cache-control': 'no-store',
-    connection: 'keep-alive',
-  })
   const requestedClaimedBy = context.url.searchParams.get('claimedBy')
     || (context.principal.authSource === 'api_token' && context.principal.tokenId ? context.principal.tokenId : null)
     || context.principal.userId
@@ -77,6 +72,11 @@ export async function handleChannelDeliveriesSse(
     if (lifetimeTimer) clearTimeout(lifetimeTimer)
   }
   if (!tools.trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
+  res.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-store',
+    connection: 'keep-alive',
+  })
   // Arm the same TCP keep-alive + max-lifetime guards the session/workspace SSE routes use,
   // so a half-open delivery consumer cannot pin a gateway slot indefinitely.
   lifetimeTimer = tools.armSseSocketLifetime(req, res)

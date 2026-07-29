@@ -36,29 +36,6 @@ export function BreadthIcon(props: IconProps) {
   )
 }
 
-// Range — target / concentric rings (how far the agent reaches across
-// tools).
-export function RangeIcon(props: IconProps) {
-  return (
-    <svg {...iconProps(props)}>
-      <circle cx="8" cy="8" r="5.5" />
-      <circle cx="8" cy="8" r="3" />
-      <circle cx="8" cy="8" r="0.9" fill="currentColor" />
-    </svg>
-  )
-}
-
-// Autonomy — compass / direction arrow (how far the agent can go on
-// its own before returning).
-export function AutonomyIcon(props: IconProps) {
-  return (
-    <svg {...iconProps(props)}>
-      <circle cx="8" cy="8" r="5.5" />
-      <path d="M11 5 L6 8 8 11 11 5 z" fill="currentColor" stroke="none" />
-    </svg>
-  )
-}
-
 // Type-chip glyphs — small and uniform, paired with the type label
 // pill on the selection card.
 export function CustomIcon(props: IconProps) {

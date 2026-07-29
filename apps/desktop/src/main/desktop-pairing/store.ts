@@ -232,7 +232,7 @@ function isExactPersistedPairingRecord(value: unknown): value is DesktopPairingR
     && isStringOrNull(record.revokedAt)
 }
 
-export function normalizeDesktopPairingPolicy(
+function normalizeDesktopPairingPolicy(
   value: unknown,
   fallback: DesktopPairingPolicy = DEFAULT_DESKTOP_PAIRING_POLICY,
 ): DesktopPairingPolicy {

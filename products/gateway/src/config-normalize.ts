@@ -115,7 +115,7 @@ export function isNonLocalHostname(host: string): boolean {
   return true
 }
 
-export function isLoopbackIp(value: string): boolean {
+function isLoopbackIp(value: string): boolean {
   if (net.isIPv4(value)) return value.startsWith('127.')
   if (!value.includes(':')) return false
   const bytes = ipv6ToBytes(value)
@@ -157,7 +157,7 @@ function isForbiddenIpv4Octets(octets: number[]): boolean {
 }
 
 /** Expand an IPv6 literal (incl. an embedded dotted-quad tail) to 16 bytes, or null if malformed. */
-export function ipv6ToBytes(addr: string): number[] | null {
+function ipv6ToBytes(addr: string): number[] | null {
   let text = addr
   const dotted = text.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
   if (dotted) {

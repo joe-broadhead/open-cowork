@@ -1,4 +1,4 @@
-export type ChannelActionCategory =
+type ChannelActionCategory =
   | 'setup'
   | 'session'
   | 'binding'
@@ -10,14 +10,14 @@ export type ChannelActionCategory =
   | 'human_loop'
   | 'diagnostics'
 
-export type ChannelActionBoundaryGroup = 'read' | 'session_binding' | 'work_control' | 'human_loop'
-export type ChannelActionTrust = 'pre_trust' | 'trusted' | 'trusted_privileged'
-export type ChannelActionSurfaceStatus = 'supported' | 'partial' | 'deferred' | 'blocked' | 'not_applicable'
-export type ChannelActionProvider = 'telegram' | 'whatsapp' | 'discord'
-export type ChannelActionSafetyClass = 'read_only' | 'binding_change' | 'work_mutation' | 'human_decision'
-export type ChannelActionNativeFallback = 'typed_command' | 'copy_command' | 'text_menu'
-export type ChannelActionPresenceIndicator = 'typing' | 'none'
-export type ChannelActionEvidenceGate =
+type ChannelActionBoundaryGroup = 'read' | 'session_binding' | 'work_control' | 'human_loop'
+type ChannelActionTrust = 'pre_trust' | 'trusted' | 'trusted_privileged'
+type ChannelActionSurfaceStatus = 'supported' | 'partial' | 'deferred' | 'blocked' | 'not_applicable'
+type ChannelActionProvider = 'telegram' | 'whatsapp' | 'discord'
+type ChannelActionSafetyClass = 'read_only' | 'binding_change' | 'work_mutation' | 'human_decision'
+type ChannelActionNativeFallback = 'typed_command' | 'copy_command' | 'text_menu'
+type ChannelActionPresenceIndicator = 'typing' | 'none'
+type ChannelActionEvidenceGate =
   | 'handler_alignment'
   | 'telegram_set_my_commands'
   | 'telegram_send_chat_action'
@@ -25,7 +25,7 @@ export type ChannelActionEvidenceGate =
   | 'adapter_contract'
   | 'live_provider_proof'
 
-export interface ChannelActionNativeUiHints {
+interface ChannelActionNativeUiHints {
   slashCommand: string
   slashAliases: string[]
   autocomplete: ChannelActionSurfaceStatus
@@ -37,7 +37,7 @@ export interface ChannelActionNativeUiHints {
   fallbackCopy: string
 }
 
-export interface ChannelActionPresencePolicy {
+interface ChannelActionPresencePolicy {
   status: ChannelActionSurfaceStatus
   indicator: ChannelActionPresenceIndicator
   startsAfter: 'trusted_inbound' | 'not_applicable'
@@ -48,7 +48,7 @@ export interface ChannelActionPresencePolicy {
   evidence: ChannelActionEvidenceGate[]
 }
 
-export interface ChannelActionProviderControl {
+interface ChannelActionProviderControl {
   provider: ChannelActionProvider
   slash: ChannelActionSurfaceStatus
   argumentAutocomplete: ChannelActionSurfaceStatus
@@ -72,7 +72,7 @@ export interface ChannelActionProviderControlSummary {
   summary: string
 }
 
-export interface ChannelPermissionDecisionContract {
+interface ChannelPermissionDecisionContract {
   gatewayOwned: Array<{
     action: string
     owner: 'gateway'
@@ -115,7 +115,7 @@ export interface ChannelUxContractReportInputs {
   permissionDecisionContract?: ChannelPermissionDecisionContract
 }
 
-export interface ChannelOperatorAction {
+interface ChannelOperatorAction {
   id: string
   label: string
   primaryCommand: string
@@ -152,7 +152,7 @@ export interface ChannelActionMenuItem {
   description: string
 }
 
-export interface ChannelActionNativeSlashCommand {
+interface ChannelActionNativeSlashCommand {
   command: string
   description: string
 }
@@ -191,9 +191,9 @@ export interface ChannelActionParityRow {
 
 export const CHANNEL_ACTION_TYPING_HEARTBEAT_MS = 4000
 export const CHANNEL_ACTION_TYPING_TIMEOUT_MS = 60_000
-export const TELEGRAM_NATIVE_COMMAND_LIMIT = 100
-export const TELEGRAM_NATIVE_COMMAND_DESCRIPTION_LIMIT = 256
-export const TELEGRAM_NATIVE_COMMAND_PATTERN = /^[a-z0-9_]{1,32}$/
+const TELEGRAM_NATIVE_COMMAND_LIMIT = 100
+const TELEGRAM_NATIVE_COMMAND_DESCRIPTION_LIMIT = 256
+const TELEGRAM_NATIVE_COMMAND_PATTERN = /^[a-z0-9_]{1,32}$/
 const CHANNEL_ACTION_PROVIDERS: ChannelActionProvider[] = ['telegram', 'whatsapp', 'discord']
 
 const supported = {
@@ -357,7 +357,7 @@ function providerControlsForAction(
   return CHANNEL_ACTION_PROVIDERS.map(provider => ({ ...defaults[provider], ...(overrides[provider] || {}) }))
 }
 
-export const CHANNEL_OPERATOR_ACTIONS: ChannelOperatorAction[] = [
+const CHANNEL_OPERATOR_ACTIONS: ChannelOperatorAction[] = [
   action({
     id: 'gateway.help',
     label: 'Help',
@@ -761,7 +761,7 @@ export function channelActionMenuItems(): ChannelActionMenuItem[] {
     }))
 }
 
-export function channelActionNativeSlashCommands(): ChannelActionNativeSlashCommand[] {
+function channelActionNativeSlashCommands(): ChannelActionNativeSlashCommand[] {
   return CHANNEL_OPERATOR_ACTIONS.flatMap(action => {
     const commands = [action.nativeCommand || action.primaryCommand]
     for (const alias of action.aliases || []) {
@@ -828,7 +828,7 @@ export function channelActionParityMatrix(): ChannelActionParityRow[] {
   }))
 }
 
-export function channelActionProviderControlSummary(provider: ChannelActionProvider): ChannelActionProviderControlSummary {
+function channelActionProviderControlSummary(provider: ChannelActionProvider): ChannelActionProviderControlSummary {
   const controls = CHANNEL_OPERATOR_ACTIONS.map(action => action.providerControls.find(control => control.provider === provider)).filter((control): control is ChannelActionProviderControl => Boolean(control))
   const fallback = [...new Set(controls.map(control => control.fallback))].sort() as ChannelActionNativeFallback[]
   const evidence = [...new Set(controls.flatMap(control => control.evidence))].sort() as ChannelActionEvidenceGate[]
@@ -850,7 +850,7 @@ export function channelActionProviderControlSummaries(): ChannelActionProviderCo
   return CHANNEL_ACTION_PROVIDERS.map(channelActionProviderControlSummary)
 }
 
-export function channelPermissionDecisionContract(): ChannelPermissionDecisionContract {
+function channelPermissionDecisionContract(): ChannelPermissionDecisionContract {
   return {
     gatewayOwned: [
       {
@@ -884,7 +884,7 @@ export function channelPermissionDecisionContract(): ChannelPermissionDecisionCo
   }
 }
 
-export function buildChannelUxContractReport(inputs: ChannelUxContractReportInputs = {}): ChannelUxContractReport {
+function buildChannelUxContractReport(inputs: ChannelUxContractReportInputs = {}): ChannelUxContractReport {
   const telegramNative = inputs.telegramNative || telegramNativeSlashCommandManifest()
   const providerControls = inputs.providerControls || channelActionProviderControlSummaries()
   const permissionDecisionContract = inputs.permissionDecisionContract || channelPermissionDecisionContract()

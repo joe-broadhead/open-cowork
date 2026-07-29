@@ -25,6 +25,7 @@ function log(message) {
 const metricCatalogPath = 'deploy/observability/metrics-catalog.json'
 const alertsPath = 'deploy/observability/prometheus-alerts.yaml'
 const dashboardPath = 'deploy/observability/grafana-open-cowork-overview.json'
+const channelTelemetryDocsPath = 'docs/channel-stack-telemetry.md'
 const operationsRunbookPath = 'docs/runbooks/cloud-managed-operations.md'
 const backupRunbookPath = 'docs/runbooks/backup-restore.md'
 const drillReportPath = 'docs/runbooks/restore-drill-report.md'
@@ -48,6 +49,7 @@ for (const path of [
   metricCatalogPath,
   alertsPath,
   dashboardPath,
+  channelTelemetryDocsPath,
   operationsRunbookPath,
   backupRunbookPath,
   drillReportPath,
@@ -198,6 +200,10 @@ const requiredMetrics = [
   'open_cowork_gateway_provider_delivery_retries_total',
   'open_cowork_gateway_provider_delivery_dead_letters_total',
   'open_cowork_gateway_provider_webhook_requests_total',
+  'open_cowork_channel_stack_info',
+  'open_cowork_channel_bindings',
+  'open_cowork_channel_messages_total',
+  'open_cowork_channel_operation_latency_ms',
 ]
 
 const requiredAlertMetrics = [
@@ -242,6 +248,85 @@ for (const metric of requiredAlertMetrics) {
 const dashboard = parseJson(dashboardPath)
 if (!Array.isArray(dashboard.panels) || dashboard.panels.length < 8) {
   throw new Error(`${dashboardPath} must define a useful operations dashboard`)
+}
+
+function channelPanelExpressions(title) {
+  const panel = dashboard.panels.find((candidate) => candidate.title === title)
+  if (!panel) throw new Error(`${dashboardPath} is missing panel "${title}"`)
+  const expressions = (panel.targets || [])
+    .map((target) => target.expr)
+    .filter((expression) => typeof expression === 'string')
+  if (expressions.length === 0) {
+    throw new Error(`${dashboardPath} panel "${title}" must define PromQL targets`)
+  }
+  return expressions
+}
+
+const adoptionExpressions = channelPanelExpressions('Channel stack adoption and inventory')
+for (const surface of [
+  'cloud-channel-gateway',
+  'standalone-gateway',
+  'durable-gateway',
+]) {
+  const expected = `absent(open_cowork_channel_stack_info{surface="${surface}",schema_version="2"})`
+  if (!adoptionExpressions.includes(expected)) {
+    throw new Error(`${dashboardPath} must check stack-info absence for ${surface}`)
+  }
+}
+
+const outcomeExpressions = channelPanelExpressions('Channel stack success, retry, and error rates')
+for (const outcome of ['success', 'retry', 'error']) {
+  const ratio = outcomeExpressions.find((expression) =>
+    expression.includes(`outcome="${outcome}"`))
+  if (
+    !ratio
+    || !ratio.includes('schema_version="2"')
+    || !ratio.includes('[$__range]')
+    || !ratio.includes('provider_kind')
+    || !ratio.includes('clamp_min(')
+    || !ratio.includes('outcome=~"success|retry|error"')
+  ) {
+    throw new Error(`${dashboardPath} must define a range-aware, per-provider ${outcome} ratio over terminal outcomes`)
+  }
+}
+if (!outcomeExpressions.some((expression) =>
+  expression.includes('by (surface, stack, provider_kind, direction, outcome)')
+  && expression.includes('increase(')
+  && expression.includes('schema_version="2"')
+  && expression.includes('outcome=~"success|retry|error|ignored"')
+  && expression.includes('[$__range]'))) {
+  throw new Error(`${dashboardPath} must define range-aware terminal volume by surface, stack, provider, direction, and outcome`)
+}
+
+const latencyExpressions = channelPanelExpressions('Channel stack p50 and p95 successful-operation latency')
+for (const quantile of ['0.50', '0.95']) {
+  const expression = latencyExpressions.find((candidate) =>
+    candidate.includes(`histogram_quantile(${quantile}`))
+  if (
+    !expression
+    || !expression.includes('schema_version="2"')
+    || !expression.includes('outcome="success"')
+    || !expression.includes('provider_kind')
+    || !expression.includes('direction)')
+    || !expression.includes('increase(')
+    || !expression.includes('[$__range]')
+  ) {
+    throw new Error(`${dashboardPath} must define range-aware p${quantile.slice(2)} latency by provider and direction`)
+  }
+}
+for (const phrase of [
+  'process-local and reset on restart',
+  'retention are controlled by the operator',
+  'An absent `stack_info` series',
+  'never records prompts, message bodies',
+  'Composition-boundary latency',
+  '`active` means a configured provider',
+  'Every operation emits exactly one `attempt`',
+  'concretely preserves or schedules',
+  'Duplicate events, empty messages',
+  '`schema_version="2"`',
+]) {
+  assertIncludes(channelTelemetryDocsPath, phrase)
 }
 
 for (const phrase of [

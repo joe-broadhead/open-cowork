@@ -61,15 +61,3 @@ export function extractCssRules(css: string): Map<string, string> {
   parseBlock(css.replace(/\/\*[\s\S]*?\*\//g, ''), '', rules)
   return rules
 }
-
-/** Extract only the rules whose (media-namespaced) selector starts with one of the given prefixes. */
-export function extractCssRulesForPrefixes(css: string, prefixes: readonly string[]): Map<string, string> {
-  const all = extractCssRules(css)
-  const filtered = new Map<string, string>()
-  for (const [selector, declarations] of all) {
-    const bare = selector.includes('} ') ? selector.slice(selector.lastIndexOf('} ') + 2) : selector
-    const tail = bare.replace(/^@[^{]+\{?\s*/, '')
-    if (prefixes.some((prefix) => tail.includes(prefix))) filtered.set(selector, declarations)
-  }
-  return filtered
-}

@@ -37,6 +37,12 @@ It records:
   calculations, Mission Control view models, evidence/redaction helpers, release-ops tooling, and
   security policy.
 
+Production TypeScript/TSX file-size discovery and the former Gateway façade LOC
+ratchets are enforced once at the monorepo root by
+`docs/development/god-module-loc-budgets.json` and
+`scripts/check-god-module-loc.mjs`. This Gateway budget remains the source of
+truth only for dependency-graph and owner-boundary policy.
+
 ## Owner And Growth Policy
 
 Every owner domain in the budget JSON has a `category`, and every category is registered in

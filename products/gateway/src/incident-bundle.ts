@@ -22,7 +22,7 @@ export interface IncidentBundleOptions {
   auditLedger?: AuditLedgerQueryOptions
 }
 
-export interface IncidentBundleAuditLedgerRow {
+interface IncidentBundleAuditLedgerRow {
   eventId: string
   sourceEventId?: number
   sourceEventType?: string
@@ -38,11 +38,11 @@ export interface IncidentBundleAuditLedgerRow {
   entryHash: string
 }
 
-export type IncidentBundleSourceStatus = 'green' | 'degraded' | 'stale' | 'blocked' | 'unknown'
-export type IncidentBundleFailureSeverity = 'info' | 'warning' | 'critical'
-export type IncidentBundleWindowScope = 'complete' | 'selected'
+type IncidentBundleSourceStatus = 'green' | 'degraded' | 'stale' | 'blocked' | 'unknown'
+type IncidentBundleFailureSeverity = 'info' | 'warning' | 'critical'
+type IncidentBundleWindowScope = 'complete' | 'selected'
 
-export const INCIDENT_BUNDLE_REDACTION_TRANSFORMATIONS = [
+const INCIDENT_BUNDLE_REDACTION_TRANSFORMATIONS = [
   'raw channel targets are fingerprinted',
   'session IDs are hashed',
   'local private paths are replaced with path hashes',
@@ -51,7 +51,7 @@ export const INCIDENT_BUNDLE_REDACTION_TRANSFORMATIONS = [
   'phone-like identifiers are fingerprinted',
 ] as const
 
-export interface IncidentBundleSourceFreshness {
+interface IncidentBundleSourceFreshness {
   source: string
   status: IncidentBundleSourceStatus
   observedAt: string
@@ -62,7 +62,7 @@ export interface IncidentBundleSourceFreshness {
   evidenceRefs: string[]
 }
 
-export interface IncidentBundleFailureClassification {
+interface IncidentBundleFailureClassification {
   code: string
   severity: IncidentBundleFailureSeverity
   source: string
@@ -72,7 +72,7 @@ export interface IncidentBundleFailureClassification {
   evidenceRefs: string[]
 }
 
-export interface IncidentBundleWindow {
+interface IncidentBundleWindow {
   total: number
   shown: number
   omitted: number
@@ -81,7 +81,7 @@ export interface IncidentBundleWindow {
   sourceLimit?: number
 }
 
-export interface IncidentBundleManifest {
+interface IncidentBundleManifest {
   schemaVersion: 1
   id: string
   generatedAt: string

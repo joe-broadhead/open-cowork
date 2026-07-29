@@ -37,7 +37,6 @@ const consoleLogAllowlist = new Set([
   'scripts/lint.mjs',
   'scripts/check-product-boundaries.mjs',
   'scripts/check-product-archive-readiness.mjs',
-  'scripts/apply-private-repo-freeze-banners.mjs',
 ])
 const secretScanAllowlist = new Set([
   'packages/shared/src/log-sanitizer.ts',

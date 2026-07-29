@@ -6,7 +6,6 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
 import { registerLaunchpadHandlers } from '../apps/desktop/src/main/ipc/launchpad-handlers.ts'
@@ -24,64 +23,8 @@ import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coord
 import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { registerKnowledgeHandlers } from '../apps/desktop/src/main/ipc/knowledge-handlers.ts'
 import { registerVoiceHandlers } from '../apps/desktop/src/main/ipc/voice-handlers.ts'
-import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
-function createTestContext() {
-  const handlers = new Map<string, unknown>()
-  const listeners = new Map<string, unknown>()
-  const context: IpcHandlerContext = {
-    ipcMain: {
-      handle(channel: string, handler: unknown) {
-        handlers.set(channel, handler)
-      },
-      on(channel: string, listener: unknown) {
-        // One-way channels (renderer uses `ipcRenderer.send`) — record
-        // them separately so the test can assert on both surfaces.
-        listeners.set(channel, listener)
-      },
-    },
-    workspaceGateway: createWorkspaceGateway({ cloudRegistry: null, cloudCredentialStore: null }),
-    desktopPairingService: {
-      list: () => [],
-      create: () => { throw new Error('not used in registration test') },
-      update: () => { throw new Error('not used in registration test') },
-      connect: async () => { throw new Error('not used in registration test') },
-      disconnect: () => { throw new Error('not used in registration test') },
-      revoke: async () => { throw new Error('not used in registration test') },
-      pollOnce: async () => { throw new Error('not used in registration test') },
-      auditLog: () => [],
-      observeRuntimeEvent: () => {},
-    } as never,
-    getMainWindow: () => null,
-    normalizeDirectory: () => '/tmp',
-    ensureSessionRecord: () => null,
-    resolvePrivateArtifactPath: () => ({ root: '/tmp', source: '/tmp/file.txt' }),
-    grantProjectDirectory: (directory) => directory,
-    resolveGrantedProjectDirectory: (directory) => directory || null,
-    resolveContextDirectory: () => null,
-    resolveScopedTarget: (target) => ({ ...target, directory: target.directory || null }),
-    buildCustomAgentPermission: async () => ({}),
-    requestNativeConfirmation: async () => true,
-    logHandlerError: () => {},
-    describeDestructiveRequest: () => 'test',
-    consumeDestructiveConfirmation: () => true,
-    reconcileIdleSession: () => {},
-    getSessionClient: async () => {
-      throw new Error('not used in registration test')
-    },
-    getSessionV2Client: async () => {
-      throw new Error('not used in registration test')
-    },
-    listRuntimeTools: async () => [],
-    withDiscoveredBuiltInTools: async (tools) => tools,
-    listToolsFromMcpEntry: async () => [],
-    isLikelyMcpAuthError: () => false,
-    authenticateNewRemoteMcpIfNeeded: async () => {},
-    approvedSkillImportDirectories: new Map(),
-    capabilityToolMethodCache: new Map(),
-  }
-  return { context, handlers, listeners }
-}
+import { createIpcHandlerHarness } from './support/ipc-handler-harness.ts'
 
 function readPreloadChannelArray(source: string, constantName: string) {
   const match = source.match(new RegExp(`const ${constantName} = \\[([\\s\\S]*?)\\] as const`))
@@ -104,7 +47,7 @@ function readPreloadApiGroups(source: string) {
 }
 
 test('IPC handler modules register their core channels', () => {
-  const { context, handlers, listeners } = createTestContext()
+  const { context, handlers, listeners } = createIpcHandlerHarness()
 
   registerWorkspaceHandlers(context)
   registerDesktopPairingHandlers(context)
@@ -189,7 +132,7 @@ test('IPC handler modules register their core channels', () => {
 })
 
 test('preload invoke/send channels match registered main-process IPC channels', () => {
-  const { context, handlers, listeners } = createTestContext()
+  const { context, handlers, listeners } = createIpcHandlerHarness()
 
   registerWorkspaceHandlers(context)
   registerDesktopPairingHandlers(context)
@@ -239,7 +182,7 @@ test('coordination IPC mutations cannot affect cloud-scoped rows', async () => {
   const db = new DatabaseSync(':memory:')
   setCoordinationDatabaseForTests(db)
   try {
-    const { context, handlers } = createTestContext()
+    const { context, handlers } = createIpcHandlerHarness()
     registerCoordinationHandlers(context)
 
     const cloudProject = createCoordinationProject({
@@ -340,7 +283,7 @@ test('knowledge proposal IPC ignores renderer-controlled storage directories', a
   clearKnowledgeStoreCache()
 
   try {
-    const { context, handlers } = createTestContext()
+    const { context, handlers } = createIpcHandlerHarness()
     registerKnowledgeHandlers(context)
 
     const snapshotHandler = handlers.get('knowledge:snapshot') as (
@@ -390,7 +333,7 @@ test('knowledge restore IPC restores a prior version, pins local storage, and va
   clearKnowledgeStoreCache()
 
   try {
-    const { context, handlers } = createTestContext()
+    const { context, handlers } = createIpcHandlerHarness()
     registerKnowledgeHandlers(context)
 
     const snapshotHandler = handlers.get('knowledge:snapshot') as (event: unknown, options?: unknown) => Promise<Record<string, unknown>>
@@ -436,7 +379,7 @@ test('knowledge restore IPC restores a prior version, pins local storage, and va
 })
 
 test('provider auth IPC fails closed for malformed renderer input before runtime access', async () => {
-  const { context, handlers } = createTestContext()
+  const { context, handlers } = createIpcHandlerHarness()
 
   registerAppHandlers(context)
 

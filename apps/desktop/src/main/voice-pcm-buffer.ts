@@ -6,10 +6,10 @@
  */
 
 export const VOICE_PCM_SAMPLE_RATE = 16_000
-export const VOICE_PCM_CHANNELS = 1
+const VOICE_PCM_CHANNELS = 1
 
 /** ~60s rolling window matches Aurum dictation defaults. */
-export const VOICE_PCM_MAX_FRAMES = VOICE_PCM_SAMPLE_RATE * 60
+const VOICE_PCM_MAX_FRAMES = VOICE_PCM_SAMPLE_RATE * 60
 
 export class VoicePcmBuffer {
   private samples: Float32Array

@@ -371,7 +371,7 @@ async function graphNodesById(sql: PostgresQuery, workspaceId: string, ids: stri
   return nodeIds.map((nodeId) => nodesById.get(nodeId) ?? fallbackGraphNode(nodeId)).sort(compareGraphNodes);
 }
 
-export function graphNodeFromRecordRow(row: Record<string, unknown>): GraphNodeRecord {
+function graphNodeFromRecordRow(row: Record<string, unknown>): GraphNodeRecord {
   const id = stringField(row, "record_id") ?? "";
   const rowPath = stringField(row, "path");
   const status = stringField(row, "status");
@@ -387,7 +387,7 @@ export function graphNodeFromRecordRow(row: Record<string, unknown>): GraphNodeR
   };
 }
 
-export function graphEdgeFromRow(row: Record<string, unknown>): GraphEdgeRecord {
+function graphEdgeFromRow(row: Record<string, unknown>): GraphEdgeRecord {
   const edgeId = stringField(row, "edge_id") ?? "edge:unknown";
   const rowPath = stringField(row, "path");
   const anchor = stringField(row, "anchor");
@@ -405,82 +405,5 @@ export function graphEdgeFromRow(row: Record<string, unknown>): GraphEdgeRecord 
     source_commit: stringField(row, "source_commit") ?? "",
     created_at: dateStringField(row, "created_at") ?? "",
     metadata: parseJsonObject(row.metadata),
-  };
-}
-
-export function graphNeighborsFromIndex(
-  index: GraphIndexResponse,
-  id: string,
-  options: { direction?: "in" | "out" | "both"; depth?: number; limit?: number } = {},
-): GraphNeighborhoodResponse {
-  const direction = options.direction ?? "both";
-  const depth = Math.min(Math.max(options.depth ?? 1, 1), 3);
-  const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
-  const nodesById = new Map(index.nodes.map((node) => [node.id, node]));
-  const selectedEdges: GraphEdgeRecord[] = [];
-  const selectedEdgeIds = new Set<string>();
-  const visited = new Set<string>([id]);
-  let frontier = new Set<string>([id]);
-  for (let level = 0; level < depth && frontier.size > 0 && selectedEdges.length < limit; level += 1) {
-    const next = new Set<string>();
-    for (const edge of index.edges) {
-      const outgoing = direction !== "in" && frontier.has(edge.from_id);
-      const incoming = direction !== "out" && frontier.has(edge.to_id);
-      if (!outgoing && !incoming) {
-        continue;
-      }
-      if (selectedEdgeIds.has(edge.id)) {
-        continue;
-      }
-      selectedEdgeIds.add(edge.id);
-      selectedEdges.push(edge);
-      const otherId = outgoing ? edge.to_id : edge.from_id;
-      if (!visited.has(otherId)) {
-        visited.add(otherId);
-        next.add(otherId);
-      }
-      if (selectedEdges.length >= limit) {
-        break;
-      }
-    }
-    frontier = next;
-  }
-  const nodeIds = new Set<string>([id]);
-  for (const edge of selectedEdges) {
-    nodeIds.add(edge.from_id);
-    nodeIds.add(edge.to_id);
-  }
-  return {
-    root_id: id,
-    depth,
-    direction,
-    nodes: [...nodeIds].map((nodeId) => nodesById.get(nodeId) ?? fallbackGraphNode(nodeId)).sort(compareGraphNodes),
-    edges: selectedEdges,
-  };
-}
-
-export function graphRelatedFromIndex(index: GraphIndexResponse, id: string, options: { limit?: number } = {}): GraphNeighborhoodResponse {
-  const nodesById = new Map(index.nodes.map((node) => [node.id, node]));
-  const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
-  const direct = index.edges.filter((edge) => edge.from_id === id || edge.to_id === id);
-  const sharedHubs = new Set(
-    direct
-      .filter((edge) => edge.edge_type === "page_topic" || edge.edge_type === "page_source" || edge.edge_type === "page_claim")
-      .map((edge) => (edge.from_id === id ? edge.to_id : edge.from_id)),
-  );
-  const relatedEdges = index.edges
-    .filter((edge) => direct.includes(edge) || sharedHubs.has(edge.from_id) || sharedHubs.has(edge.to_id))
-    .slice(0, limit);
-  const nodeIds = new Set<string>([id]);
-  for (const edge of relatedEdges) {
-    nodeIds.add(edge.from_id);
-    nodeIds.add(edge.to_id);
-  }
-  return {
-    root_id: id,
-    depth: 2,
-    direction: "both",
-    nodes: [...nodeIds].map((nodeId) => nodesById.get(nodeId) ?? fallbackGraphNode(nodeId)).sort(compareGraphNodes),
-    edges: relatedEdges,
   };
 }

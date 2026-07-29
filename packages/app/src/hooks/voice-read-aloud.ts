@@ -7,7 +7,7 @@
  */
 import { isDesktopFeatureEnabled, type DesktopFeatureFlags } from '@open-cowork/shared'
 
-export type VoiceReadAloudPhase = 'idle' | 'speaking' | 'error'
+type VoiceReadAloudPhase = 'idle' | 'speaking' | 'error'
 
 export type VoiceReadAloudState = {
   phase: VoiceReadAloudPhase

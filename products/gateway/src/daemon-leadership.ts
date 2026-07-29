@@ -7,7 +7,7 @@ import { appendAuditEvent, recoverInterruptedStorageRestore, restrictSqliteDbPer
 import { redactSensitiveText } from './security.js'
 import { assertSupportedWorkStoreSchemaVersion, workStoreSchemaVersion } from './work-store/schema.js'
 
-export type DaemonLeadershipMode = 'single_daemon' | 'writer' | 'standby' | 'no_leader' | 'unavailable'
+type DaemonLeadershipMode = 'single_daemon' | 'writer' | 'standby' | 'no_leader' | 'unavailable'
 
 export interface DaemonLeadershipSnapshot {
   enabled: boolean

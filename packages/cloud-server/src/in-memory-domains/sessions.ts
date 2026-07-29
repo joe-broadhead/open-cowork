@@ -406,13 +406,25 @@ export class InMemorySessionsDomain {
     return sliceEventsAfter(session.events, afterSequence, limit)
   }
 
-  getSessionEventStats(tenantId: string, sessionId: string): { count: number; latestSequence: number } {
+  getSessionEventStats(tenantId: string, sessionId: string): {
+    count: number
+    earliestSequence: number | null
+    latestSequence: number
+  } {
     const session = this.requireSession(tenantId, sessionId)
+    let earliestSequence: number | null = null
     let latestSequence = 0
     for (const event of session.events) {
+      if (earliestSequence === null || event.sequence < earliestSequence) {
+        earliestSequence = event.sequence
+      }
       if (event.sequence > latestSequence) latestSequence = event.sequence
     }
-    return { count: session.events.length, latestSequence }
+    return {
+      count: session.events.length,
+      earliestSequence,
+      latestSequence,
+    }
   }
 
   upsertCloudArtifactIndex(input: UpsertCloudArtifactIndexInput): CloudArtifactIndexRecord {

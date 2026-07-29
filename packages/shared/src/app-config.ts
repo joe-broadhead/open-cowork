@@ -511,12 +511,10 @@ export interface AppSettings {
   taskPermission: RuntimePermissionPolicy
   externalDirectoryPermission: RuntimePermissionPolicy
   mcpPermission: RuntimePermissionPolicy
-  requireApprovalBeforeSending: boolean
   notificationVoiceReplies: boolean
   notificationSmartSuggestions: boolean
   notificationDailyDigest: boolean
   notificationSounds: boolean
-  privacyKeepConversationHistory: boolean
   privacyShareAnonymizedUsage: boolean
   runtimeConfigSource?: 'app' | 'machine'
   runtimeToolingBridge: RuntimeToolingBridgeConsent

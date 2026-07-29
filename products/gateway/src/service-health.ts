@@ -12,8 +12,8 @@ import { runStorageDoctor } from './storage.js'
 import { openCodeFetch } from './opencode-client.js'
 import { withDeadline } from './deadlines.js'
 
-export type ServiceHealthStatus = 'ok' | 'degraded' | 'down'
-export type ServiceHealthComponentId =
+type ServiceHealthStatus = 'ok' | 'degraded' | 'down'
+type ServiceHealthComponentId =
   | 'daemon'
   | 'leadership'
   | 'dashboard'

@@ -6,9 +6,6 @@
  */
 import {
   isDesktopFeatureEnabled,
-  voiceHostStatusForFeatures,
-  type VoiceHostStatus,
-  type VoiceSessionSnapshot,
   type VoiceSessionStartInput,
   type VoiceTtsSpeakInput,
 } from '@open-cowork/shared'
@@ -173,5 +170,4 @@ export function registerVoiceHandlers(context: IpcHandlerContext) {
   })
 }
 
-export type { VoiceHostStatus, VoiceSessionSnapshot, VoiceSessionStartInput }
-export { voiceHostStatusForFeatures }
+export type { VoiceSessionStartInput }

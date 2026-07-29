@@ -5,9 +5,11 @@ import {
   getRuntimeMetricsSnapshot,
   recordAuthFailure,
   recordChannelMessageIn,
+  recordChannelOperation,
   recordSchedulerCycle,
   renderPrometheusMetrics,
   sampleRuntimeMetrics,
+  setChannelBindingTelemetry,
 } from '../runtime-metrics.js'
 import type { ObservabilitySloResult } from '../observability-contract.js'
 
@@ -47,6 +49,12 @@ describe('runtime-metrics', () => {
     recordSchedulerCycle()
     recordSchedulerCycle()
     recordChannelMessageIn('telegram')
+    setChannelBindingTelemetry('telegram', 'durable-native', 'configured', 1)
+    setChannelBindingTelemetry('telegram', 'durable-native', 'active', 1)
+    recordChannelOperation('telegram', 'durable-native', 'inbound', 'success', 18)
+    recordChannelOperation('telegram', 'durable-native', 'inbound', 'ignored', 20)
+    recordChannelOperation('telegram', 'durable-native', 'outbound', 'retry', 40)
+    recordChannelOperation('telegram', 'durable-native', 'outbound', 'error', 55)
     recordAuthFailure()
 
     const text = renderPrometheusMetrics({
@@ -77,6 +85,9 @@ describe('runtime-metrics', () => {
       'gateway_process_heap_used_bytes',
       'gateway_event_loop_lag_ms',
       'gateway_slo_latency_ms',
+      'open_cowork_channel_stack_info',
+      'open_cowork_channel_messages_total',
+      'open_cowork_channel_operation_latency_ms',
     ]) {
       expect(text).toContain(`# TYPE ${name}`)
     }
@@ -92,6 +103,11 @@ describe('runtime-metrics', () => {
     // Histogram has real observations.
     expect(text).toMatch(/gateway_slo_latency_ms_bucket\{[^}]*le="\+Inf"\} \d+/)
     expect(text).toMatch(/gateway_slo_latency_ms_count\{budget="scheduler_latency"\} 1/)
+    expect(text).toContain('schema_version="2",stack="durable-native",surface="durable-gateway"')
+    expect(text).toContain('stack="durable-native",surface="durable-gateway"')
+    expect(text).toContain('direction="inbound",outcome="ignored",provider_kind="telegram",schema_version="2"')
+    expect(text).toContain('direction="outbound",outcome="retry",provider_kind="telegram",schema_version="2"')
+    expect(text).not.toContain('provider_id=')
     // Valid exposition ends with a newline.
     expect(text.endsWith('\n')).toBe(true)
   })

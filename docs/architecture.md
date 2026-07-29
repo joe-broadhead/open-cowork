@@ -179,25 +179,24 @@ in the compatibility store facade. HTTP routes live under `http-routes/`, and th
 `@open-cowork/cloud-client` package exposes a deliberately tiny top-level
 adapter/error entry plus typed domain barrels under `src/domains/`.
 
-Cloud source files should stay below 2,000 lines. The former facades below now
-carry explicit line budgets that are ratcheted to just above their current size
-so a decomposed file cannot silently re-grow. These budgets are implementation
-backlogs, not target architecture:
+The repository-wide production LOC thresholds, exceptions, and no-regrowth
+ratchets are defined only in
+`docs/development/god-module-loc-budgets.json` and enforced by
+`scripts/check-god-module-loc.mjs`. A ratchet cap must equal the current logical
+LOC and must move down when its module shrinks. The tracked facades below are
+implementation backlogs, not target architecture:
 
-- `postgres-control-plane-store.ts` (budget 2,000 lines): decomposed below the
-  2,000-line limit and ratcheted. Compatibility implementation for the full
+- `postgres-control-plane-store.ts`: oversized compatibility implementation for the full
   Postgres-backed store plus webhook security store and managed work claim
   fencing. Domain row mappers belong in `postgres-domains/` /
   `postgres-store-domains/`.
-- `in-memory-control-plane-store.ts` (budget 1,620 lines): decomposed below the
-  2,000-line limit and ratcheted. Compatibility implementation for the full
+- `in-memory-control-plane-store.ts`: oversized compatibility implementation for the full
   domain store contract, including managed work claim fencing until the store
   contract is split further.
-- `http-server.ts` (budget 1,930 lines): decomposed below the 2,000-line limit
-  and ratcheted. Compatibility Cloud HTTP/SSE entry point that wires shared
+- `http-server.ts`: no-regrowth Cloud HTTP/SSE composition entry point that wires shared
   route modules, HTML/CSP serving, pre-auth health, and streaming lifecycles
   while route handlers continue moving into `http-routes/`.
-- `session-service.ts` (budget 1,205 lines): a thin orchestration **facade**
+- `session-service.ts`: a no-regrowth, thin orchestration **facade**
   whose real logic lives in cohesive sub-services it composes —
   `services/byok-service.ts`, `member-service.ts`, `role-service.ts`,
   `policy-service.ts`, `sso-service.ts`, `scim-service.ts`,

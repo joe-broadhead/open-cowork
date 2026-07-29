@@ -4,7 +4,7 @@ import type { PolicyBounds } from "@openwiki/policy";
 import { openPostgresSql } from "./connection.ts";
 import type { PostgresQuery, PostgresRuntimeOptions } from "./types.ts";
 
-export interface PostgresOAuthClientRecord {
+interface PostgresOAuthClientRecord {
   client_id: string;
   client_name?: string;
   redirect_uris: string[];
@@ -24,7 +24,7 @@ export interface PostgresOAuthClientRecord {
   approved_at?: string;
 }
 
-export interface PostgresOAuthAuthorizationCodeRecord {
+interface PostgresOAuthAuthorizationCodeRecord {
   id: string;
   code_hash: string;
   client_id: string;
@@ -40,7 +40,7 @@ export interface PostgresOAuthAuthorizationCodeRecord {
   consumed_at?: string;
 }
 
-export interface PostgresOAuthTokenRecord {
+interface PostgresOAuthTokenRecord {
   id: string;
   token_hash: string;
   client_id: string;

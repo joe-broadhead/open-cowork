@@ -10,6 +10,9 @@ import { pruneManagedSkillMirror } from './runtime-skill-mirror.js'
 import { syncCustomAgentRuntimeGuidance } from './native-customizations.js'
 import { findBundledSkillDirInRoot, getBundledSkillIndex } from './bundled-skill-index.js'
 import { getActiveManagedPolicy, isManagedPolicyExtensionClassEnabled } from './managed-policy.js'
+import { getBundledSkillRoots } from './bundled-skill-roots.js'
+
+export { getBundledSkillRoots } from './bundled-skill-roots.js'
 
 
 function copySkillDirectory(source: string, destination: string) {
@@ -37,33 +40,6 @@ function runtimeConfigSourceDir() {
   return existsSync(repoDesktopRuntimeConfig)
     ? repoDesktopRuntimeConfig
     : join(process.cwd(), 'runtime-config')
-}
-
-// Root directories where bundled skill packages may live, in priority
-// order. Exported so the effective-skills catalog can resolve the same
-// paths as `copySkillsAndAgents` — otherwise the Capabilities UI's
-// "Skill content" view reads from `process.cwd()/skills`, which is the
-// sandbox runtime home after the startup chdir and has no bundles.
-export function getBundledSkillRoots(): string[] {
-  const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
-  const roots: string[] = []
-  // The app-path host is unset outside Electron (cloud / node:test), so fall
-  // back to cwd-relative roots so tests can still resolve the repo's bundles.
-  if (getAppPathHost()?.isPackaged) {
-    roots.push(join(((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()), 'runtime-config', 'skills'))
-    roots.push(join(((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()), 'skills'))
-  } else if (getAppPathHost()?.getAppPath) {
-    const appPath = getAppPathHost()!.getAppPath!()
-    roots.push(join(appPath, 'runtime-config', 'skills'))
-    roots.push(join(appPath, '..', '..', 'skills'))
-  } else {
-    roots.push(join(process.cwd(), 'runtime-config', 'skills'))
-    roots.push(join(process.cwd(), 'skills'))
-  }
-  if (downstreamRoot) {
-    roots.unshift(join(downstreamRoot, 'skills'))
-  }
-  return roots
 }
 
 export function findBundledSkillDir(root: string, skillName: string): string | null {

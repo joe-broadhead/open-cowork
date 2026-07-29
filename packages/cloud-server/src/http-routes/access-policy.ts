@@ -33,18 +33,6 @@ export function routeAllowsWorkerCredential(input: GatewayRouteAccessInput) {
   return input.resource === 'workers' && Boolean(input.sessionId) && input.action === 'heartbeat'
 }
 
-export function routeAllowsGatewayOnlyToken(input: GatewayRouteAccessInput) {
-  return input.resource === 'channels'
-    || (input.resource === 'coordination' && input.sessionId === 'watches')
-    || (
-      input.resource === 'sessions'
-      && Boolean(input.sessionId)
-      && input.method === 'GET'
-      && (!input.action || input.action === 'view' || input.action === 'events'
-        || (input.action === 'artifacts' && Boolean(input.artifactId)))
-    )
-}
-
 export function principalCanUseGatewayOnlyRoute(principal: CloudPrincipal, input: GatewayRouteAccessInput) {
   if (principal.authSource !== 'api_token') return false
   if (!principalHasPrivilegedTokenScope(principal, 'gateway')) return false

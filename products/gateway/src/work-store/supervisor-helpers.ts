@@ -182,7 +182,7 @@ export function supervisorWakeupReason(state: WorkState, supervisor: RoadmapSupe
   return undefined
 }
 
-export function eventTriggersSupervisor(state: WorkState, supervisor: RoadmapSupervisorRecord, event: WorkEventRecord, policy: Record<string, any>): boolean {
+function eventTriggersSupervisor(state: WorkState, supervisor: RoadmapSupervisorRecord, event: WorkEventRecord, policy: Record<string, any>): boolean {
   const category = eventTriggerCategory(event, state, supervisor)
   if (!category || policy[category] === false) return false
   if (category === 'criticalAlertActive') return true
@@ -191,7 +191,7 @@ export function eventTriggersSupervisor(state: WorkState, supervisor: RoadmapSup
   return roadmapId === supervisor.roadmapId
 }
 
-export function eventTriggerCategory(event: WorkEventRecord, state: WorkState, supervisor: RoadmapSupervisorRecord): string | undefined {
+function eventTriggerCategory(event: WorkEventRecord, state: WorkState, supervisor: RoadmapSupervisorRecord): string | undefined {
   const roadmapId = eventRoadmapId(event, state)
   const roadmapTasks = roadmapId === supervisor.roadmapId ? state.tasks.filter(task => task.roadmapId === roadmapId) : []
   if ((event.type === 'task.done' || event.type === 'task.done.manual' || (event.type === 'task.run.completed' && event.payload?.['taskStatus'] === 'done')) && roadmapTasks.length && roadmapTasks.every(task => task.status === 'done')) return 'allRoadmapTasksDone'
@@ -210,7 +210,7 @@ export function eventTriggerCategory(event: WorkEventRecord, state: WorkState, s
   return undefined
 }
 
-export function supervisorWakeReasonForEvent(event: WorkEventRecord, detail: string): SupervisorWakeReason {
+function supervisorWakeReasonForEvent(event: WorkEventRecord, detail: string): SupervisorWakeReason {
   if (detail === 'allRoadmapTasksDone' || detail === 'taskDone') return 'issue_completed'
   if (detail === 'taskBlocked') return event.type === 'task.run.lease_expired' ? 'stale_run' : 'blocked_work'
   if (detail === 'runFailed') return event.type === 'task.run.lease_expired' ? 'stale_run' : 'failure_alert'
@@ -269,7 +269,7 @@ export function completeSupervisorWakeupReceiptRow(db: DatabaseSync, supervisor:
   return rowToSupervisorWakeupReceipt(updated) || undefined
 }
 
-export function inspectedInputsForWakeup(supervisor: RoadmapSupervisorRecord, wakeup: SupervisorWakeupCandidate): string[] {
+function inspectedInputsForWakeup(supervisor: RoadmapSupervisorRecord, wakeup: SupervisorWakeupCandidate): string[] {
   return uniqueResultStrings([
     `supervisor:${supervisor.supervisorId}`,
     `roadmap:${supervisor.roadmapId}`,
@@ -279,14 +279,14 @@ export function inspectedInputsForWakeup(supervisor: RoadmapSupervisorRecord, wa
   ])
 }
 
-export function eventRoadmapId(event: WorkEventRecord, state: WorkState): string | undefined {
+function eventRoadmapId(event: WorkEventRecord, state: WorkState): string | undefined {
   if (typeof event.payload?.['roadmapId'] === 'string') return event.payload['roadmapId']
   if (typeof event.subjectId === 'string' && state.roadmaps.some(roadmap => roadmap.id === event.subjectId)) return event.subjectId
   const taskId = typeof event.subjectId === 'string' ? event.subjectId : typeof event.payload?.['taskId'] === 'string' ? event.payload['taskId'] : undefined
   return taskId ? state.tasks.find(task => task.id === taskId)?.roadmapId : undefined
 }
 
-export function supervisorWakeTriggerPolicy(supervisor: RoadmapSupervisorRecord): Record<string, any> {
+function supervisorWakeTriggerPolicy(supervisor: RoadmapSupervisorRecord): Record<string, any> {
   return {
     taskDone: true,
     taskBlocked: true,
@@ -305,7 +305,7 @@ export function supervisorWakeTriggerPolicy(supervisor: RoadmapSupervisorRecord)
   }
 }
 
-export function supervisorCadenceMs(supervisor: RoadmapSupervisorRecord): number {
+function supervisorCadenceMs(supervisor: RoadmapSupervisorRecord): number {
   const raw = Number((supervisor.cadence as any)?.intervalMs || 0)
   return Number.isFinite(raw) && raw > 0 ? Math.max(60 * 1000, Math.min(raw, 30 * 24 * 60 * 60 * 1000)) : 0
 }

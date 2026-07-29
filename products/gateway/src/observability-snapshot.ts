@@ -47,7 +47,7 @@ export interface ObservabilitySnapshot {
   support: SupportOperationsContract
 }
 
-export interface ObservabilityEvidencePlaneFailedRunClassification {
+interface ObservabilityEvidencePlaneFailedRunClassification {
   runId: string
   taskId: string
   traceId: string
@@ -58,7 +58,7 @@ export interface ObservabilityEvidencePlaneFailedRunClassification {
   evidenceRefs: string[]
 }
 
-export interface ObservabilityEvidencePlaneSurfaceAgreement {
+interface ObservabilityEvidencePlaneSurfaceAgreement {
   httpObservability: {
     route: 'GET /observability'
     traceRootId: string

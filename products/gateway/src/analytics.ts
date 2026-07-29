@@ -54,7 +54,7 @@ export interface AnalyticsRequest {
 }
 
 /** Resolved window echoed back to callers. */
-export interface AnalyticsWindow {
+interface AnalyticsWindow {
   since: number
   until: number
   sinceIso: string
@@ -62,14 +62,14 @@ export interface AnalyticsWindow {
   days: number
 }
 
-export interface AnalyticsScope {
+interface AnalyticsScope {
   roadmapId?: string
   profile?: string
   agent?: string
   stage?: string
 }
 
-export interface AnalyticsUsageRow {
+interface AnalyticsUsageRow {
   key: string
   runCount: number
   costUsd: number
@@ -77,7 +77,7 @@ export interface AnalyticsUsageRow {
   runtimeMs: number
 }
 
-export interface AnalyticsBudgetTrendEntry {
+interface AnalyticsBudgetTrendEntry {
   name: string
   scope: 'global' | 'roadmap'
   roadmapId?: string
@@ -90,7 +90,7 @@ export interface AnalyticsBudgetTrendEntry {
   tokenLimit?: number
 }
 
-export interface AnalyticsBudgetTrend {
+interface AnalyticsBudgetTrend {
   enabled: boolean
   note: string
   entries: AnalyticsBudgetTrendEntry[]
@@ -125,7 +125,7 @@ export interface AnalyticsSummary {
  * provider-balance blip, and a resultless crash never inflate it — this is what
  * keeps the #205 alert from crying wolf on the dogfood pattern.
  */
-export interface ErrorClassSplit {
+interface ErrorClassSplit {
   errorClasses: RunErrorClassCounts
   operationalErrored: number
   externalErrored: number
@@ -136,7 +136,7 @@ export interface ErrorClassSplit {
   genuineFailureRate: number
 }
 
-export interface AnalyticsScorecardRow extends ErrorClassSplit {
+interface AnalyticsScorecardRow extends ErrorClassSplit {
   key: string
   totalRuns: number
   passed: number
@@ -157,7 +157,7 @@ export interface AnalyticsScorecardRow extends ErrorClassSplit {
   costPerCompletedTask?: number
 }
 
-export interface AnalyticsUnderperformer extends AnalyticsScorecardRow {
+interface AnalyticsUnderperformer extends AnalyticsScorecardRow {
   reason: string
 }
 
@@ -228,7 +228,7 @@ function completionRate(passed: number, terminal: number): number {
  * completion-health signal — free of Gateway session-recovery churn and
  * provider-balance blips.
  */
-export function deriveErrorClassSplit(errorClasses: RunErrorClassCounts, terminal: number): ErrorClassSplit {
+function deriveErrorClassSplit(errorClasses: RunErrorClassCounts, terminal: number): ErrorClassSplit {
   const operationalErrored = errorClasses.recovered_session + errorClasses.force_done + errorClasses.lease_expired
   const externalErrored = errorClasses.provider_balance + errorClasses.transport + errorClasses.provider_error
   const genuineErrored = errorClasses.genuine_failure

@@ -13,28 +13,12 @@ import { evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-
 import { getWorkflowToolBridgeEnvironment } from './workflow/workflow-tool-bridge.js'
 import { getKnowledgeToolBridgeEnvironment } from './knowledge/knowledge-tool-bridge.js'
 import { getSemanticUiBridgeEnvironment } from './semantic-ui-bridge.js'
+import {
+  resolveBundledMcpScriptPath,
+  resolveRuntimeResourcePath,
+} from './runtime-resource-paths.js'
 
-
-function resourcePath(...segments: string[]) {
-  if (getAppPathHost()?.isPackaged) {
-    return join(((process as { resourcesPath?: string }).resourcesPath ?? process.cwd()), ...segments)
-  }
-  const appPath = getAppPathHost()?.getAppPath?.() || process.cwd()
-  return resolve(appPath, '..', '..', ...segments)
-}
-
-function mcpPath(name: string) {
-  const downstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT?.trim()
-  if (downstreamRoot) {
-    const downstreamMcp = join(downstreamRoot, 'mcps', name, 'dist', 'index.js')
-    if (existsSync(downstreamMcp)) return downstreamMcp
-  }
-  return resourcePath('mcps', name, 'dist', 'index.js')
-}
-
-export function resolveBundledMcpScriptPath(name: string) {
-  return mcpPath(name)
-}
+export { resolveBundledMcpScriptPath } from './runtime-resource-paths.js'
 
 /**
  * Resolve a native CLI binary shipped with Open Cowork (e.g. time-keep).
@@ -63,8 +47,8 @@ export function resolveBundledNativeBinary(name: string): string | null {
   const candidates = [
     join(process.cwd(), 'third_party', bare, 'platforms', platformKey, exe),
     join(process.cwd(), 'bin', exe),
-    resourcePath('bin', exe),
-    resourcePath('third_party', bare, 'platforms', platformKey, exe),
+    resolveRuntimeResourcePath('bin', exe),
+    resolveRuntimeResourcePath('third_party', bare, 'platforms', platformKey, exe),
   ]
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate
@@ -296,7 +280,7 @@ function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): Res
   if (builtin.type === 'local') {
     const nodeCommand = builtin.command
       ? { command: resolveLocalMcpCommand(builtin.command), environment: {} }
-      : resolveBundledMcpNodeCommand(mcpPath(builtin.packageName || builtin.name))
+      : resolveBundledMcpNodeCommand(resolveBundledMcpScriptPath(builtin.packageName || builtin.name))
     const entry: ResolvedRuntimeMcpEntry = {
       type: 'local',
       command: nodeCommand.command,

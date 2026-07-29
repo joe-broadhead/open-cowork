@@ -1,28 +1,28 @@
 import { createHash } from 'node:crypto'
 
-export type EvidenceClaimState =
+type EvidenceClaimState =
   | 'local_beta_evidence_only'
   | 'local_beta_support_diagnosis_only'
   | 'local_admin_unredacted_only'
   | 'no_release_claim_expansion'
   | 'release_review_blocked'
 
-export type EvidenceClaimEffect =
+type EvidenceClaimEffect =
   | 'local_evidence_integrity_only'
   | 'local_ux_truth_only'
   | 'execution_reliability_only'
   | 'decision_record_only'
   | 'no_release_claim_expansion'
 
-export type EvidenceRedactionState =
+type EvidenceRedactionState =
   | 'redacted'
   | 'share_safe'
   | 'unredacted_local_admin_only'
   | 'blocked'
 
-export type EvidenceValidationState = 'pass' | 'warn' | 'fail'
-export type EvidenceResidualRiskState = 'open' | 'accepted' | 'blocked' | 'deferred' | 'waived'
-export type EvidenceProofState =
+type EvidenceValidationState = 'pass' | 'warn' | 'fail'
+type EvidenceResidualRiskState = 'open' | 'accepted' | 'blocked' | 'deferred' | 'waived'
+type EvidenceProofState =
   | 'proven_current'
   | 'supported_bounded'
   | 'ready_for_proof'
@@ -30,32 +30,32 @@ export type EvidenceProofState =
   | 'deferred'
   | 'waived'
   | 'fixture_only'
-export type EvidenceProofMode = 'live' | 'fixture' | 'dry_run' | 'local_state' | 'decision_record'
-export type EvidencePipelineV2Surface = 'evidence_export' | 'proof_run' | 'support_diagnosis' | 'incident_bundle' | 'release_decision'
-export type EvidencePipelineV2Status = 'pass' | 'warn' | 'fail'
-export type EvidencePipelineDecisionState = 'no_decision' | 'decision_supported' | 'decision_blocked' | 'decision_deferred'
-export type EvidencePipelineClaimChange = 'no_release_claim_expansion' | 'advance_requested' | 'advance_approved' | 'blocked' | 'deferred'
+type EvidenceProofMode = 'live' | 'fixture' | 'dry_run' | 'local_state' | 'decision_record'
+type EvidencePipelineV2Surface = 'evidence_export' | 'proof_run' | 'support_diagnosis' | 'incident_bundle' | 'release_decision'
+type EvidencePipelineV2Status = 'pass' | 'warn' | 'fail'
+type EvidencePipelineDecisionState = 'no_decision' | 'decision_supported' | 'decision_blocked' | 'decision_deferred'
+type EvidencePipelineClaimChange = 'no_release_claim_expansion' | 'advance_requested' | 'advance_approved' | 'blocked' | 'deferred'
 
-export interface EvidenceContractRef {
+interface EvidenceContractRef {
   ref: string
   kind: string
   redacted: boolean
 }
 
-export interface EvidenceContractFailure {
+interface EvidenceContractFailure {
   code: string
   summary: string
   safeNextAction: string
 }
 
-export interface EvidenceResidualRiskEntry {
+interface EvidenceResidualRiskEntry {
   id: string
   state: EvidenceResidualRiskState
   summary: string
   safeNextAction: string
 }
 
-export interface EvidenceProofContractInput {
+interface EvidenceProofContractInput {
   state: EvidenceProofState
   mode: EvidenceProofMode
   summary: string
@@ -63,7 +63,7 @@ export interface EvidenceProofContractInput {
   evidenceRefs?: string[]
 }
 
-export interface EvidenceProofContract {
+interface EvidenceProofContract {
   state: EvidenceProofState
   mode: EvidenceProofMode
   summary: string
@@ -133,7 +133,7 @@ export interface EvidenceContractStateSummary {
   unsupportedClaims: string[]
 }
 
-export interface EvidencePipelineV2DecisionInput {
+interface EvidencePipelineV2DecisionInput {
   state?: EvidencePipelineDecisionState
   claimChange?: EvidencePipelineClaimChange
   claimEffect?: EvidenceClaimEffect
@@ -142,7 +142,7 @@ export interface EvidencePipelineV2DecisionInput {
   evidenceRefs?: string[]
 }
 
-export interface EvidencePipelineV2Decision {
+interface EvidencePipelineV2Decision {
   state: EvidencePipelineDecisionState
   claimChange: EvidencePipelineClaimChange
   claimEffect: EvidenceClaimEffect
@@ -198,8 +198,8 @@ export interface EvidencePipelineV2Input {
   generatedAt?: string
 }
 
-export const EVIDENCE_CONTRACT_SAFE_NEXT_ACTION = 'Regenerate this evidence through a redacted Gateway evidence export or support diagnosis path before sharing or using it for a decision.'
-export const EVIDENCE_PROOF_SAFE_NEXT_ACTION = 'Attach bounded proof evidence or record the missing proof blocker before using this contract for a decision.'
+const EVIDENCE_CONTRACT_SAFE_NEXT_ACTION = 'Regenerate this evidence through a redacted Gateway evidence export or support diagnosis path before sharing or using it for a decision.'
+const EVIDENCE_PROOF_SAFE_NEXT_ACTION = 'Attach bounded proof evidence or record the missing proof blocker before using this contract for a decision.'
 
 const CLAIM_STATES: EvidenceClaimState[] = [
   'local_beta_evidence_only',
@@ -271,7 +271,7 @@ export function buildEvidenceContract(input: EvidenceContractInput): EvidenceCon
   return envelope
 }
 
-export function validateEvidenceContract(contract: EvidenceContractEnvelope, rawTextSamples: string[] = []): EvidenceContractEnvelope['validation'] {
+function validateEvidenceContract(contract: EvidenceContractEnvelope, rawTextSamples: string[] = []): EvidenceContractEnvelope['validation'] {
   const failures: EvidenceContractFailure[] = []
   const fail = (code: string, summary: string, safeNextAction = EVIDENCE_CONTRACT_SAFE_NEXT_ACTION) => failures.push({ code, summary, safeNextAction })
 
@@ -424,14 +424,14 @@ export function sanitizeEvidenceRefs(refs: Array<string | undefined | null>): st
     .filter((ref): ref is string => Boolean(ref))
 }
 
-export function sanitizeEvidenceRef(ref: string | undefined | null): string | undefined {
+function sanitizeEvidenceRef(ref: string | undefined | null): string | undefined {
   const text = String(ref || '').trim()
   if (!text) return undefined
   if (containsUnsafeEvidenceText(text) || !isWellFormedEvidenceRef(text)) return `<redacted:ref:${hashText(text)}>`
   return text.length > 180 ? `${text.slice(0, 177)}...` : text
 }
 
-export function normalizeEvidenceRefs(refs: string[]): EvidenceContractRef[] {
+function normalizeEvidenceRefs(refs: string[]): EvidenceContractRef[] {
   return refs.map(ref => {
     const safeRef = String(ref || '').trim()
     return {
@@ -442,7 +442,7 @@ export function normalizeEvidenceRefs(refs: string[]): EvidenceContractRef[] {
   })
 }
 
-export function isWellFormedEvidenceRef(ref: string): boolean {
+function isWellFormedEvidenceRef(ref: string): boolean {
   const text = String(ref || '').trim()
   if (!text) return false
   if (containsUnsafeEvidenceText(text)) return false

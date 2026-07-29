@@ -90,14 +90,14 @@ export function appendDelegationProgressRow(db: DatabaseSync, idempotencyKey: st
   db.prepare('UPDATE delegation_progress_receipts SET event_id = ? WHERE progress_key = ?').run(eventId, progressKey)
 }
 
-export function delegationContextsForTask(db: DatabaseSync, task: WorkTaskRecord): Array<Record<string, any>> {
+function delegationContextsForTask(db: DatabaseSync, task: WorkTaskRecord): Array<Record<string, any>> {
   return delegationContexts(db, delegationPayloadLike(task.id)).filter(context => {
     const taskIds = Array.isArray(context['taskIds']) ? context['taskIds'] : []
     return taskIds.includes(task.id)
   })
 }
 
-export function delegationContextsForRoadmap(db: DatabaseSync, roadmapId: string): Array<Record<string, any>> {
+function delegationContextsForRoadmap(db: DatabaseSync, roadmapId: string): Array<Record<string, any>> {
   return delegationContexts(db, delegationPayloadLike(roadmapId)).filter(context => context['roadmapId'] === roadmapId)
 }
 
@@ -109,11 +109,11 @@ export function delegationContextsForRoadmap(db: DatabaseSync, roadmapId: string
  * parsed payload, so the prefilter only needs to never under-match a payload
  * whose JSON contains the quoted id.
  */
-export function delegationPayloadLike(id: string): string {
+function delegationPayloadLike(id: string): string {
   return `%${JSON.stringify(String(id))}%`
 }
 
-export function delegationContexts(db: DatabaseSync, payloadLike: string): Array<Record<string, any>> {
+function delegationContexts(db: DatabaseSync, payloadLike: string): Array<Record<string, any>> {
   const rows = db.prepare("SELECT payload_json FROM events WHERE type = 'delegation.mapped' AND payload_json LIKE ? ORDER BY id ASC").all(payloadLike) as any[]
   if (!rows.length) return []
   const contexts: Array<Record<string, any>> = []
@@ -146,7 +146,7 @@ export function delegationContexts(db: DatabaseSync, payloadLike: string): Array
   })
 }
 
-export function reserveDelegationProgressReceipt(db: DatabaseSync, progressKey: string, idempotencyKey: string, progress: DelegatedWorkProgressKind, subjectId: string | undefined, now: string): boolean {
+function reserveDelegationProgressReceipt(db: DatabaseSync, progressKey: string, idempotencyKey: string, progress: DelegatedWorkProgressKind, subjectId: string | undefined, now: string): boolean {
   const result = db.prepare(`INSERT OR IGNORE INTO delegation_progress_receipts (
     progress_key, idempotency_key, progress, subject_id, event_id, created_at
   ) VALUES (?, ?, ?, ?, NULL, ?)`).run(progressKey, idempotencyKey, progress, subjectId || null, now) as any

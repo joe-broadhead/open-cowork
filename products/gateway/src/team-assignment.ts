@@ -21,11 +21,11 @@ import {
   type WorkEventRecord,
 } from './work-store.js'
 
-export type AssignmentGateType = 'review' | 'evidence' | 'eval' | 'human_approval' | 'completion_quality'
-export type AssignmentGateStatus = 'pending' | 'passed' | 'failed' | 'blocked' | 'approved' | 'rejected'
-export type AssignmentReceiptKind = 'gate_result' | 'review_outcome' | 'completion'
+type AssignmentGateType = 'review' | 'evidence' | 'eval' | 'human_approval' | 'completion_quality'
+type AssignmentGateStatus = 'pending' | 'passed' | 'failed' | 'blocked' | 'approved' | 'rejected'
+type AssignmentReceiptKind = 'gate_result' | 'review_outcome' | 'completion'
 
-export interface TeamAssignmentBudget {
+interface TeamAssignmentBudget {
   maxRuntimeMs?: number
   maxTokens?: number
   maxInputTokens?: number
@@ -34,14 +34,14 @@ export interface TeamAssignmentBudget {
   retryLimit?: number
 }
 
-export interface TeamAssignmentScope {
+interface TeamAssignmentScope {
   skills: string[]
   mcpServers: string[]
   tools: string[]
   permissions: Array<{ key: string; policy: 'allow' | 'ask' | 'deny' }>
 }
 
-export interface TeamAssignmentGateDefinition {
+interface TeamAssignmentGateDefinition {
   id: string
   type: AssignmentGateType
   requiredBefore: 'start' | 'dispatch' | 'complete'
@@ -49,7 +49,7 @@ export interface TeamAssignmentGateDefinition {
   metadata: Record<string, unknown>
 }
 
-export interface TeamAssignmentEvidenceRequirement {
+interface TeamAssignmentEvidenceRequirement {
   id: string
   type: string
   summary: string
@@ -307,13 +307,13 @@ export function recordTeamAssignmentReceipt(input: AssignmentReceiptInput, fileP
   return { ok: true, receipt }
 }
 
-export function listAssignmentReceipts(limit = 1000, filePath?: string): TeamAssignmentReceipt[] {
+function listAssignmentReceipts(limit = 1000, filePath?: string): TeamAssignmentReceipt[] {
   return listWorkEventsByType('team_assignment.created', limit, filePath)
     .map(receiptFromCreatedEvent)
     .filter(Boolean) as TeamAssignmentReceipt[]
 }
 
-export function listAssignmentEventReceipts(filePath?: string): AssignmentReceiptRecord[] {
+function listAssignmentEventReceipts(filePath?: string): AssignmentReceiptRecord[] {
   const receipts = [
     ...listAllWorkEventsByType('team_assignment.gate_result', filePath),
     ...listAllWorkEventsByType('team_assignment.review_outcome', filePath),

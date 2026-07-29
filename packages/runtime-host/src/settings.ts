@@ -138,12 +138,10 @@ function createDefaults(): AppSettings {
     // directory access and MCP tool namespaces (audit JOE-831).
     externalDirectoryPermission: 'ask',
     mcpPermission: 'ask',
-    requireApprovalBeforeSending: true,
     notificationVoiceReplies: true,
     notificationSmartSuggestions: true,
     notificationDailyDigest: false,
     notificationSounds: true,
-    privacyKeepConversationHistory: true,
     privacyShareAnonymizedUsage: false,
     runtimeConfigSource: 'app',
     runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
@@ -287,12 +285,10 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (externalDirectoryPermission) update.externalDirectoryPermission = externalDirectoryPermission
   const mcpPermission = normalizeRuntimePermissionPolicy(settings.mcpPermission, 'allow')
   if (mcpPermission) update.mcpPermission = mcpPermission
-  if (typeof settings.requireApprovalBeforeSending === 'boolean') update.requireApprovalBeforeSending = settings.requireApprovalBeforeSending
   if (typeof settings.notificationVoiceReplies === 'boolean') update.notificationVoiceReplies = settings.notificationVoiceReplies
   if (typeof settings.notificationSmartSuggestions === 'boolean') update.notificationSmartSuggestions = settings.notificationSmartSuggestions
   if (typeof settings.notificationDailyDigest === 'boolean') update.notificationDailyDigest = settings.notificationDailyDigest
   if (typeof settings.notificationSounds === 'boolean') update.notificationSounds = settings.notificationSounds
-  if (typeof settings.privacyKeepConversationHistory === 'boolean') update.privacyKeepConversationHistory = settings.privacyKeepConversationHistory
   if (typeof settings.privacyShareAnonymizedUsage === 'boolean') update.privacyShareAnonymizedUsage = settings.privacyShareAnonymizedUsage
   if (settings.runtimeToolingBridge !== undefined) {
     update.runtimeToolingBridge = normalizeRuntimeToolingBridgeConsent(settings.runtimeToolingBridge)
@@ -348,12 +344,10 @@ function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
     taskPermission,
     externalDirectoryPermission,
     mcpPermission,
-    requireApprovalBeforeSending: raw?.requireApprovalBeforeSending !== false,
     notificationVoiceReplies: raw?.notificationVoiceReplies !== false,
     notificationSmartSuggestions: raw?.notificationSmartSuggestions !== false,
     notificationDailyDigest: raw?.notificationDailyDigest === true,
     notificationSounds: raw?.notificationSounds !== false,
-    privacyKeepConversationHistory: raw?.privacyKeepConversationHistory !== false,
     privacyShareAnonymizedUsage: raw?.privacyShareAnonymizedUsage === true,
     runtimeConfigSource: normalizeRuntimeConfigSource(raw?.runtimeConfigSource) || defaults.runtimeConfigSource,
     // Legacy runtimeToolingBridgeEnabled values, including true, are

@@ -738,15 +738,15 @@ export interface FetchSourceInput {
   authorizePaths?: SourcePathAuthorizer;
 }
 
-export interface SourcePathAuthorizationTarget {
+interface SourcePathAuthorizationTarget {
   sourceId: string;
   manifestPath: string;
   rawPath?: string;
 }
 
-export type SourcePathAuthorizer = (target: SourcePathAuthorizationTarget) => void | Promise<void>;
+type SourcePathAuthorizer = (target: SourcePathAuthorizationTarget) => void | Promise<void>;
 
-export type CommitPathAuthorizer = (paths: string[]) => void | Promise<void>;
+type CommitPathAuthorizer = (paths: string[]) => void | Promise<void>;
 
 export interface FetchSourceResult extends IngestSourceResult {
   fetch: {

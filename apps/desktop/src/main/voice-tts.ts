@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { platform } from 'node:os'
 import { randomUUID } from 'node:crypto'
 
-export type VoiceTtsBackendId = 'fake' | 'system_os' | 'unavailable'
+type VoiceTtsBackendId = 'fake' | 'system_os' | 'unavailable'
 
 export type VoiceTtsVoice = {
   id: string
@@ -53,7 +53,7 @@ export type VoiceTtsEngine = {
 }
 
 export const VOICE_TTS_MAX_TEXT_CHARS = 8_000
-export const VOICE_TTS_DEFERRED_REASON =
+const VOICE_TTS_DEFERRED_REASON =
   'Local TTS not ready: OS speech tools unavailable on this platform.'
 
 function assertSpeakableText(text: string) {

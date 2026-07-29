@@ -18,11 +18,11 @@ import {
   type WorkTaskView,
 } from './work-store.js'
 
-export interface BriefingLinkMap {
+interface BriefingLinkMap {
   [key: string]: string
 }
 
-export interface BriefingItem {
+interface BriefingItem {
   id: string
   kind: string
   title: string

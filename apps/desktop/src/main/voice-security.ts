@@ -10,17 +10,6 @@
  * Greppable audit notes also live in docs/adr/private-realtime-voice.md §Security audit (JOE-1111).
  */
 
-/** Substrings that must never appear in host log lines for voice. */
-export const VOICE_LOG_FORBIDDEN_KEYS = [
-  'samples',
-  'pcm',
-  'float32',
-  'arraybuffer',
-  'waveform',
-  'rawAudio',
-  'audioBase64',
-] as const
-
 /**
  * Keys allowed on STT/TTS log metadata objects. Anything else is treated as a leak risk.
  * Intentionally excludes `text` / transcript bodies.

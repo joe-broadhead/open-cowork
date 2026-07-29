@@ -30,7 +30,7 @@ export function writeSseEvent(res: ServerResponse, event: {
   res.write(`data: ${JSON.stringify(publicEvent)}\n\n`)
 }
 
-export function publicSsePayload(type: string, payload: Record<string, unknown>) {
+function publicSsePayload(type: string, payload: Record<string, unknown>) {
   if (type !== 'artifact.created' && type !== 'artifact.updated') return payload
   const record = { ...payload }
   delete record.key
@@ -47,13 +47,19 @@ export function writeSnapshotRequiredEvent(
   res: ServerResponse,
   afterSequence: number,
   payload: Record<string, unknown>,
+  subject: {
+    sessionId?: string
+    entityType?: string
+    entityId?: string
+  } = {},
 ) {
   writeSseEvent(res, {
+    sessionId: subject.sessionId,
     sequence: afterSequence,
     type: 'snapshot.required',
     eventId: `snapshot-required:${afterSequence}`,
-    entityType: 'workspace',
-    entityId: 'workspace',
+    entityType: subject.entityType || 'workspace',
+    entityId: subject.entityId || 'workspace',
     operation: 'snapshot_required',
     projectionVersion: afterSequence,
     createdAt: new Date().toISOString(),

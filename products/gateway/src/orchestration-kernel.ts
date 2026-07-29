@@ -3,7 +3,7 @@ import type { CapacityAdmission } from './capacity.js'
 const TRANSIENT_RETRY_BASE_MS = 60_000
 const TRANSIENT_RETRY_MAX_MS = 30 * 60_000
 
-export type CapacityHoldEventType = 'capacity.admission.delayed' | 'capacity.admission.queued'
+type CapacityHoldEventType = 'capacity.admission.delayed' | 'capacity.admission.queued'
 
 export interface CapacityHoldTimelinePlan {
   taskPatch?: { note: string; earliestStartAt?: string }

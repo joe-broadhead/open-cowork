@@ -13,7 +13,7 @@ export type WindowZoomInput = {
   code: string
 }
 
-export const WINDOW_ZOOM_STEP = 0.1
+const WINDOW_ZOOM_STEP = 0.1
 
 export function clampWindowZoomFactor(value: unknown) {
   return normalizeWindowZoomFactor(value) ?? DEFAULT_WINDOW_ZOOM_FACTOR

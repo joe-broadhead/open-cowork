@@ -92,7 +92,7 @@ export function resolvedProjectContext(state: WorkState, binding: ProjectBinding
   return { status: 'resolved', reason, binding, roadmap, supervisor: defaultRoadmapSupervisor(state, roadmap.id) }
 }
 
-export function normalizeProjectBindingScope(value: unknown, provider?: string): ProjectBindingScope {
+function normalizeProjectBindingScope(value: unknown, provider?: string): ProjectBindingScope {
   if (value === undefined || value === null || value === '') {
     if (provider === 'telegram' || provider === 'whatsapp' || provider === 'discord') return provider
     return 'global'
@@ -101,7 +101,7 @@ export function normalizeProjectBindingScope(value: unknown, provider?: string):
   throw new Error(`project binding scope must be global, opencode, telegram, whatsapp, or discord: ${String(value)}`)
 }
 
-export function normalizeProjectBindingProvider(value: unknown, scope: ProjectBindingScope): string | undefined {
+function normalizeProjectBindingProvider(value: unknown, scope: ProjectBindingScope): string | undefined {
   if (scope === 'telegram' || scope === 'whatsapp' || scope === 'discord') {
     const provider = normalizeRequiredString(value || scope, 'provider', 40)
     if (provider !== scope) throw new Error(`provider must match project binding scope: ${scope}`)
@@ -111,26 +111,26 @@ export function normalizeProjectBindingProvider(value: unknown, scope: ProjectBi
   return undefined
 }
 
-export function normalizeProjectNotificationMode(value: unknown): ProjectNotificationMode {
+function normalizeProjectNotificationMode(value: unknown): ProjectNotificationMode {
   if (value === undefined || value === null || value === '') return 'immediate'
   if (value === 'immediate' || value === 'digest' || value === 'muted') return value
   throw new Error(`project notification mode must be immediate, digest, or muted: ${String(value)}`)
 }
 
 
-export function normalizeProjectBindingChatId(value: unknown, scope: ProjectBindingScope): string | undefined {
+function normalizeProjectBindingChatId(value: unknown, scope: ProjectBindingScope): string | undefined {
   if (scope === 'telegram' || scope === 'whatsapp' || scope === 'discord') return normalizeRequiredString(value, 'chatId', 200)
   if (value !== undefined && value !== null && value !== '') throw new Error('chatId is only valid for channel project bindings')
   return undefined
 }
 
-export function projectBindingSurfaceKey(input: Pick<ProjectBindingRecord, 'scope' | 'provider' | 'chatId' | 'threadId' | 'sessionId'>): string {
+function projectBindingSurfaceKey(input: Pick<ProjectBindingRecord, 'scope' | 'provider' | 'chatId' | 'threadId' | 'sessionId'>): string {
   if (input.scope === 'telegram' || input.scope === 'whatsapp' || input.scope === 'discord') return `${input.scope}:${input.provider || ''}:${input.chatId || ''}:${normalizeThreadId(input.threadId)}`
   if (input.scope === 'opencode') return `opencode:${input.sessionId}`
   return `global:${input.scope}`
 }
 
-export function sameProjectBindingTarget(binding: ProjectBindingRecord, input: Pick<ProjectBindingRecord, 'alias' | 'roadmapId' | 'sessionId' | 'scope' | 'provider' | 'chatId' | 'threadId'>): boolean {
+function sameProjectBindingTarget(binding: ProjectBindingRecord, input: Pick<ProjectBindingRecord, 'alias' | 'roadmapId' | 'sessionId' | 'scope' | 'provider' | 'chatId' | 'threadId'>): boolean {
   return binding.alias === input.alias && binding.roadmapId === input.roadmapId && binding.sessionId === input.sessionId && binding.scope === input.scope && (binding.provider || '') === (input.provider || '') && (binding.chatId || '') === (input.chatId || '') && (binding.threadId || '') === normalizeThreadId(input.threadId)
 }
 
@@ -195,11 +195,11 @@ export function compareRoadmapCompletionProposals(a: RoadmapCompletionProposalRe
   return a.id.localeCompare(b.id)
 }
 
-export function completionProposalStatusRank(status: RoadmapCompletionProposalStatus): number {
+function completionProposalStatusRank(status: RoadmapCompletionProposalStatus): number {
   return status === 'pending' ? 0 : status === 'approved' ? 1 : status === 'rejected' ? 2 : 3
 }
 
-export function scopeRank(scope: ProjectBindingScope): number {
+function scopeRank(scope: ProjectBindingScope): number {
   if (scope === 'telegram' || scope === 'whatsapp' || scope === 'discord') return 0
   if (scope === 'opencode') return 1
   return 2

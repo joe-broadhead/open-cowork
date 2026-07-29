@@ -17,7 +17,7 @@
  *     refactor can never silently drop a boundary.
  */
 
-export type ClaimState = 'allowed' | 'blocked' | 'deferred'
+type ClaimState = 'allowed' | 'blocked' | 'deferred'
 
 export interface ClaimRecord {
   /** Stable id; release tooling and docs reference these. */
@@ -63,7 +63,7 @@ export const OVERCLAIM_PATTERN =
   /\b(?:public beta approved|public-beta ready|public release-candidate approved|release-candidate ready|production ready|production certified|hosted\/team ready|SaaS ready|multi-tenant ready|universal-channel ready|provider parity certified|WhatsApp live parity certified|arbitrary scale|unattended operation supported|managed support ready|formal compliance certified)\b/i
 
 /** The current, deliberate decision for the product's release posture. */
-export const CURRENT_DECISION =
+const CURRENT_DECISION =
   'OpenCode Gateway is a public local beta for one trusted local operator. Broader claims stay blocked until their evidence exists.'
 
 export const CLAIM_BOUNDARY: readonly ClaimRecord[] = [

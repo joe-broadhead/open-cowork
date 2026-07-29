@@ -8,7 +8,7 @@ import type {
   SentMessage,
 } from '@open-cowork/gateway-channel'
 
-export type ChannelParseMode = 'plain' | 'markdown' | 'html'
+type ChannelParseMode = 'plain' | 'markdown' | 'html'
 
 export type NormalizedChannelCapabilities = {
   threads: boolean

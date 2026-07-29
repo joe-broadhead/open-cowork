@@ -208,7 +208,7 @@ export function graphIndexForQuery(
   };
 }
 
-export function graphDegree(edges: GraphEdgeRecord[]): Map<string, number> {
+function graphDegree(edges: GraphEdgeRecord[]): Map<string, number> {
   const degree = new Map<string, number>();
   for (const edge of edges) {
     degree.set(edge.from_id, (degree.get(edge.from_id) ?? 0) + 1);
@@ -217,7 +217,7 @@ export function graphDegree(edges: GraphEdgeRecord[]): Map<string, number> {
   return degree;
 }
 
-export function positionGraphNodes(nodes: GraphNodeRecord[], options: GraphVisualOptions): Array<GraphNodeRecord & { x: number; y: number }> {
+function positionGraphNodes(nodes: GraphNodeRecord[], options: GraphVisualOptions): Array<GraphNodeRecord & { x: number; y: number }> {
   if (nodes.length === 0) {
     return [];
   }
@@ -326,7 +326,7 @@ export function renderExternalLink(url: string): string {
   return `<a href="${escapeHtml(href)}">${escapeHtml(url)}</a>`;
 }
 
-export function safeExternalHref(url: string): string | undefined {
+function safeExternalHref(url: string): string | undefined {
   try {
     const parsed = new URL(url);
     return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : undefined;
@@ -364,7 +364,7 @@ export function webHrefForRecord(type: string, id: string): string | undefined {
   return undefined;
 }
 
-export function sourceIdFromFragmentId(id: string): string | undefined {
+function sourceIdFromFragmentId(id: string): string | undefined {
   const parts = id.split(":");
   if (parts[0] !== "fragment" || parts.length < 4) {
     return undefined;
@@ -381,11 +381,11 @@ export function pageLegacyRoute(id: string): string {
   return [pageType ?? "page", slug ?? id].join("/");
 }
 
-export function slugFromPageId(id: string): string {
+function slugFromPageId(id: string): string {
   return id.split(":").slice(2).join(":") || id;
 }
 
-export function pluralizePageType(pageType: string): string {
+function pluralizePageType(pageType: string): string {
   if (pageType === "entity") {
     return "entities";
   }

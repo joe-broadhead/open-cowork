@@ -1,12 +1,12 @@
 import type { GatewayConfig } from '../config.js'
 import type { WorkStoreMutationEntryPoint, recoverExpiredWorkLeases, recoverOrphanedWorkRuns } from '../work-store.js'
 
-export type StorageSourceKind = 'authoritative_sqlite' | 'transactional_sqlite' | 'derived_cache' | 'append_only_evidence' | 'operator_artifact'
+type StorageSourceKind = 'authoritative_sqlite' | 'transactional_sqlite' | 'derived_cache' | 'append_only_evidence' | 'operator_artifact'
 export type StorageDoctorSeverity = 'info' | 'warning' | 'critical'
 export type StorageDoctorStatus = 'ok' | 'degraded' | 'down'
-export type StorageBackendMode = 'local_sqlite'
+type StorageBackendMode = 'local_sqlite'
 
-export interface BackendActivationBlocker {
+interface BackendActivationBlocker {
   severity: StorageDoctorSeverity
   code: string
   summary: string
@@ -222,7 +222,7 @@ export type BackendConsistencyRuntimePosture =
   | 'supported_local_sqlite'
   | 'degraded_backend'
 
-export interface BackendConsistencyContract {
+interface BackendConsistencyContract {
   domain: string
   owner: string
   transactionOwner: string
@@ -427,7 +427,7 @@ export interface DurableStateIntegrityReport {
   unsupportedClaims: string[]
 }
 
-export type LocalDurableStateAdapterCapabilityId =
+type LocalDurableStateAdapterCapabilityId =
   | 'inspect_state'
   | 'verify_backup'
   | 'create_verified_backup'

@@ -18,7 +18,7 @@ import {
   resolveBundledOpencodeSdkPackageJsonPath,
   resolveBundledOpencodeWrapperPath,
 } from './runtime-opencode-cli.js'
-import { resolveBundledMcpScriptPath } from './runtime-mcp.js'
+import { resolveBundledMcpScriptPath } from './runtime-resource-paths.js'
 import { recordRuntimeComponentVerification } from './runtime-status.js'
 
 const RUNTIME_COMPONENT_MANIFEST_FORMAT = 'open-cowork-runtime-component-manifest-v1' satisfies RuntimeComponentVerificationReport['format']

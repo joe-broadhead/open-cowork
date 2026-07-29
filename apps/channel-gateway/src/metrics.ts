@@ -1,3 +1,5 @@
+import { ChannelStackTelemetry } from '@open-cowork/gateway-channel'
+
 // Prometheus histogram bucket boundaries (ms) for delivery handling latency. Tuned
 // for channel sends that normally complete in tens-to-hundreds of ms but can stall
 // into the tens of seconds under provider rate limiting.
@@ -43,6 +45,7 @@ export type GatewayMetrics = {
   deliveryDuplicatesSuppressed: number
   errors: number
   providerMetrics: Record<string, GatewayProviderMetrics>
+  channelTelemetry: ChannelStackTelemetry
 }
 
 export type GatewayProviderMetricState = 'configured' | 'starting' | 'healthy' | 'unhealthy' | 'failed' | 'stopped'
@@ -114,6 +117,7 @@ export function createGatewayMetrics(now = Date.now): GatewayMetrics {
     deliveryDuplicatesSuppressed: 0,
     errors: 0,
     providerMetrics: {},
+    channelTelemetry: new ChannelStackTelemetry('cloud-channel-gateway', ['monorepo-provider']),
   }
 }
 
@@ -124,6 +128,7 @@ export function ensureGatewayProviderMetrics(
   const existing = metrics.providerMetrics[provider.id]
   if (existing) {
     existing.kind = provider.kind
+    syncChannelBindings(metrics)
     return existing
   }
   const record: GatewayProviderMetrics = {
@@ -143,6 +148,7 @@ export function ensureGatewayProviderMetrics(
     deliveryLatency: createLatencyHistogram(),
   }
   metrics.providerMetrics[provider.id] = record
+  syncChannelBindings(metrics)
   return record
 }
 
@@ -152,6 +158,7 @@ export function setGatewayProviderState(
   state: GatewayProviderMetricState,
 ) {
   ensureGatewayProviderMetrics(metrics, provider).state = state
+  syncChannelBindings(metrics)
 }
 
 export function renderPrometheusMetrics(metrics: GatewayMetrics, providerCount: number, activeSessionStreams = 0, now = Date.now) {
@@ -230,8 +237,23 @@ export function renderPrometheusMetrics(metrics: GatewayMetrics, providerCount: 
     '# TYPE open_cowork_gateway_delivery_duplicates_suppressed_total counter',
     `open_cowork_gateway_delivery_duplicates_suppressed_total ${metrics.deliveryDuplicatesSuppressed}`,
     ...renderProviderMetrics(metrics),
+    metrics.channelTelemetry.renderPrometheus().trimEnd(),
     '',
   ].join('\n')
+}
+
+function syncChannelBindings(metrics: GatewayMetrics) {
+  const counts = new Map<string, { configured: number, active: number }>()
+  for (const provider of Object.values(metrics.providerMetrics)) {
+    const count = counts.get(provider.kind) || { configured: 0, active: 0 }
+    count.configured += 1
+    if (provider.state === 'healthy') count.active += 1
+    counts.set(provider.kind, count)
+  }
+  for (const [kind, count] of counts) {
+    metrics.channelTelemetry.setBindingCount('monorepo-provider', kind, 'configured', count.configured)
+    metrics.channelTelemetry.setBindingCount('monorepo-provider', kind, 'active', count.active)
+  }
 }
 
 function renderProviderMetrics(metrics: GatewayMetrics) {

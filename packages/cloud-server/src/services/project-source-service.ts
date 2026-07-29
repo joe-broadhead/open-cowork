@@ -5,8 +5,13 @@ import {
   type CloudProjectSourceInput,
   type CloudProjectSourcePolicyVerdict,
   normalizeCloudProjectSource,
+  summarizeCloudProjectSource,
 } from '@open-cowork/shared'
-import type { ControlPlaneStore } from '../control-plane-store.ts'
+import type {
+  ControlPlaneStore,
+  SessionProjectionRecord,
+  SessionRecord,
+} from '../control-plane-store.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
 import {
   evaluateCloudProjectSourcePolicy,
@@ -54,6 +59,17 @@ export class CloudProjectSourceService {
   async getSessionProjectSource(tenantId: string, sessionId: string): Promise<CloudProjectSource | null> {
     const projection = await this.store.getSessionProjection(tenantId, sessionId)
     return normalizeCloudProjectSource(projection?.view?.projectSource)
+  }
+
+  withProjectionProjectSource(
+    session: SessionRecord,
+    projection: SessionProjectionRecord | null,
+  ): SessionRecord {
+    const source = normalizeCloudProjectSource(projection?.view?.projectSource)
+    return {
+      ...session,
+      projectSource: summarizeCloudProjectSource(source),
+    }
   }
 
   normalizeAndValidateProjectSource(

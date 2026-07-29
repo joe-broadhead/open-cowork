@@ -525,7 +525,11 @@ function runControlPlaneDomainContracts(
       assert.equal((await store.listSessionEvents(tenantId, sessionId, 0, 2)).length, 2)
       assert.equal((await store.listSessionEvents(tenantId, sessionId, 0)).length, 3)
       // Aggregate stats (used by projection-status) match the event log without loading it.
-      assert.deepEqual(await store.getSessionEventStats(tenantId, sessionId), { count: 3, latestSequence: 3 })
+      assert.deepEqual(await store.getSessionEventStats(tenantId, sessionId), {
+        count: 3,
+        earliestSequence: 1,
+        latestSequence: 3,
+      })
 
       await store.upsertCloudArtifactIndex({
         tenantId,

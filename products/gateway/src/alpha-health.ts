@@ -4,9 +4,9 @@ import type { ServiceHealthReport } from './service-health.js'
 import type { StorageBackupSummary, StorageRecoveryDrillSummary } from './storage.js'
 
 export type AlphaHealthIndicatorStatus = 'ok' | 'warning' | 'blocked' | 'unknown'
-export type AlphaHealthStatus = 'healthy' | 'attention' | 'blocked' | 'not_proven'
+type AlphaHealthStatus = 'healthy' | 'attention' | 'blocked' | 'not_proven'
 
-export interface AlphaHealthIndicator {
+interface AlphaHealthIndicator {
   id: 'service_health' | 'scheduler_recovery' | 'channel_delivery' | 'open_gates' | 'eval_scorecards' | 'backup_restore' | 'alpha_blockers'
   label: string
   status: AlphaHealthIndicatorStatus

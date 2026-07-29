@@ -1,7 +1,7 @@
-// Import-cycle gate for the renderer (and the shared UI kit).
+// Import-cycle gate for first-party application and runtime packages.
 //
-// Statically scans first-party *relative* imports inside the configured roots
-// and fails if any circular import chain exists. Circular module graphs are a
+// Statically scans first-party relative and same-package imports inside the
+// configured roots and fails if any circular import chain exists. Circular module graphs are a
 // top source of fragile initialization order, hard-to-tree-shake bundles, and
 // "cannot access X before initialization" runtime crashes, so we keep the count
 // pinned at zero.
@@ -11,9 +11,9 @@
 //   - Only value imports are considered; `import type` / `export type` are
 //     erased by the compiler and cannot form a runtime cycle, so they are
 //     ignored to avoid false positives.
-//   - Cross-package imports (`@open-cowork/*`, bare npm specifiers) are ignored;
-//     this gate is about *intra-package* cycles. Package layering is enforced
-//     separately by the cloud/gateway boundary tests.
+//   - Cross-package imports (`@open-cowork/*`, bare npm specifiers) are ignored,
+//     but imports through a package's own name are resolved back into its source
+//     graph. Package layering is enforced separately by boundary tests.
 //   - To widen coverage, add a directory to SCAN_ROOTS once it is already clean.
 //
 // No external dependency: this is a small regex-based module resolver. It is
@@ -31,18 +31,8 @@ const root = process.cwd()
 export const SCAN_ROOTS = [
   'packages/app/src',
   'packages/ui/src',
-  // post-#959: widen ratchet toward runtime packages once proven cycle-free
   'packages/shared/src',
-  // post-#961 hardening: packages/runtime-host/src intentionally NOT added —
-  // known value-import cycle (not cycle-free at widen time):
-  //   runtime.ts
-  //     -> runtime-config-builder.ts
-  //       -> custom-agents-utils.ts
-  //         -> runtime-tools.ts
-  //           -> runtime.ts
-  // Break that cycle (e.g. extract pure tool-id helpers from runtime-tools, or
-  // move getClientForDirectory consumers off the runtime composition root)
-  // before ratcheting SCAN_ROOTS to include runtime-host.
+  'packages/runtime-host/src',
 ]
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx']
@@ -74,7 +64,7 @@ function collectSourceFiles(dir, out) {
 const FROM_PATTERN = /(?:import|export)\s+(type\s+)?[^;'"]*?from\s*['"]([^'"]+)['"]/g
 const DYNAMIC_IMPORT_PATTERN = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g
 
-function extractRelativeSpecifiers(source) {
+function extractValueSpecifiers(source) {
   const specifiers = []
   for (const match of source.matchAll(FROM_PATTERN)) {
     if (match[1]) continue // `import type` / `export type`: erased, no runtime edge
@@ -83,7 +73,7 @@ function extractRelativeSpecifiers(source) {
   for (const match of source.matchAll(DYNAMIC_IMPORT_PATTERN)) {
     specifiers.push(match[1])
   }
-  return specifiers.filter((spec) => spec.startsWith('.'))
+  return specifiers
 }
 
 function fileExists(path) {
@@ -125,6 +115,32 @@ function resolveSpecifier(fromFile, spec) {
   return null
 }
 
+function scanPackages() {
+  return SCAN_ROOTS.map((sourceRoot) => {
+    const absoluteSourceRoot = join(root, sourceRoot)
+    const packageRoot = dirname(absoluteSourceRoot)
+    const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+    return {
+      name: manifest.name,
+      sourceRoot: absoluteSourceRoot,
+    }
+  })
+}
+
+function sourceOwner(file, packages) {
+  return packages.find((entry) => {
+    const path = relative(entry.sourceRoot, file)
+    return path !== '..' && !path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)
+  })
+}
+
+function resolveGraphSpecifier(fromFile, spec, owner) {
+  if (spec.startsWith('.')) return resolveSpecifier(fromFile, spec)
+  if (!owner || (spec !== owner.name && !spec.startsWith(`${owner.name}/`))) return null
+  const subpath = spec === owner.name ? 'index' : spec.slice(owner.name.length + 1)
+  return resolveSpecifier(join(owner.sourceRoot, 'index.ts'), `./${subpath}`)
+}
+
 export function buildGraph() {
   const files = []
   for (const scanRoot of SCAN_ROOTS) {
@@ -132,12 +148,14 @@ export function buildGraph() {
     if (dirExists(absRoot)) collectSourceFiles(absRoot, files)
   }
   const inGraph = new Set(files)
+  const packages = scanPackages()
   const graph = new Map()
   for (const file of files) {
     const source = readFileSync(file, 'utf8')
     const edges = new Set()
-    for (const spec of extractRelativeSpecifiers(source)) {
-      const target = resolveSpecifier(file, spec)
+    const owner = sourceOwner(file, packages)
+    for (const spec of extractValueSpecifiers(source)) {
+      const target = resolveGraphSpecifier(file, spec, owner)
       if (target && inGraph.has(target) && target !== file) edges.add(target)
     }
     graph.set(file, edges)

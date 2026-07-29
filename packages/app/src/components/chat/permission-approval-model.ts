@@ -390,7 +390,7 @@ export type RunawayDetectionOptions = {
   windowMs?: number
 }
 
-export type RunawayCluster = {
+type RunawayCluster = {
   signature: string
   count: number
   ids: string[]

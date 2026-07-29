@@ -151,7 +151,7 @@ const LIVE_RECENT_TERMINAL_RUNS = 500
  */
 type ReadWorkStateOptions = { runsScope?: 'all' | 'live' }
 
-export function readWorkState(db: DatabaseSync, options: ReadWorkStateOptions = {}): WorkState {
+function readWorkState(db: DatabaseSync, options: ReadWorkStateOptions = {}): WorkState {
   const savedAt = String(getRow(db, "SELECT value FROM meta WHERE key = 'savedAt'")?.['value'] || new Date().toISOString())
   const roadmaps = queryRows(db, 'SELECT * FROM roadmaps ORDER BY created_at ASC').map(rowToRoadmap).filter(Boolean) as RoadmapRecord[]
   const supervisors = queryRows(db, 'SELECT * FROM roadmap_supervisors ORDER BY roadmap_id ASC, created_at ASC').map(rowToRoadmapSupervisor).filter(Boolean) as RoadmapSupervisorRecord[]
@@ -233,7 +233,7 @@ export function findRunRowForEnvironmentOrId(db: DatabaseSync, id: string): RunR
   return undefined
 }
 
-export function writeWorkState(db: DatabaseSync, state: WorkState): void {
+function writeWorkState(db: DatabaseSync, state: WorkState): void {
   db.exec('BEGIN IMMEDIATE')
   try {
     writeWorkStateRows(db, state)

@@ -1,7 +1,7 @@
-export type WorkStoreBackendMode = 'local_sqlite'
-export type WorkStoreReleaseStatus = 'supported_public_local_beta'
+type WorkStoreBackendMode = 'local_sqlite'
+type WorkStoreReleaseStatus = 'supported_public_local_beta'
 
-export type WorkStoreRepositoryDomainId =
+type WorkStoreRepositoryDomainId =
   | 'schema_manifest'
   | 'work_graph'
   | 'runs_leases'
@@ -13,7 +13,7 @@ export type WorkStoreRepositoryDomainId =
   | 'alerts_events'
   | 'audit_ledger'
 
-export type WorkStoreTransactionOwner =
+type WorkStoreTransactionOwner =
   | 'schema_initialization'
   | 'mutateWorkState'
   | 'domain_transaction'
@@ -26,7 +26,7 @@ export type WorkStoreMutationEntryPoint =
   | 'domain_transaction'
   | 'single_table_append'
 
-export interface WorkStoreMutationCompatibilityContract {
+interface WorkStoreMutationCompatibilityContract {
   entryPoint: WorkStoreMutationEntryPoint
   oldRecordFixture: string
   backupCompatibility: 'gateway_db_required'
@@ -75,7 +75,7 @@ function mutationContract(entryPoint: WorkStoreMutationEntryPoint, oldRecordFixt
   }
 }
 
-export const WORK_STORE_REPOSITORY_DOMAINS: readonly WorkStoreRepositoryDomain[] = [
+const WORK_STORE_REPOSITORY_DOMAINS: readonly WorkStoreRepositoryDomain[] = [
   {
     id: 'schema_manifest',
     label: 'Schema manifest and metadata',

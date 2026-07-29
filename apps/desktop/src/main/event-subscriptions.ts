@@ -1,7 +1,7 @@
 import type { BrowserWindow } from 'electron'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 
-export type RuntimeEventSubscriptionFailureStrategy = 'restart-runtime' | 'retry-subscription'
+type RuntimeEventSubscriptionFailureStrategy = 'restart-runtime' | 'retry-subscription'
 
 type SubscribeFn = (
   client: OpencodeClient,

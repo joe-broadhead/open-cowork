@@ -111,7 +111,7 @@ function legacyWorkflowSecretBatchFingerprint(
     .join('\n')
 }
 
-export type WorkflowSessionRecordInput = {
+type WorkflowSessionRecordInput = {
   tenantId: string
   userId: string
   orgId?: string | null

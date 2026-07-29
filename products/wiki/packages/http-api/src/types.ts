@@ -15,7 +15,7 @@ export interface StartedHttpApi {
   close(options?: HttpApiCloseOptions): Promise<void>;
 }
 
-export interface HttpApiCloseOptions {
+interface HttpApiCloseOptions {
   timeoutMs?: number;
 }
 

@@ -18,8 +18,8 @@ import {
   type RateLimitDecision,
 } from "./operational.ts";
 
-export const MCP_HTTP_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-export const MCP_HTTP_STREAM_RETRY_MS = 15_000;
+const MCP_HTTP_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const MCP_HTTP_STREAM_RETRY_MS = 15_000;
 
 export interface McpHttpSession {
   id: string;
@@ -38,17 +38,17 @@ export interface McpSessionStore {
   expire(root: string): Promise<void>;
 }
 
-export interface McpHttpRateLimiter {
+interface McpHttpRateLimiter {
   check(root: string, route: OperationalRoute, policy: HttpPolicyOptions, context: HttpRequestContext): Promise<RateLimitDecision>;
   recordRejection(route: OperationalRoute, decision: RateLimitDecision): void;
 }
 
-export interface McpHttpMetricsSink {
+interface McpHttpMetricsSink {
   recordRequest(route: OperationalRoute, status: number, durationMs: number): void;
   recordTool(tool: string, mode: McpToolMode, status: string, durationMs: number): void;
 }
 
-export interface McpHttpStreamRuntime {
+interface McpHttpStreamRuntime {
   retryMs: number;
   heartbeat(now: Date): string;
 }
@@ -102,7 +102,7 @@ export function createMemoryMcpSessionStore(input: { protocolVersion: string; no
   };
 }
 
-export function createPostgresMcpSessionStore(input: { protocolVersion: string; now?: () => number } = { protocolVersion: MCP_PROTOCOL_VERSION }): McpSessionStore {
+function createPostgresMcpSessionStore(input: { protocolVersion: string; now?: () => number } = { protocolVersion: MCP_PROTOCOL_VERSION }): McpSessionStore {
   const now = input.now ?? Date.now;
   return {
     async create(root, toolMode) {

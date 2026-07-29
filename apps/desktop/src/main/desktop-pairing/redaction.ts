@@ -32,7 +32,7 @@ function truncateString(value: string) {
   return `${Buffer.from(value).subarray(0, MAX_STRING_BYTES).toString('utf8')}...[truncated]`
 }
 
-export function redactDesktopPairingText(value: string, policy: DesktopPairingPolicy) {
+function redactDesktopPairingText(value: string, policy: DesktopPairingPolicy) {
   let next = truncateString(value)
   if (!policy.exposeLocalPaths) {
     next = next
@@ -43,7 +43,7 @@ export function redactDesktopPairingText(value: string, policy: DesktopPairingPo
   return next
 }
 
-export function redactDesktopPairingValue(value: unknown, policy: DesktopPairingPolicy, depth = 0): unknown {
+function redactDesktopPairingValue(value: unknown, policy: DesktopPairingPolicy, depth = 0): unknown {
   if (value === null || value === undefined) return value
   if (typeof value === 'string') return redactDesktopPairingText(value, policy)
   if (typeof value === 'number' || typeof value === 'boolean') return value

@@ -171,7 +171,7 @@ export function projectAgentTeam(name: string, team: any, config = getConfig(), 
   return { ...team, promotion: compactPromotionState('team', name), inspection: inspectTeamAccess(name, team, { config, availability }) }
 }
 
-export function compactPromotionState(subjectKind: PromotionSubjectKind, subjectName: string): any {
+function compactPromotionState(subjectKind: PromotionSubjectKind, subjectName: string): any {
   const promotion = getPromotionState(subjectKind, subjectName)
   return {
     state: promotion.state,
@@ -235,7 +235,7 @@ export function validateProfileForRoute(name: string, body: any): any {
   }
 }
 
-export function validateAgentTeamDispatch(name: string, agentTeam: AgentTeamConfig, taskId: string, stage: string): ReturnType<typeof resolveTaskStageAgent> {
+function validateAgentTeamDispatch(name: string, agentTeam: AgentTeamConfig, taskId: string, stage: string): ReturnType<typeof resolveTaskStageAgent> {
   const state = loadWorkState()
   const task = state.tasks.find(row => row.id === taskId)
   if (!task) throw new Error(`task not found: ${taskId}`)
@@ -283,7 +283,7 @@ export function agentTeamGateInput(operation: string, name: string, req: any, de
   }
 }
 
-export function agentTeamScopeKey(operation: string, name: string): string {
+function agentTeamScopeKey(operation: string, name: string): string {
   return `agent_team:${operation}:${name}`
 }
 
@@ -304,7 +304,7 @@ export function gateApproverIdentity(req: any, approverSurface: string): { actor
   return { actor: 'http', source: 'http' }
 }
 
-export function bearerFingerprint(header: unknown): string | undefined {
+function bearerFingerprint(header: unknown): string | undefined {
   const value = Array.isArray(header) ? header[0] : header
   const match = String(value || '').match(/^Bearer\s+(.+)$/i)
   const token = match?.[1]?.trim()
@@ -367,7 +367,7 @@ export function requireApprovedBlueprintGate(req: any, preview: ReturnType<typeo
   return undefined
 }
 
-export function blueprintScopeKey(name: string, version: string, revision: string): string {
+function blueprintScopeKey(name: string, version: string, revision: string): string {
   return `blueprint:apply:${name}:${version}:${revision}`
 }
 

@@ -102,13 +102,13 @@ export interface MissionDataOptions {
   channelSyncStateFile?: string
 }
 
-export interface MissionDataSourceDiagnostic {
+interface MissionDataSourceDiagnostic {
   source: string
   available: boolean
   summary: string
 }
 
-export interface MissionDataSourceAvailability {
+interface MissionDataSourceAvailability {
   tasks: boolean
   roadmaps: boolean
   projectBindings: boolean
@@ -131,7 +131,7 @@ export interface MissionDataSourceAvailability {
  * is dropped rather than silently rendered blank — this is the guard against an
  * upstream field rename quietly emptying the dashboard.
  */
-export const MissionSessionSummarySchema = z.object({
+const MissionSessionSummarySchema = z.object({
   id: z.string(),
   title: z.string().optional(),
   cost: z.number().optional(),
@@ -145,7 +145,7 @@ export const MissionSessionSummarySchema = z.object({
 
 export type MissionSessionSummary = z.infer<typeof MissionSessionSummarySchema>
 
-export interface MissionGatewaySessionSummary {
+interface MissionGatewaySessionSummary {
   id: string
   title: string
   status: 'running' | 'done'
@@ -896,7 +896,7 @@ function dateInput(date: Date): string {
 // ---------------------------------------------------------------------------
 
 /** Re-exported record contracts used by dashboard drill-down renderers. */
-export type { RunRecord, WorkDependencyRecord, RoadmapRecord, WorkTaskRecord, WorkTaskView, HumanGateRecord } from './work-store.js'
+export type { RunRecord, WorkDependencyRecord } from './work-store.js'
 
 export interface RoadmapDetailData {
   roadmap?: RoadmapRecord

@@ -1,6 +1,6 @@
 import { getConfig, type AgentProfile, type GatewayConfig } from './config.js'
 
-export interface ProfileExpectation {
+interface ProfileExpectation {
   profile: string
   agent: string
   model: { providerID: string; modelID: string; variant?: string }
@@ -13,7 +13,7 @@ export interface ProfileDrift {
   issues: string[]
 }
 
-export const GATEWAY_PROFILE_EXPECTATIONS: ProfileExpectation[] = [
+const GATEWAY_PROFILE_EXPECTATIONS: ProfileExpectation[] = [
   { profile: 'reviewer', agent: 'gateway-reviewer', model: { providerID: 'openai', modelID: 'gpt-5.5', variant: 'xhigh' }, requiredSkills: ['gateway-stage', 'gateway-review-gate'] },
   { profile: 'verifier', agent: 'gateway-verifier', model: { providerID: 'openai', modelID: 'gpt-5.5', variant: 'xhigh' }, requiredSkills: ['gateway-stage', 'gateway-review-gate'] },
   { profile: 'supervisor', agent: 'gateway-supervisor', model: { providerID: 'openai', modelID: 'gpt-5.5', variant: 'xhigh' }, requiredSkills: ['gateway-supervisor'] },

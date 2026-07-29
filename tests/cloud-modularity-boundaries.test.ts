@@ -6,7 +6,6 @@ import { join, relative } from 'node:path'
 const root = process.cwd()
 const cloudRoot = join(root, 'packages/cloud-server/src')
 const cloudClientRoot = join(root, 'packages/cloud-client/src')
-const architectureDoc = readFileSync(join(root, 'docs/architecture.md'), 'utf8')
 const downstreamDoc = readFileSync(join(root, 'docs/downstream.md'), 'utf8')
 const dockerIgnore = readFileSync(join(root, '.dockerignore'), 'utf8')
 const postgresSchema = readFileSync(join(cloudRoot, 'postgres-schema.ts'), 'utf8')
@@ -18,20 +17,6 @@ const postgresWorkflowsDomain = readFileSync(join(cloudRoot, 'postgres-store-dom
 const postgresWorkflowDefinitionsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/workflow-definitions.ts'), 'utf8')
 const postgresSessionsDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/sessions.ts'), 'utf8')
 const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
-
-const lineThreshold = 2_000
-// Budgets are ratcheted to just above the current size so a decomposed file cannot
-// silently re-grow (previously they sat 600-2,000+ lines above actuals). Lower these
-// (never raise) whenever a file shrinks further.
-const documentedLargeFileBudgets = new Map([
-  ['packages/cloud-server/src/postgres-control-plane-store.ts', 2_000],
-  ['packages/cloud-server/src/http-server.ts', 1_950],
-  ['packages/cloud-server/src/in-memory-control-plane-store.ts', 1_620],
-  // session-service is now an orchestration facade plus an explicit domains handle over the
-  // cohesive sub-services it composes (byok/member/role/policy/sso/scim/channel/…). Route-facing
-  // CRUD/list operations must use service.domains.* instead of re-growing facade forwards.
-  ['packages/cloud-server/src/session-service.ts', 1_205],
-])
 
 test('cloud core has enforceable domain module boundaries', () => {
   const expectedStoreDomains = [
@@ -130,46 +115,6 @@ test('cloud client exposes a thin public barrel and domain barrels', () => {
   ]
   for (const file of expectedClientDomains) {
     assert.equal(existsSync(join(cloudClientRoot, 'domains', file)), true, `${file} cloud-client domain barrel is missing`)
-  }
-})
-
-test('large cloud source files are documented exceptions', () => {
-  for (const [relativePath, budget] of documentedLargeFileBudgets) {
-    const file = join(root, relativePath)
-    const lineCount = readFileSync(file, 'utf8').split('\n').length
-    assert.ok(
-      lineCount <= budget,
-      `${relativePath} has ${lineCount} lines and exceeds its modularity budget of ${budget}`,
-    )
-    assert.match(
-      architectureDoc,
-      new RegExp(relativePath.split('/').at(-1)!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
-      `${relativePath} has a modularity budget but is not documented in docs/architecture.md`,
-    )
-  }
-
-  const sourceRoots = [cloudRoot, cloudClientRoot]
-  for (const sourceRoot of sourceRoots) {
-    for (const file of sourceFiles(sourceRoot)) {
-      const relativePath = relative(root, file)
-      const lineCount = readFileSync(file, 'utf8').split('\n').length
-      if (lineCount <= lineThreshold) continue
-      const budget = documentedLargeFileBudgets.get(relativePath)
-      assert.equal(
-        typeof budget,
-        'number',
-        `${relativePath} has ${lineCount} lines and needs a documented modularity budget or further splitting`,
-      )
-      assert.ok(
-        lineCount <= budget!,
-        `${relativePath} has ${lineCount} lines and exceeds its modularity budget of ${budget}`,
-      )
-      assert.match(
-        architectureDoc,
-        new RegExp(relativePath.split('/').at(-1)!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
-        `${relativePath} is a large-file exception but is not documented in docs/architecture.md`,
-      )
-    }
   }
 })
 

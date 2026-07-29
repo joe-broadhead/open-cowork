@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-export type BrandMarkSize = 'sm' | 'md' | 'lg'
+type BrandMarkSize = 'sm' | 'md' | 'lg'
 
 interface BrandMarkProps {
   /** Brand display name. Rendered beside/under the glyph when `showName` is set. */

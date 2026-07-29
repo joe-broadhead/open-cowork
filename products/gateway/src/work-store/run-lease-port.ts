@@ -23,14 +23,14 @@ import {
   type WorkTaskRunStartResult,
 } from '../work-store.js'
 
-export type WorkStoreRunLeaseOperationGroup =
+type WorkStoreRunLeaseOperationGroup =
   | 'reserve_dispatch_start'
   | 'start_run'
   | 'renew_run_lease'
   | 'recover_expired_dispatch_starts'
   | 'recover_expired_or_orphaned_runs'
 
-export interface WorkStoreRunLeasePortDomain {
+interface WorkStoreRunLeasePortDomain {
   id: 'runs_leases'
   backendMode: 'local_sqlite'
   releaseStatus: 'supported_public_local_beta'
@@ -56,7 +56,7 @@ export interface WorkStoreRunLeasePort {
   summarizeLeases(state: WorkState, now?: number): WorkLeaseSummary
 }
 
-export const WORK_STORE_RUN_LEASE_PORT_DOMAIN: WorkStoreRunLeasePortDomain = {
+const WORK_STORE_RUN_LEASE_PORT_DOMAIN: WorkStoreRunLeasePortDomain = {
   id: 'runs_leases',
   backendMode: 'local_sqlite',
   releaseStatus: 'supported_public_local_beta',

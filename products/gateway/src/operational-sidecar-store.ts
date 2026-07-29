@@ -18,10 +18,10 @@ import { DatabaseSync } from 'node:sqlite'
 import { getConfigDir } from './config.js'
 import { recoverInterruptedStorageRestore, restrictSqliteDbPermissions } from './work-store.js'
 
-export const OPERATIONAL_SIDECAR_FILE = 'operational-sidecar.sqlite'
-export const LEGACY_EVENTS_JSON = 'events.json'
-export const LEGACY_SESSIONS_JSON = 'sessions.json'
-export const LEGACY_TELEGRAM_POLLING_JSON = 'telegram-polling.json'
+const OPERATIONAL_SIDECAR_FILE = 'operational-sidecar.sqlite'
+const LEGACY_EVENTS_JSON = 'events.json'
+const LEGACY_SESSIONS_JSON = 'sessions.json'
+const LEGACY_TELEGRAM_POLLING_JSON = 'telegram-polling.json'
 
 const MAX_OPERATIONAL_EVENTS = 100
 const MAX_WORKER_SESSIONS = 200

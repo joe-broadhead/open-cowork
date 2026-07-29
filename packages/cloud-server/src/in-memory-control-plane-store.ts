@@ -1276,7 +1276,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.sessionsDomain.listSessionEventsForStream(tenantId, sessionId, afterSequence, limit)
   }
 
-  getSessionEventStats(tenantId: string, sessionId: string): { count: number; latestSequence: number } {
+  getSessionEventStats(tenantId: string, sessionId: string) {
     return this.sessionsDomain.getSessionEventStats(tenantId, sessionId)
   }
 

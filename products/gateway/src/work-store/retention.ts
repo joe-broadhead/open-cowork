@@ -11,14 +11,14 @@ import {
 import { openWorkDb, workStatePath } from './db.js'
 import { assertNoStorageOperationInProgress } from './storage-lock.js'
 
-export interface AuditLedgerRetentionResult {
+interface AuditLedgerRetentionResult {
   pruned: number
   retained: number
   anchorId?: number
   anchorHash?: string
 }
 
-export interface RowRetentionResult {
+interface RowRetentionResult {
   pruned: number
 }
 

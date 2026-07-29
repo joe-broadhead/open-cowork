@@ -6,5 +6,4 @@ export {
   normalizeQuestionAnswers,
   normalizeQuestionRequestId,
   normalizeSingleQuestionAnswer,
-  type NormalizedQuestionAnswer,
 } from '@open-cowork/runtime-host/question-normalization'

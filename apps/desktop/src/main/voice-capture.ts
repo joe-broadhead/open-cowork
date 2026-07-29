@@ -73,7 +73,7 @@ export class FakeVoiceCapture implements VoiceCapture {
   }
 }
 
-export class UnavailableVoiceCapture implements VoiceCapture {
+class UnavailableVoiceCapture implements VoiceCapture {
   readonly backend = 'unavailable' as const
   readonly detail: string
   constructor(detail: string) {
@@ -89,7 +89,7 @@ export class UnavailableVoiceCapture implements VoiceCapture {
  * ffmpeg-based capture: 16 kHz mono f32le on stdout.
  * macOS: avfoundation; Linux: pulse/alsa; Windows: dshow (best-effort).
  */
-export class FfmpegVoiceCapture implements VoiceCapture {
+class FfmpegVoiceCapture implements VoiceCapture {
   readonly backend = 'ffmpeg' as const
   readonly detail: string
   private child: ChildProcess | null = null

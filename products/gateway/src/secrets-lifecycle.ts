@@ -4,9 +4,9 @@ import type { GatewayConfig } from './config.js'
 
 const MAX_SCOPED_HTTP_TOKEN_FILE_BYTES = 8 * 1024
 
-export type SecretProvider = 'gateway_http' | 'telegram' | 'whatsapp' | 'discord' | 'opencode' | 'mcp' | 'worker'
+type SecretProvider = 'gateway_http' | 'telegram' | 'whatsapp' | 'discord' | 'opencode' | 'mcp' | 'worker'
 
-export type SecretInputClass =
+type SecretInputClass =
   | 'http_bearer_token'
   | 'provider_token'
   | 'webhook_secret'
@@ -16,7 +16,7 @@ export type SecretInputClass =
   | 'mcp_credential'
   | 'future_worker_secret'
 
-export type SecretStorageMode =
+type SecretStorageMode =
   | 'environment'
   | 'local_config'
   | 'opencode_config'
@@ -24,17 +24,17 @@ export type SecretStorageMode =
   | 'future_vault'
   | 'not_gateway_managed'
 
-export type SecretOwner = 'local_operator' | 'opencode' | 'provider' | 'future_vault'
+type SecretOwner = 'local_operator' | 'opencode' | 'provider' | 'future_vault'
 
 export type SecretReferenceId = `secretref_${string}`
-export type SecretReferenceSource = 'environment' | 'local_config'
-export type SecretScopeKind = 'system' | 'workspace' | 'project' | 'channel' | 'connector' | 'mcp' | 'worker' | 'provider'
-export type SecretRotationPosture = 'operator_managed' | 'provider_managed' | 'opencode_managed' | 'future_vault_required'
-export type SecretRotationHealth = 'healthy' | 'due' | 'overdue' | 'blocked' | 'unsupported'
-export type SecretRevocationState = 'active' | 'revoked' | 'unsupported'
-export type SecretInjectionContextKind = 'http' | 'channel' | 'connector' | 'mcp' | 'opencode' | 'subprocess' | 'worker'
+type SecretReferenceSource = 'environment' | 'local_config'
+type SecretScopeKind = 'system' | 'workspace' | 'project' | 'channel' | 'connector' | 'mcp' | 'worker' | 'provider'
+type SecretRotationPosture = 'operator_managed' | 'provider_managed' | 'opencode_managed' | 'future_vault_required'
+type SecretRotationHealth = 'healthy' | 'due' | 'overdue' | 'blocked' | 'unsupported'
+type SecretRevocationState = 'active' | 'revoked' | 'unsupported'
+type SecretInjectionContextKind = 'http' | 'channel' | 'connector' | 'mcp' | 'opencode' | 'subprocess' | 'worker'
 
-export interface SecretReferenceScope {
+interface SecretReferenceScope {
   kind: SecretScopeKind
   path: string
   provider?: SecretProvider
@@ -103,7 +103,7 @@ export interface SecretVaultResolution {
   reason?: string
 }
 
-export interface SecretInjectionContext {
+interface SecretInjectionContext {
   kind: SecretInjectionContextKind
   provider?: SecretProvider
   projectId?: string
@@ -118,7 +118,7 @@ export interface ScopedSecretInjectionRequest {
   baseEnv?: Record<string, string>
 }
 
-export interface ScopedSecretInjectionDenial {
+interface ScopedSecretInjectionDenial {
   referenceId?: SecretReferenceId
   code:
     | 'overbroad_allowlist'
@@ -177,7 +177,7 @@ export interface ConfiguredSecretInput {
   referenceIds: SecretReferenceId[]
 }
 
-export interface SecretLifecycleRisk {
+interface SecretLifecycleRisk {
   code: string
   severity: 'warning' | 'critical'
   inputId: string
@@ -220,7 +220,7 @@ export interface SecretsLifecycleReport {
   caveats: string[]
 }
 
-export interface SecretLifecycleOperatorPosture {
+interface SecretLifecycleOperatorPosture {
   mode: 'local_and_team_preview_secret_lifecycle'
   redacted: true
   rotationHealth: Record<SecretRotationHealth, number>
@@ -623,7 +623,7 @@ export function buildSecretsLifecycleReport(config: GatewayConfig, env: NodeJS.P
   }
 }
 
-export function buildSecretLifecycleOperatorPosture(
+function buildSecretLifecycleOperatorPosture(
   references: SecretReference[],
   risks: SecretLifecycleRisk[] = [],
 ): SecretLifecycleOperatorPosture {

@@ -20,14 +20,14 @@ export function optionalEventSensitivity(runType: string): { sensitivity: OpenWi
   return sensitivity === undefined ? {} : { sensitivity };
 }
 
-export function runSubjectPaths(runType: string, explicitPaths: string[] | undefined): string[] | undefined {
+function runSubjectPaths(runType: string, explicitPaths: string[] | undefined): string[] | undefined {
   const paths = [...(explicitPaths ?? []), ...(runType === "source.fetch" ? ["sources/manifests", "sources/raw"] : [])]
     .map((entry) => entry.trim())
     .filter((entry, index, values) => entry.length > 0 && values.indexOf(entry) === index);
   return paths.length === 0 ? undefined : paths;
 }
 
-export function runSensitivity(runType: string): OpenWikiSectionVisibility | undefined {
+function runSensitivity(runType: string): OpenWikiSectionVisibility | undefined {
   return runType === "source.fetch" ? "internal" : undefined;
 }
 

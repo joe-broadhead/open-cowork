@@ -75,7 +75,7 @@ function graphIndexFromDb(db: DatabaseSync): GraphIndexResponse {
   };
 }
 
-export function graphNodeFromRecordRow(row: Record<string, unknown>): GraphNodeRecord {
+function graphNodeFromRecordRow(row: Record<string, unknown>): GraphNodeRecord {
   const id = stringField(row, "record_id") ?? "";
   const pathValue = stringField(row, "path");
   const status = stringField(row, "status");
@@ -91,7 +91,7 @@ export function graphNodeFromRecordRow(row: Record<string, unknown>): GraphNodeR
   };
 }
 
-export function graphEdgeFromRow(row: Record<string, unknown>): GraphEdgeRecord {
+function graphEdgeFromRow(row: Record<string, unknown>): GraphEdgeRecord {
   const edgeId = stringField(row, "edge_id") ?? "edge:unknown";
   const rowPath = stringField(row, "path");
   const anchor = stringField(row, "anchor");
@@ -112,7 +112,7 @@ export function graphEdgeFromRow(row: Record<string, unknown>): GraphEdgeRecord 
   };
 }
 
-export function graphNeighborsFromIndex(
+function graphNeighborsFromIndex(
   index: GraphIndexResponse,
   id: string,
   options: { direction?: "in" | "out" | "both"; depth?: number; limit?: number } = {},
@@ -163,7 +163,7 @@ export function graphNeighborsFromIndex(
   };
 }
 
-export function graphRelatedFromIndex(index: GraphIndexResponse, id: string, options: { limit?: number } = {}): GraphNeighborhoodResponse {
+function graphRelatedFromIndex(index: GraphIndexResponse, id: string, options: { limit?: number } = {}): GraphNeighborhoodResponse {
   const nodesById = new Map(index.nodes.map((node) => [node.id, node]));
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
   const direct = index.edges.filter((edge) => edge.from_id === id || edge.to_id === id);

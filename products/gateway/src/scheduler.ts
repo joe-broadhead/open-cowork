@@ -85,7 +85,7 @@ import {
   type TaskStageResolution,
 } from './scheduler-helpers.js'
 
-export type { TaskStageResolution } from './scheduler-helpers.js'
+
 export { resolveTaskStageAgent, dispatchStartLeaseMs, isNotFoundError } from './scheduler-helpers.js'
 
 let schedulerCyclePromise: Promise<SchedulerCycleSnapshots> | null = null

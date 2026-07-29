@@ -1,15 +1,17 @@
 # Channel stack ownership (products/gateway vs monorepo providers)
 
-**Status:** Dual-stack **protocol freeze** retained (intentional residual, not incomplete P1). JOE-994 façades **Done**; native decommission **Won't Do** while defaults stay Durable.
+**Status:** Time-bounded two-stack exception through 2026-10-31. JOE-994 façades
+**Done**; native decommission is not selected by the current ADR.
 **Security body:** **Done** — shared verify kernels + rate-limit primitives in `@open-cowork/shared/node` (JOE-934 / post-#958/#959)
-**Related:** dual-stack security guard `scripts/check-dual-channel-security.mjs`; shared kernels in `@open-cowork/shared/node`
+**Decision:** [`adr/channel-stack-policy.md`](adr/channel-stack-policy.md);
+telemetry contract: [`channel-stack-telemetry.md`](channel-stack-telemetry.md)
 
 ## Disposition (post-#959 / post-JOE-994)
 
 | Layer | Status | Meaning |
 | --- | --- | --- |
 | **Security body** (signature verify, Meta/Discord/Telegram/Slack kernels, rate-limit algorithm) | **Done** | Shared; dual-fix checklist still required for security PRs |
-| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Opt-in façades + freeze** | Telegram native monorepo; Discord/WhatsApp monorepo **bridge**. Defaults remain Durable native. **Intentional residual freeze** — native decommission is Won't Do until product flips default. |
+| **Protocol / adapter body** (Durable `channels/*` vs monorepo `gateway-provider-*`) | **Opt-in façades + bounded exception** | Telegram native monorepo; Discord/WhatsApp monorepo **bridge**. Defaults remain Durable native through the ADR evidence window. |
 
 ## Two stacks (intentional)
 
@@ -21,12 +23,10 @@
 These stacks share product *concepts* (Telegram/WhatsApp/Discord) but **must not**
 be casually dual-fixed. Security and protocol bugs need an explicit owner.
 
-**Consolidation revisit trigger (2026-07-25 audit).** The freeze carries ~10k
-LOC of intentional duplication where every protocol change has two possible
-homes. Revisit consolidation when either signal appears: (a) real usage
-concentrates on one stack (Durable-native vs `protocolStack: monorepo`) for a
-full release cycle, or (b) a third dual-fix lands on the same protocol within
-one quarter. Until then the freeze rules above stand.
+The exception is owned by Gateway & Channels maintainers and expires on
+2026-10-31. The ADR defines the representative telemetry window, quantitative
+removal thresholds, missing-data behavior, and immediate security/maintenance
+triggers. It supersedes the prior indefinite freeze wording.
 
 ## Ownership matrix
 
@@ -40,9 +40,9 @@ one quarter. Until then the freeze rules above stand.
 ## Protocol migration (JOE-994 closed — not open P1)
 
 JOE-994 shipped opt-in composition façades and shared policy. Native Durable
-adapters remain the default; full monorepo-as-default / native decommission is
-**Won't Do** for this epic (product/ops readiness required). Do **not** re-open
-as incomplete dual-stack security P1.
+adapters remain the default. JOE-994 did not select native decommission; the
+dated channel-stack ADR now owns that decision. Do **not** re-open it as
+incomplete dual-stack security P1.
 
 **Epic plan / residual register:**
 [product-channel-protocol-unification.md](product-channel-protocol-unification.md)
@@ -64,9 +64,9 @@ Durable product policy (trust allowlists, claims, denial probes) is shared via
 `channels/channel-inbound-policy.ts` on all stacks. Security kernels remain in
 `@open-cowork/shared/node`.
 
-Native adapter decommission is **Won't Do** until monorepo (or bridge relays)
-are product-default. Until then, dual-stack security checklist remains required
-for channel security PRs.
+Native adapter decommission is not selected during the ADR's bounded evidence
+window. Until a reviewed convergence decision, the dual-stack security
+checklist remains required for channel security PRs.
 
 ### Shared security kernel (2026-07-21)
 

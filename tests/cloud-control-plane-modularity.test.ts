@@ -14,23 +14,6 @@ const ignoredDirectories = new Set([
   'site',
 ])
 
-test('cloud control-plane facade files stay within documented compatibility budgets', () => {
-  const budgets = [
-    { path: 'packages/cloud-server/src/http-server.ts', maxLines: 1_950 },
-    { path: 'packages/cloud-server/src/in-memory-control-plane-store.ts', maxLines: 1_620 },
-    { path: 'packages/cloud-server/src/session-service.ts', maxLines: 1_205 },
-  ]
-
-  for (const budget of budgets) {
-    const lines = lineCount(join(root, budget.path))
-    assert.equal(
-      lines <= budget.maxLines,
-      true,
-      `${budget.path} has ${lines} lines and must stay <= ${budget.maxLines}; extract a domain module instead of growing the facade`,
-    )
-  }
-})
-
 test('cloud route, service, client-domain, and gateway source modules stay bounded', () => {
   const budgets = [
     { directory: 'packages/cloud-server/src/http-routes', maxLines: 500 },

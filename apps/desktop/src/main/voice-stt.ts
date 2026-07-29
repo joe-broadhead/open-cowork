@@ -17,7 +17,7 @@ import { resolvePackagedAwareAurumBin } from './voice-packaging.ts'
 export const AURUM_DEFAULT_MODEL = 'tiny-q5_1'
 export const AURUM_DEFAULT_MODEL_FILE = 'ggml-tiny-q5_1.bin'
 
-export type VoiceSttBackendId = 'fake' | 'aurum_cli' | 'unavailable'
+type VoiceSttBackendId = 'fake' | 'aurum_cli' | 'unavailable'
 
 export type VoiceSttResult = {
   text: string
@@ -76,7 +76,7 @@ export class FakeVoiceStt implements VoiceSttEngine {
   }
 }
 
-export class UnavailableVoiceStt implements VoiceSttEngine {
+class UnavailableVoiceStt implements VoiceSttEngine {
   readonly backend = 'unavailable' as const
   readonly model = AURUM_DEFAULT_MODEL
   readonly detail: string
@@ -243,7 +243,7 @@ export function isAurumModelCached(cacheDir: string, model: string): boolean {
 }
 
 /** Probe OC cache first, then platform Aurum default caches. */
-export function isAurumModelAvailable(model: string, cacheDir: string): boolean {
+function isAurumModelAvailable(model: string, cacheDir: string): boolean {
   if (isAurumModelCached(cacheDir, model)) return true
   const filename = MODEL_FILES[model] || `ggml-${model}.bin`
   const systemDirs: string[] = []

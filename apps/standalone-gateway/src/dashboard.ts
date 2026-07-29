@@ -1,3 +1,4 @@
+import type { ChannelStackTelemetry } from "@open-cowork/gateway-channel";
 import type { StandaloneGatewayDashboardSnapshot } from "./types.js";
 
 export function renderStandaloneGatewayDashboard(snapshot: StandaloneGatewayDashboardSnapshot): string {
@@ -48,7 +49,10 @@ export function renderStandaloneGatewayDashboard(snapshot: StandaloneGatewayDash
 </html>`;
 }
 
-export function renderStandaloneGatewayMetrics(snapshot: StandaloneGatewayDashboardSnapshot): string {
+export function renderStandaloneGatewayMetrics(
+  snapshot: StandaloneGatewayDashboardSnapshot,
+  telemetry?: ChannelStackTelemetry,
+): string {
   const sessionsByStatus = countBy(snapshot.sessions.map((session) => session.status));
   const jobsByStatus = countBy(snapshot.jobs.map((job) => job.status));
   return [
@@ -67,6 +71,7 @@ export function renderStandaloneGatewayMetrics(snapshot: StandaloneGatewayDashbo
     "# HELP open_cowork_standalone_gateway_audit_events Standalone Gateway audit rows in the operator snapshot.",
     "# TYPE open_cowork_standalone_gateway_audit_events gauge",
     `open_cowork_standalone_gateway_audit_events ${snapshot.audits.length}`,
+    telemetry?.renderPrometheus().trimEnd() || "",
     "",
   ].join("\n");
 }

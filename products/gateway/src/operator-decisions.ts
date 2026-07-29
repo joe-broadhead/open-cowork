@@ -1,7 +1,7 @@
 import type { PendingPermissionRequest, PendingQuestionRequest } from './opencode-requests.js'
 import type { HumanGateRecord, RoadmapCompletionProposalRecord } from './work-store.js'
 
-export type OperatorDecisionSource =
+type OperatorDecisionSource =
   | 'gateway_human_gate'
   | 'gateway_completion_proposal'
   | 'opencode_question'
@@ -20,7 +20,7 @@ export type OperatorDecisionState =
   | 'stale'
   | 'blocked'
 
-export interface OperatorDecisionAction {
+interface OperatorDecisionAction {
   id: string
   label: string
   command?: string
@@ -48,15 +48,15 @@ export interface OperatorDecisionSummary {
   evidenceRef: string
 }
 
-export type OperatorDecisionSurface =
+type OperatorDecisionSurface =
   | 'opencode_web_tui'
   | 'trusted_channel'
   | 'cli_mcp'
   | 'mission_control'
 
-export type OperatorDecisionSurfaceStatus = 'aligned' | 'recovery_required' | 'unavailable'
+type OperatorDecisionSurfaceStatus = 'aligned' | 'recovery_required' | 'unavailable'
 
-export interface OperatorDecisionSessionRecovery {
+interface OperatorDecisionSessionRecovery {
   status: 'available' | 'metadata_only' | 'unavailable' | 'unknown'
   reason?: string
   recoveryHint?: string

@@ -4,8 +4,7 @@ import { join, resolve } from 'node:path'
 import type { SessionChangeSummary, SessionUsageSummary } from '@open-cowork/shared'
 import { getAppDataDir } from './config-loader-core.js'
 import { log } from '@open-cowork/shared/node'
-import { getRuntimeHomeDir } from './runtime.js'
-import { isSandboxWorkspaceDir } from './runtime-paths.js'
+import { getRuntimeHomeDir, isSandboxWorkspaceDir } from './runtime-paths.js'
 import { normalizeStoredSessionRecord, type StoredSessionRecord } from './session-registry-utils.js'
 
 export const SESSION_REGISTRY_SCHEMA_VERSION = 1

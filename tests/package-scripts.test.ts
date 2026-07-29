@@ -56,6 +56,12 @@ function parseJsonc<T>(source: string): T {
 }
 
 const knipJson = parseJsonc<KnipJson>(readFileSync(new URL('../knip.jsonc', import.meta.url), 'utf8'))
+const workflowSources = readdirSync(new URL('../.github/workflows/', import.meta.url))
+  .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'))
+  .map((file) => ({
+    file,
+    source: readFileSync(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8'),
+  }))
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 const docsWorkflow = readFileSync(new URL('../.github/workflows/docs.yml', import.meta.url), 'utf8')
 const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
@@ -144,14 +150,17 @@ function rootBuildWorkspacePackageDirs(): string[] {
 }
 
 function knipConfigForWorkspace(workspace: string): KnipJson['workspaces'][string] | undefined {
-  const workspaces = knipJson.workspaces || {}
-  if (workspaces[workspace]) return workspaces[workspace]
+  const [match] = knipConfigKeysForWorkspace(workspace)
+  return match ? knipJson.workspaces?.[match] : undefined
+}
 
-  return Object.entries(workspaces).find(([pattern]) => {
+function knipConfigKeysForWorkspace(workspace: string): string[] {
+  return Object.keys(knipJson.workspaces || {}).filter((pattern) => {
+    if (pattern === workspace) return true
     if (!pattern.endsWith('/*')) return false
     const prefix = pattern.slice(0, -1)
     return workspace.startsWith(prefix) && !workspace.slice(prefix.length).includes('/')
-  })?.[1]
+  })
 }
 
 test('root node test scripts prepare generated shared artifacts before tests run', () => {
@@ -540,7 +549,6 @@ test('root lint script runs all release gate checks', () => {
     'node scripts/build-docs-mermaid-vendor.mjs --check',
     'node scripts/check-preload-channels.mjs',
     'node scripts/check-shared-dist.mjs',
-    'pnpm lint:dead-code',
     'pnpm boundaries:check',
   ])
   assert.equal(requireScript('docs:vendor:build'), 'node scripts/build-docs-mermaid-vendor.mjs')
@@ -551,7 +559,7 @@ test('root lint script runs all release gate checks', () => {
 test('dead-code gate covers every source workspace package', () => {
   assert.equal(
     requireScript('lint:dead-code'),
-    'knip --config knip.jsonc --production --files --exports',
+    'node scripts/dead-code-report.mjs',
   )
   assert.equal(
     requireScript('dead-code:report'),
@@ -559,12 +567,35 @@ test('dead-code gate covers every source workspace package', () => {
   )
   assert.equal(
     requireScript('knip', workspacePackageJson('products/gateway')),
-    'knip --directory ../.. --config knip.jsonc --workspace products/gateway --production --files --exports',
+    'pnpm --dir ../.. lint:dead-code',
   )
   assert.equal(
     requireScript('check:dead-code', workspacePackageJson('products/wiki')),
-    "knip --directory ../.. --config knip.jsonc --workspace products/wiki --workspace 'products/wiki/packages/*' --production --files --exports",
+    'pnpm --dir ../.. lint:dead-code',
   )
+  assert.equal(
+    requireScript('knip', workspacePackageJson('products/wiki')),
+    'pnpm check:dead-code',
+  )
+  for (const workflow of workflowSources) {
+    assert.doesNotMatch(
+      workflow.source,
+      /^\s+run:\s+.*(?:\bknip\b|check:dead-code).*$/m,
+      `${workflow.file} must not invoke a standalone product Knip command`,
+    )
+  }
+  const canonicalWorkflowGates = new Set([
+    'ci.yml',
+    'release.yml',
+    'weekly-gateway.yml',
+  ])
+  for (const workflow of workflowSources) {
+    assert.equal(
+      (workflow.source.match(/^\s+run:\s+pnpm lint:dead-code\s*$/gm) || []).length,
+      canonicalWorkflowGates.has(workflow.file) ? 1 : 0,
+      `${workflow.file} must invoke the canonical dead-code gate exactly when required`,
+    )
+  }
   assert.equal(existsSync(new URL('../products/gateway/knip.json', import.meta.url)), false)
   assert.equal(existsSync(new URL('../products/wiki/knip.json', import.meta.url)), false)
 
@@ -575,6 +606,11 @@ test('dead-code gate covers every source workspace package', () => {
   assert.deepEqual(missing, [], `knip.jsonc must cover every source workspace package: ${missing.join(', ')}`)
 
   for (const workspace of expected) {
+    assert.equal(
+      knipConfigKeysForWorkspace(workspace).length,
+      1,
+      `knip workspace ${workspace} must be discovered exactly once`,
+    )
     const config = knipConfigForWorkspace(workspace)
     assert.ok(config?.entry?.length, `knip workspace ${workspace} must declare entry files`)
     assert.ok(config?.project?.length, `knip workspace ${workspace} must declare project files`)
@@ -586,6 +622,26 @@ test('dead-code gate covers every source workspace package', () => {
     'root scripts must be discovered from real package/CI callers instead of catch-all entries',
   )
   assert.equal(
+    workspaces['.']?.entry?.includes('.github/scripts/*.mjs'),
+    false,
+    'GitHub scripts must be enumerated from real workflow callers instead of a catch-all entry',
+  )
+  assert.deepEqual(
+    workspaces['.']?.entry?.filter((entry) => entry.startsWith('tests/')),
+    ['tests/*.test.ts'],
+    'root test entries must exactly match the top-level files run by scripts/run-node-tests.mjs',
+  )
+  assert.equal(
+    workspaces['apps/desktop']?.entry?.some((entry) => entry.startsWith('src/') && entry.includes('.test.')),
+    false,
+    'desktop source tests must not be treated as live without a source-test runner',
+  )
+  assert.deepEqual(
+    workspaces['products/wiki/packages/*']?.entry?.filter((entry) => entry.startsWith('test/')),
+    ['test/*.test.ts'],
+    'Wiki package test entries must exactly match the shallow files run by its test script',
+  )
+  assert.equal(
     knipJson.ignore?.some((pattern) => pattern.startsWith('products/gateway') || pattern.startsWith('products/wiki')),
     false,
     'the canonical inventory must not exclude Gateway or Wiki',
@@ -593,18 +649,19 @@ test('dead-code gate covers every source workspace package', () => {
 
   const expectedExternalEntrypoints: Record<string, string[]> = {
     '.': [
+      '.github/scripts/release-signing-mode.mjs',
+      '.github/scripts/release-windows-signing-mode.mjs',
       'scripts/compose-config-schema.mjs',
       'scripts/desktop-after-sign.mjs',
       'scripts/prune-cloud-runtime.mjs',
       'scripts/prune-gateway-runtime.mjs',
     ],
-    'apps/desktop': ['src/**/*.test.ts'],
     'products/gateway': [
       'scripts/docker-auth-smoke.mjs',
       'scripts/docker-compose-auth-smoke.mjs',
     ],
     'products/wiki': ['scripts/openwiki-packaged-cli-smoke.mjs'],
-    'products/wiki/packages/*': ['test/**/*.test.ts'],
+    'products/wiki/packages/*': ['test/*.test.ts'],
   }
   for (const [workspace, entries] of Object.entries(expectedExternalEntrypoints)) {
     for (const entry of entries) {
@@ -616,10 +673,10 @@ test('dead-code gate covers every source workspace package', () => {
   }
 })
 
-test('dead-code report detects an intentionally unused file and emits JSON directly', () => {
+test('dead-code report detects every canonical mutation probe', () => {
   const result = spawnSync(
     process.execPath,
-    ['scripts/dead-code-report.mjs', '--verify-probe'],
+    ['scripts/dead-code-report.mjs', '--verify-probes'],
     {
       cwd: fileURLToPath(repoRoot),
       encoding: 'utf8',
@@ -629,7 +686,14 @@ test('dead-code report detects an intentionally unused file and emits JSON direc
 
   assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`)
   assert.deepEqual(JSON.parse(result.stdout), {
-    probeDetected: true,
+    probes: {
+      unusedDependency: true,
+      unusedExport: true,
+      unusedFile: true,
+      unusedType: true,
+      unlistedBinary: true,
+      unlistedDependency: true,
+    },
     schemaVersion: 1,
   })
 })
@@ -1057,10 +1121,11 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm audit:prod',
     'pnpm audit:full',
     'pnpm license:check',
-    'pnpm lint:dead-code',
   ]) {
     assert.match(ciWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `CI must run ${command}`)
   }
+  assert.equal((ciWorkflow.match(/^\s+run: pnpm lint$/gm) || []).length, 1)
+  assert.equal((ciWorkflow.match(/^\s+run: pnpm lint:dead-code$/gm) || []).length, 1)
 
   for (const command of [
     'pnpm install --frozen-lockfile',
@@ -1093,7 +1158,6 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit:prod',
     'pnpm audit:full',
-    'pnpm lint:dead-code',
     'node scripts/verify-release-tag-signature.mjs',
     'node scripts/verify-release-artifact-matrix.mjs',
     'node scripts/verify-release-actor.mjs',
@@ -1101,6 +1165,8 @@ test('ci and release workflows use canonical release gate scripts', () => {
   ]) {
     assert.match(releaseWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `release workflow must run ${command}`)
   }
+  assert.equal((releaseWorkflow.match(/^\s+run: pnpm lint$/gm) || []).length, 1)
+  assert.equal((releaseWorkflow.match(/^\s+run: pnpm lint:dead-code$/gm) || []).length, 1)
 
   for (const evidence of [
     'Generate CycloneDX SBOM',

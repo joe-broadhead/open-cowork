@@ -430,9 +430,13 @@ export type ControlPlaneStore = {
   // pre-check on every 1s poll was redundant per-connection DB load. Non-stream callers keep
   // listSessionEvents (which still validates existence).
   listSessionEventsForStream(tenantId: string, sessionId: string, afterSequence?: number, limit?: number): MaybePromise<SessionEventRecord[]>
-  // Aggregate count + max sequence for projection-status, so it never loads the whole
-  // event log just to compute lag (index-served on the postgres backend).
-  getSessionEventStats(tenantId: string, sessionId: string): MaybePromise<{ count: number; latestSequence: number }>
+  // Aggregate count + retained sequence bounds for projection status and SSE gap
+  // detection, so neither path loads the event log (index-served on Postgres).
+  getSessionEventStats(tenantId: string, sessionId: string): MaybePromise<{
+    count: number
+    earliestSequence: number | null
+    latestSequence: number
+  }>
   upsertCloudArtifactIndex(input: UpsertCloudArtifactIndexInput): MaybePromise<CloudArtifactIndexRecord>
   getCloudArtifactIndexRecord(input: {
     tenantId: string

@@ -6,13 +6,13 @@ export type PortabilityProofLease = {
   checkpointVersion: number
 }
 
-export type PortabilityProofCommandKind =
+type PortabilityProofCommandKind =
   | 'prompt'
   | 'abort'
   | 'permission.respond'
   | 'question.reply'
 
-export type PortabilityProofCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
+type PortabilityProofCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
 
 export type PortabilityProofSessionCommand = {
   commandId: string

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-export type SecretRedactionFixture = {
+type SecretRedactionFixture = {
   id: string
   label: string
   value: string
@@ -11,7 +11,7 @@ function token(prefix: string, char: string, length: number) {
   return `${prefix}${char.repeat(length)}`
 }
 
-export const SECRET_REDACTION_FIXTURES: SecretRedactionFixture[] = [
+const SECRET_REDACTION_FIXTURES: SecretRedactionFixture[] = [
   { id: 'openai-legacy', label: 'OpenAI legacy API key', value: token('sk-', 'a', 48) },
   { id: 'openai-project', label: 'OpenAI project API key', value: token('sk-proj-', 'b', 48) },
   { id: 'openai-admin', label: 'OpenAI admin API key', value: token('sk-admin-', 'c', 48) },

@@ -143,6 +143,35 @@
       ]
     },
     {
+      "type": "timeseries",
+      "title": "Channel stack adoption and inventory",
+      "targets": [
+        { "expr": "sum(open_cowork_channel_stack_info) by (surface, stack, schema_version)" },
+        { "expr": "sum(open_cowork_channel_bindings) by (surface, stack, provider_kind, status)" },
+        { "expr": "absent(open_cowork_channel_stack_info{surface=\"cloud-channel-gateway\",schema_version=\"2\"})" },
+        { "expr": "absent(open_cowork_channel_stack_info{surface=\"standalone-gateway\",schema_version=\"2\"})" },
+        { "expr": "absent(open_cowork_channel_stack_info{surface=\"durable-gateway\",schema_version=\"2\"})" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Channel stack success, retry, and error rates",
+      "targets": [
+        { "expr": "sum(increase(open_cowork_channel_messages_total{schema_version=\"2\",outcome=~\"success|retry|error|ignored\"}[$__range])) by (surface, stack, provider_kind, direction, outcome)" },
+        { "expr": "sum(increase(open_cowork_channel_messages_total{schema_version=\"2\",outcome=\"success\"}[$__range])) by (surface, stack, provider_kind, direction) / clamp_min(sum(increase(open_cowork_channel_messages_total{schema_version=\"2\",outcome=~\"success|retry|error\"}[$__range])) by (surface, stack, provider_kind, direction), 1)" },
+        { "expr": "sum(increase(open_cowork_channel_messages_total{schema_version=\"2\",outcome=\"retry\"}[$__range])) by (surface, stack, provider_kind, direction) / clamp_min(sum(increase(open_cowork_channel_messages_total{schema_version=\"2\",outcome=~\"success|retry|error\"}[$__range])) by (surface, stack, provider_kind, direction), 1)" },
+        { "expr": "sum(increase(open_cowork_channel_messages_total{schema_version=\"2\",outcome=\"error\"}[$__range])) by (surface, stack, provider_kind, direction) / clamp_min(sum(increase(open_cowork_channel_messages_total{schema_version=\"2\",outcome=~\"success|retry|error\"}[$__range])) by (surface, stack, provider_kind, direction), 1)" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Channel stack p50 and p95 successful-operation latency",
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, surface, stack, provider_kind, direction) (increase(open_cowork_channel_operation_latency_ms_bucket{schema_version=\"2\",outcome=\"success\"}[$__range])))" },
+        { "expr": "histogram_quantile(0.95, sum by (le, surface, stack, provider_kind, direction) (increase(open_cowork_channel_operation_latency_ms_bucket{schema_version=\"2\",outcome=\"success\"}[$__range])))" }
+      ]
+    },
+    {
       "type": "logs",
       "title": "Correlated structured logs",
       "targets": [

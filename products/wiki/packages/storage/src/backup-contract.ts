@@ -9,7 +9,7 @@ export type BackupCredentialState =
   | "external"
   | "unsupported";
 
-export type BackupDiagnosticSeverity = "info" | "warning" | "error";
+type BackupDiagnosticSeverity = "info" | "warning" | "error";
 
 export interface BackupDestinationDiagnostic {
   code: string;

@@ -142,7 +142,7 @@ export type RunAnalyticsDimension = 'profile' | 'agent' | 'roadmap'
  *     genuine cohort so a resultless errored run can never trip the #205 alert
  *     (a missing result is not evidence the profile is at fault).
  */
-export type RunErrorClass =
+type RunErrorClass =
   | 'recovered_session'
   | 'force_done'
   | 'lease_expired'

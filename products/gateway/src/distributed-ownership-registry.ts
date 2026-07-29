@@ -9,7 +9,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export interface DistributedOwnershipProvingRegistry {
+interface DistributedOwnershipProvingRegistry {
   status?: string
   openMigrateHazards?: string[]
 }

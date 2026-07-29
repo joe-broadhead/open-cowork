@@ -1,27 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { BrowserWindow, IpcMain } from 'electron'
-import { registerE2EEvalHandlers } from './e2e-eval-handlers.ts'
-
-function createFakeIpcMain() {
-  const handlers = new Map<string, (...args: unknown[]) => unknown>()
-  const ipcMain = {
-    handle(channel: string, listener: (...args: unknown[]) => unknown) {
-      handlers.set(channel, listener)
-    },
-  } as unknown as IpcMain
-  return {
-    ipcMain,
-    async invoke(channel: string, ...args: unknown[]) {
-      const handler = handlers.get(channel)
-      if (!handler) throw new Error(`no handler for ${channel}`)
-      return handler({}, ...args)
-    },
-    has(channel: string) {
-      return handlers.has(channel)
-    },
-  }
-}
+import type { BrowserWindow } from 'electron'
+import { registerE2EEvalHandlers } from '../apps/desktop/src/main/ipc/e2e-eval-handlers.ts'
+import { createIpcMainHarness as createFakeIpcMain } from './support/ipc-handler-harness.ts'
 
 void test('eval:emit-permission-request is fail-closed without OPEN_COWORK_E2E', async () => {
   const fake = createFakeIpcMain()

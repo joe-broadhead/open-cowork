@@ -97,7 +97,7 @@ function normalizeChartArtifactSource(value: unknown): ChartArtifactSource | nul
   }
 }
 
-export function getChartArtifactMetadataPath(filePath: string): string {
+function getChartArtifactMetadataPath(filePath: string): string {
   return filePath.replace(/\.png$/i, '.json')
 }
 

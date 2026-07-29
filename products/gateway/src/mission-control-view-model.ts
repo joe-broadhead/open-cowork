@@ -1,8 +1,8 @@
 import type { ObservabilitySloResult, TraceCorrelationIndex } from './observability-contract.js'
 import { formatTaskCounts, isActiveTaskStatus } from './task-summary.js'
 
-export type MissionControlSourceState = 'loading' | 'ready' | 'empty' | 'partial' | 'stale' | 'degraded' | 'missing' | 'blocked' | 'error'
-export type MissionControlSourceSeverity = 'ok' | 'info' | 'warning' | 'critical'
+type MissionControlSourceState = 'loading' | 'ready' | 'empty' | 'partial' | 'stale' | 'degraded' | 'missing' | 'blocked' | 'error'
+type MissionControlSourceSeverity = 'ok' | 'info' | 'warning' | 'critical'
 
 export interface MissionControlSourceContract {
   key: string
@@ -28,7 +28,7 @@ export interface MissionControlSourceContract {
   ageMs?: number
 }
 
-export interface MissionControlSourceSummaryItem {
+interface MissionControlSourceSummaryItem {
   key: string
   label: string
   route: string
@@ -47,9 +47,9 @@ export interface MissionControlSourceSummary {
   items: MissionControlSourceSummaryItem[]
 }
 
-export type MissionControlSourceOperatorActionKind = 'inspect' | 'paginate' | 'refresh' | 'repair' | 'wait' | 'none'
+type MissionControlSourceOperatorActionKind = 'inspect' | 'paginate' | 'refresh' | 'repair' | 'wait' | 'none'
 
-export interface MissionControlSourceOperatorAction {
+interface MissionControlSourceOperatorAction {
   kind: MissionControlSourceOperatorActionKind
   available: boolean
   label: string
@@ -57,7 +57,7 @@ export interface MissionControlSourceOperatorAction {
   reason: string
 }
 
-export interface MissionControlSourceStateViewModelSource {
+interface MissionControlSourceStateViewModelSource {
   key: string
   label: string
   view: string
@@ -139,10 +139,10 @@ export interface MissionControlSourceStateViewModel {
   issues: Array<{ code: string; severity: 'critical'; summary: string }>
 }
 
-export type MissionControlDataPlaneStatus = 'ready' | 'bounded' | 'degraded' | 'blocked'
-export type MissionControlDataPlaneConsumer = 'dashboard' | 'mcp' | 'support' | 'cli'
+type MissionControlDataPlaneStatus = 'ready' | 'bounded' | 'degraded' | 'blocked'
+type MissionControlDataPlaneConsumer = 'dashboard' | 'mcp' | 'support' | 'cli'
 
-export interface MissionControlDataPlaneConsumerContract {
+interface MissionControlDataPlaneConsumerContract {
   consumer: MissionControlDataPlaneConsumer
   truthVocabulary: 'mission_control_source_contracts'
   readOnly: true
@@ -199,7 +199,7 @@ export interface MissionControlDashboardSummaryInput {
   sourceContracts?: MissionControlSourceContract[]
 }
 
-export interface MissionControlHealthContract {
+interface MissionControlHealthContract {
   status?: string
   scheduler?: {
     enabled?: boolean
@@ -213,7 +213,7 @@ export interface MissionControlHealthContract {
   }>
 }
 
-export interface MissionControlTaskRowContract {
+interface MissionControlTaskRowContract {
   id?: string
   status?: string
   priority?: string
@@ -223,32 +223,32 @@ export interface MissionControlTaskRowContract {
   currentStage?: string
 }
 
-export interface MissionControlRoadmapRowContract {
+interface MissionControlRoadmapRowContract {
   id?: string
   status?: string
   priority?: string
   title?: string
 }
 
-export interface MissionControlRunRowContract {
+interface MissionControlRunRowContract {
   id?: string
   status?: string
   sessionId?: string
 }
 
-export interface MissionControlTaskDataContract {
+interface MissionControlTaskDataContract {
   counts?: Record<string, number>
   tasks?: MissionControlTaskRowContract[]
   roadmaps?: MissionControlRoadmapRowContract[]
   runs?: MissionControlRunRowContract[]
 }
 
-export interface MissionControlSessionRowContract {
+interface MissionControlSessionRowContract {
   id?: string
   status?: string
 }
 
-export interface MissionControlSessionDataContract {
+interface MissionControlSessionDataContract {
   sessions?: MissionControlSessionRowContract[]
   counts?: {
     running?: number
@@ -257,18 +257,18 @@ export interface MissionControlSessionDataContract {
   }
 }
 
-export interface MissionControlRequestCollectionContract {
+interface MissionControlRequestCollectionContract {
   questions?: Array<{ id?: string }>
   permissions?: Array<{ id?: string }>
 }
 
-export interface MissionControlAttentionContract {
+interface MissionControlAttentionContract {
   attention?: {
     summary?: string
   }
 }
 
-export interface MissionControlEnvironmentCollectionContract {
+interface MissionControlEnvironmentCollectionContract {
   environments?: Array<{
     status?: string
     cleanup?: { state?: string }
@@ -285,7 +285,7 @@ export interface MissionControlDashboardContractValidation {
   failures: Array<{ field: string; summary: string }>
 }
 
-export interface MissionControlDashboardSummaryIssue {
+interface MissionControlDashboardSummaryIssue {
   id: string
   status: string
   priority: string
@@ -294,7 +294,7 @@ export interface MissionControlDashboardSummaryIssue {
   currentStage: string
 }
 
-export interface MissionControlDashboardSummaryInitiative {
+interface MissionControlDashboardSummaryInitiative {
   id: string
   status: string
   priority: string
@@ -330,7 +330,7 @@ export type OperationsCockpitStatus =
   | 'unavailable'
   | 'unsupported'
 
-export interface OperationsCockpitItem {
+interface OperationsCockpitItem {
   id: string
   label: string
   status: OperationsCockpitStatus
@@ -383,7 +383,7 @@ export type MissionControlWindowKey =
   | 'workGraphNodes'
   | 'workGraphEdges'
 
-export interface MissionControlWindowOptions {
+interface MissionControlWindowOptions {
   limit?: number
   offset?: number
   search?: string
@@ -1066,12 +1066,12 @@ export function formatMissionControlEnvironmentCounts(environments: any[]): stri
   return `${active} active | ${retained} retained | ${cleanupFailed} cleanup failed`
 }
 
-export function normalizeMissionControlSearch(value: unknown): string | undefined {
+function normalizeMissionControlSearch(value: unknown): string | undefined {
   const text = String(value || '').trim()
   return text ? text.substring(0, 120) : undefined
 }
 
-export function missionControlSearchText(value: unknown): string {
+function missionControlSearchText(value: unknown): string {
   try {
     return JSON.stringify(value || {}).toLowerCase()
   } catch {

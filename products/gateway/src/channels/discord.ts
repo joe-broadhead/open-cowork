@@ -104,6 +104,10 @@ export const discordChannel: ChannelAdapter & {
     started = false
   },
 
+  isActive() {
+    return started
+  },
+
   async sendMessage(chatId: string, text: string, options?: { threadId?: string; idempotencyKey?: string }) {
     const cfg = getDiscordConfig()
     assertDiscordOutboundConfigured(cfg)
@@ -254,7 +258,7 @@ export function buildDiscordMessagePayload(message: StructuredGatewayMessage): {
   return payload
 }
 
-export function buildDiscordActionRows(actions: MessageAction[]): any[] {
+function buildDiscordActionRows(actions: MessageAction[]): any[] {
   const buttons = planNativeActionDelivery(actions, {
     maxActions: DISCORD_COMPONENT_ROW_LIMIT * DISCORD_COMPONENTS_PER_ROW,
     maxLabelChars: 80,

@@ -128,7 +128,7 @@ function workspaceDependencyRoot(packageRoot, dependencyName) {
   return realpathSync(dependencyPath)
 }
 
-export function inspectWorkspaceBuildFreshness(
+function inspectWorkspaceBuildFreshness(
   packageRoot,
   {
     includeSelf = false,

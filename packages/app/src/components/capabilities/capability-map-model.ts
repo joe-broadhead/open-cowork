@@ -22,7 +22,7 @@ export type CapabilityMapGroup = {
   matchedSkillNames: Set<string>
 }
 
-export type CapabilityMapTier = 'custom' | 'builtin' | 'opencode'
+type CapabilityMapTier = 'custom' | 'builtin' | 'opencode'
 
 export type CapabilityMapSection = {
   id: CapabilityMapTier
@@ -89,7 +89,7 @@ const CAPABILITY_MAP_TIER_RANK: Record<CapabilityMapTier, number> = {
   opencode: 2,
 }
 
-export function capabilityToolTier(tool: CapabilityTool): CapabilityMapTier {
+function capabilityToolTier(tool: CapabilityTool): CapabilityMapTier {
   if (tool.source === 'custom' || tool.origin === 'custom' || tool.scope === 'machine' || tool.scope === 'project') {
     return 'custom'
   }
@@ -97,7 +97,7 @@ export function capabilityToolTier(tool: CapabilityTool): CapabilityMapTier {
   return 'builtin'
 }
 
-export function capabilitySkillTier(skill: CapabilitySkill): CapabilityMapTier {
+function capabilitySkillTier(skill: CapabilitySkill): CapabilityMapTier {
   if (skill.source === 'custom' || skill.origin === 'custom' || skill.scope === 'machine' || skill.scope === 'project') {
     return 'custom'
   }

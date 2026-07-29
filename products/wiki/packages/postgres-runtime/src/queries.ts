@@ -11,7 +11,7 @@ import { jobAttemptFromRow, jobDetailFromRow, jsonb, readRuntimeSections, string
 import { proposalSectionIds, proposalTargetsPath, proposalUpdatedAt } from "./search.ts";
 import { openCurrentPostgresRuntime } from "./sync.ts";
 import { metadataCount, recordTypeCount, tableCount, workspaceSourceCommit } from "./queries-counts.ts";
-export { jobStatusCount, recordTypeCount, runStatusCount } from "./queries-counts.ts";
+export { jobStatusCount, runStatusCount } from "./queries-counts.ts";
 export {
   listCurrentPostgresIdentities,
   listCurrentPostgresOpenQuestions,

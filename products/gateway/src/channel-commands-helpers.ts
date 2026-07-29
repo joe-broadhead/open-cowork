@@ -82,7 +82,7 @@ export function formatTaskSummary(task: WorkTaskView): string[] {
   ]
 }
 
-export const READ_ONLY_CHANNEL_COMMANDS = new Set([
+const READ_ONLY_CHANNEL_COMMANDS = new Set([
   'help', 'start', 'commands', 'whereami',
   'status', 'current', 'open', 'latest',
   'tasks', 'issues', 'roadmaps', 'initiatives',
@@ -90,7 +90,7 @@ export const READ_ONLY_CHANNEL_COMMANDS = new Set([
   'gates', 'alerts', 'incident', 'questions', 'permissions', 'digest',
 ])
 
-export const READ_ONLY_PROJECT_ACTIONS = new Set(['status', 'digest', 'decisions', 'open'])
+const READ_ONLY_PROJECT_ACTIONS = new Set(['status', 'digest', 'decisions', 'open'])
 
 export function isPrivilegedChannelAction(command: ParsedChannelCommand): boolean {
   if (READ_ONLY_CHANNEL_COMMANDS.has(command.name)) return false
@@ -135,7 +135,7 @@ export function formatChannelDecisionHint(decision: OperatorDecisionSummary): st
   ].join('\n')
 }
 
-export function formatDecisionOwner(decision: OperatorDecisionSummary): string {
+function formatDecisionOwner(decision: OperatorDecisionSummary): string {
   if (decision.owner === 'opencode') return 'OpenCode'
   if (decision.owner === 'gateway') return 'Gateway'
   return 'Gateway channel security'

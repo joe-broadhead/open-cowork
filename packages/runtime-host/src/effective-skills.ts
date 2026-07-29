@@ -8,7 +8,7 @@ import {
 import { getConfiguredSkillsFromConfig } from './config-loader-core.js'
 import { getCustomSkill, listCustomSkills } from './native-customizations.js'
 import type { NativeConfigScope } from './runtime-paths.js'
-import { getBundledSkillRoots } from './runtime-content.js'
+import { getBundledSkillRoots } from './bundled-skill-roots.js'
 import { getBundledSkillIndex, type BundledSkillIndexEntry } from './bundled-skill-index.js'
 import { log } from '@open-cowork/shared/node'
 import { validateOpenCodeSkillBundle } from './skill-bundle-validation.js'

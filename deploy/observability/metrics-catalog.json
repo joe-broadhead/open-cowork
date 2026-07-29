@@ -391,6 +391,30 @@
       "type": "counter",
       "owner": "gateway",
       "description": "Webhook requests received by configured provider id and kind."
+    },
+    {
+      "name": "open_cowork_channel_stack_info",
+      "type": "gauge",
+      "owner": "gateway-channels",
+      "description": "Presence marker for a deployed channel stack by bounded surface, stack, and telemetry schema version. An absent series means the stack is not deployed or has not exposed this contract; it must not be interpreted as zero use."
+    },
+    {
+      "name": "open_cowork_channel_bindings",
+      "type": "gauge",
+      "owner": "gateway-channels",
+      "description": "Configured and active channel binding inventory by bounded surface, stack, provider kind, and status. Values contain no binding, tenant, recipient, address, or credential identifiers."
+    },
+    {
+      "name": "open_cowork_channel_messages_total",
+      "type": "counter",
+      "owner": "gateway-channels",
+      "description": "Comparable inbound and outbound channel operation counts by bounded schema version, surface, stack, provider kind, direction, and mutually exclusive attempt, success, retry, error, or ignored outcome. Retry means an observed retry handoff, while ignored excludes duplicates, no-ops, and policy denials from adoption."
+    },
+    {
+      "name": "open_cowork_channel_operation_latency_ms",
+      "type": "histogram",
+      "owner": "gateway-channels",
+      "description": "Comparable composition-boundary latency in milliseconds for terminal inbound and outbound outcomes, by bounded schema version, surface, stack, provider kind, direction, and outcome. One logical request remains one sample across text chunking or structured-message delegation. Inbound latency spans handler invocation to a committed, deferred, ignored, or failed decision; outbound latency spans the composed egress request. Use histogram_quantile over the _bucket series; no message content or customer identifiers are collected."
     }
   ]
 }

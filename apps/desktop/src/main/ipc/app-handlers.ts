@@ -91,8 +91,6 @@ const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'taskPermission',
   'externalDirectoryPermission',
   'mcpPermission',
-  'requireApprovalBeforeSending',
-  'privacyKeepConversationHistory',
   'runtimeConfigSource',
   'runtimeToolingBridge',
   'runtimeToolingBridgeEnabled',

@@ -3,7 +3,7 @@ import { normalizeChannelRenderCapabilities, type ChannelCapabilities, type Chan
 
 export type { ChannelCapabilities, ChannelRenderCapabilities, ChannelRenderCapability, ChannelRenderMode } from './capabilities.js'
 
-export type StructuredMessageKind =
+type StructuredMessageKind =
   | 'status'
   | 'progress'
   | 'gate_approval'
@@ -65,9 +65,9 @@ export interface RenderedChannelMessage {
   degradedFrom?: ChannelRenderMode
 }
 
-export type NativeActionDeliveryKind = 'url' | 'callback' | 'copy'
-export type NativeActionOmitReason = 'action_limit' | 'missing_label' | 'missing_identifier' | 'unsafe_url' | 'unsupported_url' | 'identifier_not_safe' | 'identifier_too_large'
-export type NativeActionUrlMode = 'native' | 'callback' | 'omit'
+type NativeActionDeliveryKind = 'url' | 'callback' | 'copy'
+type NativeActionOmitReason = 'action_limit' | 'missing_label' | 'missing_identifier' | 'unsafe_url' | 'unsupported_url' | 'identifier_not_safe' | 'identifier_too_large'
+type NativeActionUrlMode = 'native' | 'callback' | 'omit'
 
 export interface NativeActionDeliveryLimits {
   maxActions: number
@@ -89,7 +89,7 @@ export interface NativeActionDeliveryItem {
   description?: string
 }
 
-export interface NativeActionDeliveryOmission {
+interface NativeActionDeliveryOmission {
   sourceIndex: number
   reason: NativeActionOmitReason
   label?: string
@@ -379,7 +379,7 @@ export function runResultCard(input: RunResultCardInput): StructuredGatewayMessa
   })
 }
 
-export function renderPlainTextFallback(message: StructuredGatewayMessage): string {
+function renderPlainTextFallback(message: StructuredGatewayMessage): string {
   const lines: string[] = [message.title]
   if (message.status) lines.push(`Status: ${message.status}`)
   if (message.severity) lines.push(`Severity: ${message.severity}`)
@@ -395,7 +395,7 @@ export function renderPlainTextFallback(message: StructuredGatewayMessage): stri
   return fallbackLines(lines).join('\n')
 }
 
-export function renderMarkdownFallback(message: StructuredGatewayMessage): string {
+function renderMarkdownFallback(message: StructuredGatewayMessage): string {
   const lines: string[] = [`## ${message.title}`]
   if (message.status) lines.push(`**Status:** ${message.status}`)
   if (message.severity) lines.push(`**Severity:** ${message.severity}`)

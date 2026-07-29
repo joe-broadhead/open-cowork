@@ -45,8 +45,6 @@ export {
   cleanupFailedEnvironmentRun,
   environmentPromptContext,
   finalizeEnvironmentRun,
-  releaseEnvironmentRun,
-  retainEnvironmentRun,
 } from './environments/lifecycle.js'
 import {
   collectLocalContainerArtifacts,
@@ -145,7 +143,7 @@ export const localProcessEnvironmentController: EnvironmentController = {
   releaseByKey: releaseMetadataEnvironmentAcquisition,
 }
 
-export const localContainerEnvironmentController: EnvironmentController = {
+const localContainerEnvironmentController: EnvironmentController = {
   ...localProcessEnvironmentController,
   backend: 'local-container',
   hydrate(spec, input) {
@@ -191,7 +189,7 @@ export const localContainerEnvironmentController: EnvironmentController = {
   releaseByKey: releaseLocalContainerEnvironmentByKey,
 }
 
-export const remoteCrabboxEnvironmentController: EnvironmentController = {
+const remoteCrabboxEnvironmentController: EnvironmentController = {
   ...localProcessEnvironmentController,
   backend: 'remote-crabbox',
   prepare: prepareRemoteCrabboxEnvironment,

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 const zStringRecord = <Schema extends z.ZodTypeAny>(schema: Schema) => z.record(z.string(), schema)
 
-export const delegationContractVersion = 1
+const delegationContractVersion = 1
 
 export const delegationFailureModes = [
   'insufficient_scope',
@@ -18,13 +18,13 @@ const nonEmptyString = z.string().trim().min(1)
 const optionalString = z.string().trim().min(1).optional()
 const stringList = z.array(nonEmptyString).default([])
 
-export const delegationEvidenceRequirementSchema = z.object({
+const delegationEvidenceRequirementSchema = z.object({
   type: z.enum(['diff', 'test', 'command', 'link', 'screenshot', 'log', 'decision', 'file', 'note', 'other']).optional(),
   ref: optionalString,
   summary: nonEmptyString,
 })
 
-export const delegationNotificationTargetSchema = z.object({
+const delegationNotificationTargetSchema = z.object({
   mode: z.enum(['none', 'parent_session', 'project_binding', 'channel', 'custom']).default('parent_session'),
   sessionId: optionalString,
   provider: z.enum(['opencode', 'telegram', 'whatsapp']).optional(),
@@ -40,7 +40,7 @@ export const delegationNotificationTargetSchema = z.object({
   }).optional(),
 })
 
-export const delegationParentSessionSchema = z.object({
+const delegationParentSessionSchema = z.object({
   sessionId: nonEmptyString,
   channel: z.object({
     provider: z.enum(['telegram', 'whatsapp']).optional(),
@@ -49,7 +49,7 @@ export const delegationParentSessionSchema = z.object({
   }).optional(),
 })
 
-export const delegationTargetSchema = z.discriminatedUnion('type', [
+const delegationTargetSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('issue'),
     roadmapId: optionalString,

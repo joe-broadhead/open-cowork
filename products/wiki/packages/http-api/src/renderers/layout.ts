@@ -395,11 +395,11 @@ function adjacentServerPages(page: PageRecord, pages: PageRecord[]): { previous?
   };
 }
 
-export function pageNavigationLink(label: string, title: string, href: string): string {
+function pageNavigationLink(label: string, title: string, href: string): string {
   return `<a class="ow-page-nav__item" href="${escapeHtml(href)}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(title)}</strong></a>`;
 }
 
-export function pageNavigationPlaceholder(label: string): string {
+function pageNavigationPlaceholder(label: string): string {
   return `<span class="ow-page-nav__item is-disabled"><span>${escapeHtml(label)}</span><strong>None</strong></span>`;
 }
 

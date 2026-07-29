@@ -1,7 +1,6 @@
 import { buildModelInfoSnapshot } from './model-info-utils.js'
-import type { OpencodeClient as V2OpencodeClient, OpencodeClientConfig } from '@opencode-ai/sdk/v2'
+import type { OpencodeClient as V2OpencodeClient } from '@opencode-ai/sdk/v2'
 import {
-  buildAuthenticatedOpencodeV2ClientConfig,
   createOpencodeV2Client,
 } from './opencode-client-kernel.js'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
@@ -48,13 +47,11 @@ import {
 import { preflightConfiguredCapabilityBundlesForRuntime } from './capability-bundle-runtime-preflight.js'
 import { recordCurrentRuntimeComponentVerification } from './runtime-component-manifest.js'
 import { copySkillsAndAgents } from './runtime-content.js'
-import { getOrCreateDirectoryClient } from './runtime-client-cache.js'
 import { syncRuntimeHomeToolingBridge } from './runtime-home-bridge.js'
 import { verifyRuntimeSkillCatalog } from './runtime-skill-verifier.js'
 import {
   createManagedOpencodeServer,
   createManagedOpencodeServerAuth,
-  type ManagedOpencodeServerAuth,
   type ManagedOpencodeServerLogLevel,
   type ManagedOpencodeServerUnexpectedExit,
 } from './runtime-managed-server.js'
@@ -65,10 +62,19 @@ import {
   resolveListeningPid,
   terminateManagedRuntimePid,
 } from './runtime-process-cleanup.js'
-import { MAX_DIRECTORY_CLIENTS, runtimeState } from './runtime-state.js'
+import { runtimeState } from './runtime-state.js'
+import {
+  buildManagedOpencodeClientConfig,
+} from './runtime-client-access.js'
 import { sdkErrorMessage } from './sdk-error.js'
 import { connectNativeProviderApiKey } from './opencode-v2.js'
 export { getRuntimeHomeDir } from './runtime-paths.js'
+export {
+  buildManagedOpencodeClientConfig,
+  getClient,
+  getClientForDirectory,
+  setDirectoryClientLifecycleHandlers,
+} from './runtime-client-access.js'
 export { buildManagedRuntimeEnvironment } from './runtime-environment.js'
 export {
   buildManagedOpencodeServerEnvironment,
@@ -142,11 +148,6 @@ function computeRuntimeStartupPlan(settings = getEffectiveSettings()): RuntimeSt
     useMachineOpenCodeConfig: runtimeConfigSource === 'machine',
     shouldRefreshAccessToken: shouldRefreshAccessTokenOnStartup(),
   }
-}
-
-function normalizeDirectory(directory?: string | null) {
-  if (!directory) return null
-  return resolve(directory)
 }
 
 function isContainedPath(root: string, target: string) {
@@ -434,15 +435,6 @@ async function createManagedOpencode(
   }
 }
 
-export function buildManagedOpencodeClientConfig(
-  baseUrl: string,
-  auth: ManagedOpencodeServerAuth,
-  directory?: string | null,
-): OpencodeClientConfig & { directory?: string } {
-  // JOE-943: shared kernel owns authenticated V2 client config shape.
-  return buildAuthenticatedOpencodeV2ClientConfig(baseUrl, auth, directory)
-}
-
 export function shouldEnableNativeWebSearch() {
   const permissions = getAppConfig().permissions
   return permissions.web !== 'deny' && permissions.webSearch !== false
@@ -682,48 +674,12 @@ export async function startRuntime(
   }
 }
 
-export function getClient(): V2OpencodeClient | null {
-  return runtimeState.getClient()
-}
-
-export function getClientForDirectory(directory?: string | null): V2OpencodeClient | null {
-  const normalized = normalizeDirectory(directory)
-  const serverUrl = runtimeState.getServerUrl()
-  const serverAuth = runtimeState.getServerAuth()
-  return getOrCreateDirectoryClient({
-    baseClient: runtimeState.getClient(),
-    serverUrl,
-    directory: normalized,
-    runtimeHomeDir: normalizeDirectory(getRuntimeHomeDir()),
-    cache: runtimeState.getDirectoryClientCacheForRuntime(),
-    maxEntries: MAX_DIRECTORY_CLIENTS,
-    createClient: (baseUrl, scopedDirectory) =>
-      createOpencodeV2Client(serverAuth
-        ? buildManagedOpencodeClientConfig(baseUrl, serverAuth, scopedDirectory)
-        : { baseUrl, directory: scopedDirectory }),
-    onCreate: (scopedClient, scopedDirectory) => {
-      runtimeState.getDirectoryClientCreatedHandler()?.(scopedDirectory, scopedClient)
-    },
-    onEvict: (scopedClient, scopedDirectory) => {
-      log('runtime', `Evicting directory-scoped OpenCode client for ${scopedDirectory}`)
-      runtimeState.getDirectoryClientEvictedHandler()?.(scopedDirectory, scopedClient)
-    },
-  })
-}
-
 export function getServerUrl() {
   return runtimeState.getServerUrl()
 }
 
 export function getActiveProjectOverlayDirectory() {
   return runtimeState.getActiveProjectOverlayDirectory()
-}
-
-export function setDirectoryClientLifecycleHandlers(handlers: {
-  onCreate?: ((directory: string, client: V2OpencodeClient) => void) | null
-  onEvict?: ((directory: string, client: V2OpencodeClient) => void) | null
-}) {
-  runtimeState.setDirectoryClientLifecycleHandlers(handlers)
 }
 
 export async function stopRuntime() {

@@ -81,7 +81,7 @@ export function evaluateUnredactedExportGuard(
  * Callers must pass `localAdmin=true` (or set requireLocalAdmin=false only for
  * explicitly redacted-safe paths). Fail closed with 403 when missing.
  */
-export function requireLocalAdminIntent(
+function requireLocalAdminIntent(
   req: { url?: string },
   url: URL = new URL(req.url || '/', 'http://localhost'),
 ): ReturnType<typeof json> | null {

@@ -315,7 +315,7 @@ export function listTaskDispatchReceipts(filter: { taskId?: string; status?: Tas
   return withWorkDb(filePath, db => listTaskDispatchReceiptsFromDb(db, filter))
 }
 
-export function listTaskDispatchReceiptsFromDb(db: DatabaseSync, filter: { taskId?: string; status?: TaskDispatchReceiptStatus; stage?: string; profile?: string } = {}): TaskDispatchReceiptRecord[] {
+function listTaskDispatchReceiptsFromDb(db: DatabaseSync, filter: { taskId?: string; status?: TaskDispatchReceiptStatus; stage?: string; profile?: string } = {}): TaskDispatchReceiptRecord[] {
   const clauses: string[] = []
   const params: unknown[] = []
   if (filter.taskId) {
@@ -338,7 +338,7 @@ export function listTaskDispatchReceiptsFromDb(db: DatabaseSync, filter: { taskI
   return rows.map(rowToTaskDispatchReceipt).filter(Boolean) as TaskDispatchReceiptRecord[]
 }
 
-export function updateTaskDispatchReceipt(
+function updateTaskDispatchReceipt(
   dispatchId: string,
   filePath: string,
   fn: (receipt: TaskDispatchReceiptRecord, db: DatabaseSync, now: string) => boolean,
@@ -434,7 +434,7 @@ export function upsertTaskDispatchAcquisitionRow(
   return taskDispatchAcquisitionRecord(receipt, next)
 }
 
-export function normalizeStoredTaskDispatchAcquisitions(value: unknown): StoredTaskDispatchAcquisition[] {
+function normalizeStoredTaskDispatchAcquisitions(value: unknown): StoredTaskDispatchAcquisition[] {
   if (!Array.isArray(value)) return []
   return value.flatMap(raw => {
     const row = raw as Partial<StoredTaskDispatchAcquisition> | null
@@ -464,7 +464,7 @@ export function normalizeStoredTaskDispatchAcquisitions(value: unknown): StoredT
   })
 }
 
-export function taskDispatchAcquisitionRows(row: Record<string, unknown>): TaskDispatchAcquisitionRecord[] {
+function taskDispatchAcquisitionRows(row: Record<string, unknown>): TaskDispatchAcquisitionRecord[] {
   const receipt: TaskDispatchReceiptRecord = {
     id: String(row['id'] || ''),
     taskId: String(row['task_id'] || ''),
@@ -480,7 +480,7 @@ export function taskDispatchAcquisitionRows(row: Record<string, unknown>): TaskD
     .map(acquisition => taskDispatchAcquisitionRecord(receipt, acquisition))
 }
 
-export function taskDispatchAcquisitionRecord(receipt: TaskDispatchReceiptRecord, acquisition: StoredTaskDispatchAcquisition): TaskDispatchAcquisitionRecord {
+function taskDispatchAcquisitionRecord(receipt: TaskDispatchReceiptRecord, acquisition: StoredTaskDispatchAcquisition): TaskDispatchAcquisitionRecord {
   return {
     dispatchId: receipt.id,
     taskId: receipt.taskId,

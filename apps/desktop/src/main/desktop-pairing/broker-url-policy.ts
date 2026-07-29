@@ -17,7 +17,7 @@ function brokerReason(reason: string) {
   return reason.replace(/\bMCPs\b/g, 'desktop pairing brokers').replace(/\bMCP\b/g, 'desktop pairing broker')
 }
 
-export function isLocalDevelopmentBrokerUrl(rawUrl: string | URL) {
+function isLocalDevelopmentBrokerUrl(rawUrl: string | URL) {
   const parsed = typeof rawUrl === 'string' ? new URL(rawUrl) : rawUrl
   const host = normalizeBrokerHostname(parsed.hostname)
   return host === 'localhost' || host === '127.0.0.1' || host === '::1'

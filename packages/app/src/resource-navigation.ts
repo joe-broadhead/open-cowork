@@ -14,7 +14,7 @@ import {
 } from '@open-cowork/shared'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from './stores/session-workspace-keys'
 
-export type ResourceNavigationValue =
+type ResourceNavigationValue =
   | WorkspaceInfo
   | SessionInfo
   | WorkflowDetail
@@ -27,7 +27,7 @@ export type ResourceNavigationValue =
 
 export type ResourceNavigationAction = ResourceOpenAction<ResourceNavigationValue | null>
 
-export type ResourceNavigationEventDetail = {
+type ResourceNavigationEventDetail = {
   deepLink?: string
   identity?: CanonicalResourceIdentity
 }
@@ -40,7 +40,7 @@ const DESKTOP_SUPPORTED_AUTHORITIES = new Set<ResourceAuthority>([
   'paired-desktop',
 ])
 
-export function resourceAuthorityForWorkspace(workspace: WorkspaceInfo): ResourceAuthority {
+function resourceAuthorityForWorkspace(workspace: WorkspaceInfo): ResourceAuthority {
   if (workspace.authority === 'desktop_local') return 'desktop-local'
   if (workspace.authority === 'cloud_worker') return 'desktop-cloud'
   if (workspace.authority === 'cloud_channel_gateway') return 'cloud-channel-gateway'

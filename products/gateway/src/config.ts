@@ -21,7 +21,7 @@ import {
   normalizeLiveConfig,
 } from './config-normalize.js'
 
-export { GatewayConfigSchema } from './config-schema.js'
+
 
 export type AgentPromotionState = 'draft' | 'evaluated' | 'promoted' | 'deprecated' | 'blocked'
 
@@ -33,7 +33,7 @@ export interface AgentBudgetContract {
   humanGate?: 'never' | 'on-risk' | 'always'
 }
 
-export interface AgentOutputContract {
+interface AgentOutputContract {
   format?: 'text' | 'json' | 'stage-result' | 'supervisor-result'
   schema?: Record<string, unknown>
   requiredEvidence?: string[]
@@ -89,7 +89,7 @@ export interface ChannelAllowlistRule {
   adminUserIds?: string[]
 }
 
-export interface ExposedHttpSecurityConfig {
+interface ExposedHttpSecurityConfig {
   /**
    * Reject daemon startup in exposed mode (allowNonLocalHttp) when a configured
    * Gateway HTTP token is shorter than minTokenLength or carries less than
@@ -176,7 +176,7 @@ export interface GovernanceBudgetConfig {
   action?: GovernanceAction
 }
 
-export interface GovernanceConfig {
+interface GovernanceConfig {
   enabled: boolean
   action: GovernanceAction
   global: GovernanceBudgetConfig
@@ -191,7 +191,7 @@ export interface GovernanceConfig {
 
 export type HumanGateTimeoutAction = 'remind' | 'escalate' | 'pause' | 'block'
 
-export interface HumanLoopConfig {
+interface HumanLoopConfig {
   enabled: boolean
   taskStartApproval: boolean
   stageApprovals: string[]
@@ -211,7 +211,7 @@ export interface HumanLoopConfig {
  * provider-balance blips (operational/external cohorts) never trip it. Requires
  * at least `minRuns` terminal runs so a thin sample cannot cry wolf.
  */
-export interface ProfileHealthAlertConfig {
+interface ProfileHealthAlertConfig {
   enabled: boolean
   windowDays: number
   minRuns: number
@@ -225,7 +225,7 @@ export interface ProfileHealthAlertConfig {
  * `scheduler.maxRunsPerTask` so the operator is warned BEFORE the per-task run
  * cap hard-blocks the task. Reads a bounded indexed aggregate, never mutates.
  */
-export interface StuckTaskAlertConfig {
+interface StuckTaskAlertConfig {
   enabled: boolean
   runThreshold: number
 }
@@ -245,9 +245,9 @@ export interface AlertsConfig {
   }
 }
 
-export type StorageBackendMode = 'local_sqlite'
+type StorageBackendMode = 'local_sqlite'
 
-export interface StorageConfig {
+interface StorageConfig {
   backend: StorageBackendMode
   /**
    * Durable-store retention windows for the unbounded history tables. The
@@ -264,7 +264,7 @@ export interface StorageConfig {
   }
 }
 
-export interface SecretLifecycleConfig {
+interface SecretLifecycleConfig {
   rotationHealthByInputId?: Record<string, string>
   rotationHealthByReferenceId?: Record<string, string>
   lastVerifiedAtByInputId?: Record<string, string>
@@ -708,7 +708,7 @@ export function clearConfigCacheForTest(): void {
   cachedConfig = null
 }
 
-export function normalizeSchedulerConfig(input: GatewayConfig['scheduler'], profiles: Record<string, AgentProfile> = getConfig().profiles): GatewayConfig['scheduler'] {
+function normalizeSchedulerConfig(input: GatewayConfig['scheduler'], profiles: Record<string, AgentProfile> = getConfig().profiles): GatewayConfig['scheduler'] {
   const defaultPipeline = normalizeStageList(input.defaultPipeline, 'scheduler.defaultPipeline')
   const stageProfiles = normalizeStageProfiles(input.stageProfiles || {}, defaultPipeline, profiles)
   const intervalMs = boundedInteger(input.intervalMs, 1000, 24 * 60 * 60 * 1000, 'scheduler.intervalMs')

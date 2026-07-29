@@ -49,7 +49,7 @@ export function getPackageVersion(storeEntryName) {
   return nameWithVersion.slice(versionSeparator + 1) || null
 }
 
-export function resolveInstalledOpencodeVersion(options = {}) {
+function resolveInstalledOpencodeVersion(options = {}) {
   const packageJsonPath = options.opencodePackageJsonPath || join(repoRoot, 'apps', 'desktop', 'node_modules', 'opencode-ai', 'package.json')
   if (!existsSync(packageJsonPath)) {
     throw new Error(`Installed opencode-ai package metadata not found at ${packageJsonPath}. Run pnpm install before packaging.`)
@@ -157,7 +157,7 @@ function opencodeBinaryName(electronPlatformName) {
  * packages have been copied. Prefers the arch-native package, then the x64
  * baseline variant used on some Intel builds.
  */
-export function resolvePackagedOpencodeCliPath(resourcesDir, electronPlatformName, archName) {
+function resolvePackagedOpencodeCliPath(resourcesDir, electronPlatformName, archName) {
   const platform = platformPackageName(electronPlatformName)
   const binary = opencodeBinaryName(electronPlatformName)
   const moduleNames = [
@@ -180,7 +180,7 @@ export function resolvePackagedOpencodeCliPath(resourcesDir, electronPlatformNam
  * workspace node_modules copy). electron-builder rewrites package metadata when
  * packing, so the on-disk install and the asar entry can differ.
  */
-export function resolvePackagedRuntimeComponentPaths(resourcesDir, options = {}) {
+function resolvePackagedRuntimeComponentPaths(resourcesDir, options = {}) {
   const electronPlatformName = options.electronPlatformName || process.platform
   const archName = getTargetArchName(options.arch) || process.arch
   const opencodeCli = options.componentPaths?.['opencode-cli']
@@ -235,7 +235,7 @@ function readCliVersionFromBinary(binaryPath) {
  * Extract `@opencode-ai/sdk/package.json` from the packaged app.asar so the
  * trusted manifest pins the same bytes the runtime will re-hash at launch.
  */
-export function extractPackagedOpencodeSdkPackageJson(resourcesDir, options = {}) {
+function extractPackagedOpencodeSdkPackageJson(resourcesDir, options = {}) {
   if (options.sdkPackageJsonPath && existsSync(options.sdkPackageJsonPath)) {
     return options.sdkPackageJsonPath
   }
@@ -357,7 +357,7 @@ export async function writePackagedRuntimeComponentManifest(resourcesDir, option
  * Map electron-builder platform/arch → third_party/time-keep/platforms key.
  * Source binaries: https://github.com/joe-broadhead/time-keep releases.
  */
-export function timeKeepPlatformKey(electronPlatformName, archName) {
+function timeKeepPlatformKey(electronPlatformName, archName) {
   if (electronPlatformName === 'darwin') {
     return archName === 'arm64' ? 'darwin-arm64' : 'darwin-x64'
   }
@@ -370,7 +370,7 @@ export function timeKeepPlatformKey(electronPlatformName, archName) {
   return null
 }
 
-export function copyBundledTimeKeepBinary(resourcesDir, electronPlatformName, archName, options = {}) {
+function copyBundledTimeKeepBinary(resourcesDir, electronPlatformName, archName, options = {}) {
   const key = timeKeepPlatformKey(electronPlatformName, archName)
   if (!key) {
     throw new Error(`Cannot map ${electronPlatformName}/${archName} to a time-keep platform asset`)
@@ -437,4 +437,5 @@ export function createDesktopAfterPack(options = {}) {
   }
 }
 
+/** @public Owner: Desktop Packaging. Electron Builder loads this default hook by configured file path. */
 export default createDesktopAfterPack()

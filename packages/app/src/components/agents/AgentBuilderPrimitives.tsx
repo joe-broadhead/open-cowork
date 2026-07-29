@@ -376,7 +376,7 @@ export function InferenceTab({
   )
 }
 
-export function serializeAgentBuilderModelId(providerId: string, modelId: string): string {
+function serializeAgentBuilderModelId(providerId: string, modelId: string): string {
   return modelId.startsWith(`${providerId}/`) ? modelId : `${providerId}/${modelId}`
 }
 

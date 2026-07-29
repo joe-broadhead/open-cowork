@@ -2,10 +2,10 @@ import type { GatewayConfig } from './config.js'
 import type { ChannelCapabilities, ChannelWebhookRouteRequirement } from './channels/capabilities.js'
 import { extractHostname, evaluateHttpRequestSecurity, getHttpAuthPosture, isLocalHostname, publicWebhookRoutesForProvider, type HttpCapability } from './security.js'
 
-export type WebhookVerificationStatus = 'ready' | 'missing' | 'unsupported' | 'not_applicable'
-export type WebhookExposureMode = 'public_webhook_mode' | 'authenticated_reverse_proxy' | 'local_only' | 'unsafe_public' | 'not_applicable'
-export type WebhookVerifierState = 'ready' | 'warning' | 'blocked' | 'not_applicable'
-export type WebhookVerifierIssueCode =
+type WebhookVerificationStatus = 'ready' | 'missing' | 'unsupported' | 'not_applicable'
+type WebhookExposureMode = 'public_webhook_mode' | 'authenticated_reverse_proxy' | 'local_only' | 'unsafe_public' | 'not_applicable'
+type WebhookVerifierState = 'ready' | 'warning' | 'blocked' | 'not_applicable'
+type WebhookVerifierIssueCode =
   | 'webhook_url_missing'
   | 'webhook_route_missing'
   | 'verify_token_mismatch'
@@ -32,7 +32,7 @@ export interface WebhookRouteVerification {
   requiredCapability: HttpCapability
 }
 
-export interface WebhookVerifierIssue {
+interface WebhookVerifierIssue {
   code: WebhookVerifierIssueCode
   severity: 'info' | 'warning' | 'blocked'
   summary: string

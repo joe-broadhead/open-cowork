@@ -160,7 +160,7 @@ export function reconcileLocalContainerEnvironmentRuns(environments: Environment
 }
 
 
-export function createLocalContainerWorkspace(spec: EnvironmentSpec, options: { taskId: string; stage: string; idempotencyKey?: string }): string {
+function createLocalContainerWorkspace(spec: EnvironmentSpec, options: { taskId: string; stage: string; idempotencyKey?: string }): string {
   const keyed = options.idempotencyKey ? localContainerWorkspaceTargetForKey(spec, options.idempotencyKey) : undefined
   const root = keyed?.root || path.join(os.tmpdir(), 'opencode-gateway', 'local-container', `${safePathPart(spec.name)}-${safePathPart(options.taskId)}-${safePathPart(options.stage)}-${randomUUID()}`)
   const workspace = path.join(root, 'workspace')
@@ -170,19 +170,19 @@ export function createLocalContainerWorkspace(spec: EnvironmentSpec, options: { 
   return workspace
 }
 
-export function localContainerWorkspaceTargetForKey(spec: EnvironmentSpec, idempotencyKey: string): { idempotencyKeyHash: string; root: string; workspace: string } {
+function localContainerWorkspaceTargetForKey(spec: EnvironmentSpec, idempotencyKey: string): { idempotencyKeyHash: string; root: string; workspace: string } {
   const idempotencyKeyHash = environmentIdempotencyKeyHash(idempotencyKey)
   const root = path.join(os.tmpdir(), 'opencode-gateway', 'local-container', `${safePathPart(spec.name)}-key-${idempotencyKeyHash}`)
   return { idempotencyKeyHash, root, workspace: path.join(root, 'workspace') }
 }
 
-export function createLocalContainerCaptureDir(workspace: string): string {
+function createLocalContainerCaptureDir(workspace: string): string {
   const dir = path.join(path.dirname(workspace), 'captures')
   fs.mkdirSync(dir, { recursive: true })
   return dir
 }
 
-export function createLocalContainerCommandWrapper(spec: EnvironmentSpec, workdir: string | undefined, captureDir: string): string {
+function createLocalContainerCommandWrapper(spec: EnvironmentSpec, workdir: string | undefined, captureDir: string): string {
   const scriptPath = path.join(path.dirname(captureDir), 'gateway-container-command.js')
   const runtimePrefix = localContainerCommandPrefix(spec, workdir)
   const timeoutMs = spec.resources.timeoutMs
@@ -240,7 +240,7 @@ interface LocalContainerCommandResult {
   error?: string
 }
 
-export function preflightLocalContainerStageCommands(spec: EnvironmentSpec, base: EnvironmentPreflightResult): { preflight: EnvironmentPreflightResult; results: LocalContainerCommandResult[] } {
+function preflightLocalContainerStageCommands(spec: EnvironmentSpec, base: EnvironmentPreflightResult): { preflight: EnvironmentPreflightResult; results: LocalContainerCommandResult[] } {
   const checked = base.checked.slice()
   const missing = base.missing.slice()
   const warnings = base.warnings.slice()
@@ -270,7 +270,7 @@ export function preflightLocalContainerStageCommands(spec: EnvironmentSpec, base
   return { preflight: { ok: missing.length === 0, checked: uniqueStrings(checked), missing: uniqueStrings(missing), warnings, commandRefs: uniqueStrings(commandRefs) }, results }
 }
 
-export function runLocalContainerShellCommand(spec: EnvironmentSpec, command: string, workdir: string | undefined, phase: string): LocalContainerCommandResult {
+function runLocalContainerShellCommand(spec: EnvironmentSpec, command: string, workdir: string | undefined, phase: string): LocalContainerCommandResult {
   return runLocalContainerCommand(spec, ['sh', '-lc', command], workdir, phase)
 }
 
@@ -294,7 +294,7 @@ export function runLocalContainerCommand(spec: EnvironmentSpec, command: string[
   }
 }
 
-export function localContainerCommandSummary(result: LocalContainerCommandResult): Record<string, unknown> {
+function localContainerCommandSummary(result: LocalContainerCommandResult): Record<string, unknown> {
   return {
     ok: result.ok,
     phase: result.phase,
@@ -306,11 +306,11 @@ export function localContainerCommandSummary(result: LocalContainerCommandResult
   }
 }
 
-export function localContainerCommandRef(runtime: string, args: string[]): string {
+function localContainerCommandRef(runtime: string, args: string[]): string {
   return [runtime, ...args].join(' ')
 }
 
-export function warmLocalContainerPool(spec: EnvironmentSpec, workdir: string | undefined): { enabled: false } | { enabled: true; key: string; hit: boolean; warmedAt?: string; result?: LocalContainerCommandResult } {
+function warmLocalContainerPool(spec: EnvironmentSpec, workdir: string | undefined): { enabled: false } | { enabled: true; key: string; hit: boolean; warmedAt?: string; result?: LocalContainerCommandResult } {
   if (!spec.container?.warm) return { enabled: false }
   const runtime = spec.container.runtime || 'docker'
   const image = spec.container.image || '<image>'
@@ -323,7 +323,7 @@ export function warmLocalContainerPool(spec: EnvironmentSpec, workdir: string | 
   return { enabled: true, key, hit: false, warmedAt: result.ok ? warmedAt : undefined, result }
 }
 
-export function redactLocalContainerText(text: string, spec: EnvironmentSpec): string {
+function redactLocalContainerText(text: string, spec: EnvironmentSpec): string {
   let out = text
   for (const name of uniqueStrings([...Object.keys(spec.env), ...spec.secrets.allow])) {
     const value = process.env[name]
@@ -336,7 +336,7 @@ export function localContainerCommandPrefix(spec: EnvironmentSpec, workdir: stri
   return [spec.container?.runtime || 'docker', ...localContainerRunArgs(spec, workdir, [])]
 }
 
-export function localContainerRunArgs(spec: EnvironmentSpec, workdir: string | undefined, command: string[]): string[] {
+function localContainerRunArgs(spec: EnvironmentSpec, workdir: string | undefined, command: string[]): string[] {
   const containerWorkdir = localContainerWorkdir(spec)
   const args = ['run', '--rm']
   if (spec.container?.pull && spec.container.pull !== 'missing') args.push('--pull', spec.container.pull)
@@ -366,21 +366,21 @@ function assertContainerNetworkPolicy(spec: Pick<EnvironmentSpec, 'name' | 'netw
   }
 }
 
-export function localContainerNetworkArgs(spec: EnvironmentSpec): string[] {
+function localContainerNetworkArgs(spec: EnvironmentSpec): string[] {
   assertContainerNetworkPolicy(spec)
   if (spec.network.mode === 'disabled' || spec.network.mode === 'restricted') return ['--network', 'none']
   return spec.container?.network ? ['--network', spec.container.network] : []
 }
 
-export function localContainerWorkdir(spec: EnvironmentSpec): string {
+function localContainerWorkdir(spec: EnvironmentSpec): string {
   return spec.container?.workdir || DEFAULT_CONTAINER_WORKDIR
 }
 
-export function localContainerCacheVolumes(spec: EnvironmentSpec): Array<{ name: string; target: string; mode: 'readonly' | 'readwrite' }> {
+function localContainerCacheVolumes(spec: EnvironmentSpec): Array<{ name: string; target: string; mode: 'readonly' | 'readwrite' }> {
   return spec.cache.volumes.map(volume => ({ name: `opencode-gateway-${hashText(`${spec.specHash}:${volume.name}`).slice(0, 16)}-${safePathPart(volume.name)}`, target: volume.path, mode: volume.mode || 'readwrite' }))
 }
 
-export function readLocalContainerCaptures(captureDir: string | undefined): Array<Record<string, any> & { metadataPath: string }> {
+function readLocalContainerCaptures(captureDir: string | undefined): Array<Record<string, any> & { metadataPath: string }> {
   if (!captureDir || !fs.existsSync(captureDir)) return []
   const rows: Array<Record<string, any> & { metadataPath: string }> = []
   for (const entry of fs.readdirSync(captureDir).sort()) {
@@ -394,7 +394,7 @@ export function readLocalContainerCaptures(captureDir: string | undefined): Arra
   return rows
 }
 
-export function localContainerWorkspaceArtifacts(workspace: string | undefined): string[] {
+function localContainerWorkspaceArtifacts(workspace: string | undefined): string[] {
   if (!workspace) return []
   const root = path.join(workspace, '.gateway', 'artifacts')
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return []
@@ -413,7 +413,7 @@ export function localContainerWorkspaceArtifacts(workspace: string | undefined):
 }
 
 
-export function isLocalContainerWorkspace(workspace: string): boolean {
+function isLocalContainerWorkspace(workspace: string): boolean {
   const root = path.join(os.tmpdir(), 'opencode-gateway', 'local-container')
   const relative = path.relative(root, workspace)
   return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative)

@@ -160,7 +160,7 @@ export function renderFormActions(primaryLabel: string): string {
   return `<div class="ow-form-actions"><button type="submit">${escapeHtml(primaryLabel)}</button></div>`;
 }
 
-export { renderDiff } from "./diff.ts";
+;
 
 export function renderGraphMount(options: {
   src: string;

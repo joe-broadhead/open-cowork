@@ -14,7 +14,7 @@ import { repoRoot, waitForAppShell } from './smoke-helpers.ts'
 // Linux) because it drives the packaged/dev Electron app — that is what the
 // monthly workflow provides.
 
-export const EVAL_ARTIFACT_DIR = resolve(
+const EVAL_ARTIFACT_DIR = resolve(
   repoRoot,
   process.env.OPEN_COWORK_EVAL_ARTIFACT_DIR?.trim() || 'apps/desktop/test-artifacts/evals',
 )
@@ -22,7 +22,7 @@ export const EVAL_ARTIFACT_DIR = resolve(
 // Baselines live in-tree so a large visual change shows up as a reviewable
 // diff. On first run (or when explicitly updating) missing baselines are
 // seeded here and must be accepted/committed by a maintainer.
-export const VISUAL_BASELINE_DIR = resolve(repoRoot, 'apps/desktop/tests/visual-baselines')
+const VISUAL_BASELINE_DIR = resolve(repoRoot, 'apps/desktop/tests/visual-baselines')
 
 // Fraction of sampled pixels allowed to differ before a surface is flagged.
 // Deliberately generous: this guards against large/structural regressions
@@ -31,7 +31,7 @@ const DEFAULT_DIFF_THRESHOLD = 0.04
 const DEFAULT_PER_PIXEL_TOLERANCE = 24 // 0-255 per channel
 const COMPARE_WIDTH = 320 // downscale both images to this width before diffing
 
-export function shouldUpdateBaselines(): boolean {
+function shouldUpdateBaselines(): boolean {
   const raw = process.env.OPEN_COWORK_EVAL_UPDATE_BASELINES?.trim()
   return raw === '1' || raw === 'true'
 }
@@ -41,7 +41,7 @@ function ensureDir(dir: string) {
   return dir
 }
 
-export function evalFlowDir(flow: string): string {
+function evalFlowDir(flow: string): string {
   return ensureDir(join(EVAL_ARTIFACT_DIR, flow))
 }
 

@@ -16,7 +16,7 @@ import { platform as osPlatform } from 'node:os'
 
 export type VoicePackagingPlatform = 'darwin' | 'linux' | 'win32' | 'other'
 
-export type VoiceNativeBinaryKind = 'aurum' | 'ffmpeg'
+type VoiceNativeBinaryKind = 'aurum' | 'ffmpeg'
 
 export type VoicePlatformPackagingRow = {
   platform: VoicePackagingPlatform
@@ -59,24 +59,9 @@ export const VOICE_PACKAGING_MATRIX: VoicePlatformPackagingRow[] = [
   },
 ]
 
-export function voicePackagingPlatform(id = osPlatform()): VoicePackagingPlatform {
+function voicePackagingPlatform(id = osPlatform()): VoicePackagingPlatform {
   if (id === 'darwin' || id === 'linux' || id === 'win32') return id
   return 'other'
-}
-
-export function isElectronPackaged(
-  env: NodeJS.ProcessEnv = process.env,
-  electronApp?: { isPackaged?: boolean } | null,
-): boolean {
-  if (electronApp && typeof electronApp.isPackaged === 'boolean') {
-    return electronApp.isPackaged
-  }
-  // electron-builder / Electron set these in production.
-  return env.OPEN_COWORK_PACKAGED === '1'
-    || Boolean(env.PORTABLE_EXECUTABLE_DIR)
-    || (typeof process.resourcesPath === 'string'
-      && process.resourcesPath.length > 0
-      && !process.resourcesPath.includes(`${join('node_modules', 'electron')}`))
 }
 
 /**
@@ -92,7 +77,7 @@ export function voicePackagedResourcesDir(
   return join(resourcesPath, 'voice')
 }
 
-export function packagedBinaryName(kind: VoiceNativeBinaryKind, platform = osPlatform()): string {
+function packagedBinaryName(kind: VoiceNativeBinaryKind, platform = osPlatform()): string {
   if (platform === 'win32') {
     return kind === 'aurum' ? 'aurum.exe' : 'ffmpeg.exe'
   }

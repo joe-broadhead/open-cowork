@@ -2,7 +2,7 @@ import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readFileSyn
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const WORKSPACE_SUBPROCESS_COVERAGE_PREFIXES = [
+const WORKSPACE_SUBPROCESS_COVERAGE_PREFIXES = [
   'apps/standalone-gateway/dist/',
   'mcps/agents/dist/',
   'mcps/charts/dist/',

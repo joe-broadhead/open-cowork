@@ -12,25 +12,25 @@ import {
 } from './access-inspection.js'
 import { redactEnvironmentNetworkTarget, redactEnvironmentSensitiveText, type EnvironmentRunRecord, type EnvironmentSpec } from './environments.js'
 
-export type RuntimeCapabilityGrantStatus = 'granted' | 'denied'
-export type RuntimeCapabilityGrantDecision = 'allow' | 'ask' | 'deny'
-export type RuntimeCapabilityGrantRequestKind = 'agent' | 'skill' | 'mcp' | 'tool' | 'capability' | 'permission' | 'environment' | 'secret' | 'network' | 'filesystem'
+type RuntimeCapabilityGrantStatus = 'granted' | 'denied'
+type RuntimeCapabilityGrantDecision = 'allow' | 'ask' | 'deny'
+type RuntimeCapabilityGrantRequestKind = 'agent' | 'skill' | 'mcp' | 'tool' | 'capability' | 'permission' | 'environment' | 'secret' | 'network' | 'filesystem'
 
-export interface RuntimeCapabilityGrantValidation {
+interface RuntimeCapabilityGrantValidation {
   ok: boolean
   errors: string[]
   warnings: string[]
   denied: RuntimeCapabilityDenial[]
 }
 
-export interface RuntimeCapabilityDenial {
+interface RuntimeCapabilityDenial {
   kind: RuntimeCapabilityGrantRequestKind
   value: string
   reason: string
   action: string
 }
 
-export interface RuntimeCapabilityGrantInspectionSummary {
+interface RuntimeCapabilityGrantInspectionSummary {
   kind: AccessInspectionKind
   name: string
   status: AccessInspectionStatus

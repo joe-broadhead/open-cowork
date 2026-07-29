@@ -145,7 +145,7 @@ export interface EnvironmentRunRecord {
   metadata: Record<string, unknown>
 }
 
-export interface EnvironmentHydrationInput {
+interface EnvironmentHydrationInput {
   taskId: string
   roadmapId?: string
   stage: string
@@ -163,7 +163,7 @@ export interface EnvironmentSourcePlan {
   missing: Array<{ taskId: string; reason: string }>
 }
 
-export interface EnvironmentSourcePatch {
+interface EnvironmentSourcePatch {
   id: string
   taskId: string
   runId: string

@@ -113,7 +113,7 @@ export function auditLedgerRecordFromWorkEvent(event: WorkEventRecord, previousH
   }
 }
 
-export function redactAuditLedgerPayload(payload: Record<string, unknown>): Record<string, unknown> {
+function redactAuditLedgerPayload(payload: Record<string, unknown>): Record<string, unknown> {
   return redactPayloadObject(payload, 0) as Record<string, unknown>
 }
 

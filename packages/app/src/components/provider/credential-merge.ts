@@ -1,6 +1,6 @@
 type ProviderCredentialBag = Record<string, string>
 
-export const CREDENTIAL_MASK = '••••••••'
+const CREDENTIAL_MASK = '••••••••'
 
 export function isCredentialMask(value: string | null | undefined) {
   return value === CREDENTIAL_MASK

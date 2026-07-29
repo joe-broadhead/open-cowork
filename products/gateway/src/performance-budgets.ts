@@ -6,7 +6,7 @@ import {
 } from './mission-control-view-model.js'
 import { evaluateReadiness, type ReadinessCheck } from './readiness.js'
 
-export type PerformanceBudgetStatus = 'pass' | 'fail'
+type PerformanceBudgetStatus = 'pass' | 'fail'
 
 export interface PerformanceBudgetRow {
   id: string

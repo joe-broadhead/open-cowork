@@ -9,6 +9,7 @@ import { buildChannelConnectorRegistry } from '../channel-connectors.js'
 import { progressCard, runResultCard } from '../channels/renderer.js'
 import type { ChannelMessage } from '../channels/provider.js'
 import { clearConfigCacheForTest, getConfig, updateConfig } from '../config.js'
+import { TransientInboundError } from '../security.js'
 import { clearWorkStateForTest, listWorkEvents } from '../work-store.js'
 import { clearEventsForTest, getQueuedEvents } from '../wakeup.js'
 import {
@@ -232,6 +233,39 @@ describe('discord alpha adapter', () => {
 
     expect(response).toMatchObject({ status: 200, body: { type: 4 } })
     expect(handled).toEqual([expect.objectContaining({ messageId: 'interaction-slow', text: '/status' })])
+  })
+
+  it('does not claim provider redelivery for an async native Discord handler failure', async () => {
+    const keys = generateKeyPairSync('ed25519')
+    const publicKey = Buffer.from(keys.publicKey.export({ format: 'der', type: 'spki' }) as Buffer).subarray(-32).toString('hex')
+    process.env['OPENCODE_GATEWAY_DISCORD_ALPHA_ENABLED'] = 'true'
+    process.env['DISCORD_PUBLIC_KEY'] = publicKey
+    updateConfig({ security: { channelAllowlists: { discord: [{ chatId: 'channel-1' }] } } } as any)
+    const handled: ChannelMessage[] = []
+    discordChannel.onMessage(async message => {
+      handled.push(message)
+      throw new TransientInboundError('Gateway is restarting')
+    })
+
+    const body = JSON.stringify({
+      type: 3,
+      id: 'interaction-transient',
+      channel_id: 'channel-1',
+      member: { user: { id: 'user-1' } },
+      data: { custom_id: '/status' },
+    })
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const signature = sign(null, Buffer.from(timestamp + body), keys.privateKey).toString('hex')
+
+    await expect(discordChannel.handleInteraction(body, {
+      'x-signature-ed25519': signature,
+      'x-signature-timestamp': timestamp,
+    })).resolves.toMatchObject({ status: 200, body: { type: 4 } })
+    await flushDiscordDispatch()
+
+    expect(handled).toHaveLength(1)
+    expect(handled[0]?.transientFailureHandoff).toBeUndefined()
+    expect(getQueuedEvents().join('\n')).toContain('Discord inbound handler failed: Gateway is restarting')
   })
 
   it('preserves Discord thread targets so channel allowlists can scope project/session routing', async () => {

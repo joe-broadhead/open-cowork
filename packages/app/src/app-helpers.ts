@@ -5,7 +5,7 @@ import { isDesktopRuntime } from './runtime-env'
 export const UI_PRIMITIVES_HASH = '#/ui-primitives'
 export const UI_PRIMITIVES_ENABLED = import.meta.env.DEV
 
-export type ViewTransitionDocument = Document & {
+type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => {
     finished?: Promise<void>
     ready?: Promise<void>
@@ -13,7 +13,7 @@ export type ViewTransitionDocument = Document & {
   }
 }
 
-export function canUseViewTransition() {
+function canUseViewTransition() {
   // Electron packaged shells often recover by reloading the renderer mid-boot
   // (splash → main). View Transitions abort as "Transition was skipped" in that
   // race and used to surface as a fatal Startup Error. Keep transitions on web.

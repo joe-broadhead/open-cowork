@@ -8,9 +8,14 @@ import { setDaemonClient } from './gateway-runtime.js'
 import { trackWorker, loadWorkerState, reconcileWorkersFromOpenCode } from './workers.js'
 import { renderDashboard } from './dashboard.js'
 import { subscribeToOpenCodeEvents, addLiveClient, closeAllLiveClients, stopLiveEvents } from './live.js'
-import { getTelegramChannel } from './channels/telegram-protocol-stack.js'
 import { getWhatsAppChannel, isWhatsAppMonorepoBridge } from './channels/whatsapp-protocol-stack.js'
 import { getDiscordChannel, isDiscordMonorepoBridge } from './channels/discord-protocol-stack.js'
+import { channelInboundFailureOutcome } from './channel-telemetry.js'
+import {
+  composedChannelTelemetryStack,
+  createDaemonChannelComposition,
+  syncChannelBindingTelemetry,
+} from './channels/runtime-composition.js'
 import { claimInboundWebhookRateLimit, inboundWebhookRateKey, noteInboundWebhookAuthFailure } from './channels/webhook-rate-limit.js'
 import { actionDeliveryForCapabilities } from './channels/capabilities.js'
 import { resolveAgent } from './routing.js'
@@ -34,7 +39,15 @@ import { rotateServiceLogIfNeeded } from './service-logs.js'
 import { runAlertEngine } from './alerts.js'
 import { deliverAlertNotifications } from './alert-delivery.js'
 import { createLogger } from './logger.js'
-import { recordAuthFailure, recordChannelMessageIn, recordChannelMessageOut, recordSchedulerCycle, startRuntimeMetricsSampler, stopRuntimeMetricsSampler } from './runtime-metrics.js'
+import {
+  recordAuthFailure,
+  recordChannelMessageIn,
+  recordChannelMessageOut,
+  recordChannelOperation,
+  recordSchedulerCycle,
+  startRuntimeMetricsSampler,
+  stopRuntimeMetricsSampler,
+} from './runtime-metrics.js'
 import { createGatewayOpenCodeClient, openCodeFetch } from './opencode-client.js'
 import { safeOpenCodeBaseUrlString } from './opencode-url-policy.js'
 import { withDeadline } from './deadlines.js'
@@ -113,14 +126,13 @@ export async function serve() {
   startHeartbeat()
 
   // JOE-994 Phase 2–3: Telegram/Discord/WhatsApp may be Durable native or monorepo façades.
-  const telegramChannel = getTelegramChannel()
-  const whatsappChannel = getWhatsAppChannel()
-  const discordChannel = getDiscordChannel()
-  const channelByName = new Map([
-    [telegramChannel.name, telegramChannel],
-    [whatsappChannel.name, whatsappChannel],
-    [discordChannel.name, discordChannel],
-  ])
+  const {
+    channels: channelByName,
+    telegramChannel,
+    whatsappChannel,
+    discordChannel,
+  } = createDaemonChannelComposition()
+  syncChannelBindingTelemetry(channelByName)
   let acceptingWork = true
   const jsonRoutes = createJsonRoutes()
   const syncBridge = startChannelSync(client, channelByName)
@@ -188,127 +200,155 @@ export async function serve() {
   })
 
   const handleChannelMessage = async (msg: any) => {
-    if (!canCurrentDaemonWrite()) {
-      const leadership = getCurrentDaemonLeadershipStatus()
-      log.warn('Deferring channel inbound while not writer', { mode: leadership.mode, remediation: leadership.remediation, provider: msg.provider })
-      throw new TransientInboundError('gateway daemon is standby; retry on the active writer')
-    }
-    recordChannelMessageIn(msg.provider)
-    const trustDecision = channelInboundTrustDecision(msg)
-    if (!trustDecision.allowed) {
-      const target = redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)
-      queueEvent(trustDecision.reason === 'untrusted_actor'
-        ? `Rejected untrusted channel actor inbound: ${target}`
-        : `Rejected untrusted channel inbound: ${target}`)
-      try { appendChannelInboundDenialAudit({ provider: msg.provider, chatId: msg.chatId, threadId: msg.threadId, reason: trustDecision.reason }) } catch {}
-      return
-    }
-    const parsedCommand = parseChannelCommand(msg.text)
-    if (parsedCommand) recordChannelCommandEvent('channel.command.received', msg, parsedCommand)
-    let commandFailed = false
-    const commandReply = await handleChannelCommand(client as any, msg)
-      .catch((err: any) => {
-        commandFailed = true
-        return `Command failed: ${redactSensitiveText(err?.message || String(err))}`
-      })
-    if (commandReply !== null) {
-      const channel = channelByName.get(msg.provider)
-      const actionDelivery = actionDeliveryForCapabilities(channel?.capabilities, Boolean(channel?.sendCommandMenu))
-      try {
-        if (parsedCommand && isChannelCommandMenuRequest(parsedCommand.name) && channel?.sendCommandMenu && actionDelivery === 'native') {
-          await channel.sendCommandMenu(msg.chatId, commandReply, channelCommandMenuActions(), { threadId: msg.threadId })
-          recordChannelMessageOut(msg.provider)
-          recordChannelCommandEvent(commandFailed ? 'channel.command.failed' : 'channel.command.replied', msg, parsedCommand, { delivery: 'command_menu', replyLength: commandReply.length })
-        } else {
-          await channel?.sendMessage(msg.chatId, commandReply.substring(0, 4000), { threadId: msg.threadId })
-          recordChannelMessageOut(msg.provider)
-          if (parsedCommand) recordChannelCommandEvent(commandFailed ? 'channel.command.failed' : 'channel.command.replied', msg, parsedCommand, { delivery: 'message', replyLength: commandReply.length })
-        }
-      } catch (err: any) {
-        if (parsedCommand) recordChannelCommandEvent('channel.command.failed', msg, parsedCommand, { delivery: 'message', error: redactSensitiveText(err?.message || String(err)) })
-        throw err
-      }
-      return
-    }
-
-    const stickyPresence = (await import('./agent-presence.js')).resolveAgentPresenceForChannel(msg.provider, msg.chatId, msg.threadId)
-    const agent = stickyPresence?.opencodeAgent || resolveAgent(msg.provider, msg.chatId, msg.text)
-    const title = msg.provider.toUpperCase() + ':' + msg.userId + ': ' + msg.text.substring(0, 30)
-    let sessionId = stickyPresence?.sessionId || getChannelSession(msg.provider, msg.chatId, msg.threadId)
-    if (sessionId) {
-      const sessionCheck = await checkBoundChannelSession(client, sessionId)
-      if (sessionCheck === 'transient') {
-        // OpenCode is briefly unreachable; keep the existing conversation binding
-        // instead of silently orphaning it with a fresh session, and signal the
-        // channel adapter to retry the message rather than acknowledge it.
-        queueEvent(`${msg.provider} inbound deferred for ${redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)}: bound session check failed transiently`)
-        throw new TransientInboundError('bound channel session check failed transiently; OpenCode may be restarting')
-      }
-      if (sessionCheck === 'missing') sessionId = undefined
-    }
-    if (!sessionId) {
-      let sessionIdCreated: string
-      try {
-        const { getOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
-        const created = await getOpenCodeSessionRuntime().createSession({ title: 'GW:' + title })
-        sessionIdCreated = created.id
-      } catch (err: any) {
-        // A create failure during an OpenCode outage is transient: defer the
-        // message for retry instead of dropping it. Genuine 404s stay poison.
-        if (isNotFoundError(err)) throw err
-        queueEvent(`${msg.provider} inbound deferred for ${redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)}: session create failed transiently`)
-        throw new TransientInboundError('channel session create failed transiently; OpenCode may be restarting')
-      }
-      sessionId = sessionIdCreated
-      setChannelSession(msg.provider, msg.chatId, sessionId, { threadId: msg.threadId, mode: 'chat', title })
-      if (stickyPresence) {
-        const { updateAgentPresence } = await import('./agent-presence.js')
-        updateAgentPresence(stickyPresence.presenceId, { sessionId })
-      }
-    }
-    const binding = listChannelSessions({ provider: msg.provider, chatId: msg.chatId, threadId: msg.threadId || '' })[0]
-    trackWorker({ id: sessionId, title, parentId: msg.provider, status: 'running', startedAt: new Date().toISOString(), lastCheck: new Date().toISOString(), lastTodo: null, lastMessage: null })
-    queueEvent(`${msg.provider} inbound message from ${channelTargetLabel(msg.provider, msg.chatId, msg.threadId)} (${msg.text.length} chars)`)
-    await syncBridge?.initialize(sessionId, msg.provider, msg.chatId, msg.threadId)
-    const acceptedInbound = syncBridge ? syncBridge.recordInbound(sessionId, msg.provider, msg.chatId, msg.text, msg.threadId, msg.messageId) : true
-    if (!acceptedInbound) {
-      queueEvent(`${msg.provider} duplicate inbound ignored for ${channelTargetLabel(msg.provider, msg.chatId, msg.threadId)}`)
-      return
-    }
-
-    const system = [
-      'You are responding through an OpenCode Gateway channel session. Be concise, action-oriented, and use Gateway tools for durable work state when needed.',
-      channelBindingSystemContext(binding),
-    ].filter(Boolean).join('\n\n')
-
-    const { getOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
-    const runtime = getOpenCodeSessionRuntime()
+    const telemetryStartedAt = Date.now()
+    const telemetryStack = composedChannelTelemetryStack(
+      msg.provider,
+      channelByName.get(msg.provider),
+    )
+    let telemetryOutcome: 'success' | 'retry' | 'error' | 'ignored' = 'ignored'
+    recordChannelMessageIn(msg.provider, telemetryStack)
     try {
-      if (!syncBridge) {
-        const result = await runtime.prompt({
-          sessionId,
-          agent,
-          system,
-          parts: [{ type: 'text', text: msg.text }],
-          async: false,
-        }) as any
-        let reply = ''
-        for (const p of (result?.data?.parts || [])) if (p.type === 'text' && p.text) reply += p.text + '\n'
-        if (reply) await channelByName.get(msg.provider)?.sendMessage(msg.chatId, reply.substring(0, 4000), { threadId: msg.threadId })
-      } else {
-        await runtime.prompt({
-          sessionId,
-          agent,
-          system,
-          parts: [{ type: 'text', text: msg.text }],
-        })
-        syncBridge.markInboundSubmitted(msg.provider, msg.chatId, msg.text, msg.threadId, msg.messageId)
+      if (!canCurrentDaemonWrite()) {
+        const leadership = getCurrentDaemonLeadershipStatus()
+        log.warn('Deferring channel inbound while not writer', { mode: leadership.mode, remediation: leadership.remediation, provider: msg.provider })
+        throw new TransientInboundError('gateway daemon is standby; retry on the active writer')
       }
-    } catch (err: any) {
-      syncBridge?.forgetInbound(msg.provider, msg.chatId, msg.text, msg.threadId, msg.messageId)
-      const detail = redactSensitiveText(err?.message || String(err))
-      queueEvent(`${msg.provider} prompt submission deferred for ${redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)}: ${detail}`)
-      throw new TransientInboundError('channel prompt submission failed transiently; retry inbound delivery')
+      const trustDecision = channelInboundTrustDecision(msg)
+      if (!trustDecision.allowed) {
+        const target = redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)
+        queueEvent(trustDecision.reason === 'untrusted_actor'
+          ? `Rejected untrusted channel actor inbound: ${target}`
+          : `Rejected untrusted channel inbound: ${target}`)
+        try { appendChannelInboundDenialAudit({ provider: msg.provider, chatId: msg.chatId, threadId: msg.threadId, reason: trustDecision.reason }) } catch {}
+        return
+      }
+      const parsedCommand = parseChannelCommand(msg.text)
+      if (parsedCommand) recordChannelCommandEvent('channel.command.received', msg, parsedCommand)
+      let commandFailed = false
+      const commandReply = await handleChannelCommand(client as any, msg)
+        .catch((err: any) => {
+          commandFailed = true
+          return `Command failed: ${redactSensitiveText(err?.message || String(err))}`
+        })
+      if (commandReply !== null) {
+        const channel = channelByName.get(msg.provider)
+        const actionDelivery = actionDeliveryForCapabilities(channel?.capabilities, Boolean(channel?.sendCommandMenu))
+        try {
+          if (parsedCommand && isChannelCommandMenuRequest(parsedCommand.name) && channel?.sendCommandMenu && actionDelivery === 'native') {
+            await channel.sendCommandMenu(msg.chatId, commandReply, channelCommandMenuActions(), { threadId: msg.threadId })
+            recordChannelMessageOut(msg.provider)
+            recordChannelCommandEvent(commandFailed ? 'channel.command.failed' : 'channel.command.replied', msg, parsedCommand, { delivery: 'command_menu', replyLength: commandReply.length })
+          } else {
+            await channel?.sendMessage(msg.chatId, commandReply.substring(0, 4000), { threadId: msg.threadId })
+            recordChannelMessageOut(msg.provider)
+            if (parsedCommand) recordChannelCommandEvent(commandFailed ? 'channel.command.failed' : 'channel.command.replied', msg, parsedCommand, { delivery: 'message', replyLength: commandReply.length })
+          }
+          telemetryOutcome = !commandFailed && channel ? 'success' : 'error'
+        } catch (err: any) {
+          if (parsedCommand) recordChannelCommandEvent('channel.command.failed', msg, parsedCommand, { delivery: 'message', error: redactSensitiveText(err?.message || String(err)) })
+          throw err
+        }
+        return
+      }
+
+      const stickyPresence = (await import('./agent-presence.js')).resolveAgentPresenceForChannel(msg.provider, msg.chatId, msg.threadId)
+      const agent = stickyPresence?.opencodeAgent || resolveAgent(msg.provider, msg.chatId, msg.text)
+      const title = msg.provider.toUpperCase() + ':' + msg.userId + ': ' + msg.text.substring(0, 30)
+      let sessionId = stickyPresence?.sessionId || getChannelSession(msg.provider, msg.chatId, msg.threadId)
+      if (sessionId) {
+        const sessionCheck = await checkBoundChannelSession(client, sessionId)
+        if (sessionCheck === 'transient') {
+          // OpenCode is briefly unreachable; keep the existing conversation binding
+          // instead of silently orphaning it with a fresh session, and signal the
+          // channel adapter to retry the message rather than acknowledge it.
+          queueEvent(`${msg.provider} inbound deferred for ${redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)}: bound session check failed transiently`)
+          throw new TransientInboundError('bound channel session check failed transiently; OpenCode may be restarting')
+        }
+        if (sessionCheck === 'missing') sessionId = undefined
+      }
+      if (!sessionId) {
+        let sessionIdCreated: string
+        try {
+          const { getOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+          const created = await getOpenCodeSessionRuntime().createSession({ title: 'GW:' + title })
+          sessionIdCreated = created.id
+        } catch (err: any) {
+          // A create failure during an OpenCode outage is transient: defer the
+          // message for retry instead of dropping it. Genuine 404s stay poison.
+          if (isNotFoundError(err)) throw err
+          queueEvent(`${msg.provider} inbound deferred for ${redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)}: session create failed transiently`)
+          throw new TransientInboundError('channel session create failed transiently; OpenCode may be restarting')
+        }
+        sessionId = sessionIdCreated
+        setChannelSession(msg.provider, msg.chatId, sessionId, { threadId: msg.threadId, mode: 'chat', title })
+        if (stickyPresence) {
+          const { updateAgentPresence } = await import('./agent-presence.js')
+          updateAgentPresence(stickyPresence.presenceId, { sessionId })
+        }
+      }
+      const binding = listChannelSessions({ provider: msg.provider, chatId: msg.chatId, threadId: msg.threadId || '' })[0]
+      trackWorker({ id: sessionId, title, parentId: msg.provider, status: 'running', startedAt: new Date().toISOString(), lastCheck: new Date().toISOString(), lastTodo: null, lastMessage: null })
+      queueEvent(`${msg.provider} inbound message from ${channelTargetLabel(msg.provider, msg.chatId, msg.threadId)} (${msg.text.length} chars)`)
+      await syncBridge?.initialize(sessionId, msg.provider, msg.chatId, msg.threadId)
+      const acceptedInbound = syncBridge ? syncBridge.recordInbound(sessionId, msg.provider, msg.chatId, msg.text, msg.threadId, msg.messageId) : true
+      if (!acceptedInbound) {
+        queueEvent(`${msg.provider} duplicate inbound ignored for ${channelTargetLabel(msg.provider, msg.chatId, msg.threadId)}`)
+        return
+      }
+
+      const system = [
+        'You are responding through an OpenCode Gateway channel session. Be concise, action-oriented, and use Gateway tools for durable work state when needed.',
+        channelBindingSystemContext(binding),
+      ].filter(Boolean).join('\n\n')
+
+      const { getOpenCodeSessionRuntime } = await import('./opencode-session-runtime.js')
+      const runtime = getOpenCodeSessionRuntime()
+      try {
+        if (!syncBridge) {
+          const result = await runtime.prompt({
+            sessionId,
+            agent,
+            system,
+            parts: [{ type: 'text', text: msg.text }],
+            async: false,
+          }) as any
+          let reply = ''
+          for (const p of (result?.data?.parts || [])) if (p.type === 'text' && p.text) reply += p.text + '\n'
+          if (reply) {
+            await channelByName.get(msg.provider)?.sendMessage(msg.chatId, reply.substring(0, 4000), { threadId: msg.threadId })
+            recordChannelMessageOut(msg.provider)
+          }
+        } else {
+          await runtime.prompt({
+            sessionId,
+            agent,
+            system,
+            parts: [{ type: 'text', text: msg.text }],
+          })
+          syncBridge.markInboundSubmitted(msg.provider, msg.chatId, msg.text, msg.threadId, msg.messageId)
+        }
+        telemetryOutcome = 'success'
+      } catch (err: any) {
+        syncBridge?.forgetInbound(msg.provider, msg.chatId, msg.text, msg.threadId, msg.messageId)
+        const detail = redactSensitiveText(err?.message || String(err))
+        queueEvent(`${msg.provider} prompt submission deferred for ${redactedChannelTargetLabel(msg.provider, msg.chatId, msg.threadId)}: ${detail}`)
+        throw new TransientInboundError('channel prompt submission failed transiently; retry inbound delivery')
+      }
+    } catch (error) {
+      // A transient error is a retry only when this adapter invocation carries
+      // proof that its delivery boundary preserves the message for redelivery.
+      // Native Discord interactions acknowledge before async dispatch, and its
+      // gateway events have no redelivery contract, so both correctly stay error.
+      telemetryOutcome = channelInboundFailureOutcome(msg, isTransientInboundError(error))
+      throw error
+    } finally {
+      recordChannelOperation(
+        msg.provider,
+        telemetryStack,
+        'inbound',
+        telemetryOutcome,
+        Date.now() - telemetryStartedAt,
+      )
     }
   }
 
@@ -329,6 +369,7 @@ export async function serve() {
       await startChannelAdapter(whatsappChannel, source)
       await startChannelAdapter(discordChannel, source)
       externalChannelsStarted = true
+      syncChannelBindingTelemetry(channelByName)
       log.info('External channel adapters started', { source })
     } catch (err) {
       await stopExternalChannels(`${source} rollback`)
@@ -346,6 +387,7 @@ export async function serve() {
       Promise.resolve().then(() => whatsappChannel.stop?.()),
       Promise.resolve().then(() => discordChannel.stop?.()),
     ])
+    syncChannelBindingTelemetry(channelByName)
     for (const result of results) {
       if (result.status === 'rejected') queueEvent(`Channel adapter stop after ${source} failed: ${redactSensitiveText(result.reason?.message || String(result.reason))}`)
     }

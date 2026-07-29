@@ -1,9 +1,3 @@
-import {
-  WORKSPACE_SUPPORT_APIS,
-  coordinationCapabilityFromWorkspaceApi,
-  coordinationCapabilityStatus,
-  workspaceApiSupportContextForAuthority,
-} from '@open-cowork/shared'
 import { log } from '@open-cowork/shared/node'
 import { createKeyedSerializer } from './keyed-serializer.ts'
 import type {
@@ -44,10 +38,7 @@ import type {
   WorkflowWebhookSecretMutationResult,
   WorkspaceInfo,
   WorkspaceApiSupport,
-  WorkspaceApiSupportStatus,
   WorkspacePolicy,
-  WorkspaceProductSurface,
-  WorkspaceExecutionAuthority,
   WorkspaceStatus,
   WorkspaceSyncResult,
   ScopedArtifactRef,
@@ -119,8 +110,22 @@ import { createCloudWorkflowGateway } from './workspace-gateway-cloud-workflows.
 import { createCloudThreadGateway } from './workspace-gateway-cloud-threads.ts'
 import { createCloudArtifactGateway } from './workspace-gateway-cloud-artifacts.ts'
 import { CloudSubscriptionManager } from './cloud-subscription-manager.ts'
+import {
+  LOCAL_WORKSPACE,
+  LOCAL_WORKSPACE_ID,
+  cloudConnectionFromWorkspace,
+  cloudRegistrationFromConnection,
+  normalizeDesktopWorkspaceId,
+  pairedRegistrationFromRecord,
+  pairedWorkspaceId,
+  readWorkspaceIdOption,
+} from './workspace/workspace-registration.ts'
+import {
+  workspacePolicyForKind,
+  workspaceSupportMatrix,
+} from './workspace/workspace-support-matrix.ts'
 
-export const LOCAL_WORKSPACE_ID = 'local'
+export { LOCAL_WORKSPACE_ID, readWorkspaceIdOption }
 
 type WorkspaceEventLike = { sender?: { id?: number } } | null | undefined
 
@@ -143,69 +148,6 @@ export type WorkspaceGatewayOptions = {
   cloudReconnectMaxAttempts?: number
 }
 
-const LOCAL_WORKSPACE: WorkspaceRegistration = {
-  id: LOCAL_WORKSPACE_ID,
-  kind: 'local',
-  authority: 'desktop_local',
-  label: 'Local',
-  status: 'online',
-  lastSyncedAt: null,
-}
-
-const LOCAL_WORKSPACE_POLICY: WorkspacePolicy = {
-  features: {
-    sessions: true,
-    threads: true,
-    workflows: true,
-    artifacts: true,
-    settings: true,
-    customContent: true,
-    capabilities: true,
-  },
-  allowedAgents: null,
-  allowedTools: null,
-  allowedMcps: null,
-  localFiles: 'enabled',
-  localStdioMcps: 'enabled',
-  machineRuntimeConfig: 'allowlisted',
-}
-
-const DISABLED_CLOUD_POLICY: WorkspacePolicy = {
-  features: {
-    sessions: false,
-    threads: false,
-    workflows: false,
-    artifacts: false,
-    settings: false,
-    customContent: false,
-    capabilities: false,
-  },
-  allowedAgents: [],
-  allowedTools: [],
-  allowedMcps: [],
-  localFiles: 'disabled',
-  localStdioMcps: 'disabled',
-  machineRuntimeConfig: 'disabled',
-}
-
-const DISABLED_REMOTE_POLICY: WorkspacePolicy = {
-  features: {
-    sessions: false,
-    threads: false,
-    workflows: false,
-    artifacts: false,
-    settings: false,
-    customContent: false,
-    capabilities: false,
-  },
-  allowedAgents: [],
-  allowedTools: [],
-  allowedMcps: [],
-  localFiles: 'disabled',
-  localStdioMcps: 'disabled',
-  machineRuntimeConfig: 'disabled',
-}
-
 const CLOUD_CUSTOM_AGENTS_KEY = 'custom-agents'
 const CLOUD_CUSTOM_MCPS_KEY = 'custom-mcps'
 const CLOUD_CUSTOM_SKILLS_KEY = 'custom-skills'
@@ -223,92 +165,6 @@ function isCredentialRefreshAuthFailure(error: unknown) {
 function senderKey(event: WorkspaceEventLike) {
   const id = event?.sender?.id
   return typeof id === 'number' && Number.isFinite(id) ? id : 0
-}
-
-function normalizeWorkspaceId(workspaceId?: string | null) {
-  if (workspaceId === undefined || workspaceId === null || workspaceId === '') return null
-  const trimmed = workspaceId.trim()
-  if (!trimmed) return null
-  if (Buffer.byteLength(trimmed, 'utf8') > 512) {
-    throw new Error('Workspace id is too large.')
-  }
-  return trimmed
-}
-
-export function readWorkspaceIdOption(input: unknown): string | null {
-  if (input === undefined || input === null) return null
-  if (typeof input !== 'object' || Array.isArray(input)) {
-    throw new Error('Workspace options must be an object when provided.')
-  }
-  const workspaceId = (input as { workspaceId?: unknown }).workspaceId
-  if (workspaceId === undefined || workspaceId === null || workspaceId === '') return null
-  if (typeof workspaceId !== 'string') throw new Error('Workspace id must be a string.')
-  return normalizeWorkspaceId(workspaceId)
-}
-
-function cloudRegistrationFromConnection(connection: CloudWorkspaceConnectionRecord): WorkspaceRegistration {
-  return {
-    id: connection.id,
-    kind: 'cloud',
-    authority: 'cloud_worker',
-    label: connection.label,
-    status: 'auth_required',
-    baseUrl: connection.baseUrl,
-    tenantId: connection.tenantId,
-    userId: connection.userId,
-    profileName: connection.profileName,
-    lastSyncedAt: connection.lastSyncedAt,
-    error: 'Sign in to this cloud workspace to enable sync.',
-  }
-}
-
-function connectionFromWorkspace(workspace: WorkspaceRegistration): CloudWorkspaceConnectionRecord {
-  if (workspace.kind !== 'cloud' || !workspace.baseUrl) {
-    throw new Error('Cloud workspace requires a base URL.')
-  }
-  const timestamp = new Date(0).toISOString()
-  return {
-    id: workspace.id,
-    baseUrl: normalizeCloudWorkspaceBaseUrl(workspace.baseUrl),
-    label: workspace.label,
-    tenantId: workspace.tenantId,
-    userId: workspace.userId,
-    profileName: workspace.profileName,
-    lastSyncedAt: workspace.lastSyncedAt || null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-}
-
-function pairedWorkspaceId(pairingId: string) {
-  return `paired-desktop:${pairingId}`
-}
-
-function pairedRegistrationFromRecord(record: DesktopPairingPublicRecord): WorkspaceRegistration {
-  const isOnline = record.enabled && !record.revokedAt && record.status === 'paired_online'
-  const isRevoked = record.revokedAt || record.status === 'revoked'
-  const status: WorkspaceStatus = isRevoked
-    ? 'disabled'
-    : isOnline
-      ? 'online'
-      : record.enabled
-        ? 'offline'
-        : 'disabled'
-  const allowedSessions = record.allowedSessionIds === null
-    ? 'all allowed sessions'
-    : `${record.allowedSessionIds.length} allowed session${record.allowedSessionIds.length === 1 ? '' : 's'}`
-  return {
-    id: pairedWorkspaceId(record.id),
-    kind: 'paired_desktop',
-    authority: 'desktop_paired',
-    label: record.label || record.deviceName || 'Paired Desktop',
-    status,
-    lastSyncedAt: record.lastHeartbeatAt || record.lastConnectedAt || null,
-    error: isRevoked
-      ? 'This Desktop pairing has been revoked.'
-      : record.error || (status === 'offline' ? 'Paired Desktop connector is offline; remote mutations are disabled.' : null),
-    profileName: allowedSessions,
-  }
 }
 
 export class WorkspaceGateway {
@@ -437,7 +293,7 @@ export class WorkspaceGateway {
   registerWorkspace(workspace: WorkspaceRegistration) {
     this.workspaces.set(workspace.id, { ...workspace })
     if (workspace.kind === 'cloud' && workspace.baseUrl && !this.cloudConnections.has(workspace.id)) {
-      this.cloudConnections.set(workspace.id, connectionFromWorkspace(workspace))
+      this.cloudConnections.set(workspace.id, cloudConnectionFromWorkspace(workspace))
     }
     if (workspace.kind === 'gateway' && workspace.baseUrl && !this.gatewayConnections.has(workspace.id)) {
       this.gatewayConnections.set(workspace.id, gatewayConnectionFromWorkspace(workspace))
@@ -537,7 +393,7 @@ export class WorkspaceGateway {
   }
 
   remove(event: WorkspaceEventLike, workspaceIdInput: string): boolean {
-    const workspaceId = normalizeWorkspaceId(workspaceIdInput)
+    const workspaceId = normalizeDesktopWorkspaceId(workspaceIdInput)
     if (!workspaceId || workspaceId === LOCAL_WORKSPACE_ID) return false
     if (this.cloudDesktopConfig.requireManagedOrg && this.managedCloudWorkspaceIds.has(workspaceId)) return false
     const workspace = this.workspaces.get(workspaceId)
@@ -672,15 +528,12 @@ export class WorkspaceGateway {
 
   policy(event: WorkspaceEventLike, workspaceIdInput?: string | null): WorkspacePolicy {
     const workspace = this.resolveWorkspace(event, workspaceIdInput)
-    if (workspace.kind === 'local') return LOCAL_WORKSPACE_POLICY
-    if (workspace.kind === 'cloud') return DISABLED_CLOUD_POLICY
-    return DISABLED_REMOTE_POLICY
+    return workspacePolicyForKind(workspace.kind)
   }
 
   async cloudPolicy(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<WorkspacePolicy> {
     const workspace = this.resolveWorkspace(event, workspaceIdInput)
-    if (workspace.kind === 'local') return LOCAL_WORKSPACE_POLICY
-    if (workspace.kind !== 'cloud') return DISABLED_REMOTE_POLICY
+    if (workspace.kind !== 'cloud') return workspacePolicyForKind(workspace.kind)
     try {
       return (await this.requireCloudAdapter(workspace)).policy()
     } catch (error) {
@@ -688,7 +541,7 @@ export class WorkspaceGateway {
       // outage (network/adapter failure) is indistinguishable from a real policy
       // denial, so a workspace silently loses capabilities with no diagnostic trail.
       log('workspace-gateway', `Cloud policy lookup failed for workspace ${workspace.id}; using disabled policy: ${error instanceof Error ? error.message : String(error)}`)
-      return DISABLED_CLOUD_POLICY
+      return workspacePolicyForKind('cloud')
     }
   }
 
@@ -705,246 +558,8 @@ export class WorkspaceGateway {
 
   async supportMatrix(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<WorkspaceApiSupport[]> {
     const workspace = this.resolveWorkspace(event, workspaceIdInput)
-    if (workspace.kind === 'local') {
-      return WORKSPACE_SUPPORT_APIS.map((api) => ({
-        api,
-        ...this.localSupportForApi(api, workspace.status),
-      }))
-    }
-    if (workspace.kind === 'gateway') {
-      return this.remoteSupportMatrix({
-        authority: 'gateway_standalone',
-        surface: 'gateway_standalone',
-        workspace,
-        deferredReason: 'Desktop Gateway sessions are deferred until Standalone Gateway exposes a Desktop-safe session and projection API.',
-        pathReason: 'Gateway workspaces do not expose private Gateway host paths to Desktop.',
-        workflowReason: 'Gateway workflow control from Desktop is deferred until the Standalone Gateway API is available.',
-        artifactReason: 'Gateway artifact browsing from Desktop is deferred until the Standalone Gateway artifact API is available.',
-        settingsReason: 'Gateway runtime settings stay owned by the Standalone Gateway deployment.',
-        customContentReason: 'Gateway custom content stays owned by the Standalone Gateway deployment.',
-        capabilitiesReason: 'Gateway capability catalog sync is deferred until the Standalone Gateway API is available.',
-      })
-    }
-    if (workspace.kind === 'paired_desktop') {
-      const pairingReason = workspace.status === 'online'
-        ? 'Paired Desktop workspace browsing is deferred until the edge registration API is available.'
-        : 'Paired Desktop connector is offline or disabled.'
-      return this.remoteSupportMatrix({
-        authority: 'desktop_paired',
-        surface: 'desktop_paired',
-        workspace,
-        deferredReason: pairingReason,
-        pathReason: 'Paired Desktop workspaces redact local paths from remote surfaces by default.',
-        workflowReason: 'Paired Desktop workflow control is deferred until pairing workflow policy exists.',
-        artifactReason: 'Paired Desktop exposes redacted artifact metadata only until artifact-body policy is explicit.',
-        settingsReason: 'Paired Desktop settings remain local to the owning Desktop.',
-        customContentReason: 'Paired Desktop custom content remains local to the owning Desktop.',
-        capabilitiesReason: 'Paired Desktop capability sync is deferred until remote projection policy exists.',
-      })
-    }
-    const policy = await this.cloudPolicy(event, workspace.id)
-    const feature = (key: string, fallback = false) => policy.features[key] ?? fallback
-    const cloudSupport = (api: string, status: WorkspaceApiSupportStatus, reason: string | null = null): WorkspaceApiSupport => ({
-      api,
-      status,
-      verdict: {
-        allowed: status === 'supported' || status === 'read_only',
-        reason,
-        ...(reason ? { policyCode: status } : {}),
-      },
-      context: workspaceApiSupportContextForAuthority('cloud_worker', {
-        surface: 'desktop_cloud',
-        onlineState: workspace.status,
-        status,
-        pathExposure: status === 'not_supported' ? 'not_exposed' : 'cloud_safe_refs',
-        ...(api === 'artifacts.reveal' ? { artifactReveal: 'none' as const } : {}),
-        ...(reason
-          ? {
-              blockedReason: {
-                allowed: status === 'supported' || status === 'read_only',
-                reason,
-                policyCode: status,
-              },
-            }
-          : {}),
-      }),
-    })
-    const supportedIf = (api: string, allowed: boolean, reason: string): WorkspaceApiSupport => (
-      allowed ? cloudSupport(api, 'supported') : cloudSupport(api, 'blocked_by_policy', reason)
-    )
-    const chatEnabled = feature('chat', feature('sessions', true))
-    return [
-      supportedIf('sessions.list', chatEnabled, 'Cloud chat is disabled by this workspace policy.'),
-      supportedIf('sessions.create', chatEnabled, 'Cloud chat is disabled by this workspace policy.'),
-      supportedIf('sessions.activate', chatEnabled, 'Cloud chat is disabled by this workspace policy.'),
-      supportedIf('sessions.get', chatEnabled, 'Cloud chat is disabled by this workspace policy.'),
-      supportedIf('sessions.prompt', chatEnabled, 'Cloud chat is disabled by this workspace policy.'),
-      supportedIf('sessions.abort', chatEnabled, 'Cloud chat is disabled by this workspace policy.'),
-      cloudSupport('sessions.fileSnippet', 'not_supported', 'Cloud workspaces cannot read arbitrary local host paths.'),
-      cloudSupport('sessions.diff', 'not_supported', 'Cloud workspaces cannot diff arbitrary local host paths.'),
-      supportedIf('threads.search', feature('threadIndex'), 'Cloud thread index is disabled by this workspace policy.'),
-      supportedIf('threads.tags', feature('threadIndex'), 'Cloud thread index is disabled by this workspace policy.'),
-      supportedIf('threads.smartFilters', feature('threadIndex'), 'Cloud thread index is disabled by this workspace policy.'),
-      supportedIf('workflows.list', feature('workflows'), 'Cloud workflows are disabled by this workspace policy.'),
-      supportedIf('workflows.run', feature('workflows'), 'Cloud workflows are disabled by this workspace policy.'),
-      cloudSupport('coordination.projects', 'deferred', 'Cloud project coordination is deferred until the shared coordination control plane is available.'),
-      cloudSupport('coordination.tasks', 'deferred', 'Cloud task coordination is deferred until the shared coordination control plane is available.'),
-      supportedIf('coordination.runs', feature('workflows'), 'Cloud coordination runs are disabled by this workspace policy.'),
-      supportedIf('coordination.schedules', feature('workflows'), 'Cloud schedules are disabled by this workspace policy.'),
-      cloudSupport('coordination.watches', 'deferred', 'Cloud watch management is deferred in the desktop Cloud surface until the WorkspaceGateway adapter is wired.'),
-      cloudSupport('coordination.delegation', 'deferred', 'Cloud delegation coordination is deferred until the shared coordination control plane is available.'),
-      supportedIf('artifacts.list', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
-      supportedIf('artifacts.index', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
-      supportedIf('artifacts.status', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
-      supportedIf('artifacts.upload', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
-      supportedIf('artifacts.download', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
-      cloudSupport('artifacts.reveal', 'not_supported', 'Cloud artifacts cannot be revealed in the local filesystem. Export the artifact instead.'),
-      supportedIf('settings.portable', feature('settings'), 'Cloud portable settings are disabled by this workspace policy.'),
-      supportedIf('customContent.agents', feature('customAgents'), 'Cloud custom agents are disabled by this workspace policy.'),
-      supportedIf('customContent.skills', feature('customSkills'), 'Cloud custom skills are disabled by this workspace policy.'),
-      supportedIf('customContent.mcps', feature('customMcps'), 'Cloud custom MCPs are disabled by this workspace policy.'),
-      supportedIf('capabilities.catalog', feature('agents'), 'Cloud capability catalog is disabled by this workspace policy.'),
-      cloudSupport('localFiles', 'not_supported', 'Cloud workspaces do not implicitly upload local files.'),
-      cloudSupport('localStdioMcps', 'not_supported', 'Cloud workspaces do not execute arbitrary local stdio MCPs.'),
-      cloudSupport('machineRuntimeConfig', 'not_supported', 'Cloud workspaces do not use machine-native runtime config.'),
-      cloudSupport('voice.capture', 'not_supported', 'Private realtime voice is Desktop Local only. Cloud workspaces do not capture microphone audio on this machine.'),
-      cloudSupport('voice.stt', 'not_supported', 'On-device speech-to-text (Aurum) is Desktop Local only.'),
-      cloudSupport('voice.tts', 'not_supported', 'Private text-to-speech is Desktop Local only.'),
-      cloudSupport('voice.conversation', 'not_supported', 'Voice conversation is Desktop Local only.'),
-    ]
-  }
-
-  private localSupportForApi(api: string, workspaceStatus: WorkspaceStatus): Omit<WorkspaceApiSupport, 'api'> {
-    const capability = coordinationCapabilityFromWorkspaceApi(api)
-    const status = capability ? coordinationCapabilityStatus('desktop_local', capability) : 'supported'
-    const reason = this.localSupportReason(api, status)
-    return {
-      status,
-      verdict: {
-        allowed: status === 'supported' || status === 'read_only',
-        reason,
-        ...(reason ? { policyCode: status } : {}),
-      },
-      context: workspaceApiSupportContextForAuthority('desktop_local', {
-        surface: 'desktop_local',
-        onlineState: workspaceStatus,
-        status,
-        ...(reason
-          ? {
-              blockedReason: {
-                allowed: status === 'supported' || status === 'read_only',
-                reason,
-                policyCode: status,
-              },
-            }
-          : {}),
-      }),
-    }
-  }
-
-  private localSupportReason(api: string, status: WorkspaceApiSupportStatus): string | null {
-    if (status === 'supported' || status === 'read_only') return null
-    if (api === 'coordination.watches') return 'Desktop Local watch subscriptions require a channel delivery target.'
-    if (status === 'deferred') return 'This Desktop Local capability is deferred until its product surface is implemented.'
-    return 'This Desktop Local capability is not supported.'
-  }
-
-  private remoteSupportMatrix(input: {
-    authority: WorkspaceExecutionAuthority
-    surface: WorkspaceProductSurface
-    workspace: WorkspaceRegistration
-    deferredReason: string
-    pathReason: string
-    workflowReason: string
-    artifactReason: string
-    settingsReason: string
-    customContentReason: string
-    capabilitiesReason: string
-  }): WorkspaceApiSupport[] {
-    const remoteSupport = (
-      api: string,
-      status: WorkspaceApiSupportStatus,
-      reason: string | null,
-      options: {
-        artifactBody?: 'gateway_artifact_store' | 'redacted_metadata_only' | 'none'
-        artifactReveal?: 'gateway_artifact_store' | 'redacted_metadata_only' | 'none'
-      } = {},
-    ): WorkspaceApiSupport => ({
-      api,
-      status,
-      verdict: {
-        allowed: status === 'supported' || status === 'read_only',
-        reason,
-        ...(reason ? { policyCode: status === 'deferred' ? 'workspace.deferred' : 'workspace.not_supported' } : {}),
-      },
-      context: workspaceApiSupportContextForAuthority(input.authority, {
-        surface: input.surface,
-        onlineState: input.workspace.status,
-        status,
-        pathExposure: 'redacted_remote',
-        pairingState: input.authority === 'desktop_paired'
-          ? input.workspace.status === 'online' ? 'paired_online' : input.workspace.status === 'offline' ? 'paired_offline' : 'pairing_required'
-          : 'not_applicable',
-        workflows: status === 'deferred' ? 'deferred' : 'not_supported',
-        ...(options.artifactBody ? { artifactBody: options.artifactBody } : {}),
-        ...(options.artifactReveal ? { artifactReveal: options.artifactReveal } : {}),
-        ...(reason
-          ? {
-              blockedReason: {
-                allowed: false,
-                reason,
-                policyCode: status === 'deferred' ? 'workspace.deferred' : 'workspace.not_supported',
-              },
-            }
-          : {}),
-      }),
-    })
-
-    return [
-      remoteSupport('sessions.list', 'deferred', input.deferredReason),
-      remoteSupport('sessions.create', 'deferred', input.deferredReason),
-      remoteSupport('sessions.activate', 'deferred', input.deferredReason),
-      remoteSupport('sessions.get', 'deferred', input.deferredReason),
-      remoteSupport('sessions.prompt', 'deferred', input.deferredReason),
-      remoteSupport('sessions.abort', 'deferred', input.deferredReason),
-      remoteSupport('sessions.fileSnippet', 'not_supported', input.pathReason, { artifactBody: 'none', artifactReveal: 'none' }),
-      remoteSupport('sessions.diff', 'not_supported', input.pathReason, { artifactBody: 'none', artifactReveal: 'none' }),
-      remoteSupport('threads.search', 'deferred', input.deferredReason),
-      remoteSupport('threads.tags', 'deferred', input.deferredReason),
-      remoteSupport('threads.smartFilters', 'deferred', input.deferredReason),
-      remoteSupport('workflows.list', 'deferred', input.workflowReason),
-      remoteSupport('workflows.run', 'deferred', input.workflowReason),
-      remoteSupport('coordination.projects', 'deferred', input.deferredReason),
-      remoteSupport('coordination.tasks', 'deferred', input.deferredReason),
-      remoteSupport('coordination.runs', 'deferred', input.deferredReason),
-      remoteSupport('coordination.schedules', 'deferred', input.workflowReason),
-      remoteSupport('coordination.watches', 'deferred', input.deferredReason),
-      remoteSupport('coordination.delegation', 'deferred', input.deferredReason),
-      remoteSupport('artifacts.list', 'deferred', input.artifactReason, {
-        artifactBody: input.authority === 'gateway_standalone' ? 'gateway_artifact_store' : 'redacted_metadata_only',
-        artifactReveal: 'none',
-      }),
-      remoteSupport('artifacts.index', 'deferred', input.artifactReason, { artifactBody: 'redacted_metadata_only', artifactReveal: 'none' }),
-      remoteSupport('artifacts.status', 'deferred', input.artifactReason, { artifactBody: 'redacted_metadata_only', artifactReveal: 'none' }),
-      remoteSupport('artifacts.upload', 'deferred', input.artifactReason, { artifactReveal: 'none' }),
-      remoteSupport('artifacts.download', 'deferred', input.artifactReason, {
-        artifactBody: input.authority === 'gateway_standalone' ? 'gateway_artifact_store' : 'redacted_metadata_only',
-        artifactReveal: 'none',
-      }),
-      remoteSupport('artifacts.reveal', 'not_supported', 'Remote workspace artifacts cannot be revealed in the local filesystem.', { artifactBody: 'none', artifactReveal: 'none' }),
-      remoteSupport('settings.portable', 'not_supported', input.settingsReason),
-      remoteSupport('customContent.agents', 'not_supported', input.customContentReason),
-      remoteSupport('customContent.skills', 'not_supported', input.customContentReason),
-      remoteSupport('customContent.mcps', 'not_supported', input.customContentReason),
-      remoteSupport('capabilities.catalog', 'deferred', input.capabilitiesReason),
-      remoteSupport('localFiles', 'not_supported', input.pathReason, { artifactBody: 'none', artifactReveal: 'none' }),
-      remoteSupport('localStdioMcps', 'not_supported', 'Remote workspaces do not execute this Desktop app\'s local stdio MCPs.'),
-      remoteSupport('machineRuntimeConfig', 'not_supported', 'Remote workspaces do not use this Desktop app\'s machine-native runtime config.'),
-      remoteSupport('voice.capture', 'not_supported', 'Private realtime voice is Desktop Local only.'),
-      remoteSupport('voice.stt', 'not_supported', 'On-device speech-to-text is Desktop Local only.'),
-      remoteSupport('voice.tts', 'not_supported', 'Private text-to-speech is Desktop Local only.'),
-      remoteSupport('voice.conversation', 'not_supported', 'Voice conversation is Desktop Local only.'),
-    ]
+    if (workspace.kind !== 'cloud') return workspaceSupportMatrix(workspace)
+    return workspaceSupportMatrix(workspace, await this.cloudPolicy(event, workspace.id))
   }
 
   async sync(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<WorkspaceSyncResult> {
@@ -1440,7 +1055,7 @@ export class WorkspaceGateway {
   }
 
   private resolveWorkspace(event: WorkspaceEventLike, workspaceIdInput?: string | null): WorkspaceRegistration {
-    const workspaceId = normalizeWorkspaceId(workspaceIdInput) || this.activeWorkspaceId(event)
+    const workspaceId = normalizeDesktopWorkspaceId(workspaceIdInput) || this.activeWorkspaceId(event)
     return this.getWorkspace(workspaceId)
   }
 
@@ -1464,7 +1079,7 @@ export class WorkspaceGateway {
   }
 
   private getWorkspace(workspaceIdInput: string): WorkspaceRegistration {
-    const workspaceId = normalizeWorkspaceId(workspaceIdInput)
+    const workspaceId = normalizeDesktopWorkspaceId(workspaceIdInput)
     if (!workspaceId) throw new Error('Workspace id is required.')
     const workspace = this.workspaces.get(workspaceId)
     if (workspace) return workspace

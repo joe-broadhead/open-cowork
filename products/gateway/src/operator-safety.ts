@@ -34,7 +34,7 @@ import {
   type WorkState,
 } from './work-store.js'
 
-export type OperatorSafetyState = 'ready_for_beta' | 'attention' | 'paused' | 'blocked'
+type OperatorSafetyState = 'ready_for_beta' | 'attention' | 'paused' | 'blocked'
 export type OperatorSafetyAction = 'status' | 'hygiene' | 'pause' | 'resume' | 'recover' | 'reset-stale'
 
 export interface OperatorSafetyReport {

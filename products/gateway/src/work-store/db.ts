@@ -57,7 +57,7 @@ export function workStatePath(): string {
   return path.join(process.env['OPENCODE_GATEWAY_STATE_DIR'] || getConfigDir(), 'gateway.db')
 }
 
-export const STORAGE_RESTORE_JOURNAL_FILE = '.storage-restore-journal.json'
+const STORAGE_RESTORE_JOURNAL_FILE = '.storage-restore-journal.json'
 
 export interface StorageRestoreJournalEntry {
   name: string

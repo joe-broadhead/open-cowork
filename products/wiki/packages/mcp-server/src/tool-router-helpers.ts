@@ -78,7 +78,7 @@ export async function readProposalDetailForMcp(root: string, id: string, context
   });
 }
 
-export function proposalArtifactBelongsToProposal(proposal: ProposalRecord, repoPath: string): boolean {
+function proposalArtifactBelongsToProposal(proposal: ProposalRecord, repoPath: string): boolean {
   const stem = proposal.id.replace(/:/g, "_").replace(/-/g, "_");
   return (
     repoPath === `proposals/diffs/${stem}.diff` ||
@@ -112,6 +112,6 @@ export function redactRunForMcp(run: RunRecord, context: McpPolicyContext): RunR
   return redactOpenWikiRunRecord(run, { includeSensitiveOperationalMetadata: context.role === "admin" || context.scopes.includes("wiki:admin") });
 }
 
-export function isRunRecord(value: unknown): value is RunRecord {
+function isRunRecord(value: unknown): value is RunRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value) && (value as { type?: unknown }).type === "run";
 }

@@ -3,7 +3,7 @@ import { getConfig } from './config.js'
 import { loadWorkState, workStatePath, type RunRecord, type WorkState, type WorkTaskRecord } from './work-store.js'
 import { getRunCostTokenTotals, getRunUsageTotalsBatch, type RunUsageQuery } from './work-store/analytics-queries.js'
 
-export type GovernanceDecisionStatus = 'allowed' | 'warn' | 'blocked' | 'paused'
+type GovernanceDecisionStatus = 'allowed' | 'warn' | 'blocked' | 'paused'
 
 export interface GovernanceDecision {
   allowed: boolean

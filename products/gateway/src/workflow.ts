@@ -2,10 +2,10 @@ import type { AgentProfile } from './config.js'
 
 export type WorkStatus = 'pending' | 'running' | 'done' | 'blocked' | 'paused' | 'cancelled' | 'archived'
 export type RunStatus = 'running' | 'passed' | 'failed' | 'blocked' | 'errored'
-export type StageResultStatus = 'pass' | 'fail' | 'blocked' | 'unknown'
+type StageResultStatus = 'pass' | 'fail' | 'blocked' | 'unknown'
 export type FailureClass = 'blocked' | 'needs_user_input' | 'needs_credentials' | 'flaky_test' | 'unsafe' | 'exceeded_budget' | 'unclear_spec' | 'implementation_failed' | 'verification_failed'
 
-export type EvidenceType = 'diff' | 'test' | 'command' | 'link' | 'screenshot' | 'log' | 'decision' | 'file' | 'note' | 'other'
+type EvidenceType = 'diff' | 'test' | 'command' | 'link' | 'screenshot' | 'log' | 'decision' | 'file' | 'note' | 'other'
 
 export interface StageEvidence {
   type: EvidenceType
@@ -229,7 +229,7 @@ export function mergeTaskQualitySpecDefaults(taskSpec: TaskQualitySpec | undefin
   }
 }
 
-export function validateStageResultQuality(task: WorkflowTaskLike, stage: string, result: StageResult): { ok: boolean; feedback?: string } {
+function validateStageResultQuality(task: WorkflowTaskLike, stage: string, result: StageResult): { ok: boolean; feedback?: string } {
   if (result.status !== 'pass') return { ok: true }
   const spec = task.qualitySpec
   if (!spec) return { ok: true }

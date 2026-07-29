@@ -358,7 +358,7 @@ function dispatchReasoningPatch(
   })
 }
 
-export function flushPendingTextEvents(
+function flushPendingTextEvents(
   win: BrowserWindow,
   dispatchRuntimeEvent: DispatchRuntimeEvent,
   state: SessionScopedMessageState,

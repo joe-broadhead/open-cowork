@@ -282,7 +282,7 @@ export async function openCurrentPostgresRuntime(
   }
 }
 
-export async function runtimeMetadataValue(sql: PostgresSql, workspaceId: string, key: string): Promise<string | undefined> {
+async function runtimeMetadataValue(sql: PostgresSql, workspaceId: string, key: string): Promise<string | undefined> {
   const rows = await sql<Array<{ value: string }>>`
     SELECT value
     FROM runtime_metadata
@@ -292,13 +292,13 @@ export async function runtimeMetadataValue(sql: PostgresSql, workspaceId: string
   return rows[0]?.value;
 }
 
-export async function currentRuntimeContentHash(repo: LoadedOpenWikiRepo): Promise<string> {
+async function currentRuntimeContentHash(repo: LoadedOpenWikiRepo): Promise<string> {
   const [graph, topics] = await Promise.all([listGraphEdges(repo.root), listTopics(repo.root)]);
   const records = collectDerivedRecords(repo, topics.topics);
   return derivedRuntimeContentHash(records, graph.edges);
 }
 
-export function runtimeDirtyPathsRequireContentCheck(paths: string[], env: NodeJS.ProcessEnv = process.env): boolean {
+function runtimeDirtyPathsRequireContentCheck(paths: string[], env: NodeJS.ProcessEnv = process.env): boolean {
   return paths.some((repoPath) => runtimeDirtyPathRequiresContentCheck(repoPath, env));
 }
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * JOE-994: fail closed if dual-stack channel protocol inventory drifts from
- * the freeze ownership model. Does not require unification to be complete.
+ * JOE-994 / JOE-1211: fail closed if the dual-stack channel inventory or its
+ * time-bounded ownership policy drifts. This intentionally checks decision
+ * metadata rather than preserving the superseded permanent-freeze wording.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -27,13 +28,33 @@ function mustContain(rel, needle) {
   if (!text.includes(needle)) failures.push(`${rel} must include ${JSON.stringify(needle)}`)
 }
 
-// Freeze docs
+// Inventory and bounded-decision docs
 mustExist('docs/product-channel-ownership.md')
 mustExist('docs/product-channel-protocol-unification.md')
+mustExist('docs/adr/channel-stack-policy.md')
+mustExist('docs/channel-stack-telemetry.md')
 mustContain('docs/product-channel-ownership.md', 'Protocol / adapter body')
-mustContain('docs/product-channel-ownership.md', 'Intentional residual freeze')
+mustContain('docs/product-channel-ownership.md', 'Time-bounded two-stack exception')
+mustContain('docs/product-channel-ownership.md', 'Gateway & Channels maintainers')
+mustContain('docs/product-channel-ownership.md', '2026-10-31')
 mustContain('docs/product-channel-protocol-unification.md', 'JOE-994')
-mustContain('docs/product-channel-protocol-unification.md', 'protocol freeze retained')
+mustContain('docs/product-channel-protocol-unification.md', 'time-bounded two-stack decision')
+mustContain('docs/adr/channel-stack-policy.md', 'Accepted — temporary two-stack exception')
+mustContain('docs/adr/channel-stack-policy.md', 'Mandatory review')
+mustContain('docs/adr/channel-stack-policy.md', '2026-10-31')
+mustContain('docs/adr/channel-stack-policy.md', '30 consecutive representative')
+mustContain('docs/adr/channel-stack-policy.md', 'There is no representative released observation window')
+mustContain('docs/adr/channel-stack-policy.md', 'JOE-1456')
+mustContain('docs/adr/channel-stack-policy.md', 'at least 95%')
+mustContain('docs/adr/channel-stack-policy.md', '0.5 percentage points')
+mustContain('docs/adr/channel-stack-policy.md', '1.2')
+mustContain('docs/channel-stack-telemetry.md', 'open_cowork_channel_stack_info')
+for (const surface of ['cloud-channel-gateway', 'standalone-gateway', 'durable-gateway']) {
+  mustContain(
+    'docs/channel-stack-telemetry.md',
+    `absent(open_cowork_channel_stack_info{surface="${surface}",schema_version="2"})`,
+  )
+}
 
 // Durable stack roots
 const durableChannels = mustExist('products/gateway/src/channels')
@@ -57,10 +78,8 @@ for (const name of [
 }
 mustContain('docs/product-channel-protocol-unification.md', 'Phase 2')
 mustContain('docs/product-channel-protocol-unification.md', 'Phase 3')
-mustContain('docs/product-channel-protocol-unification.md', "Won't Do")
 mustContain('docs/product-channel-protocol-unification.md', 'Residual register')
 mustContain('docs/product-channel-ownership.md', 'Protocol stack façades')
-mustContain('docs/product-channel-ownership.md', "Won't Do")
 
 // Monorepo provider packages (at least the production set)
 const providerRoot = mustExist('packages')
@@ -98,6 +117,6 @@ if (failures.length) {
   process.exit(1)
 }
 
-scriptLog(`Channel protocol inventory OK (durable channels + ${providers.length} gateway-provider-* packages; freeze retained)`)
+scriptLog(`Channel protocol inventory OK (durable channels + ${providers.length} gateway-provider-* packages; bounded policy retained)`)
 scriptLog(`Durable root: products/gateway/src/channels (${readdirSync(durableChannels).filter((n) => n.endsWith('.ts')).length} ts files)`)
 scriptLog(`Providers: ${providers.join(', ')}`)

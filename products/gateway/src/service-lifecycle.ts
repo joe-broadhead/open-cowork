@@ -3,7 +3,7 @@ import * as path from 'node:path'
 import { getConfig, getConfigDir, type GatewayConfig } from './config.js'
 import { serviceLogPath } from './service-logs.js'
 
-export type ServiceLifecycleOperationId =
+type ServiceLifecycleOperationId =
   | 'setup'
   | 'update'
   | 'start'
@@ -19,7 +19,7 @@ export type ServiceLifecycleOperationId =
   | 'cleanup'
   | 'uninstall'
 
-export type ServiceLifecycleResultState =
+type ServiceLifecycleResultState =
   | 'supported'
   | 'read_only'
   | 'dry_run_only'
@@ -27,7 +27,7 @@ export type ServiceLifecycleResultState =
   | 'external_approval_required'
   | 'unsupported'
 
-export interface ServiceLifecycleOperation {
+interface ServiceLifecycleOperation {
   id: ServiceLifecycleOperationId
   label: string
   state: ServiceLifecycleResultState
@@ -39,7 +39,7 @@ export interface ServiceLifecycleOperation {
   evidenceKind: 'local_command' | 'local_http' | 'local_file' | 'manual_operator'
 }
 
-export interface ServiceLifecycleTarget {
+interface ServiceLifecycleTarget {
   path: string
   kind: 'config' | 'state' | 'opencode_assets' | 'service_file' | 'log' | 'release_smoke_artifact'
   owner: 'gateway' | 'opencode' | 'service_manager'

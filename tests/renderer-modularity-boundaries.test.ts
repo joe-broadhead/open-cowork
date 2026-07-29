@@ -73,8 +73,16 @@ test('renderer large-file exceptions are documented in the architecture doc', ()
   }
 })
 
-test('renderer and UI kit have no circular import chains', () => {
+test('application, UI, shared, and runtime-host sources have no circular import chains', () => {
+  assert.ok(SCAN_ROOTS.includes('packages/runtime-host/src'))
   const graph = buildGraph()
+  const managedSupervisor = join(root, 'packages/runtime-host/src/runtime-managed-server-supervisor.ts')
+  const runtimeHostIndex = join(root, 'packages/runtime-host/src/index.ts')
+  assert.equal(
+    graph.get(managedSupervisor)?.has(runtimeHostIndex),
+    true,
+    'same-package imports through @open-cowork/runtime-host must remain visible to the cycle gate',
+  )
   const components = findCyclicComponents(graph)
   const rendered = components.map((component) => extractCyclePath(component, graph).map((f) => relative(root, f)).join(' -> '))
   assert.deepEqual(

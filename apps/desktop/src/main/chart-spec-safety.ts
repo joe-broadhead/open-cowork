@@ -47,7 +47,7 @@ export const MAX_CHART_GRID_CELLS = 4_000_000
 // rejected fail-closed. This list intentionally covers the full documented
 // transform surface so no legitimate chart is newly rejected — it only closes
 // the "unrecognized type slips through the default branch" gap.
-export const ROW_SAFE_CHART_TRANSFORMS: ReadonlySet<string> = new Set([
+const ROW_SAFE_CHART_TRANSFORMS: ReadonlySet<string> = new Set([
   // Data shaping / reduction (row-neutral or row-reducing)
   'aggregate', 'bin', 'collect', 'countpattern', 'dotbin', 'extent', 'filter',
   'formula', 'identifier', 'joinaggregate', 'lookup', 'pivot', 'project',

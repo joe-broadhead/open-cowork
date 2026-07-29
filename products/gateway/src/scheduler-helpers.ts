@@ -238,7 +238,7 @@ function sourceBaseRef(workdir: string | undefined): string {
   return ref || `workdir:${path.resolve(workdir)}`
 }
 
-export function uniqueStrings(values: string[]): string[] {
+function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)))
 }
 
@@ -287,7 +287,7 @@ export function runWorkdir(run: { environment?: { workdir?: string } } | undefin
   return run?.environment?.workdir || taskWorkdir(task)
 }
 
-export function extractWorkdir(value: string): string | undefined {
+function extractWorkdir(value: string): string | undefined {
   for (const line of value.split(/\r?\n/)) {
     const match = line.match(/^\s*(?:workdir|working directory|checkout|directory)\s*:\s*(.+?)\s*$/i)
     const candidate = match?.[1]?.trim()
@@ -297,7 +297,7 @@ export function extractWorkdir(value: string): string | undefined {
   return inline && path.isAbsolute(inline) ? canonicalWorkdir(inline) : undefined
 }
 
-export function canonicalWorkdir(directory: string): string {
+function canonicalWorkdir(directory: string): string {
   try { return fs.realpathSync(directory) } catch { return path.resolve(directory) }
 }
 
@@ -329,7 +329,7 @@ export function latestAssistantError(messages: any[]): string | undefined {
   return undefined
 }
 
-export function formatAssistantError(error: any): string {
+function formatAssistantError(error: any): string {
   const detail = error?.data?.message || error?.message || error?.name || String(error)
   const status = error?.data?.statusCode ? `HTTP ${error.data.statusCode}: ` : ''
   return `OpenCode assistant error: ${status}${detail}`

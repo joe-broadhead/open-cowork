@@ -1,17 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { CloudProjectSourceInput } from '@open-cowork/shared'
 import type { ApiTokenScope } from '../control-plane-store.ts'
-import type { CloudHttpServerOptions } from '../http-server.ts'
-import type { CloudCookieSession } from '../session-cookie-auth.ts'
-import type { CloudPrincipal } from '../session-service.ts'
+import type {
+  CloudHttpRouteContext,
+  CloudHttpServerOptions,
+} from '../http-contracts.ts'
 
-export type CloudApiRouteContext = {
-  principal: CloudPrincipal
-  authSource: 'cookie' | 'resolver'
-  cookieSession: CloudCookieSession | null
-  url: URL
-  segments: string[]
-}
+export type CloudApiRouteContext = CloudHttpRouteContext
 
 export type CloudApiRouteTools = {
   readJsonBody(req: IncomingMessage, maxBodyBytes: number): Promise<Record<string, unknown>>

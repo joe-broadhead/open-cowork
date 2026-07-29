@@ -1,18 +1,18 @@
 # Dual-stack channel protocol unification (JOE-994)
 
-**Status:** Capacity epic **closed** — Phases 0–3 façades shipped; native
-adapter decommission is **Won't Do** with protocol freeze retained (defaults stay Durable
-native). Re-open only when product prioritizes monorepo/bridge as default.
+**Status:** Capacity epic **closed** — Phases 0–3 façades shipped. The current
+time-bounded two-stack decision retains Durable-native defaults through its
+evidence window; it does not make decommission permanently Won't Do.
 **Security body:** Done (shared kernels + dual-stack checklist / CI gate)
 **Linear:** [JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)
-**Freeze source of truth:** [`product-channel-ownership.md`](product-channel-ownership.md)
+**Decision source of truth:** [`adr/channel-stack-policy.md`](adr/channel-stack-policy.md)
 
 This document records the monorepo plan and outcomes for composing Durable
 Gateway `products/gateway/src/channels/*` onto monorepo
 `packages/gateway-provider-*`. It is **not** an incomplete security P1 and
 must not be used to re-open dual-stack security work that is already Done.
 
-## Intentional freeze (do not break)
+## Bounded exception (do not break during the evidence window)
 
 | Layer | Status |
 | --- | --- |
@@ -20,7 +20,7 @@ must not be used to re-open dual-stack security work that is already Done.
 | PR dual-stack security checklist | Required (JOE-932) — still required |
 | Protocol / adapter implementations | **Two stacks by design**; Durable defaults **native**; monorepo opt-in via `protocolStack` |
 
-Until product changes defaults:
+Until the ADR review selects a migration:
 
 1. Fix security bugs in the owning stack (or shared kernel).
 2. Do **not** casually dual-fix protocol adapters.
@@ -61,9 +61,9 @@ Until product changes defaults:
 
 ## Phased acceptance
 
-### Phase 0 — Inventory + freeze (this doc)
+### Phase 0 — Inventory + original freeze (this doc)
 
-- [x] Document both stacks and freeze disposition
+- [x] Document both stacks and the original freeze disposition
 - [x] Link JOE-994 from ownership doc
 - [x] Machine inventory script (see below) keeps paths honest
 
@@ -76,7 +76,7 @@ Until product changes defaults:
 - [x] Conformance tests for capability declarations
   (`packages/gateway-channel/src/dual-stack-contract*.ts`,
   `tests/channel-protocol-dual-stack-contract.test.ts`)
-- [x] No behavior change for operators (comparison/conformance only; freeze retained)
+- [x] No behavior change for operators (comparison/conformance only)
 
 ### Phase 2 — Compose one Durable channel onto monorepo provider
 
@@ -94,7 +94,7 @@ Until product changes defaults:
 HA operational-sidecar cursor; rich HTML `sendRichMessage` falls back to text;
 native `setMyCommands` registration is not mirrored. Default path unchanged.
 
-### Phase 3 — Remaining channels + decommission
+### Phase 3 — Remaining channels + decommission disposition
 
 - [x] Migrate remaining Durable channels (opt-in monorepo façades)
   - Discord + WhatsApp bridge façades over `gateway-provider-discord` /
@@ -102,11 +102,11 @@ native `setMyCommands` registration is not mirrored. Default path unchanged.
   - Shared inbound policy: `channel-inbound-policy.ts` (all three providers)
   - Defaults remain **durable native**; monorepo requires bridge credentials
 - [x] Protocol stack selectors + daemon channel-map wiring for webhook routes
-- [x] **Won't Do (with product sign-off):** remove/archive duplicate **native**
-  protocol code while monorepo is not product-default. Native Durable adapters
-  remain the default operator path; deleting them would force bridge relays or
-  grammy HA tradeoffs without a product default flip.
-- [x] Update freeze/ownership docs with residual notes (bridge ≠ native)
+- [x] **Not selected by the current ADR:** remove/archive duplicate **native**
+  protocol code during the bounded evidence window. Native Durable adapters
+  remain the default operator path; deleting them now would force bridge relays
+  or grammy HA tradeoffs without a reviewed migration.
+- [x] Update ownership docs with residual notes (bridge ≠ native)
 
 **Residuals (monorepo Discord/WhatsApp only):** bridge-mode only (relay must
 verify native platform signatures); not a drop-in for Meta/Discord interaction
@@ -126,22 +126,22 @@ outbound.
 node scripts/check-channel-protocol-inventory.mjs
 ```
 
-Fails closed if the freeze ownership doc or either stack's expected roots are
+Fails closed if the ownership doc or either stack's expected roots are
 missing. Does **not** require monorepo to be the default stack.
 
 ## Exit criteria for JOE-994 epic
 
 - [x] Phase 2+ façades landed for production Durable channels (Telegram native
-  monorepo; Discord/WhatsApp bridge) **and** explicit **Won't Do** on native
-  decommission with protocol freeze retained (defaults stay Durable)
-- [x] Ownership doc updated (façades + freeze + checklist still required)
+  monorepo; Discord/WhatsApp bridge) and the dated channel-stack ADR now owns
+  decommission disposition (defaults stay Durable during its evidence window)
+- [x] Ownership doc updated (façades + bounded exception + checklist still required)
 - [x] Dual-stack security checklist still required for security PRs
 
 ## Residual register (post-epic; not incomplete P1)
 
 | Residual | Owner path | Reopen when |
 | --- | --- | --- |
-| Native Durable adapters retained as default | `channels/telegram.ts`, `whatsapp.ts`, `discord.ts` | Product sets monorepo/bridge as default |
+| Native Durable adapters retained as default | `channels/telegram.ts`, `whatsapp.ts`, `discord.ts` | ADR quantitative trigger or mandatory review selects convergence |
 | Telegram monorepo HA cursor / rich HTML / setMyCommands | monorepo façade only | HA + product parity required |
 | Discord/WhatsApp bridge ≠ native Graph/Interactions | monorepo façade only | Native monorepo providers exist or relays are standard |
 | Dual-stack security checklist | PR template + CI gate | Full single-stack ownership (not planned) |

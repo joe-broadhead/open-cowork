@@ -1,4 +1,4 @@
-export type AuditComplianceLedgerStatus = 'local_append_only_foundation_not_certified' | 'design_only_not_implemented'
+type AuditComplianceLedgerStatus = 'local_append_only_foundation_not_certified' | 'design_only_not_implemented'
 export type AuditEventClass =
   | 'user_action'
   | 'agent_action'
@@ -14,7 +14,7 @@ export type AuditEventClass =
   | 'extension_change'
   | 'secret_reference'
 
-export type AuditMode = 'local_beta_redacted_evidence' | 'self_hosted_team_design' | 'hosted_compliance_unsupported'
+type AuditMode = 'local_beta_redacted_evidence' | 'self_hosted_team_design' | 'hosted_compliance_unsupported'
 export type AuditActorKind =
   | 'local_operator'
   | 'user'
@@ -82,7 +82,7 @@ export interface AuditCurrentSurfaceMapping {
   gap: string
 }
 
-export interface IncidentEvidenceContract {
+interface IncidentEvidenceContract {
   manifestFields: string[]
   bundleContents: string[]
   redactionRules: string[]
@@ -369,7 +369,7 @@ export const AUDIT_CURRENT_SURFACES: AuditCurrentSurfaceMapping[] = [
   },
 ]
 
-export const INCIDENT_EVIDENCE_CONTRACT: IncidentEvidenceContract = {
+const INCIDENT_EVIDENCE_CONTRACT: IncidentEvidenceContract = {
   manifestFields: [
     'schemaVersion',
     'id',

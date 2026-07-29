@@ -6,7 +6,7 @@ import { listEffectiveSkillBundlesSync, type EffectiveSkillContextOptions } from
 import { warmBundledSkillIndex } from './bundled-skill-index.js'
 import { log } from '@open-cowork/shared/node'
 import { getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.js'
-import { getBundledSkillRoots } from './runtime-content.js'
+import { getBundledSkillRoots } from './bundled-skill-roots.js'
 export type RuntimeSkillBundle = {
   name: string
   content: string
