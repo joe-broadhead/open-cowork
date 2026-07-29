@@ -83,7 +83,7 @@ export type GatewayProviderConfig = {
   settings: Record<string, unknown>
 }
 
-export type GatewayRawConfig = GatewayDeploymentConfig
+type GatewayRawConfig = GatewayDeploymentConfig
 type GatewayRawProvider = NonNullable<GatewayRawConfig['providers']>[number]
 
 export type GatewayEnv = Record<string, string | undefined>
