@@ -356,7 +356,8 @@ test("Postgres runtime exposes incremental sync and freshness checks", async () 
   assert.match(source, /repoPath\.startsWith\("runs\/"\) \|\| repoPath\.startsWith\("events\/"\)/);
   assert.match(source, /refreshGovernancePlane/);
   assert.doesNotMatch(source, /upsertGovernancePlane/);
-  assert.match(source, /export async function clearWorkspaceGovernanceRows/);
+  assert.match(source, /async function clearWorkspaceGovernanceRows/);
+  assert.doesNotMatch(source, /export async function clearWorkspaceGovernanceRows/);
   assert.match(source, /DELETE FROM source_objects WHERE workspace_id/);
   assert.match(source, /DELETE FROM runs WHERE workspace_id/);
   assert.match(source, /DELETE FROM events WHERE workspace_id/);
