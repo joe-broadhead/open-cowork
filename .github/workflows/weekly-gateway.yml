@@ -55,8 +55,8 @@ jobs:
       - name: Typecheck Gateway
         run: pnpm --filter cowork-gateway typecheck
 
-      - name: Dead code (knip)
-        run: pnpm --filter cowork-gateway knip
+      - name: Canonical dead-code gate
+        run: pnpm lint:dead-code
 
       - name: Test Gateway (full matrix)
         id: gateway-test
