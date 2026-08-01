@@ -209,14 +209,9 @@ const strings: Record<string, string> = {
   'settings.reset.resetting': 'جارٍ إعادة الضبط…',
   'settings.reset.requiresConfirm': 'يتطلّب تأكيدًا صريحًا. سيُغلق التطبيق ويُعاد تشغيله.',
   'settings.language.label': 'اللغة',
-  'settings.language.description': 'اختر لغة الواجهة. يُحفظ الاختيار على هذا الجهاز. تعود اللغات المترجمة جزئيًا إلى الإنجليزية للسلاسل المفقودة.',
-  'settings.language.systemDefault': 'كشف تلقائي (النظام)',
-  'settings.language.partialOption': '{{label}} — {{percent}}٪ مترجم',
 
   'agents.create': 'إنشاء عميل',
 
-  'capabilities.tab.tools': 'الاتصالات',
-  'capabilities.tab.skills': 'القدرات',
 
   'workflows.regenerate': 'إعادة الإنشاء',
   'workflows.copyWebhookUrl': 'نسخ عنوان URL',
@@ -332,10 +327,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': 'استيراد',
   'studioTeamPage.eyebrow': 'الفريق',
   'studioTeamPage.title': 'زملاء العمل',
-  'studioTeamPage.subtitle': 'كوّن وكلاء OpenCode في قائمة زملاء عمل بأدوار ومهارات وأدوات واضحة وطرق تعيين في المحادثة.',
+  'studioTeamPage.subtitle': 'كوّن قائمة زملاء عمل بأدوار ومهارات وأدوات واضحة وطرق تعيين في المحادثة.',
   'studioTeamPage.customCount': 'مخصّص',
   'studioTeamPage.builtInCount': 'مدمج',
-  'studioTeamPage.runtimeCount': 'وقت التشغيل',
   'studioTeamPage.search': 'ابحث عن زملاء العمل أو المهارات أو الأدوات أو التعليمات…',
   'studioTeamPage.filterLabel': 'مرشّح زملاء العمل',
   'studioTeamPage.importTitle': 'استيراد زميل عمل مخصّص من ملف .cowork-agent.json',
@@ -374,9 +368,6 @@ const strings: Record<string, string> = {
   'capabilities.title': 'الأدوات والمهارات',
   'capabilities.subtitle': 'افحص الأدوات وحزم المهارات المتاحة في سياق OpenCode الحالي، بما في ذلك الإضافات المدمجة، والجهاز، والمشروع، والمخصّصة.',
   'capabilities.addTool': 'إضافة اتصال',
-  'capabilities.addSkillButton': 'إضافة قدرة',
-  'capabilities.searchTools': 'ابحث في الاتصالات أو الأوصاف أو زملاء العمل…',
-  'capabilities.searchSkills': 'ابحث في القدرات أو الأوصاف أو زملاء العمل…',
   'capabilities.details': 'التفاصيل',
   'capabilities.connection': 'الاتصال',
   'capabilities.linkedCoworkers': 'زملاء العمل المرتبطون',
@@ -568,9 +559,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': 'ما الذي يجب أن ينجزه فريقك اليوم؟',
   'studioHome.subtitle': '{{brand}} · اختر زميلًا قائدًا، و@اذكر المتخصصين، وراجع العمل في مكان واحد',
   'studioHome.composer.placeholder': 'اسأل أي شيء أو @اذكر زميلًا',
-  'studioHome.coachmark': 'اكتب طلبًا، أو أرفق سياقًا، أو @اذكر زميلًا — ⌘K للأوامر.',
-  'home.statusStrip.ready': 'جاهز',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
 
 }
 

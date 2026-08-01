@@ -1,7 +1,7 @@
 # Channel stack ownership (products/gateway vs monorepo providers)
 
-**Status:** Time-bounded two-stack exception through 2026-10-31. JOE-994 façades
-**Done**; native decommission is not selected by the current ADR.
+**Status:** Time-bounded two-stack exception through 2026-10-31. Native Durable
+adapters remain the default; decommission is not selected by the current ADR.
 **Security body:** **Done** — shared verify kernels + rate-limit primitives in `@open-cowork/shared/node` (JOE-934 / post-#958/#959)
 **Decision:** [`adr/channel-stack-policy.md`](adr/channel-stack-policy.md);
 telemetry contract: [`channel-stack-telemetry.md`](channel-stack-telemetry.md)
@@ -37,19 +37,22 @@ triggers. It supersedes the prior indefinite freeze wording.
 | Durable Gateway (cowork-gateway) inbound/outbound chat | products/gateway channels | monorepo providers (unless migrating) |
 | Shared crypto / rate-limit / retry primitives | `packages/gateway-channel` or `@open-cowork/shared` | copy-paste into either stack |
 
-## Protocol migration (JOE-994 closed — not open P1)
+## Protocol composition boundary
 
-JOE-994 shipped opt-in composition façades and shared policy. Native Durable
-adapters remain the default. JOE-994 did not select native decommission; the
-dated channel-stack ADR now owns that decision. Do **not** re-open it as
-incomplete dual-stack security P1.
+The opt-in composition façades and shared inbound policy do not change the
+default owner: native Durable adapters remain the operator path. The dated
+channel-stack ADR owns any convergence decision; do **not** treat the retained
+protocol stacks as incomplete dual-stack security work.
 
-**Epic plan / residual register:**
-[product-channel-protocol-unification.md](product-channel-protocol-unification.md)
-([JOE-994](https://linear.app/joe-broadhead/issue/JOE-994/epic-dual-stack-channel-protocol-unification-capacity)).
-Inventory guard: `node scripts/check-channel-protocol-inventory.mjs`.
+Non-security capability keys are shared through
+`packages/shared/src/channel-protocol-contract.ts`. Capability declarations
+remain covered by `tests/channel-protocol-dual-stack-contract.test.ts` and the
+package conformance helpers under `packages/gateway-channel/src/`. Inventory
+guard: `node scripts/check-channel-protocol-inventory.mjs`. It fails closed on
+missing stack roots or decision sources without requiring the monorepo path to
+become the default.
 
-### Protocol stack façades (JOE-994 Phase 2–3)
+### Protocol stack façades
 
 | Channel | Setting | Monorepo meaning |
 | --- | --- | --- |

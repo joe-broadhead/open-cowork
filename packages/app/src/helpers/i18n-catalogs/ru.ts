@@ -205,14 +205,9 @@ const strings: Record<string, string> = {
   'settings.reset.resetting': 'Сброс…',
   'settings.reset.requiresConfirm': 'Требуется явное подтверждение. Приложение закроется и перезапустится.',
   'settings.language.label': 'Язык',
-  'settings.language.description': 'Выберите язык интерфейса. Выбор сохраняется на этом устройстве. Для частично переведённых языков недостающие строки показываются на английском.',
-  'settings.language.systemDefault': 'Автоопределение (система)',
-  'settings.language.partialOption': '{{label}} — переведено {{percent}} %',
 
   'agents.create': 'Создать агента',
 
-  'capabilities.tab.tools': 'Подключения',
-  'capabilities.tab.skills': 'Способности',
 
   'workflows.regenerate': 'Создать заново',
   'workflows.copyWebhookUrl': 'Копировать URL',
@@ -328,10 +323,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': 'Импорт',
   'studioTeamPage.eyebrow': 'Команда',
   'studioTeamPage.title': 'Коллеги',
-  'studioTeamPage.subtitle': 'Собирайте агентов OpenCode в список коллег с понятными ролями, навыками, инструментами и назначениями в чате.',
+  'studioTeamPage.subtitle': 'Создайте список коллег с понятными ролями, навыками, инструментами и назначениями в чате.',
   'studioTeamPage.customCount': 'пользовательские',
   'studioTeamPage.builtInCount': 'встроенные',
-  'studioTeamPage.runtimeCount': 'runtime',
   'studioTeamPage.search': 'Поиск коллег, навыков, инструментов или инструкций…',
   'studioTeamPage.filterLabel': 'Фильтр коллег',
   'studioTeamPage.importTitle': 'Импортировать своего коллегу из файла .cowork-agent.json',
@@ -370,9 +364,6 @@ const strings: Record<string, string> = {
   'capabilities.title': 'Инструменты и навыки',
   'capabilities.subtitle': 'Просматривайте инструменты и пакеты навыков, доступные в текущем контексте OpenCode, включая встроенные, машинные, проектные и пользовательские дополнения.',
   'capabilities.addTool': 'Добавить подключение',
-  'capabilities.addSkillButton': 'Добавить способность',
-  'capabilities.searchTools': 'Поиск подключений, описаний или коллег…',
-  'capabilities.searchSkills': 'Поиск способностей, описаний или коллег…',
   'capabilities.details': 'Детали',
   'capabilities.connection': 'Подключение',
   'capabilities.linkedCoworkers': 'Связанные коллеги',
@@ -564,9 +555,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': 'Чем займётся ваша команда сегодня?',
   'studioHome.subtitle': '{{brand}} · Выберите ведущего коллегу, @упомяните специалистов и проверьте работу в одном месте',
   'studioHome.composer.placeholder': 'Спросите что угодно или @упомяните коллегу',
-  'studioHome.coachmark': 'Напишите запрос, приложите контекст или @упомяните коллегу — ⌘K для команд.',
-  'home.statusStrip.ready': 'Готово',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
 
 }
 

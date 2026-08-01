@@ -30,6 +30,7 @@ export {
   buildCapabilityMapGroups,
   buildCapabilityMapSections,
   buildCapabilityToolSections,
+  conciseCapabilitySummary,
   linkedSkillsForTool,
   linkedToolsForSkill,
   mergedRuntimeToolset,

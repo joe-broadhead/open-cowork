@@ -2,20 +2,19 @@ import {
   getDefaultThemeId,
   getThemeTokens,
   getUserFacingThemes,
+  isUserFacingTheme,
   isUiTheme,
-  isUiAccentPresetId,
   accentActionFillToken,
-  UI_ACCENT_PRESETS,
   type UiAccentPresetId,
   type UiTheme,
 } from './theme-presets'
 
-export { getUserFacingThemes, UI_ACCENT_PRESETS }
-export type { UiTheme, UiAccentPresetId }
+export { getUserFacingThemes }
+export type { UiTheme }
 
 // "Match theme" (the default) uses each theme's own accent; the named presets are
 // optional overrides.
-export const THEME_MATCHED_ACCENT = 'theme' as const
+const THEME_MATCHED_ACCENT = 'theme' as const
 export type UiAccentChoice = UiAccentPresetId | typeof THEME_MATCHED_ACCENT
 
 export type ColorScheme = 'system' | 'dark' | 'light'
@@ -30,6 +29,21 @@ export type AppearancePreferences = {
   uiFont: UiFont
   monoFont: MonoFont
   density: Density
+}
+
+/**
+ * Value telemetry intentionally counts only an explicit theme/density choice
+ * away from the configured defaults. Fonts, accents, color scheme changes,
+ * and resetting a variant to its default are useful preferences but are not
+ * the retained appearance outcome defined by the product-value contract.
+ */
+export function isNonDefaultAppearanceVariantChange(
+  preferences: Partial<AppearancePreferences>,
+): boolean {
+  return (preferences.uiTheme !== undefined
+      && isUserFacingTheme(preferences.uiTheme)
+      && preferences.uiTheme !== getDefaultThemeId())
+    || (preferences.density !== undefined && preferences.density !== 'regular')
 }
 
 const STORAGE_KEYS = {
@@ -88,14 +102,18 @@ function readColorScheme(): ColorScheme {
 
 function readUiTheme(): UiTheme {
   const stored = localStorage.getItem(STORAGE_KEYS.uiTheme)
-  return isUiTheme(stored) ? stored : getDefaultThemeId()
+  const fallback = getDefaultThemeId()
+  if (isUserFacingTheme(stored) || (stored === fallback && isUiTheme(stored))) return stored
+  if (stored) localStorage.setItem(STORAGE_KEYS.uiTheme, fallback)
+  return fallback
 }
 
 function readAccent(): UiAccentChoice {
   const stored = localStorage.getItem(STORAGE_KEYS.accent)
-  // Default to "Match theme" so each theme renders with its own accent; a named
-  // preset is only used when the user explicitly picks one.
-  return isUiAccentPresetId(stored) ? stored : THEME_MATCHED_ACCENT
+  if (stored && stored !== THEME_MATCHED_ACCENT) {
+    localStorage.setItem(STORAGE_KEYS.accent, THEME_MATCHED_ACCENT)
+  }
+  return THEME_MATCHED_ACCENT
 }
 
 function readUiFont(): UiFont {
@@ -217,7 +235,18 @@ export function applyAppearancePreferences(preferences = getAppearancePreference
 
 export function saveAppearancePreferences(preferences: Partial<AppearancePreferences>) {
   const current = getAppearancePreferences()
-  const next = { ...current, ...preferences }
+  const requestedTheme = preferences.uiTheme
+  const retainedTheme = requestedTheme
+    && (isUserFacingTheme(requestedTheme)
+      || (requestedTheme === getDefaultThemeId() && isUiTheme(requestedTheme)))
+    ? requestedTheme
+    : current.uiTheme
+  const next = {
+    ...current,
+    ...preferences,
+    uiTheme: retainedTheme,
+    accent: THEME_MATCHED_ACCENT,
+  }
   localStorage.setItem(STORAGE_KEYS.colorScheme, next.colorScheme)
   localStorage.setItem(STORAGE_KEYS.uiTheme, next.uiTheme)
   localStorage.setItem(STORAGE_KEYS.accent, next.accent)

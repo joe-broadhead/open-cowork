@@ -4,7 +4,7 @@ import { sessionEngine } from '@open-cowork/runtime-host/session-engine'
 import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs } from '@open-cowork/runtime-host/session-diff-fallback'
 import { getLocalSessionPort } from '../local-workspace-session.ts'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
-import { getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
+import { getClient, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
 import {
   getNativeSession,
   listNativeSessionMessages,
@@ -27,6 +27,22 @@ import { log } from '@open-cowork/shared/node'
 import { clearPermissionsForSession } from '../permission-tracker.ts'
 import { cleanupSandboxWorkspaceForSession } from '../sandbox-storage.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
+
+type RuntimeClient = NonNullable<ReturnType<typeof getClient>>
+
+/**
+ * The pinned OpenCode 1.18.1 V2 client has no session-delete route. Keep the
+ * one documented classic gap centralized here so temporary validation sessions
+ * and user-requested deletion share the same audited SDK exception.
+ */
+export async function deleteSessionThroughClassicGap(
+  client: RuntimeClient,
+  input: { sessionID: string, directory?: string },
+  options: { throwOnError: true, signal?: AbortSignal } = { throwOnError: true },
+): Promise<void> {
+  await client.session.delete(input, options)
+}
+
 export function registerSessionActionHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('session:export', async (_event, sessionIdInput: unknown) => {
     const sessionId = normalizeSessionId(sessionIdInput)
@@ -202,7 +218,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
         throw new Error('Confirmation required before deleting a thread.')
       }
       const record = context.ensureSessionRecord(sessionId)
-      await client.session.delete({ sessionID: sessionId }, { throwOnError: true })
+      await deleteSessionThroughClassicGap(client, { sessionID: sessionId })
       clearPermissionsForSession(sessionId)
       removeParentSession(sessionId)
       removeSessionRecord(sessionId)

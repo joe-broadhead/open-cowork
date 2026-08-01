@@ -3,7 +3,7 @@ import { PluginIcon } from '../plugins/PluginIcon'
 import { t } from '../../helpers/i18n'
 import { entityChroma } from '../../helpers/entity-chroma'
 import {
-  buildCapabilityMapSections, mergedRuntimeToolset, prettyKind, CapabilityMapGroup, } from './capabilities-page-support.ts'
+  buildCapabilityMapSections, conciseCapabilitySummary, mergedRuntimeToolset, prettyKind, CapabilityMapGroup, } from './capabilities-page-support.ts'
 import { EmptyGrid } from './capabilities-page-components.tsx'
 import { Badge, Card, Icon, type BadgeTone } from '@open-cowork/ui'
 
@@ -156,7 +156,7 @@ function CapabilityMapGroupCard({
               {isCustomTool ? <Badge tone="muted">Custom</Badge> : null}
             </div>
             <div className="font-display text-role-card-title font-semibold text-text truncate leading-tight">{tool.name}</div>
-            <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">{tool.description}</div>
+            <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">{conciseCapabilitySummary(tool.description)}</div>
           </div>
         </div>
 
@@ -171,7 +171,7 @@ function CapabilityMapGroupCard({
           </span>
           <span className="text-text-muted/60" aria-hidden>·</span>
           <span className="tabular">
-            <span className="text-text-secondary font-[560]">{agentCount}</span> {agentCount === 1 ? 'agent' : 'agents'}
+            <span className="text-text-secondary font-[560]">{agentCount}</span> {agentCount === 1 ? 'coworker' : 'coworkers'}
           </span>
           {tool.scope ? (
             <>
@@ -183,6 +183,7 @@ function CapabilityMapGroupCard({
             </>
           ) : null}
         </div>
+        <span className="self-end text-2xs font-semibold text-text-secondary">Details</span>
       </button>
 
       {skillCount > 0 ? (

@@ -280,7 +280,7 @@ The Electron main process:
 - bridges IPC
 - manages window lifecycle
 - owns local storage, session registry access, and rebuildable sidecar
-  projections such as the Projects (thread-index) sidecar
+  projections such as the sidebar recent-chat thread index
 - enforces desktop-side policy and safety boundaries
 
 Code:
@@ -295,8 +295,8 @@ Code:
   `packages/runtime-host/src/mcp-stdio-policy.ts`,
   `packages/runtime-host/src/shell-env.ts` — policy and safety boundaries.
 - `packages/runtime-host/src/thread-index/thread-index-store.ts` and
-  `packages/runtime-host/src/thread-index/thread-index-service.ts` — the local Projects
-  search/tag projection over the session registry and session history.
+  `packages/runtime-host/src/thread-index/thread-index-service.ts` — the local sidebar
+  recent-chat search/tag projection over the session registry and session history.
 
 ### 4. Event projection layer
 
@@ -344,11 +344,20 @@ The renderer owns:
 - navigation
 - chat UX
 - the welcoming Home composer
-- the Projects workspace for indexed history search, tags, saved filters, and
-  suggestions
+- the Projects coordination board for objectives, Kanban tasks, assignments,
+  and linked work chats
 - Team (coworkers), Tools & Skills, and secondary Studio surfaces
 - settings
 - artifact presentation
+
+### Product capability manifest
+
+`packages/shared/src/product-capability-manifest.ts` is the product-facing
+source of truth for the hero routes, progressive-disclosure tier, route-to-
+feature mapping, capability outcomes, and configured catalog counts. UI chrome
+and public claims must derive from or be validated against that manifest;
+OpenCode remains the source of truth for runtime execution and discovered
+runtime capabilities.
 
 The renderer does not access the local filesystem or network directly. It
 goes through the preload bridge and IPC contract.

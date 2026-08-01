@@ -208,14 +208,9 @@ const strings: Record<string, string> = {
   'settings.reset.resetting': '正在重置…',
   'settings.reset.requiresConfirm': '需要明确确认。应用将关闭并重启。',
   'settings.language.label': '语言',
-  'settings.language.description': '选择界面语言。选择会记忆在本机。部分翻译的语言会为缺失的字符串回退到英文。',
-  'settings.language.systemDefault': '自动检测（系统）',
-  'settings.language.partialOption': '{{label}} — 已翻译 {{percent}}%',
 
   'agents.create': '创建智能体',
 
-  'capabilities.tab.tools': '连接',
-  'capabilities.tab.skills': '能力',
 
   'workflows.regenerate': '重新生成',
   'workflows.copyWebhookUrl': '复制 URL',
@@ -331,10 +326,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': '导入',
   'studioTeamPage.eyebrow': '团队',
   'studioTeamPage.title': '同事',
-  'studioTeamPage.subtitle': '将 OpenCode 智能体组织成同事名单，并清晰展示角色、技能、工具和聊天分配。',
+  'studioTeamPage.subtitle': '组建同事团队，并清晰展示角色、技能、工具和聊天分配。',
   'studioTeamPage.customCount': '自定义',
   'studioTeamPage.builtInCount': '内置',
-  'studioTeamPage.runtimeCount': '运行时',
   'studioTeamPage.search': '搜索同事、技能、工具或指令…',
   'studioTeamPage.filterLabel': '同事筛选',
   'studioTeamPage.importTitle': '从 .cowork-agent.json 文件导入自定义同事',
@@ -373,9 +367,6 @@ const strings: Record<string, string> = {
   'capabilities.title': '工具与技能',
   'capabilities.subtitle': '检查当前 OpenCode 上下文中可用的工具和技能包，包括内置、机器、项目和自定义的添加。',
   'capabilities.addTool': '添加连接',
-  'capabilities.addSkillButton': '添加能力',
-  'capabilities.searchTools': '搜索连接、描述或同事…',
-  'capabilities.searchSkills': '搜索能力、描述或同事…',
   'capabilities.details': '详情',
   'capabilities.connection': '连接',
   'capabilities.linkedCoworkers': '关联同事',
@@ -567,9 +558,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': '你的团队今天要处理什么？',
   'studioHome.subtitle': '{{brand}} · 选择一位主导同事，@提及专家，并在一个地方审查工作',
   'studioHome.composer.placeholder': '随便问，或 @提及一位同事',
-  'studioHome.coachmark': '输入提示、附加上下文，或 @提及一位同事 — ⌘K 打开命令。',
-  'home.statusStrip.ready': '就绪',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} 个 MCP',
 
 }
 

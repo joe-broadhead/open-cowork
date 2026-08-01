@@ -1,5 +1,7 @@
-import { DENSITY_OPTIONS, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type Density, type MonoFont, type UiFont, UI_ACCENT_PRESETS, UI_FONT_OPTIONS, type UiAccentPresetId, type UiTheme, getUserFacingThemes, THEME_MATCHED_ACCENT } from '../../helpers/theme'
+import { useEffect } from 'react'
+import { DENSITY_OPTIONS, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type Density, type MonoFont, type UiFont, UI_FONT_OPTIONS, type UiTheme, getUserFacingThemes } from '../../helpers/theme'
 import { t } from '../../helpers/i18n'
+import { recordFeatureValueDiscovery } from '../../helpers/feature-value-telemetry'
 import { Badge, Card, SegmentedControl, Select } from '@open-cowork/ui'
 import { fieldLabelCls, sectionLabelCls } from './settings-panel-styles'
 
@@ -17,6 +19,9 @@ export function AppearancePreview({
   onUpdate: (patch: Partial<AppearancePreferences>) => void
 }) {
   const themes = getUserFacingThemes()
+  useEffect(() => {
+    recordFeatureValueDiscovery('appearance')
+  }, [])
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3">
@@ -59,48 +64,6 @@ export function AppearancePreview({
             label: colorSchemeLabel(scheme),
           }))}
         />
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <span className={sectionLabelCls}>{t('settings.appearance.accent', 'Accent')}</span>
-        <div className="grid grid-cols-3 gap-2">
-          <Card
-            interactive
-            padding="sm"
-            aria-pressed={appearance.accent === THEME_MATCHED_ACCENT}
-            onClick={() => onUpdate({ accent: THEME_MATCHED_ACCENT })}
-            className="settings-choice-card"
-          >
-            <span className="flex items-center gap-2">
-              <span
-                className="h-5 w-5 shrink-0 rounded-full border border-border-subtle"
-                style={{ background: 'conic-gradient(from 210deg, var(--color-accent), var(--color-info), var(--color-green), var(--color-amber), var(--color-red), var(--color-accent))' }}
-              />
-              <span className="min-w-0 truncate text-xs font-semibold text-text">{t('settings.appearance.accentMatchTheme', 'Match theme')}</span>
-            </span>
-          </Card>
-          {Object.entries(UI_ACCENT_PRESETS).map(([accentId, accent]) => {
-            const active = appearance.accent === accentId
-            return (
-              <Card
-                key={accentId}
-                interactive
-                padding="sm"
-                aria-pressed={active}
-                onClick={() => onUpdate({ accent: accentId as UiAccentPresetId })}
-                className="settings-choice-card"
-              >
-                <span className="flex items-center gap-2">
-                  <span
-                    className="h-5 w-5 rounded-full border border-border-subtle"
-                    style={{ background: `linear-gradient(150deg, ${accent.accent2}, ${accent.accent})` }}
-                  />
-                  <span className="min-w-0 text-xs font-semibold text-text">{accent.label}</span>
-                </span>
-              </Card>
-            )
-          })}
-        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

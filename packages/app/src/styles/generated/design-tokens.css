@@ -78,8 +78,10 @@
   --accent-line: color-mix(in srgb,var(--accent) 38%,transparent);
   --accent-gradient: linear-gradient(150deg,var(--accent-2),var(--accent));
   --elevation-popover: var(--shadow-3);
-  --specular: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
-  --specular-strong: inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent);
+  --color-shadow-ink: #000;
+  --color-highlight-ink: #fff;
+  --specular: inset 0 1px 0 color-mix(in srgb, var(--color-highlight-ink) 3%, transparent);
+  --specular-strong: inset 0 1px 0 color-mix(in srgb, var(--color-highlight-ink) 5%, transparent);
   --glass-bg: color-mix(in srgb, var(--color-elevated) 86%, transparent);
   --glass-blur: blur(14px) saturate(1.05);
   --glass-border: color-mix(in srgb, var(--color-accent) 24%, transparent);

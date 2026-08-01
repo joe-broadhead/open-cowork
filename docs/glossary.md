@@ -55,7 +55,9 @@ keep older names.
 | Gateway (durable) | products/gateway, cowork-gateway | Unqualified “gateway”; OpenCode Gateway after import |
 | Health Center | view `health` | Mixing Diagnostics/Health without one label |
 
-Full claim boundary: [Product purity register](product-purity-register.md).
+Release claims are gated by the [product contract](product-contract.md),
+[capability manifest](architecture.md#product-capability-manifest), and
+[release checklist](release-checklist.md).
 
 ## Sessions, project chats & artifacts
 
@@ -104,13 +106,12 @@ Skill bundle
     so they can't be invoked through a Cowork-only path.
 
 MCP (Model Context Protocol)
-:   A protocol for exposing tools to a model. Open Cowork ships seven MCPs out
-    of the box: `agents` (custom-agent authoring), `charts` (Vega-Lite + Mermaid
-    rendering), `knowledge` (knowledge-wiki proposals), `semantic-ui`
-    (approval-gated UI actions), `skills` (skill-bundle management),
-    `workflows` (workflow preview and creation), and `time-keep` (IANA
-    timezones, calendar math, business days, holidays, and local timers).
-    Users can also add stdio or HTTP MCPs. See [Skills & MCPs](skills-and-mcps.md).
+:   A protocol for exposing tools to a model. Open Cowork configures bundled
+    MCPs for coworker authoring, visualization, in-app knowledge proposals,
+    approval-gated UI actions, skill management, workflow setup, and local time
+    operations. The live **Tools & Skills** catalog is authoritative for an
+    installed workspace. Users can also add stdio or HTTP MCPs. See
+    [Skills & MCPs](skills-and-mcps.md).
 
 Capability
 :   The internal umbrella term for tools, skills, and agents. The
@@ -217,12 +218,12 @@ Allowed env placeholder
 
 ## UI surfaces
 
-Default Studio navigation (user-facing names):
+Studio navigation labels when their feature is enabled (user-facing names):
 
 | Nav label | Purpose |
 | --- | --- |
 | **Home** | Landing composer and recent work |
-| **Projects** | Indexed project-chat history, tags, filters |
+| **Projects** | Objectives, Kanban tasks, assignments, and linked work chats |
 | **Knowledge** | In-app knowledge spaces, pages, and proposals (not Wiki) |
 | **Approvals** | Cross-session review queue for permissions and questions |
 | **Team** | Built-in and custom coworkers |
@@ -233,13 +234,14 @@ Default Studio navigation (user-facing names):
 | **Settings** | Appearance, models, permissions, storage |
 
 Home
-:   The welcoming landing surface — single composer, recent project chats,
-    @-coworker suggestion pills. Submitting a prompt creates a new session
-    and routes to Chat in one motion.
+:   The welcoming landing surface — one composer, a compact lead-coworker
+    picker, inline `@` mentions, and recent conversations in the active
+    workspace. Submitting a prompt creates a new session and routes to Chat in
+    one motion.
 
 Projects
-:   The full-history workspace for search, facets, tags, and saved filters
-    over project chats. See [Projects](projects.md).
+:   The coordination board for objectives, Kanban tasks, coworker assignments,
+    and linked work chats. See [Projects](projects.md).
 
 Team
 :   The coworker catalog (built-in + custom OpenCode agents). See

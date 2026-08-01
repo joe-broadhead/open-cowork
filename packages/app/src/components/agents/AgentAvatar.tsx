@@ -45,7 +45,7 @@ export function AgentAvatar({ name, color = 'accent', size = 'md', className = '
         color: 'var(--color-text)',
         background: `linear-gradient(140deg, color-mix(in srgb, ${chroma} 90%, var(--color-base)) 0%, color-mix(in srgb, ${chroma} 62%, var(--color-base)) 100%)`,
         borderColor: `color-mix(in srgb, ${chroma} 45%, transparent)`,
-        boxShadow: 'inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent)',
+        boxShadow: 'inset 0 1px 0 0 color-mix(in srgb, var(--color-highlight-ink) 14%, transparent)',
       }}
       aria-label={`${name} avatar`}
     >

@@ -1,4 +1,5 @@
 import { clearKnowledgeStoreCache } from '@open-cowork/runtime-host/knowledge/knowledge-store'
+import { knowledgeSpaceIdFromCreationId } from '@open-cowork/shared'
 import { createCoordinationProject, createCoordinationTask, createCoordinationWatch, getCoordinationProject, getCoordinationTask, getCoordinationWatch, setCoordinationDatabaseForTests } from '@open-cowork/runtime-host/coordination/coordination-store'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -23,6 +24,7 @@ import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coord
 import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { registerKnowledgeHandlers } from '../apps/desktop/src/main/ipc/knowledge-handlers.ts'
 import { registerVoiceHandlers } from '../apps/desktop/src/main/ipc/voice-handlers.ts'
+import { registerAdoptionHandlers } from '../apps/desktop/src/main/ipc/adoption-handlers.ts'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { createIpcHandlerHarness } from './support/ipc-handler-harness.ts'
 
@@ -58,6 +60,7 @@ test('IPC handler modules register their core channels', () => {
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
   registerKnowledgeHandlers(context)
+  registerAdoptionHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
@@ -70,6 +73,7 @@ test('IPC handler modules register their core channels', () => {
   // be registered. Guards against regressions like the renderer panic
   // reporter going missing.
   assert.equal(listeners.has('diagnostics:renderer-error'), true)
+  assert.equal(handlers.has('adoption:feature-value'), true)
 
   assert.equal(handlers.has('workspace:list'), true)
   assert.equal(handlers.has('workspace:activate'), true)
@@ -131,6 +135,17 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('threads:suggestions:accept'), true)
 })
 
+test('feature-value IPC rejects schema-invalid payloads without acknowledgement', async () => {
+  const { context, invoke } = createIpcHandlerHarness()
+  registerAdoptionHandlers(context)
+
+  assert.equal(await invoke('adoption:feature-value', {
+    feature: 'projects',
+    stage: 'activated',
+    prompt: 'must not pass',
+  }), false)
+})
+
 test('preload invoke/send channels match registered main-process IPC channels', () => {
   const { context, handlers, listeners } = createIpcHandlerHarness()
 
@@ -143,6 +158,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
   registerKnowledgeHandlers(context)
+  registerAdoptionHandlers(context)
   registerVoiceHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
@@ -274,7 +290,7 @@ test('coordination IPC mutations cannot affect cloud-scoped rows', async () => {
   }
 })
 
-test('knowledge proposal IPC ignores renderer-controlled storage directories', async () => {
+test('knowledge write IPC pins local storage and validates Space creation correlation', async () => {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const appDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-knowledge-ipc-app-'))
   const rendererStorageDir = mkdtempSync(join(tmpdir(), 'open-cowork-knowledge-ipc-renderer-'))
@@ -294,12 +310,29 @@ test('knowledge proposal IPC ignores renderer-controlled storage directories', a
       event: unknown,
       input: unknown,
     ) => Promise<Record<string, unknown>>
+    const createSpace = handlers.get('knowledge:space:create') as (
+      event: unknown,
+      input: unknown,
+    ) => Promise<Record<string, unknown>>
 
     const snapshot = await snapshotHandler(null, {})
     const spaces = snapshot.spaces as Array<{ id: string }>
     const pages = snapshot.pages as Array<{ id: string, title: string }>
     assert.ok(spaces[0]?.id)
     assert.ok(pages[0]?.id)
+
+    const creationId = '00000000-0000-4000-8000-000000000001'
+    const correlatedSpace = await createSpace(null, {
+      storageDataDir: rendererStorageDir,
+      creationId,
+      name: 'Correlated creation',
+      visibility: 'team',
+    })
+    assert.equal(correlatedSpace.id, knowledgeSpaceIdFromCreationId(creationId))
+    await assert.rejects(
+      () => createSpace(null, { creationId: 'not-a-uuid', name: 'Invalid correlation' }),
+      /creation id must be a UUID/i,
+    )
 
     const proposal = await createProposal(null, {
       storageDataDir: rendererStorageDir,

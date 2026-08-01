@@ -125,8 +125,9 @@ test('private voice: ADR and progressive disclosure docs present', () => {
   const mkdocs = readFileSync(join(root, 'mkdocs.yml'), 'utf8')
   assert.match(mkdocs, /private-realtime-voice\.md/)
 
-  const register = readFileSync(join(root, 'docs/product-purity-register.md'), 'utf8')
-  assert.match(register, /Private realtime voice/)
+  const releaseChecklist = readFileSync(join(root, 'docs/release-checklist.md'), 'utf8')
+  assert.match(releaseChecklist, /Private voice/)
+  assert.match(releaseChecklist, /features\.voice/)
 })
 
 test('private voice: public default config does not enable features.voice', () => {
@@ -134,6 +135,11 @@ test('private voice: public default config does not enable features.voice', () =
     features?: Record<string, boolean>
   }
   assert.notEqual(config.features?.voice, true)
+
+  const desktopSchema = JSON.parse(readFileSync(join(root, 'schemas/config/desktop-core.schema.json'), 'utf8')) as {
+    properties?: { features?: { properties?: Record<string, unknown> } }
+  }
+  assert.ok(desktopSchema.properties?.features?.properties?.voice)
 })
 
 test('private voice: IPC and preload channels are scaffolded', () => {
@@ -233,8 +239,6 @@ test('private voice: IPC and preload channels are scaffolded', () => {
   assert.match(dogfood, /Claim freeze/)
   assert.match(dogfood, /Forbidden/)
 
-  const closeout = readFileSync(join(root, 'docs/voice-private-epic-closeout.md'), 'utf8')
-  assert.match(closeout, /JOE-1114/)
-  assert.match(closeout, /Residual risk register/)
-  assert.match(closeout, /P0 open children without Waive/)
+  assert.match(dogfood, /Claim freeze/)
+  assert.match(dogfood, /default.*off/i)
 })

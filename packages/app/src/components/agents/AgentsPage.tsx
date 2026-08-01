@@ -4,12 +4,13 @@ import type {
 import { AgentBuilderPage } from './AgentBuilderPage'
 import {
   BuiltInSelectionCard, CustomSelectionCard, RuntimeSelectionCard, } from './AgentSelectionCard'
-import { Button, Dialog, EmptyState, ErrorState, Input, SegmentedControl, Skeleton, StudioPageHeader } from '@open-cowork/ui'
+import { Button, Dialog, ErrorState, Input, SegmentedControl, Skeleton, StudioPageHeader } from '@open-cowork/ui'
 import { toast } from '../ui/Toaster'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
-import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
+import { supportAllows, supportEntry, useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import {
   bundleToAgentConfig,
   decodeAgentBundle,
@@ -17,8 +18,9 @@ import {
   encodeAgentBundle,
   stringifyAgentBundle,
 } from '../../helpers/agent-bundle'
+import { recordFeatureValueActivation, recordFeatureValueDiscovery } from '../../helpers/feature-value-telemetry'
 
-type Filter = 'all' | 'custom' | 'builtin' | 'runtime' | 'opencode'
+type Filter = 'all' | 'custom' | 'builtin'
 
 // Entry to the builder. The list grid shows every agent (built-in, custom,
 // runtime) as a portrait-style card. Clicking one opens the builder.
@@ -56,6 +58,7 @@ export function AgentsPage({
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const loadGenerationRef = useRef(0)
   // When an import collides with an existing custom coworker, we hold the
   // decoded bundle here and surface a styled confirm before overwriting.
   const [importConflict, setImportConflict] = useState<{ name: string } | null>(null)
@@ -63,10 +66,16 @@ export function AgentsPage({
 
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
+  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const workspaceSupport = useActiveWorkspaceSupport()
   // Custom coworker authoring edits local machine/runtime config — Desktop local only.
-  const canAuthorCustomCoworkers = workspaceSupport.flags.canUseMachineRuntimeConfig
-    || workspaceSupport.flags.authority === 'desktop_local'
+  const canAuthorCustomCoworkers = workspaceSupport.isLocal
+    && supportAllows(supportEntry(workspaceSupport.support, 'machineRuntimeConfig'), { mutation: true })
+  const canUseLocalRuntimeActions = workspaceSupport.isLocal
+
+  useEffect(() => {
+    if (canAuthorCustomCoworkers) recordFeatureValueDiscovery('custom-team')
+  }, [canAuthorCustomCoworkers])
 
   const projectDirectory = useMemo(
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
@@ -74,21 +83,40 @@ export function AgentsPage({
   )
 
   const contextOptions = useMemo(
-    () => projectDirectory ? { directory: projectDirectory } : undefined,
-    [projectDirectory],
+    () => {
+      const workspaceId = activeWorkspaceId === LOCAL_WORKSPACE_ID ? undefined : activeWorkspaceId
+      return projectDirectory || workspaceId
+        ? { directory: projectDirectory || undefined, workspaceId }
+        : undefined
+    },
+    [activeWorkspaceId, projectDirectory],
   )
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((replaceVisibleRoster = false) => {
+    const generation = ++loadGenerationRef.current
     setLoading(true)
     setLoadError(null)
+    if (replaceVisibleRoster) {
+      setCustoms([])
+      setCatalog(null)
+      setAppConfig(null)
+      setBuiltinDetails([])
+      setRuntimeAgents([])
+      setSelected(null)
+      setCreating(false)
+      setCreatingSeed(null)
+    }
     void Promise.all([
       window.coworkApi.agents.list(contextOptions),
       window.coworkApi.agents.catalog(contextOptions),
       window.coworkApi.app.builtinAgents(),
-      window.coworkApi.agents.runtime().catch(() => []),
+      canUseLocalRuntimeActions
+        ? window.coworkApi.agents.runtime().catch(() => [])
+        : Promise.resolve<RuntimeAgentDescriptor[]>([]),
       window.coworkApi.app.config(),
     ])
       .then(([nextCustoms, nextCatalog, nextBuiltIns, nextRuntimeAgents, nextConfig]) => {
+        if (generation !== loadGenerationRef.current) return
         setCustoms(nextCustoms)
         setCatalog(nextCatalog)
         setBuiltinDetails(nextBuiltIns)
@@ -96,25 +124,35 @@ export function AgentsPage({
         setAppConfig(nextConfig)
       })
       .catch((error) => {
+        if (generation !== loadGenerationRef.current) return
         setLoadError(error instanceof Error ? error.message : String(error))
       })
-      .finally(() => setLoading(false))
-  }, [contextOptions])
+      .finally(() => {
+        if (generation === loadGenerationRef.current) setLoading(false)
+      })
+  }, [canUseLocalRuntimeActions, contextOptions])
 
   useEffect(() => {
-    refresh()
+    refresh(true)
     const unsubscribe = window.coworkApi.on.runtimeReady(() => refresh())
-    return unsubscribe
+    return () => {
+      loadGenerationRef.current += 1
+      unsubscribe()
+    }
   }, [refresh])
 
   useEffect(() => {
     if (!initialDraft) return
+    if (!canAuthorCustomCoworkers) {
+      onClearDraft?.()
+      return
+    }
     // External seeders (command palette) bypass starter suggestions; the
     // draft they hand us is the intent.
     setSelected(null)
     setCreatingSeed(initialDraft)
     setCreating(true)
-  }, [initialDraft])
+  }, [canAuthorCustomCoworkers, initialDraft, onClearDraft])
 
   // Any runtime-registered agent that isn't also a built-in or a Cowork
   // custom — these are SDK plugin injections; we still surface them.
@@ -179,7 +217,7 @@ export function AgentsPage({
   )
 
   // Route into the builder
-  if (catalog && (creating || selectedCustom || selectedBuiltIn || selectedRuntime)) {
+  if (catalog && ((creating && canAuthorCustomCoworkers) || (selectedCustom && canAuthorCustomCoworkers) || selectedBuiltIn || selectedRuntime)) {
     return (
       <AgentBuilderPage
         target={
@@ -209,7 +247,7 @@ export function AgentsPage({
           refresh()
           if (testAgent) onTestAgent?.(testAgent.name, testAgent.directory ?? projectDirectory)
         }}
-        onTestAgent={onTestAgent}
+        onTestAgent={canUseLocalRuntimeActions ? onTestAgent : undefined}
         onOpenCapabilities={onOpenCapabilities}
       />
     )
@@ -217,8 +255,13 @@ export function AgentsPage({
 
   const showCustoms = filter === 'all' || filter === 'custom'
   const showBuiltIns = filter === 'all' || filter === 'builtin'
-  const showRuntime = (filter === 'all' || filter === 'runtime') && runtimeUnknown.length > 0
-  const showOpenCode = filter === 'all' || filter === 'opencode'
+  // The Built-in filter covers every non-custom coworker source, while the
+  // summary keeps their provenance truthful: product built-ins render in the
+  // main section; runtime and OpenCode-provided matches live under Advanced.
+  const advancedMatchCount = filteredRuntime.length + filteredOpenCode.length
+  const matchingProvidedCount = filteredBuiltIns.length + advancedMatchCount
+  const matchingCount = (showCustoms ? filteredCustoms.length : 0) + (showBuiltIns ? matchingProvidedCount : 0)
+  const showAdvancedCoworkers = showBuiltIns && (filteredRuntime.length > 0 || filteredOpenCode.length > 0)
 
   const onExportAgent = async (agent: CustomAgentSummary) => {
     const bundle = encodeAgentBundle(agent)
@@ -232,9 +275,15 @@ export function AgentsPage({
         ? { scope: 'project', directory: projectDirectory }
         : { scope: 'machine' },
     )
-    await window.coworkApi.agents.create(config)
+    const created = await window.coworkApi.agents.create(config)
+    if (!created) {
+      toast({ tone: 'error', message: t('agentBuilder.saveFailed', 'The coworker was not saved. Refresh and try again.') })
+      return false
+    }
+    recordFeatureValueActivation('custom-team')
     refresh()
     setSelected({ kind: 'custom', name: targetName })
+    return true
   }
 
   const onImportAgent = async () => {
@@ -257,22 +306,35 @@ export function AgentsPage({
       setImportConflict({ name: targetName })
       return
     }
-    await finalizeImport(targetName)
+    try {
+      await finalizeImport(targetName)
+    } finally {
+      pendingImportBundle.current = null
+    }
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div
+      className="flex-1 overflow-y-auto"
+      data-testid="team-surface"
+      data-load-state={loading && !catalog ? 'loading' : loadError && !catalog ? 'error' : loadError ? 'partial' : 'ready'}
+    >
       <div className="feature-page-shell">
         <StudioPageHeader
           className="mb-6"
           eyebrow={t('studioTeamPage.eyebrow', 'Team')}
           title={t('studioTeamPage.title', 'Coworkers')}
-          description={t('studioTeamPage.subtitle', 'Compose OpenCode agents into a coworker roster with clear roles, skills, tools, and chat assignment affordances.')}
+          description={t('studioTeamPage.subtitle', 'Build a coworker roster with clear roles, skills, tools, and chat assignments.')}
           meta={(
             <div className="flex flex-wrap gap-2 text-2xs text-text-muted">
-              <span>{customs.length} {t('studioTeamPage.customCount', 'custom')}</span>
-              <span>{filteredBuiltIns.length} {t('studioTeamPage.builtInCount', 'built-in')}</span>
-              {runtimeUnknown.length > 0 ? <span>{runtimeUnknown.length} {t('studioTeamPage.runtimeCount', 'runtime')}</span> : null}
+              <span role="status">{matchingCount === 1
+                ? t('studioTeamPage.visibleCountSingle', '1 coworker matches')
+                : t('studioTeamPage.visibleCount', '{{count}} coworkers match', { count: matchingCount })}</span>
+              {showCustoms ? <span>{filteredCustoms.length} {t('studioTeamPage.customCount', 'custom')}</span> : null}
+              {showBuiltIns ? <span>{filteredBuiltIns.length} {t('studioTeamPage.builtInCount', 'built-in')}</span> : null}
+              {showBuiltIns && advancedMatchCount > 0
+                ? <span>{advancedMatchCount} {t('studioTeamPage.advancedCount', 'advanced')}</span>
+                : null}
             </div>
           )}
           actions={[{
@@ -298,10 +360,13 @@ export function AgentsPage({
             label={t('studioTeamPage.filterLabel', 'Coworker filter')}
             value={filter}
             onChange={(value) => setFilter(value as Filter)}
-            options={(['all', 'custom', 'builtin', 'runtime', 'opencode'] as const).map((value) => ({
+            options={(['all', 'custom', 'builtin'] as const).map((value) => ({
               value,
-              label: value === 'builtin' ? 'Built-in' : value === 'opencode' ? 'OpenCode' : value[0]!.toUpperCase() + value.slice(1),
-              disabled: value === 'runtime' && runtimeUnknown.length === 0,
+              label: value === 'builtin'
+                ? t('studioTeamPage.filterBuiltIn', 'Built-in')
+                : value === 'custom'
+                  ? t('studioTeamPage.filterCustom', 'Custom')
+                  : t('studioTeamPage.filterAll', 'All'),
             }))}
           />
           <Button
@@ -312,7 +377,7 @@ export function AgentsPage({
             disabled={!canAuthorCustomCoworkers}
             disabledReason={canAuthorCustomCoworkers
               ? undefined
-              : t('studioTeamPage.cloudAuthoringBlocked', 'Custom coworker import is Desktop local. Cloud shows policy-safe roster metadata and Start chat only.')}
+              : t('studioTeamPage.cloudAuthoringBlocked', 'Custom coworker authoring is available in Desktop Local. This workspace shows a read-only roster.')}
             title={t('studioTeamPage.importTitle', 'Import a custom coworker from a .cowork-agent.json file')}
           >
             {t('agentsPage.import', 'Import')}
@@ -324,7 +389,7 @@ export function AgentsPage({
             disabled={!canAuthorCustomCoworkers}
             disabledReason={canAuthorCustomCoworkers
               ? undefined
-              : t('studioTeamPage.cloudAuthoringBlocked', 'Custom coworker authoring is Desktop local. Cloud shows policy-safe roster metadata and Start chat only.')}
+              : t('studioTeamPage.cloudAuthoringBlocked', 'Custom coworker authoring is available in Desktop Local. This workspace shows a read-only roster.')}
             onClick={() => {
               setSelected(null)
               setCreatingSeed(null)
@@ -339,7 +404,7 @@ export function AgentsPage({
           <p className="mb-4 text-2xs text-text-muted" role="note">
             {t(
               'studioTeamPage.cloudAuthoringNote',
-              'This Cloud workspace lists allowed coworkers. Hire/edit custom coworkers stays on Desktop local (machine runtime config).',
+              'This workspace lists allowed coworkers as a read-only roster. Hire or edit custom coworkers in Desktop Local.',
             )}
           </p>
         ) : null}
@@ -365,18 +430,39 @@ export function AgentsPage({
         {loadError && catalog ? (
           <div role="alert" className="mb-4 rounded-md border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
             <span className="font-semibold">{t('studioTeamPage.refreshFailed', 'Couldn’t refresh coworkers.')}</span> {loadError}
-            <Button size="sm" variant="ghost" className="ml-2" onClick={refresh}>
+            <Button size="sm" variant="ghost" className="ml-2" onClick={() => refresh()}>
               {t('studioTeamPage.reload', 'Reload')}
             </Button>
           </div>
         ) : null}
 
+        {!(loading && !catalog) && !(loadError && !catalog) && showBuiltIns && (
+          <ListSection
+            label={t('studioTeamPage.builtInSection', 'Built-in coworkers')}
+            sublabel={t('studioTeamPage.builtInSectionHelp', 'Ready-to-use Open Cowork specialists with bundled skills and tools.')}
+            emptyState={t('studioTeamPage.noBuiltInMatch', 'No built-in coworkers matched your search.')}
+            empty={filteredBuiltIns.length === 0}
+          >
+            {filteredBuiltIns.map((agent) => (
+              <BuiltInSelectionCard
+                key={agent.name}
+                agent={agent}
+                catalog={catalog}
+                onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
+                onTest={canUseLocalRuntimeActions && onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
+              />
+            ))}
+          </ListSection>
+        )}
+
         {!(loading && !catalog) && !(loadError && !catalog) && showCustoms && (
           <ListSection
             label={t('studioTeamPage.customSection', 'Custom coworkers')}
-            sublabel={t('studioTeamPage.customSectionHelp', 'Built by you; edit, enable, export, or delete from the card.')}
+            sublabel={canAuthorCustomCoworkers
+              ? t('studioTeamPage.customSectionHelp', 'Coworkers you can edit, enable, export, or remove.')
+              : t('studioTeamPage.cloudAuthoringNote', 'This workspace lists allowed coworkers as a read-only roster. Hire or edit custom coworkers in Desktop Local.')}
             emptyState={customs.length === 0
-              ? t('studioTeamPage.noCustom', 'No custom coworkers yet. Create one to package a repeatable role, instructions, skills, and tools.')
+              ? t('studioTeamPage.noCustom', 'No custom coworkers yet. Create one when you need a reusable role with its own instructions, skills, and tools.')
               : t('studioTeamPage.noCustomMatch', 'No custom coworkers matched your search.')}
             empty={filteredCustoms.length === 0}
           >
@@ -385,17 +471,18 @@ export function AgentsPage({
                 key={agent.name}
                 agent={agent}
                 catalog={catalog}
-                onOpen={() => setSelected({ kind: 'custom', name: agent.name })}
-                onTest={onTestAgent ? () => onTestAgent(
+                readOnly={!canAuthorCustomCoworkers}
+                onOpen={canAuthorCustomCoworkers ? () => setSelected({ kind: 'custom', name: agent.name }) : undefined}
+                onTest={canAuthorCustomCoworkers && onTestAgent ? () => onTestAgent(
                   agent.name,
                   agent.scope === 'project' ? agent.directory || projectDirectory : projectDirectory,
                 ) : undefined}
-                onStartChat={onStartAgentChat ? () => onStartAgentChat(
+                onStartChat={canAuthorCustomCoworkers && onStartAgentChat ? () => onStartAgentChat(
                   agent.name,
                   agent.scope === 'project' ? agent.directory || projectDirectory : projectDirectory,
                 ) : undefined}
                 onExport={() => onExportAgent(agent)}
-                onDelete={async () => {
+                onDelete={canAuthorCustomCoworkers ? async () => {
                   const target = {
                     name: agent.name,
                     scope: agent.scope,
@@ -405,65 +492,57 @@ export function AgentsPage({
                   if (!confirmation) return
                   const ok = await window.coworkApi.agents.remove(target, confirmation.token)
                   if (ok) refresh()
-                }}
+                } : undefined}
               />
             ))}
           </ListSection>
         )}
 
-        {!(loading && !catalog) && !(loadError && !catalog) && showBuiltIns && (
-          <ListSection
-            label={t('studioTeamPage.builtInSection', 'Built-in coworkers')}
-            sublabel={t('studioTeamPage.builtInSectionHelp', 'Open Cowork specialists built from bundled skills and tools.')}
-            emptyState={t('studioTeamPage.noBuiltInMatch', 'No built-in coworkers matched your search.')}
-            empty={filteredBuiltIns.length === 0}
-          >
-            {filteredBuiltIns.map((agent) => (
-              <BuiltInSelectionCard
-                key={agent.name}
-                agent={agent}
-                onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
-                onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
-              />
-            ))}
-          </ListSection>
-        )}
-
-        {!(loading && !catalog) && !(loadError && !catalog) && showRuntime && (
-          <ListSection
-            label={t('studioTeamPage.runtimeSection', 'Runtime-registered coworkers')}
-            sublabel={t('studioTeamPage.runtimeSectionHelp', 'Coworkers registered by an SDK plugin; OpenCode still owns their runtime behavior.')}
-            emptyState={t('studioTeamPage.noRuntimeMatch', 'No runtime coworkers matched your search.')}
-            empty={filteredRuntime.length === 0}
-          >
-            {filteredRuntime.map((agent) => (
-              <RuntimeSelectionCard
-                key={agent.name}
-                agent={agent}
-                onOpen={() => setSelected({ kind: 'runtime', name: agent.name })}
-                onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
-              />
-            ))}
-          </ListSection>
-        )}
-
-        {!(loading && !catalog) && !(loadError && !catalog) && showOpenCode && (
-          <ListSection
-            label="OpenCode defaults"
-            sublabel="Native OpenCode agents that own core execution behavior."
-            emptyState={t('studioTeamPage.noOpenCodeMatch', 'No OpenCode defaults matched your search.')}
-            empty={filteredOpenCode.length === 0}
-          >
-            {filteredOpenCode.map((agent) => (
-              <BuiltInSelectionCard
-                key={agent.name}
-                agent={agent}
-                onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
-                onTest={onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
-              />
-            ))}
-          </ListSection>
-        )}
+        {!(loading && !catalog) && !(loadError && !catalog) && showAdvancedCoworkers ? (
+          <details className="mb-8 rounded-lg border border-border-subtle bg-elevated/40 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-text">
+              {t('studioTeamPage.advancedTitle', 'Advanced coworker details')}
+            </summary>
+            <p className="mt-2 text-xs text-text-muted">
+              {t('studioTeamPage.advancedHelp', 'Runtime and OpenCode provenance for operators and integration authors.')}
+            </p>
+            {filteredRuntime.length > 0 ? (
+              <ListSection
+                label={t('studioTeamPage.runtimeSection', 'Integration-provided coworkers')}
+                sublabel={t('studioTeamPage.runtimeSectionHelp', 'Coworkers supplied by an installed integration. OpenCode owns their execution behavior.')}
+                emptyState={t('studioTeamPage.noRuntimeMatch', 'No integration-provided coworkers matched your search.')}
+                empty={filteredRuntime.length === 0}
+              >
+                {filteredRuntime.map((agent) => (
+                  <RuntimeSelectionCard
+                    key={agent.name}
+                    agent={agent}
+                    onOpen={() => setSelected({ kind: 'runtime', name: agent.name })}
+                    onTest={canUseLocalRuntimeActions && onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
+                  />
+                ))}
+              </ListSection>
+            ) : null}
+            {filteredOpenCode.length > 0 ? (
+              <ListSection
+                label={t('studioTeamPage.openCodeSection', 'OpenCode defaults')}
+                sublabel={t('studioTeamPage.openCodeSectionHelp', 'Core execution coworkers supplied by OpenCode.')}
+                emptyState={t('studioTeamPage.noOpenCodeMatch', 'No OpenCode defaults matched your search.')}
+                empty={false}
+              >
+                {filteredOpenCode.map((agent) => (
+                  <BuiltInSelectionCard
+                    key={agent.name}
+                    agent={agent}
+                    catalog={catalog}
+                    onOpen={() => setSelected({ kind: 'builtin', name: agent.name })}
+                    onTest={canUseLocalRuntimeActions && onTestAgent ? () => onTestAgent(agent.name, projectDirectory) : undefined}
+                  />
+                ))}
+              </ListSection>
+            ) : null}
+          </details>
+        ) : null}
       </div>
 
       {importConflict ? (
@@ -553,11 +632,9 @@ function ListSection({
         <p className="text-xs text-text-muted mt-0.5">{sublabel}</p>
       </div>
       {empty ? (
-        <EmptyState
-          icon="bot"
-          title={label}
-          body={emptyState}
-        />
+        <div className="rounded-md border border-dashed border-border px-3 py-3 text-xs leading-relaxed text-text-muted" role="status">
+          {emptyState}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">{children}</div>
       )}

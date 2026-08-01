@@ -19,6 +19,7 @@ import {
 import { Badge, Button, Card, Icon, SegmentedControl } from '@open-cowork/ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { getStarterTemplates } from './starter-templates'
+import { recordFeatureValueActivation } from '../../helpers/feature-value-telemetry'
 
 type Props = {
   target: BuilderTarget
@@ -243,14 +244,14 @@ export function AgentBuilderPage({
         mode: draft.mode === 'primary' ? 'primary' : 'subagent',
         ...(permissionOverrides !== undefined ? { permissionOverrides } : {}),
       }
-      if (target.kind === 'custom') {
-        await window.coworkApi.agents.update(
+      const saved = target.kind === 'custom'
+        ? await window.coworkApi.agents.update(
           { name: target.agent.name, scope: target.agent.scope, directory: target.agent.directory || null },
           payload,
         )
-      } else {
-        await window.coworkApi.agents.create(payload)
-      }
+        : await window.coworkApi.agents.create(payload)
+      if (!saved) throw new Error(t('agentBuilder.saveFailed', 'The coworker was not saved. Refresh and try again.'))
+      recordFeatureValueActivation('custom-team')
       onSaved(options.testAfterSave
         ? {
             name: payload.name,

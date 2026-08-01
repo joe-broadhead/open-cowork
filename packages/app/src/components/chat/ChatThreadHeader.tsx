@@ -9,6 +9,7 @@ type ChatThreadHeaderProps = {
   currentSessionId: string
   parentSession: Session | null
   inspectorOpen: boolean
+  reviewItemCount: number
   unreverting: boolean
   taskContext?: ConversationTaskContext | null
   onOpenParent: () => void
@@ -25,6 +26,7 @@ export function ChatThreadHeader({
   currentSessionId,
   parentSession,
   inspectorOpen,
+  reviewItemCount,
   unreverting,
   taskContext = null,
   onOpenParent,
@@ -124,25 +126,25 @@ export function ChatThreadHeader({
             onAction: onCaptureToKnowledge,
           },
           {
-            id: 'context',
+            id: 'review',
             label: inspectorOpen ? 'Hide Review' : 'Show Review',
-            icon: 'panel-left',
+            icon: 'file-diff',
             pressed: inspectorOpen,
             title: inspectorOpen ? 'Hide the review pane' : 'Show the review pane',
             onAction: onToggleInspector,
           },
-          {
-            id: 'review',
-            label: 'Review',
-            icon: 'file-diff',
-            hidden: !currentSession?.changeSummary || currentSession.changeSummary.files <= 0,
-            pressed: inspectorOpen,
-            tone: 'primary',
-            title: 'Review changed files and artifacts',
-            onAction: onToggleInspector,
-          },
         ]}
-      />
+      >
+        {reviewItemCount > 0 ? (
+          <Badge
+            tone="accent"
+            aria-label={t('chatThreadHeader.reviewItems', '{{count}} Review items', { count: reviewItemCount })}
+            aria-live="polite"
+          >
+            {reviewItemCount}
+          </Badge>
+        ) : null}
+      </ActionCluster>
     </div>
   )
 }

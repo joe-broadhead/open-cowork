@@ -1,10 +1,11 @@
-import type { ReactElement, ReactNode } from 'react'
+import { useId, type ReactElement, type ReactNode } from 'react'
 import type { CapabilitySkill, CapabilityTool } from '@open-cowork/shared'
 import { PluginIcon } from '../plugins/PluginIcon'
 import {
   BreadthIcon, BuiltinIcon, CustomIcon, RuntimeIcon, } from '../agents/agent-attribute-icons'
 import { Badge, Button, Card, Icon, entityChroma, type BadgeTone } from '@open-cowork/ui'
 import type { CapabilityLinkedTool } from './capabilities-page-support.ts'
+import { conciseCapabilitySummary } from './capabilities-page-support.ts'
 
 // Maps token-style chip colors to canonical Badge tones so every pill shares
 // the shared pill material.
@@ -52,6 +53,7 @@ function CapabilityCardShell({
   footer,
   onOpen,
 }: CardShellProps) {
+  const descriptionId = useId()
   return (
     <Card
       variant="surface"
@@ -62,6 +64,8 @@ function CapabilityCardShell({
     >
       <button
         onClick={onOpen}
+        aria-label={`Details for ${title}`}
+        aria-describedby={descriptionId}
         className="w-full text-start p-4 flex flex-col gap-3 group-hover:bg-surface-hover transition-colors duration-[120ms] cursor-pointer"
       >
         <div className="flex items-start gap-3">
@@ -77,7 +81,7 @@ function CapabilityCardShell({
             <div className="font-display text-role-card-title font-semibold text-text truncate leading-tight">
               {title}
             </div>
-            <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
+            <div id={descriptionId} className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
               {description || 'No description'}
             </div>
           </div>
@@ -85,6 +89,7 @@ function CapabilityCardShell({
 
         <MetaLine meta={meta} spineSeed={spineSeed} />
         {bodyExtra}
+        <span className="self-end text-2xs font-semibold text-text-secondary">Details</span>
       </button>
 
       {footer}
@@ -179,7 +184,7 @@ export function ToolSelectionCard({
       typeChips={[originChip, ...extraChips]}
       glyph={<PluginIcon icon={tool.icon || tool.namespace || tool.id} size={44} />}
       title={tool.name}
-      description={tool.description}
+      description={conciseCapabilitySummary(tool.description)}
       meta={meta}
       bodyExtra={linkedSkills.length > 0 ? <LinkedSkillPills skills={linkedSkills} /> : undefined}
       footer={
@@ -248,7 +253,7 @@ export function SkillSelectionCard({
         </div>
       }
       title={skill.label}
-      description={skill.description}
+      description={conciseCapabilitySummary(skill.description)}
       meta={meta}
       bodyExtra={linkedTools.length > 0 ? <LinkedToolPills tools={linkedTools} /> : undefined}
       footer={

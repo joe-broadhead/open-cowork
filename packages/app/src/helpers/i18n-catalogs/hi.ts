@@ -205,14 +205,9 @@ const strings: Record<string, string> = {
   'settings.reset.resetting': 'रीसेट हो रहा है…',
   'settings.reset.requiresConfirm': 'स्पष्ट पुष्टि चाहिए। ऐप बंद और पुनः आरंभ होगा।',
   'settings.language.label': 'भाषा',
-  'settings.language.description': 'इंटरफ़ेस भाषा चुनें। चयन इस डिवाइस पर याद रखा जाता है। आंशिक रूप से अनुवादित भाषाएँ लापता स्ट्रिंग्स के लिए अंग्रेज़ी पर फ़ॉलबैक होंगी।',
-  'settings.language.systemDefault': 'स्वचालित पहचान (सिस्टम)',
-  'settings.language.partialOption': '{{label}} — {{percent}}% अनूदित',
 
   'agents.create': 'एजेंट बनाएँ',
 
-  'capabilities.tab.tools': 'कनेक्शन',
-  'capabilities.tab.skills': 'क्षमताएं',
 
   'workflows.regenerate': 'फिर से जनरेट करें',
   'workflows.copyWebhookUrl': 'URL कॉपी करें',
@@ -328,10 +323,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': 'आयात',
   'studioTeamPage.eyebrow': 'टीम',
   'studioTeamPage.title': 'सहकर्मी',
-  'studioTeamPage.subtitle': 'OpenCode एजेंटों को स्पष्ट भूमिकाओं, कौशलों, टूल और चैट असाइनमेंट वाले सहकर्मी रोस्टर में व्यवस्थित करें।',
+  'studioTeamPage.subtitle': 'स्पष्ट भूमिकाओं, कौशलों, टूल और चैट असाइनमेंट वाला सहकर्मी रोस्टर बनाएँ।',
   'studioTeamPage.customCount': 'कस्टम',
   'studioTeamPage.builtInCount': 'अंतर्निहित',
-  'studioTeamPage.runtimeCount': 'रनटाइम',
   'studioTeamPage.search': 'सहकर्मी, कौशल, टूल या निर्देश खोजें…',
   'studioTeamPage.filterLabel': 'सहकर्मी फ़िल्टर',
   'studioTeamPage.importTitle': '.cowork-agent.json फ़ाइल से कस्टम सहकर्मी आयात करें',
@@ -370,9 +364,6 @@ const strings: Record<string, string> = {
   'capabilities.title': 'टूल और कौशल',
   'capabilities.subtitle': 'वर्तमान OpenCode संदर्भ में उपलब्ध टूल और कौशल बंडल की जाँच करें, जिसमें अंतर्निहित, मशीन, प्रोजेक्ट और कस्टम जोड़ शामिल हैं।',
   'capabilities.addTool': 'कनेक्शन जोड़ें',
-  'capabilities.addSkillButton': 'क्षमता जोड़ें',
-  'capabilities.searchTools': 'कनेक्शन, विवरण, या सहकर्मी खोजें…',
-  'capabilities.searchSkills': 'क्षमताएं, विवरण, या सहकर्मी खोजें…',
   'capabilities.details': 'विवरण',
   'capabilities.connection': 'कनेक्शन',
   'capabilities.linkedCoworkers': 'जुड़े सहकर्मी',
@@ -564,9 +555,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': 'आज आपकी टीम क्या निपटाए?',
   'studioHome.subtitle': '{{brand}} · मुख्य सहकर्मी चुनें, विशेषज्ञों को @मेंशन करें, और काम को एक जगह समीक्षा करें',
   'studioHome.composer.placeholder': 'कुछ भी पूछें, या किसी सहकर्मी को @मेंशन करें',
-  'studioHome.coachmark': 'प्रॉम्प्ट लिखें, संदर्भ जोड़ें, या किसी सहकर्मी को @मेंशन करें — कमांड के लिए ⌘K.',
-  'home.statusStrip.ready': 'तैयार',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
 
 }
 

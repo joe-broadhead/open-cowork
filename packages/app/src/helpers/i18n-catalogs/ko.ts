@@ -205,14 +205,9 @@ const strings: Record<string, string> = {
   'settings.reset.resetting': '재설정 중…',
   'settings.reset.requiresConfirm': '명시적인 확인이 필요합니다. 앱이 닫히고 다시 시작됩니다.',
   'settings.language.label': '언어',
-  'settings.language.description': '인터페이스 언어를 선택합니다. 이 장치에서 선택이 기억됩니다. 부분적으로 번역된 언어는 누락된 문자열에 대해 영어로 폴백됩니다.',
-  'settings.language.systemDefault': '자동 감지 (시스템)',
-  'settings.language.partialOption': '{{label}} — {{percent}}% 번역됨',
 
   'agents.create': '에이전트 생성',
 
-  'capabilities.tab.tools': '연결',
-  'capabilities.tab.skills': '능력',
 
   'workflows.regenerate': '재생성',
   'workflows.copyWebhookUrl': 'URL 복사',
@@ -328,10 +323,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': '가져오기',
   'studioTeamPage.eyebrow': '팀',
   'studioTeamPage.title': '동료',
-  'studioTeamPage.subtitle': 'OpenCode 에이전트를 명확한 역할, 스킬, 도구, 채팅 배정이 있는 동료 명단으로 구성하세요.',
+  'studioTeamPage.subtitle': '명확한 역할, 스킬, 도구, 채팅 배정이 있는 동료 명단을 구성하세요.',
   'studioTeamPage.customCount': '사용자 정의',
   'studioTeamPage.builtInCount': '내장',
-  'studioTeamPage.runtimeCount': '런타임',
   'studioTeamPage.search': '동료, 스킬, 도구 또는 지시 검색…',
   'studioTeamPage.filterLabel': '동료 필터',
   'studioTeamPage.importTitle': '.cowork-agent.json 파일에서 사용자 정의 동료 가져오기',
@@ -370,9 +364,6 @@ const strings: Record<string, string> = {
   'capabilities.title': '도구 및 스킬',
   'capabilities.subtitle': '현재 OpenCode 컨텍스트에서 사용 가능한 도구와 스킬 번들을 검사합니다. 내장, 머신, 프로젝트 및 사용자 정의 추가를 포함합니다.',
   'capabilities.addTool': '연결 추가',
-  'capabilities.addSkillButton': '능력 추가',
-  'capabilities.searchTools': '연결, 설명 또는 동료 검색…',
-  'capabilities.searchSkills': '능력, 설명 또는 동료 검색…',
   'capabilities.details': '상세',
   'capabilities.connection': '연결',
   'capabilities.linkedCoworkers': '연결된 동료',
@@ -564,9 +555,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': '오늘 팀이 무엇을 해결할까요?',
   'studioHome.subtitle': '{{brand}} · 리드 동료를 선택하고, 전문가를 @멘션하고, 한곳에서 작업을 검토하세요',
   'studioHome.composer.placeholder': '무엇이든 묻거나 동료를 @멘션하세요',
-  'studioHome.coachmark': '프롬프트를 쓰고, 컨텍스트를 첨부하거나 동료를 @멘션하세요 — 명령은 ⌘K.',
-  'home.statusStrip.ready': '준비됨',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
 
 }
 

@@ -1649,6 +1649,28 @@ test('cloud control plane persists workflow runs and finalizes workflow state du
   assert.equal(detail?.latestRunStatus, 'completed')
   assert.equal(detail?.latestRunSummary, 'Revenue is up.')
   assert.equal(store.listWorkflowRuns('tenant-1', 'workflow-1')[0]?.id, 'run-1')
+
+  const failedRun = store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-1',
+    runId: 'run-2',
+    triggerType: 'manual',
+    createdAt: new Date('2026-01-01T00:04:00.000Z'),
+  })
+  const persistedSecret = 'cloud-workflow-secret-must-not-persist'
+  const failed = store.failWorkflowRun({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-1',
+    runId: failedRun.id,
+    error: `command failed; Authorization: Bearer ${persistedSecret}`,
+    nextStatus: 'active',
+    nextRunAt: null,
+    finishedAt: new Date('2026-01-01T00:05:00.000Z'),
+  })
+  assert.match(failed?.error || '', /command failed.*REDACTED_TOKEN/)
+  assert.equal(failed?.error?.includes(persistedSecret), false)
+  assert.equal(store.getWorkflow('tenant-1', 'user-1', 'workflow-1')?.latestRunSummary?.includes(persistedSecret), false)
 })
 
 test('cloud control plane fences workflow finalization by active worker lease', () => {

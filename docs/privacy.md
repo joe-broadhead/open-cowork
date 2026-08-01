@@ -1,7 +1,8 @@
 # Telemetry and Privacy
 
-Open Cowork does not include product analytics, crash reporting, or
-auto-update telemetry in the upstream build.
+The upstream Open Cowork configuration sends no product analytics, crash
+reports, or auto-update telemetry. A separate content-free adoption channel is
+available only under the dual opt-in described below.
 
 The app writes a small local NDJSON event log under Electron's
 `userData` directory for diagnostics. Events cover app launch, auth
@@ -80,7 +81,12 @@ exact contract and the privacy implications of turning it on.
 
 Separately from the diagnostic forwarder above, Open Cowork ships an
 **opt-in, content-free adoption signal**. It is **off by default** and
-sends **nothing** unless an operator explicitly enables it. When enabled,
+sends **nothing** unless an operator configures a collector **and** the user
+enables anonymized usage sharing in **Local workspace → Privacy**. Consent is
+installation-wide because the desktop emitter is process-wide: it covers only
+content-free activity shown in that desktop installation, including Cloud and
+Paired workspace surfaces. Cloud/Paired Settings show this scope but cannot
+create a conflicting workspace-level consent. When enabled,
 it reports only coarse, anonymous usage so maintainers and self-hosters
 can gauge adoption — never the substance of anyone's work.
 
@@ -95,6 +101,13 @@ What it *may* send when enabled:
   `channels`, `onboarding`), whether a session streamed, an
   approval decision as the enum `approved`/`denied`, and a workflow
   run trigger as the enum `manual`/`scheduled`/`webhook`.
+- Optional-feature value stages under schema `adoption/v2`: a fixed feature
+  enum (`projects`, `playbooks`, `custom-team`, `channels`, `knowledge`,
+  `artifacts`, `voice`, `gateway-wiki-linking`, `locales`, or `appearance`)
+  and only `discovered`, first `activated`, or first later `repeated`. The
+  local tracker emits each stage at most once while its browser storage remains
+  available; clearing or blocking that storage resets the rate limit. No project,
+  session, user, file, or installation identifier accompanies the stage.
 
 What it **never** sends — by construction, not by policy:
 
@@ -114,6 +127,15 @@ no validator that accepts arbitrary text, so prompts, content, and paths
 have no way through even if a caller passes them in by mistake. A unit
 test (`tests/adoption-telemetry.test.ts`) asserts that injected prompts,
 file paths, emails, and secrets never appear in a transmitted payload.
+The renderer keeps only a local per-feature discovery boolean and a bounded
+`0`/`1`/`2` milestone so it can classify first versus repeated success; it
+stores no timestamps, ids, or content. The milestone advances only after the
+main process confirms that both operator configuration and user consent permit
+the event. Work performed while sharing is off is neither queued nor backfilled,
+so enabling sharing later begins a fresh observable funnel instead of emitting
+an orphan repeat. Network delivery remains best-effort: an accepted event that
+fails while offline is not retried. Browser builds reject this channel until
+Cloud provides an equivalent reviewed consent contract.
 
 ### Enabling, self-hosting, or disabling it
 
@@ -140,6 +162,27 @@ environment variables, which take precedence over the config file:
   `0`/`false` to force off.
 - `OPEN_COWORK_ADOPTION_TELEMETRY_ENDPOINT` — the HTTPS collector URL.
 
-To disable entirely, leave `telemetry.adoption` unset (the default), set
-`enabled: false`, or set `OPEN_COWORK_ADOPTION_TELEMETRY_ENABLED=0`. With
-no endpoint configured the emitter performs no network I/O at all.
+To disable entirely, leave `telemetry.adoption` unset (the default), turn off
+anonymized usage sharing in Settings, set `enabled: false`, or set
+`OPEN_COWORK_ADOPTION_TELEMETRY_ENABLED=0`. With no endpoint configured the
+emitter performs no network I/O at all.
+
+### Reviewing optional-feature value
+
+Operators can turn a collector export into a content-free funnel review without
+uploading it anywhere:
+
+```bash
+pnpm report:feature-value -- ./adoption-events.ndjson
+# Use `-` for stdin or add `--json` for machine-readable output.
+```
+
+The report accepts `adoption/v2` JSON arrays or newline-delimited collector
+records, ignores unrelated adoption events, and rejects malformed
+`feature.value` records. It reports discovery, first activation, and first
+repeat counts and rates alongside the accountable owner and review date for
+each optional surface. Automatic removal remains disabled: the report is
+decision evidence, and a product owner must approve sample size and thresholds
+before a surface can be kept, improved, or removed on adoption data alone. The
+JSON form also includes the durable outcome, discovery, activation, repeat,
+denominator, owner, and review-date definition for every row.

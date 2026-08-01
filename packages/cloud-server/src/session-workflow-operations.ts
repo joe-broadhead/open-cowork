@@ -26,6 +26,7 @@ import type {
   WorkflowTriggerType,
   WorkflowWebhookSecretMutationResult,
 } from '@open-cowork/shared'
+import { redactSecretText } from '@open-cowork/shared'
 import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
@@ -841,11 +842,12 @@ export class CloudWorkflowOperationsService {
     if (!workflow) return null
     const now = run.status === 'failed' && run.finishedAt ? new Date(run.finishedAt) : new Date()
     const nextStatus = this.nextWorkflowStatusAfterRun(workflow)
+    const safeError = redactSecretText(run.status === 'failed' ? run.error || error : error, 1_000)
     return {
       tenantId,
       workflowId: workflow.id,
       runId: run.id,
-      error: run.status === 'failed' ? run.error || error : error,
+      error: safeError,
       nextStatus,
       nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
       leaseToken,

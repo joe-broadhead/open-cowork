@@ -19,6 +19,7 @@ describe('ProviderAuthControls', () => {
       method: 'auto',
       instructions: '',
     })
+    vi.mocked(window.coworkApi.provider.callback).mockResolvedValue(true)
     vi.mocked(window.coworkApi.provider.list).mockResolvedValue([
       { id: 'openai', name: 'OpenAI', connected: true },
     ])
@@ -45,6 +46,7 @@ describe('ProviderAuthControls', () => {
     await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
 
     await waitFor(() => expect(onAuthUpdated).toHaveBeenCalledTimes(1))
+    expect(onAuthUpdated).toHaveBeenCalledWith(true)
     expect(window.coworkApi.provider.callback).toHaveBeenCalledWith('openai', 0)
     expect(window.coworkApi.runtime.restart).not.toHaveBeenCalled()
     expect(screen.getByText('Provider login completed.')).toBeTruthy()
@@ -106,7 +108,33 @@ describe('ProviderAuthControls', () => {
     expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith('Open the browser, choose Continue, then return to Open Cowork.')
   })
 
-  it('accepts already-consumed browser auth callbacks when provider verification succeeds', async () => {
+  it('notifies the parent after authorize fails without replacing the provider error', async () => {
+    vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({
+      openai: [browserMethod],
+    })
+    vi.mocked(window.coworkApi.provider.authorize).mockRejectedValue(new Error('Provider login authorization expired.'))
+    const onAuthInvalidated = vi.fn(async () => {
+      throw new Error('settings refresh failed')
+    })
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="openai"
+        providerName="OpenAI"
+        connected={false}
+        onAuthInvalidated={onAuthInvalidated}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }))
+
+    await waitFor(() => expect(onAuthInvalidated).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('Provider login authorization expired.')).toBeTruthy()
+    expect(screen.queryByText('settings refresh failed')).toBeNull()
+  })
+
+  it('does not infer browser auth success from a pre-existing provider connection', async () => {
     vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({
       openai: [browserMethod],
     })
@@ -120,6 +148,9 @@ describe('ProviderAuthControls', () => {
       { id: 'openai', name: 'OpenAI', connected: true },
     ])
     const onAuthUpdated = vi.fn()
+    const onAuthInvalidated = vi.fn(async () => {
+      throw new Error('settings refresh failed')
+    })
     const user = userEvent.setup()
 
     render(
@@ -128,15 +159,80 @@ describe('ProviderAuthControls', () => {
         providerName="OpenAI"
         connected={false}
         onAuthUpdated={onAuthUpdated}
+        onAuthInvalidated={onAuthInvalidated}
       />,
     )
 
     await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }))
     await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
 
-    await waitFor(() => expect(onAuthUpdated).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByText('callback already consumed')).toBeTruthy())
+    expect(onAuthUpdated).not.toHaveBeenCalled()
+    expect(onAuthInvalidated).toHaveBeenCalledTimes(1)
     expect(window.coworkApi.provider.callback).toHaveBeenCalledWith('openai', 0)
-    expect(screen.getByText('Provider login completed.')).toBeTruthy()
+    expect(screen.queryByText('Provider login completed.')).toBeNull()
+    expect(screen.queryByText('settings refresh failed')).toBeNull()
+    expect(window.coworkApi.provider.list).not.toHaveBeenCalled()
+  })
+
+  it('keeps a browser attempt pending until its exact callback is terminal', async () => {
+    vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({ openai: [browserMethod] })
+    vi.mocked(window.coworkApi.provider.authorize).mockResolvedValue({
+      url: 'https://auth.example.test',
+      method: 'auto',
+      instructions: '',
+    })
+    vi.mocked(window.coworkApi.provider.callback).mockResolvedValue(false)
+    vi.mocked(window.coworkApi.provider.list).mockResolvedValue([
+      { id: 'openai', name: 'OpenAI', connected: true },
+    ])
+    const onAuthUpdated = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="openai"
+        providerName="OpenAI"
+        connected
+        onAuthUpdated={onAuthUpdated}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }))
+    await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
+
+    await waitFor(() => expect(screen.getByText(/login is still pending/i)).toBeTruthy())
+    expect(onAuthUpdated).not.toHaveBeenCalled()
+    expect(window.coworkApi.provider.list).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: "I've finished signing in" })).toBeTruthy()
+  })
+
+  it('boots setup before discovering OAuth-only sign-in methods', async () => {
+    vi.mocked(window.coworkApi.provider.authMethods)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ openai: [browserMethod] })
+    vi.mocked(window.coworkApi.provider.authorize).mockResolvedValue({
+      url: 'https://auth.example.test',
+      method: 'auto',
+      instructions: '',
+    })
+    const onBeforeAuthorize = vi.fn(async () => true)
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="openai"
+        providerName="OpenAI"
+        connected={false}
+        copyMode="setup"
+        onBeforeAuthorize={onBeforeAuthorize}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Check browser sign-in options' }))
+
+    await waitFor(() => expect(window.coworkApi.provider.authorize).toHaveBeenCalledWith('openai', 0, {}))
+    expect(onBeforeAuthorize).toHaveBeenCalledTimes(1)
   })
 
   it('can clear stale OpenCode-native provider auth before a fresh login', async () => {
@@ -159,6 +255,7 @@ describe('ProviderAuthControls', () => {
 
     await waitFor(() => expect(window.coworkApi.provider.logout).toHaveBeenCalledWith('openai'))
     expect(onAuthUpdated).toHaveBeenCalledTimes(1)
+    expect(onAuthUpdated).toHaveBeenCalledWith(false)
     expect(screen.getByText('Provider login removed. Sign in again to refresh the token.')).toBeTruthy()
   })
 })

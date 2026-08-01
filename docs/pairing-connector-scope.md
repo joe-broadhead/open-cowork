@@ -31,4 +31,4 @@ remote use are complete.
 
 - [Desktop outbound pairing](desktop-outbound-pairing.md)
 - [Product contract](product-contract.md)
-- [Product purity register](product-purity-register.md)
+- [Product contract](product-contract.md)

@@ -21,8 +21,13 @@
 
 import { getAppConfig } from './config-loader-core.js'
 import { getEffectiveSettings } from './settings.js'
+import {
+  FEATURE_VALUE_STAGES,
+  FEATURE_VALUE_SURFACES,
+  type FeatureValueEventInput,
+} from '@open-cowork/shared'
 
-export const ADOPTION_TELEMETRY_SCHEMA = 'adoption/v1'
+export const ADOPTION_TELEMETRY_SCHEMA = 'adoption/v2'
 const REMOTE_TIMEOUT_MS = 2000
 
 // Coarse, content-free surfaces. Anything not in this set is dropped by the
@@ -79,6 +84,8 @@ function semverValidator(value: unknown): string | undefined {
 // through even when their key collides with an allowlisted one.
 const PROPERTY_VALIDATORS: Record<string, PropertyValidator> = {
   surface: enumValidator(ADOPTION_SURFACES),
+  feature: enumValidator(FEATURE_VALUE_SURFACES),
+  stage: enumValidator(FEATURE_VALUE_STAGES),
   decision: enumValidator(APPROVAL_DECISIONS),
   trigger: enumValidator(RUN_TRIGGERS),
   platform: enumValidator(PLATFORMS),
@@ -93,6 +100,7 @@ const EVENT_PROPERTIES: Record<string, readonly string[]> = {
   'app.launched': ['platform', 'appVersion'],
   'app.ready': [],
   'feature.opened': ['surface'],
+  'feature.value': ['feature', 'stage'],
   'session.started': ['streamed'],
   'approval.resolved': ['decision'],
   'workflow.run': ['trigger'],
@@ -116,6 +124,18 @@ export interface AdoptionTelemetryConfig {
   enabled: boolean
   endpoint?: string
   headers?: Record<string, string>
+}
+
+type AdoptionTelemetrySourceConfig = {
+  enabled?: boolean
+  endpoint?: string
+  headers?: Record<string, string>
+}
+
+export interface RuntimeAdoptionTelemetryConfigDeps {
+  getConfig?: () => { telemetry?: { adoption?: AdoptionTelemetrySourceConfig } }
+  getSettings?: () => { privacyShareAnonymizedUsage: boolean }
+  env?: NodeJS.ProcessEnv
 }
 
 // The single choke point every adoption event flows through. It is a pure
@@ -173,25 +193,27 @@ export interface AdoptionTelemetryDeps {
 }
 
 export interface AdoptionTelemetry {
-  track: (event: string, props?: Record<string, unknown>) => void
-  appLaunched: (props?: { platform?: string; appVersion?: string }) => void
-  appReady: () => void
-  featureOpened: (surface: AdoptionSurface) => void
-  sessionStarted: (props?: { streamed?: boolean }) => void
-  approvalResolved: (decision: 'approved' | 'denied') => void
-  workflowRun: (trigger: 'manual' | 'scheduled' | 'webhook') => void
-  onboardingCompleted: () => void
+  track: (event: string, props?: Record<string, unknown>) => boolean
+  appLaunched: (props?: { platform?: string; appVersion?: string }) => boolean
+  appReady: () => boolean
+  featureOpened: (surface: AdoptionSurface) => boolean
+  featureValue: (input: FeatureValueEventInput) => boolean
+  featureValueDelivered: (input: FeatureValueEventInput) => Promise<boolean>
+  sessionStarted: (props?: { streamed?: boolean }) => boolean
+  approvalResolved: (decision: 'approved' | 'denied') => boolean
+  workflowRun: (trigger: 'manual' | 'scheduled' | 'webhook') => boolean
+  onboardingCompleted: () => boolean
 }
 
-// Default network transport: fire-and-forget POST, short timeout, silent on
-// any failure. Only reached when the caller's config is enabled AND has an
-// endpoint, so a disabled or endpoint-less install performs no network I/O.
+// The public telemetry calls remain fire-and-forget, while the feature-value
+// funnel uses the same transport through an acknowledged path so its local
+// milestone cursor advances only after the collector accepts the event.
 async function defaultTransport(event: AdoptionEvent, config: AdoptionTelemetryConfig): Promise<void> {
   if (!config.enabled || !config.endpoint) return
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS)
   try {
-    await fetch(config.endpoint, {
+    const response = await fetch(config.endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -200,8 +222,7 @@ async function defaultTransport(event: AdoptionEvent, config: AdoptionTelemetryC
       },
       body: JSON.stringify(event),
     })
-  } catch {
-    // Network / timeout / DNS failures must never surface to the caller.
+    if (!response.ok) throw new Error(`Adoption collector rejected the event with HTTP ${response.status}.`)
   } finally {
     clearTimeout(timer)
   }
@@ -211,28 +232,47 @@ export function createAdoptionTelemetry(deps: AdoptionTelemetryDeps): AdoptionTe
   const transport = deps.transport ?? defaultTransport
   const now = deps.now ?? (() => new Date())
 
-  function track(event: string, props?: Record<string, unknown>) {
+  function prepare(event: string, props?: Record<string, unknown>) {
     let config: AdoptionTelemetryConfig
     try {
       config = deps.getConfig()
     } catch {
-      return
+      return null
     }
     // Opt-in gate: do no work at all (not even redaction) unless the operator
     // has both enabled the channel and configured a sink.
-    if (!config.enabled || !config.endpoint) return
+    if (!config.enabled || !config.endpoint) return null
 
     const redacted = redactAdoptionEvent(event, props, now)
     if (!redacted.ok) {
       deps.onDrop?.(event, redacted.dropped)
-      return
+      return null
     }
     if (redacted.dropped.length > 0) deps.onDrop?.(event, redacted.dropped)
+    return { config, event: redacted.event }
+  }
+
+  function track(event: string, props?: Record<string, unknown>) {
+    const prepared = prepare(event, props)
+    if (!prepared) return false
 
     try {
-      void transport(redacted.event, config)
+      void Promise.resolve(transport(prepared.event, prepared.config)).catch(() => undefined)
     } catch {
       // Best-effort only.
+      return false
+    }
+    return true
+  }
+
+  async function deliver(event: string, props?: Record<string, unknown>) {
+    const prepared = prepare(event, props)
+    if (!prepared) return false
+    try {
+      await transport(prepared.event, prepared.config)
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -241,6 +281,8 @@ export function createAdoptionTelemetry(deps: AdoptionTelemetryDeps): AdoptionTe
     appLaunched: (props) => track('app.launched', props),
     appReady: () => track('app.ready'),
     featureOpened: (surface) => track('feature.opened', { surface }),
+    featureValue: (input) => track('feature.value', input),
+    featureValueDelivered: (input) => deliver('feature.value', input),
     sessionStarted: (props) => track('session.started', props),
     approvalResolved: (decision) => track('approval.resolved', { decision }),
     workflowRun: (trigger) => track('workflow.run', { trigger }),
@@ -252,7 +294,7 @@ export function createAdoptionTelemetry(deps: AdoptionTelemetryDeps): AdoptionTe
 // intended for self-hosters who cannot edit the packaged config file; either
 // path can enable + point the sink, or leave it disabled to transmit nothing.
 export function resolveAdoptionTelemetryConfig(
-  fromConfig?: { enabled?: boolean; endpoint?: string; headers?: Record<string, string> },
+  fromConfig?: AdoptionTelemetrySourceConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): AdoptionTelemetryConfig {
   const envEnabledRaw = env.OPEN_COWORK_ADOPTION_TELEMETRY_ENABLED
@@ -271,17 +313,21 @@ export function resolveAdoptionTelemetryConfig(
   }
 }
 
-function getRuntimeAdoptionConfig(): AdoptionTelemetryConfig {
-  let fromConfig: { enabled?: boolean; endpoint?: string; headers?: Record<string, string> } | undefined
+export function resolveRuntimeAdoptionTelemetryConfig(
+  deps: RuntimeAdoptionTelemetryConfigDeps = {},
+): AdoptionTelemetryConfig {
+  const configLoader = deps.getConfig ?? getAppConfig
+  const settingsLoader = deps.getSettings ?? getEffectiveSettings
+  let fromConfig: AdoptionTelemetrySourceConfig | undefined
   try {
-    fromConfig = getAppConfig().telemetry?.adoption
+    fromConfig = configLoader().telemetry?.adoption
   } catch {
     fromConfig = undefined
   }
-  const resolved = resolveAdoptionTelemetryConfig(fromConfig)
+  const resolved = resolveAdoptionTelemetryConfig(fromConfig, deps.env ?? process.env)
   // JOE-855: user privacy toggle gates transmission even when deploy config enables it.
   try {
-    if (!getEffectiveSettings().privacyShareAnonymizedUsage) {
+    if (!settingsLoader().privacyShareAnonymizedUsage) {
       return { ...resolved, enabled: false }
     }
   } catch {
@@ -293,5 +339,5 @@ function getRuntimeAdoptionConfig(): AdoptionTelemetryConfig {
 
 // Process-wide singleton wired to the real app config + network transport.
 export const adoptionTelemetry: AdoptionTelemetry = createAdoptionTelemetry({
-  getConfig: getRuntimeAdoptionConfig,
+  getConfig: resolveRuntimeAdoptionTelemetryConfig,
 })

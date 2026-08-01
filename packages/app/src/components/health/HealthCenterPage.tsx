@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  SETUP_HEALTH_CHECKS, SETUP_INTENTS, workspaceAuthorityContract, type DesktopPairingPublicRecord, type RuntimeCapabilityStatus, type RuntimeInputDiagnostics, type RuntimeStatus, type SetupHealthStatus, type WorkspaceApiSupport, type WorkspaceExecutionAuthority, type WorkspaceInfo, } from '@open-cowork/shared'
+  SETUP_HEALTH_CHECKS, SETUP_INTENTS, workspaceAuthorityContract, type DesktopPairingPublicRecord, type RuntimeCapabilityProvenanceRecord, type RuntimeCapabilityStatus, type RuntimeInputDiagnostics, type RuntimeStatus, type SetupHealthStatus, type WorkspaceApiSupport, type WorkspaceExecutionAuthority, type WorkspaceInfo, } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { Badge, Button, Card, type BadgeTone } from '@open-cowork/ui'
 
@@ -59,6 +59,83 @@ function capabilityStatusPriority(status: RuntimeCapabilityStatus) {
     case 'active':
     case 'available':
       return 3
+  }
+}
+
+function capabilityAppliesToProductMode(
+  capability: RuntimeCapabilityProvenanceRecord,
+  productMode: string,
+) {
+  return capability.productMode
+    .split(',')
+    .some((mode) => mode.trim() === productMode)
+}
+
+type CapabilityRecoveryDetails = {
+  singular: string
+  plural: string
+  recoverySingular: string
+  recoveryPlural: string
+}
+
+function capabilityRecoveryDetails(kind: RuntimeCapabilityProvenanceRecord['kind']): CapabilityRecoveryDetails {
+  switch (kind) {
+    case 'provider':
+      return {
+        singular: t('health.capabilityKindProvider', 'Model provider'),
+        plural: t('health.capabilityKindProviderPlural', 'Model providers'),
+        recoverySingular: t('health.capabilityRecoveryProvider', 'Open Settings, then reconnect the affected model provider.'),
+        recoveryPlural: t('health.capabilityRecoveryProviderPlural', 'Open Settings, then reconnect the affected model providers.'),
+      }
+    case 'model':
+      return {
+        singular: t('health.capabilityKindModel', 'Selected model'),
+        plural: t('health.capabilityKindModelPlural', 'Selected models'),
+        recoverySingular: t('health.capabilityRecoveryModel', 'Open Settings, then choose an available model.'),
+        recoveryPlural: t('health.capabilityRecoveryModelPlural', 'Open Settings, then choose available replacements for the affected models.'),
+      }
+    case 'mcp':
+      return {
+        singular: t('health.capabilityKindMcp', 'Tool connection'),
+        plural: t('health.capabilityKindMcpPlural', 'Tool connections'),
+        recoverySingular: t('health.capabilityRecoveryMcp', 'Open Tools & Skills, then reconnect the affected tool connection.'),
+        recoveryPlural: t('health.capabilityRecoveryMcpPlural', 'Open Tools & Skills, then reconnect the affected tool connections.'),
+      }
+    case 'skill':
+      return {
+        singular: t('health.capabilityKindSkill', 'Skill'),
+        plural: t('health.capabilityKindSkillPlural', 'Skills'),
+        recoverySingular: t('health.capabilityRecoverySkill', 'Open Tools & Skills, then re-enable the affected skill.'),
+        recoveryPlural: t('health.capabilityRecoverySkillPlural', 'Open Tools & Skills, then re-enable the affected skills.'),
+      }
+    case 'agent':
+      return {
+        singular: t('health.capabilityKindAgent', 'Coworker'),
+        plural: t('health.capabilityKindAgentPlural', 'Coworkers'),
+        recoverySingular: t('health.capabilityRecoveryAgent', 'Open Team, then repair or re-enable the affected coworker.'),
+        recoveryPlural: t('health.capabilityRecoveryAgentPlural', 'Open Team, then repair or re-enable the affected coworkers.'),
+      }
+    case 'tool':
+      return {
+        singular: t('health.capabilityKindTool', 'Tool'),
+        plural: t('health.capabilityKindToolPlural', 'Tools'),
+        recoverySingular: t('health.capabilityRecoveryTool', 'Open Tools & Skills, then reconnect or re-enable the affected tool.'),
+        recoveryPlural: t('health.capabilityRecoveryToolPlural', 'Open Tools & Skills, then reconnect or re-enable the affected tools.'),
+      }
+    case 'workflow':
+      return {
+        singular: t('health.capabilityKindWorkflow', 'Playbook'),
+        plural: t('health.capabilityKindWorkflowPlural', 'Playbooks'),
+        recoverySingular: t('health.capabilityRecoveryWorkflow', 'Open Playbooks, then repair or re-enable the affected playbook.'),
+        recoveryPlural: t('health.capabilityRecoveryWorkflowPlural', 'Open Playbooks, then repair or re-enable the affected playbooks.'),
+      }
+    case 'opencode-plugin':
+      return {
+        singular: t('health.capabilityKindOpenCodePlugin', 'OpenCode extension'),
+        plural: t('health.capabilityKindOpenCodePluginPlural', 'OpenCode extensions'),
+        recoverySingular: t('health.capabilityRecoveryOpenCodePlugin', 'Update or re-enable the affected OpenCode extension, then restart the runtime.'),
+        recoveryPlural: t('health.capabilityRecoveryOpenCodePluginPlural', 'Update or re-enable the affected OpenCode extensions, then restart the runtime.'),
+      }
   }
 }
 
@@ -149,6 +226,7 @@ export function HealthCenterPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -212,16 +290,46 @@ export function HealthCenterPage() {
       status: checkStatus(check.id, snapshot),
     }))
   ), [snapshot])
-  const runtimeCapabilities = useMemo(() => (
+  const allRuntimeCapabilities = useMemo(() => (
     [...(snapshot.runtimeInputs?.capabilities || [])]
       .sort((left, right) => (
         capabilityStatusPriority(left.status) - capabilityStatusPriority(right.status)
         || left.kind.localeCompare(right.kind)
         || left.id.localeCompare(right.id)
       ))
-      .slice(0, 12)
   ), [snapshot.runtimeInputs])
+  const runtimeCapabilities = useMemo(() => allRuntimeCapabilities.slice(0, 12), [allRuntimeCapabilities])
   const runtimeConflicts = snapshot.runtimeInputs?.conflicts || []
+  const healthRuntimeCapabilities = useMemo(() => (
+    allRuntimeCapabilities.filter((capability) => (
+      capabilityAppliesToProductMode(capability, 'desktop-local')
+    ))
+  ), [allRuntimeCapabilities])
+  const criticalCapabilities = healthRuntimeCapabilities.filter((capability) => capabilityStatusPriority(capability.status) === 0)
+  const criticalCapabilityGroups = useMemo(() => {
+    const groups = new Map<RuntimeCapabilityProvenanceRecord['kind'], number>()
+    for (const capability of healthRuntimeCapabilities) {
+      if (capabilityStatusPriority(capability.status) !== 0) continue
+      groups.set(capability.kind, (groups.get(capability.kind) || 0) + 1)
+    }
+    return [...groups].map(([kind, count]) => ({
+      kind,
+      count,
+      details: capabilityRecoveryDetails(kind),
+    }))
+  }, [healthRuntimeCapabilities])
+  const unhealthyWorkspaces = snapshot.workspaces.filter(({ workspace }) => (
+    workspace.status === 'auth_required'
+    || workspace.status === 'offline'
+    || workspace.status === 'error'
+  ))
+  const ready = Boolean(
+    snapshot.loadedAt
+    && snapshot.runtime?.ready
+    && criticalCapabilities.length === 0
+    && unhealthyWorkspaces.length === 0
+    && !error,
+  )
 
   const runWorkspaceAction = async (workspace: WorkspaceInfo) => {
     const action = workspaceAction(workspace)
@@ -263,7 +371,7 @@ export function HealthCenterPage() {
             <p className="mt-1 max-w-3xl text-xs leading-relaxed text-text-muted">
               {t(
                 'health.subtitle',
-                'Setup paths, execution authority, sync state, and recovery checks for Desktop, Cloud, Channel Gateway, and Standalone Gateway. Standalone/Paired may show connection-only until session APIs ship.',
+                'Check whether Open Cowork is ready, then follow the safest recovery action when something needs attention.',
               )}
             </p>
           </div>
@@ -284,6 +392,126 @@ export function HealthCenterPage() {
           </div>
         ) : null}
 
+        <Card className="min-h-[132px]" data-testid="health-summary">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <div className="flex items-center gap-2">
+                <StatusPill status={!snapshot.loadedAt ? 'unknown' : ready ? 'ready' : 'action_required'} />
+                <h2 className="font-display text-role-card-title font-bold text-text">
+                  {!snapshot.loadedAt
+                    ? t('health.summaryChecking', 'Checking readiness')
+                    : ready
+                      ? t('health.summaryReady', 'Open Cowork is ready')
+                      : t('health.summaryAction', 'Open Cowork needs attention')}
+                </h2>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                {!snapshot.loadedAt
+                  ? t('health.summaryCheckingBody', 'Running the core execution and workspace checks now.')
+                  : ready
+                    ? t('health.summaryReadyBody', 'Execution is available and every connected workspace is reachable.')
+                    : t('health.summaryActionBody', 'Resolve the items below before starting important work.')}
+              </p>
+            </div>
+            {!snapshot.runtime?.ready && snapshot.loadedAt ? (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void restartRuntime()}
+                disabled={busyAction === 'runtime:restart'}
+                loading={busyAction === 'runtime:restart'}
+              >
+                {busyAction === 'runtime:restart' ? t('health.restarting', 'Restarting...') : t('health.restartRuntimeButton', 'Restart runtime')}
+              </Button>
+            ) : null}
+          </div>
+        </Card>
+
+        {snapshot.loadedAt && (!snapshot.runtime?.ready || unhealthyWorkspaces.length > 0 || criticalCapabilities.length > 0 || error) ? (
+          <section aria-labelledby="health-actions-title">
+            <h2 id="health-actions-title" className="mb-2 font-display text-role-section-title font-bold text-text">
+              {t('health.recoveryActionsTitle', 'What to do next')}
+            </h2>
+            <div className="grid gap-2 md:grid-cols-2">
+              {!snapshot.runtime?.ready ? (
+                <Card>
+                  <h3 className="text-sm font-semibold text-text">{t('health.runtimeAffected', 'Execution is unavailable')}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                    {t('health.runtimeRecovery', 'Restart the runtime. If it remains unavailable, check provider setup in Settings.')}
+                  </p>
+                </Card>
+              ) : null}
+              {error ? (
+                <Card>
+                  <h3 className="text-sm font-semibold text-text">{t('health.checksIncomplete', 'Some checks are incomplete')}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                    {t('health.checksIncompleteRecovery', 'Refresh health checks. If the same check stays unavailable, open Advanced operator diagnostics for its source details.')}
+                  </p>
+                </Card>
+              ) : null}
+              {unhealthyWorkspaces.map(({ workspace }) => {
+                const action = workspaceAction(workspace)
+                return (
+                  <Card key={workspace.id}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-text">{workspace.label}</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                          {workspace.status === 'auth_required'
+                            ? t('health.workspaceSignInRecovery', 'Sign in again to restore access to this workspace.')
+                            : t('health.workspaceSyncRecovery', 'Sync this workspace again. If it stays offline, check its connection.')}
+                        </p>
+                      </div>
+                      {action ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void runWorkspaceAction(workspace)}
+                          disabled={busyAction === `${workspace.id}:${action}`}
+                          loading={busyAction === `${workspace.id}:${action}`}
+                        >
+                          {action === 'Sign in' ? t('health.workspaceActionSignIn', 'Sign in') : t('health.workspaceActionSync', 'Sync')}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </Card>
+                )
+              })}
+              {criticalCapabilityGroups.map(({ kind, count, details }) => (
+                  <Card key={kind}>
+                    <h3 className="text-sm font-semibold text-text">
+                      {count === 1
+                        ? t('health.capabilityAffected', '{{capability}} is unavailable', {
+                            capability: details.singular,
+                          })
+                        : t('health.capabilityClassAffected', '{{count}} {{capabilities}} are unavailable', {
+                            count,
+                            capabilities: details.plural,
+                          })}
+                    </h3>
+                    <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                      {count === 1 ? details.recoverySingular : details.recoveryPlural}
+                    </p>
+                  </Card>
+                ))}
+            </div>
+          </section>
+        ) : null}
+
+        <details
+          className="rounded-lg border border-border-subtle bg-elevated/40 p-4"
+          data-testid="health-advanced"
+          open={advancedOpen}
+          onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+        >
+          <summary className="cursor-pointer text-sm font-semibold text-text">
+            {t('health.advancedTitle', 'Advanced operator diagnostics')}
+          </summary>
+          <p className="mt-2 text-xs leading-relaxed text-text-muted">
+            {t('health.advancedDescription', 'Deployment topology, CLI validation commands, runtime provenance, workspace authority, pairings, and operator checks.')}
+          </p>
+          {advancedOpen ? (
+            <div className="mt-4 flex flex-col gap-4">
         <div className="grid gap-3 lg:grid-cols-5">
           {SETUP_INTENTS.map((intent) => (
             <Card key={intent.id} className="min-h-[190px]">
@@ -500,6 +728,10 @@ export function HealthCenterPage() {
             </Card>
           </div>
         </div>
+
+            </div>
+          ) : null}
+        </details>
 
         <div className="rounded-lg border border-border-subtle bg-elevated px-4 py-3 text-2xs text-text-muted">
           {snapshot.loadedAt

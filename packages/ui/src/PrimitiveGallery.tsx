@@ -259,7 +259,7 @@ export function PrimitiveGallery() {
             <RunTimeline
               stateLabel="Running"
               live
-              sessionId="ses_9f2a"
+              linkedChat
               currentStepId="running"
               completedStepIds={['queued']}
               steps={[
@@ -424,7 +424,7 @@ export function PrimitiveGallery() {
                 stateLabel="Review"
                 currentStepId="review"
                 completedStepIds={['queued', 'running']}
-                sessionId="ses_drawer"
+                linkedChat
                 steps={[
                   { id: 'queued', label: 'Queued' },
                   { id: 'running', label: 'Running' },

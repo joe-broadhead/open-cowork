@@ -256,7 +256,7 @@ export function primitivesSurfaceCss(): string {
     color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 88%, var(--color-base)) 0%,
     color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 58%, var(--color-base)) 100%);
   border: var(--border-width-1) solid color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 45%, transparent);
-  box-shadow: inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent);
+  box-shadow: inset 0 1px 0 0 color-mix(in srgb, var(--color-highlight-ink) 14%, transparent);
   transition: border-color var(--dur-1) var(--ease-out);
 }
 
@@ -269,7 +269,7 @@ export function primitivesSurfaceCss(): string {
     color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 58%, var(--color-base)) 100%);
   border: var(--border-width-1) solid color-mix(in srgb, var(--entity-chroma, var(--color-accent)) 45%, transparent);
   color: var(--color-text);
-  box-shadow: inset 0 1px 0 0 color-mix(in srgb, #fff 14%, transparent);
+  box-shadow: inset 0 1px 0 0 color-mix(in srgb, var(--color-highlight-ink) 14%, transparent);
 }
 
 .studio-status-dot--live {

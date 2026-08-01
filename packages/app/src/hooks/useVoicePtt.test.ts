@@ -11,6 +11,13 @@ import { installRendererTestCoworkApi } from '../test/setup'
 import { createTestVoiceApi, createTestVoiceHostStatus } from '../test/voice-fixtures'
 import { appendDictation, useVoicePtt } from './useVoicePtt'
 
+const featureValueTelemetry = vi.hoisted(() => ({
+  recordFeatureValueDiscovery: vi.fn(),
+  recordFeatureValueActivation: vi.fn(),
+}))
+
+vi.mock('../helpers/lazy-feature-value-telemetry', () => featureValueTelemetry)
+
 const supportFlags = {
   canVoiceCapture: true,
   canVoiceStt: true,
@@ -123,16 +130,28 @@ describe('useVoicePtt', () => {
     }))
   }
 
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    let reject!: (reason?: unknown) => void
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise
+      reject = rejectPromise
+    })
+    return { promise, resolve, reject }
+  }
+
   it('toggles listening and replaces baseline with final text', async () => {
     const { result } = renderVoicePtt()
 
     await waitFor(() => expect(result.current.visible).toBe(true))
     await waitFor(() => expect(result.current.enabled).toBe(true))
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).toHaveBeenCalledWith('voice')
 
     await act(async () => {
       await result.current.toggle()
     })
     expect(window.coworkApi.voice.startSession).toHaveBeenCalled()
+    expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledWith('voice')
     expect(result.current.phase).toBe('listening')
 
     await act(async () => {
@@ -247,5 +266,159 @@ describe('useVoicePtt', () => {
       setComposerText: vi.fn(),
     }))
     await waitFor(() => expect(result.current.visible).toBe(false))
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).not.toHaveBeenCalledWith('voice')
+  })
+
+  it('does not activate Voice when the host rejects session start', async () => {
+    window.coworkApi.voice.startSession = vi.fn(async () => {
+      throw new Error('microphone denied')
+    })
+    const { result } = renderVoicePtt()
+    await waitFor(() => expect(result.current.enabled).toBe(true))
+
+    await act(async () => {
+      await result.current.toggle()
+    })
+
+    expect(result.current.phase).toBe('error')
+    expect(featureValueTelemetry.recordFeatureValueActivation).not.toHaveBeenCalledWith('voice')
+  })
+
+  it('cancels an active capture when the composer unmounts', async () => {
+    const { result, unmount } = renderVoicePtt()
+    await waitFor(() => expect(result.current.enabled).toBe(true))
+    await act(async () => {
+      await result.current.toggle()
+    })
+    await act(async () => {
+      for (const listener of listeners) {
+        listener({
+          type: 'partial',
+          event: {
+            sessionId: 'voice-1',
+            text: 'discard this partial',
+            isFinal: false,
+            at: new Date().toISOString(),
+          },
+        })
+      }
+    })
+    expect(composerText).toBe('Draft: discard this partial')
+
+    unmount()
+
+    await waitFor(() => expect(window.coworkApi.voice.cancel).toHaveBeenCalledTimes(1))
+    expect(window.coworkApi.voice.cancel).toHaveBeenCalledWith('voice-1')
+    expect(composerText).toBe('Draft: ')
+  })
+
+  it('cancels a deferred capture that resolves after unmount', async () => {
+    const pending = deferred<VoiceSessionSnapshot>()
+    window.coworkApi.voice.startSession = vi.fn(() => pending.promise)
+    const { result, unmount } = renderVoicePtt()
+    await waitFor(() => expect(result.current.enabled).toBe(true))
+
+    let togglePromise!: Promise<void>
+    act(() => {
+      togglePromise = result.current.toggle()
+    })
+    await waitFor(() => expect(window.coworkApi.voice.startSession).toHaveBeenCalled())
+    unmount()
+    pending.resolve({
+      id: 'voice-deferred',
+      openCodeSessionId: 'ses_1',
+      workspaceId: 'local',
+      mode: 'ptt',
+      phase: 'listening',
+      startedAt: new Date().toISOString(),
+    })
+    await togglePromise
+
+    await waitFor(() => expect(window.coworkApi.voice.cancel).toHaveBeenCalledTimes(1))
+    expect(window.coworkApi.voice.cancel).toHaveBeenCalledWith('voice-deferred')
+    expect(featureValueTelemetry.recordFeatureValueActivation).not.toHaveBeenCalledWith('voice')
+  })
+
+  it('cancels a deferred capture when toggled off before startup completes', async () => {
+    const pending = deferred<VoiceSessionSnapshot>()
+    window.coworkApi.voice.startSession = vi.fn(() => pending.promise)
+    const { result } = renderVoicePtt()
+    await waitFor(() => expect(result.current.enabled).toBe(true))
+
+    let startPromise!: Promise<void>
+    act(() => {
+      startPromise = result.current.toggle()
+    })
+    await waitFor(() => expect(window.coworkApi.voice.startSession).toHaveBeenCalled())
+    await act(async () => {
+      await result.current.toggle()
+    })
+    expect(result.current.phase).toBe('idle')
+    act(() => {
+      void result.current.toggle()
+    })
+    expect(window.coworkApi.voice.startSession).toHaveBeenCalledTimes(1)
+
+    pending.resolve({
+      id: 'voice-deferred',
+      openCodeSessionId: 'ses_1',
+      workspaceId: 'local',
+      mode: 'ptt',
+      phase: 'listening',
+      startedAt: new Date().toISOString(),
+    })
+    await startPromise
+
+    await waitFor(() => expect(window.coworkApi.voice.cancel).toHaveBeenCalledTimes(1))
+    expect(window.coworkApi.voice.cancel).toHaveBeenCalledWith('voice-deferred')
+    expect(featureValueTelemetry.recordFeatureValueActivation).not.toHaveBeenCalledWith('voice')
+  })
+
+  it('cancels capture when Voice eligibility is lost', async () => {
+    const { result, rerender } = renderVoicePtt()
+    await waitFor(() => expect(result.current.enabled).toBe(true))
+    await act(async () => {
+      await result.current.toggle()
+    })
+
+    supportFlags.canVoiceCapture = false
+    rerender()
+
+    await waitFor(() => expect(window.coworkApi.voice.cancel).toHaveBeenCalledTimes(1))
+    expect(window.coworkApi.voice.cancel).toHaveBeenCalledWith('voice-1')
+    expect(result.current.visible).toBe(false)
+
+    await act(async () => {
+      for (const listener of listeners) {
+        listener({
+          type: 'error',
+          sessionId: 'voice-1',
+          message: 'late error from released capture',
+          at: new Date().toISOString(),
+        })
+      }
+    })
+    expect(result.current.phase).toBe('idle')
+  })
+
+  it('cancels capture when the owning chat session changes', async () => {
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useVoicePtt({
+        openCodeSessionId: sessionId,
+        getComposerText: () => composerText,
+        setComposerText: (text) => { composerText = text },
+      }),
+      { initialProps: { sessionId: 'ses_1' } },
+    )
+    await waitFor(() => expect(result.current.enabled).toBe(true))
+    await act(async () => {
+      await result.current.toggle()
+    })
+
+    rerender({ sessionId: 'ses_2' })
+
+    await waitFor(() => expect(window.coworkApi.voice.cancel).toHaveBeenCalledTimes(1))
+    expect(window.coworkApi.voice.cancel).toHaveBeenCalledWith('voice-1')
+    expect(result.current.phase).toBe('idle')
   })
 })

@@ -121,3 +121,21 @@ test('voice host cancel clears buffer mid-session', async () => {
   assert.equal(host.getStatus().sessionId, null)
   assert.equal(host.getHostPcmSnapshot(), null)
 })
+
+test('voice host ignores stale session-scoped cancellation without mutating the active capture', async () => {
+  const host = new VoiceHost({
+    features: { voice: true },
+    capture: new FakeVoiceCapture(),
+    stt: new FakeVoiceStt(),
+    probeMicrophone: async () => 'granted',
+    partialsEnabled: false,
+  })
+  const session = await host.startSession({ mode: 'conversation', continuousVad: true })
+
+  const status = await host.cancel('stale-session')
+
+  assert.equal(status.sessionId, session.id)
+  assert.equal(status.phase, 'listening')
+  assert.equal(status.vad?.continuous, true)
+  await host.cancel(session.id)
+})

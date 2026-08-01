@@ -251,6 +251,7 @@ export function projectsSurfaceCss(): string {
 
 .studio-project-create label,
 .studio-plan-form label,
+.studio-coworker-picker,
 .studio-select-row,
 .studio-hand-to {
   display: grid;
@@ -260,6 +261,27 @@ export function projectsSurfaceCss(): string {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.studio-coworker-picker {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.studio-coworker-picker legend {
+  margin-bottom: var(--space-1);
+}
+
+.studio-coworker-picker p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: var(--lh-xs);
+  text-transform: none;
 }
 
 .studio-project-create input,

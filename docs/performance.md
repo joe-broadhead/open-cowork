@@ -229,13 +229,12 @@ Startup-to-interactive is gated from both ends:
 
 - **Renderer side (parse/eval bytes):** the gzipped eager startup graph
   the browser fetches on first load. `scripts/check-bundle-size.mjs`
-  walks the `browser.html` entry's static-import closure plus its single
-  bootstrap dynamic import and sums the gzipped bytes. Budget: **220 KB**
-  (fresh 2026-07-14 production build: **208,910 B / 204.0 KB**, leaving
-  **16,370 B / 16.0 KB** headroom). Diff inspection, provider sign-in
-  controls, conditional Home review/motion surfaces, and status telemetry
-  stay behind guarded dynamic-import boundaries; lazy route views and
-  chart/diagram vendors also load on demand and do not count against startup.
+  walks the `browser.html` entry's static-import closure plus its bootstrap
+  dynamic import and sums the gzipped bytes. Budget: **220 KB**. Diff
+  inspection, provider sign-in controls, advanced session inspection, and
+  status telemetry stay behind guarded dynamic-import boundaries; lazy route
+  views and chart/diagram vendors also load on demand and do not count against
+  startup.
 - **Main-process side (init to first interactive session):**
   `tests/startup-budget.test.ts` measures a fresh `SessionEngine`
   hydrating a realistic session from projected history and producing the

@@ -213,7 +213,15 @@ export function ModelsPanel({
                 providerName={provider.name}
                 connected={provider.connected}
                 onBeforeAuthorize={persistBeforeProviderAuth}
+                onAuthInvalidated={async () => {
+                  // OAuth authorize/callback failures may have invalidated the
+                  // durable setup proof in main. Persist once more so Settings
+                  // consumes that authoritative result and returns to Setup.
+                  await onPersistSettings()
+                }}
                 onAuthUpdated={async () => {
+                  const persisted = await onPersistSettings()
+                  if (!persisted) return false
                   const nextConfig = await window.coworkApi.app.config()
                   onConfigRefreshed(nextConfig)
                   const refreshedProvider = nextConfig.providers.available.find((entry) => entry.id === provider.id) || null
@@ -223,6 +231,7 @@ export function ModelsPanel({
                       effectiveModel: refreshedProvider.defaultModel,
                     })
                   }
+                  return true
                 }}
               />
 
@@ -257,7 +266,7 @@ export function ModelsPanel({
                 <div className="text-2xs leading-relaxed text-text-muted">
                   {t(
                     'settings.models.connectionCheckDescription',
-                    'Saving applies these credentials and restarts the runtime. Connection problems surface as runtime status after Save — use Save Changes to exercise credentials.',
+                    'Saving a provider, model, or credential change returns you to setup, where Test connection applies and verifies the saved connection.',
                   )}
                 </div>
               </Card>

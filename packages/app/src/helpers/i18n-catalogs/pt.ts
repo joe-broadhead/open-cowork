@@ -208,14 +208,9 @@ const strings: Record<string, string> = {
   'settings.reset.resetting': 'Redefinindo…',
   'settings.reset.requiresConfirm': 'Requer confirmação explícita. O app fechará e reiniciará.',
   'settings.language.label': 'Idioma',
-  'settings.language.description': 'Escolha o idioma da interface. A seleção é lembrada neste dispositivo. Idiomas parcialmente traduzidos mostrarão textos faltantes em inglês.',
-  'settings.language.systemDefault': 'Detecção automática (sistema)',
-  'settings.language.partialOption': '{{label}} — {{percent}} % traduzido',
 
   'agents.create': 'Criar agente',
 
-  'capabilities.tab.tools': 'Conexões',
-  'capabilities.tab.skills': 'Aptidões',
 
   'workflows.regenerate': 'Gerar novamente',
   'workflows.copyWebhookUrl': 'Copiar URL',
@@ -331,10 +326,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': 'Importar',
   'studioTeamPage.eyebrow': 'Equipe',
   'studioTeamPage.title': 'Colegas',
-  'studioTeamPage.subtitle': 'Componha agentes OpenCode em uma lista de colegas com funções, habilidades, ferramentas e atribuições de chat claras.',
+  'studioTeamPage.subtitle': 'Crie uma lista de colegas com funções, habilidades, ferramentas e atribuições de chat claras.',
   'studioTeamPage.customCount': 'personalizados',
   'studioTeamPage.builtInCount': 'integrados',
-  'studioTeamPage.runtimeCount': 'runtime',
   'studioTeamPage.search': 'Buscar colegas, habilidades, ferramentas ou instruções…',
   'studioTeamPage.filterLabel': 'Filtro de colegas',
   'studioTeamPage.importTitle': 'Importar um colega personalizado de um arquivo .cowork-agent.json',
@@ -373,9 +367,6 @@ const strings: Record<string, string> = {
   'capabilities.title': 'Ferramentas e habilidades',
   'capabilities.subtitle': 'Inspecione as ferramentas e pacotes de habilidades disponíveis no contexto atual do OpenCode, incluindo adições integradas, de máquina, de projeto e personalizadas.',
   'capabilities.addTool': 'Adicionar conexão',
-  'capabilities.addSkillButton': 'Adicionar aptidão',
-  'capabilities.searchTools': 'Buscar conexões, descrições ou colegas…',
-  'capabilities.searchSkills': 'Buscar aptidões, descrições ou colegas…',
   'capabilities.details': 'Detalhes',
   'capabilities.connection': 'Conexão',
   'capabilities.linkedCoworkers': 'Colegas vinculados',
@@ -567,9 +558,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': 'O que a tua equipa deve enfrentar hoje?',
   'studioHome.subtitle': '{{brand}} · Escolhe um colega líder, @menciona especialistas e revê o trabalho num só lugar',
   'studioHome.composer.placeholder': 'Pergunta o que quiseres ou @menciona um colega',
-  'studioHome.coachmark': 'Escreve um prompt, anexa contexto ou @menciona um colega — ⌘K para comandos.',
-  'home.statusStrip.ready': 'Pronto',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} MCPs',
 
 }
 

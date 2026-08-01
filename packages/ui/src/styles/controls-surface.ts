@@ -114,7 +114,7 @@ export function controlsSurfaceCss(): string {
   inset-inline-start: -70%;
   width: 42%;
   transform: skewX(-18deg) translateX(0);
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 42%, transparent), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-highlight-ink) 42%, transparent), transparent);
   opacity: 0;
   pointer-events: none;
 }

@@ -19,21 +19,22 @@ Reference workflows in the repository root:
 - [ ] `node products/wiki/scripts/standalone-smoke.mjs` green on the release candidate tarball
 - [ ] Desktop release notes do not claim Gateway/Wiki publish unless product workflows also ran
 
-## Product purity claim gate (JOE-1029 / JOE-1089)
+## Product claim gate
 
-Before publishing release notes or marketing copy, confirm against
-[Product purity register](product-purity-register.md) and the freeze sample
-[Pure release notes claim freeze](samples/pure-release-notes-claim-freeze.md):
+Before publishing release notes or marketing copy, confirm the draft against
+the [product contract](product-contract.md), the
+[capability manifest](architecture.md#product-capability-manifest), and the
+[enterprise readiness matrix](enterprise-readiness-matrix.md):
 
-- [ ] Draft matches the claim-freeze sample’s allowed language (or stricter)
+- [ ] Every named surface and configured catalog count matches the shipped capability manifest
 - [ ] No unqualified “gateway” (must say Channel / Standalone / durable Gateway)
 - [ ] No “Always allow” / daily digest as shipping features unless implemented
-- [ ] Private voice (`features.voice`) claims follow [claim freeze](runbooks/voice-private-dogfood.md#claim-freeze-allowed-vs-forbidden): Local Desktop opt-in only; no Cloud Web mic, no always-on without consent, no “fully offline package” without aurum + model; evidence via [epic close-out](voice-private-epic-closeout.md) / dogfood runbook; default remains **off**
-- [ ] No Standalone/Paired “full workspace chat ready” while support matrix is deferred ([JOE-1091 residual](runbooks/standalone-session-api-residual-joe-1091.md))
+- [ ] Private voice (`features.voice`) claims follow [claim freeze](runbooks/voice-private-dogfood.md#claim-freeze-allowed-vs-forbidden): Local Desktop opt-in only; no Cloud Web mic, no always-on without consent, no “fully offline package” without Aurum + model; default remains **off**
+- [ ] No Standalone/Paired “full workspace chat ready” while the [Standalone API ADR](adr/standalone-desktop-session-api.md) keeps session operations deferred
 - [ ] Knowledge ≠ Wiki; no default Desktop Wiki/Gateway MCP claims
 - [ ] Projects described as coordination board (not history facets) unless UI changes
 - [ ] No `enterprise-ready` unless every required row in [enterprise readiness matrix](enterprise-readiness-matrix.md) is `proven` with evidence
-- [ ] Cloud sync not claimed “proven” without live dogfood notes ([R-1094](runbooks/cloud-sync-dogfood-residual-joe-1094.md) until then)
+- [ ] Cloud continuity is not called “proven” without a successful [cross-surface smoke](runbooks/cloud-sync-dogfood.md)
 - [ ] Claim level below matches evidence table (do not skip tiers)
 
 ## Release Claim Levels

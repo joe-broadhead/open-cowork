@@ -6,7 +6,7 @@
 import { telemetry } from '@open-cowork/runtime-host/telemetry'
 import { adoptionTelemetry } from '@open-cowork/runtime-host/adoption-telemetry'
 import { primeShellEnvironment } from '@open-cowork/runtime-host/shell-env'
-import { applySettingsSideEffects, isSetupComplete } from '@open-cowork/runtime-host/settings'
+import { applySettingsSideEffects, isSetupComplete, loadSettings } from '@open-cowork/runtime-host/settings'
 import { flushSessionRegistryWrites } from '@open-cowork/runtime-host/session-registry'
 import { publishNotification } from '@open-cowork/runtime-host/session-event-dispatcher'
 import { getActiveProjectOverlayDirectory, getRuntimeHomeDir, setDirectoryClientLifecycleHandlers, startRuntime, stopRuntime } from '@open-cowork/runtime-host/runtime'
@@ -48,6 +48,9 @@ import { shouldScheduleRuntimeReconnect } from './runtime-reconnect-policy.ts'
 import { registerAppProtocolSchemes } from './app-protocol-schemes.ts'
 import { registerBrandingAssetProtocol } from './branding-protocol.ts'
 import type { ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
+import { isDesktopFeatureEnabled } from '@open-cowork/shared'
+import { resolveDevelopmentSetupConnectionValidator } from './setup/connection-validation.ts'
+import { canStartDesktopRuntime, type DesktopRuntimeStartIntent } from './setup/runtime-start-policy.ts'
 
 // Inject Electron's utilityProcess as the managed OpenCode server's supervisor
 // forker (desktop-only; the cloud forks via node:child_process instead). Set at
@@ -119,7 +122,7 @@ const {
 } = createMainWindowController({
   app,
   appDirname: __dirname,
-  brandName: branding.name,
+  branding,
   appIconPath,
   canOpenMainWindowFromLoading: () => getRuntimeInitializationStatus().phase === 'error',
   getAppIsQuitting: () => appIsQuitting,
@@ -185,31 +188,68 @@ let mcpInterval: NodeJS.Timeout | null = null
 // the client pointing at the final server, and the UI hangs waiting for
 // events that can never arrive.
 const runRebootOnce = createSingleFlight()
+const runRuntimeTransitionSerially = createPromiseChain()
+let runtimeSuspensionEpoch = 0
+
+async function deactivateDesktopRuntime() {
+  if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  runtimeStarted = false
+  setRuntimeReady(false, null)
+  // Directory-scoped SSE subscriptions still point at the OpenCode server
+  // we are about to shut down; reset them so onCreate fires fresh against
+  // the new server once scoped clients are recreated.
+  eventSubscriptions.reset()
+  // Clear cached runtime tool lists whenever the active server is removed.
+  const { invalidateRuntimeToolCache } = await import('@open-cowork/runtime-host/runtime-tool-cache')
+  invalidateRuntimeToolCache()
+  invalidateCustomAgentCatalogCache()
+  await stopRuntime()
+}
+
+async function rebootRuntimeWithIntent(intent: DesktopRuntimeStartIntent): Promise<void> {
+  const requestedSuspensionEpoch = runtimeSuspensionEpoch
+  return runRebootOnce(async () => {
+    return runRuntimeTransitionSerially(async () => {
+      await deactivateDesktopRuntime()
+      // A settings save may invalidate setup while this transition is in
+      // flight. In that case, the suspension wins and no stale runtime is
+      // brought back after the settings IPC has returned.
+      if (
+        requestedSuspensionEpoch !== runtimeSuspensionEpoch
+        || !canStartDesktopRuntime(isSetupComplete(), intent)
+      ) return
+      try {
+        await bootRuntimeInsideTransition(runtimeProjectDirectory, intent, requestedSuspensionEpoch)
+      } catch (err: unknown) {
+        log('error', `Runtime reboot failed: ${err instanceof Error ? err.message : String(err)}`)
+        if (intent === 'validated') scheduleReconnect()
+      }
+      if (
+        requestedSuspensionEpoch !== runtimeSuspensionEpoch
+        || !canStartDesktopRuntime(isSetupComplete(), intent)
+      ) {
+        await deactivateDesktopRuntime()
+      }
+    })
+  })
+}
 
 export async function rebootRuntime(): Promise<void> {
-  return runRebootOnce(async () => {
-    if (mcpInterval) { clearInterval(mcpInterval); mcpInterval = null }
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
-    runtimeStarted = false
-    setRuntimeReady(false, null)
-    // Directory-scoped SSE subscriptions still point at the OpenCode server
-    // we are about to shut down; reset them so onCreate fires fresh against
-    // the new server once scoped clients are recreated.
-    eventSubscriptions.reset()
-    // Clear cached runtime tool lists — on reboot the MCP set, provider,
-    // or model may have changed, and serving stale tool metadata from
-    // the Capabilities UI would mislead the user.
-    const { invalidateRuntimeToolCache } = await import('@open-cowork/runtime-host/runtime-tool-cache')
-    invalidateRuntimeToolCache()
-    invalidateCustomAgentCatalogCache()
-    await stopRuntime()
-    try {
-      await bootRuntime(runtimeProjectDirectory)
-    } catch (err: unknown) {
-      log('error', `Runtime reboot failed: ${err instanceof Error ? err.message : String(err)}`)
-      scheduleReconnect()
-    }
-  })
+  if (!isSetupComplete()) {
+    await suspendRuntimeForSetup()
+    return
+  }
+  return rebootRuntimeWithIntent('validated')
+}
+
+export async function rebootRuntimeForSetupValidation(): Promise<void> {
+  return rebootRuntimeWithIntent('setup_connection_validation')
+}
+
+export async function suspendRuntimeForSetup(): Promise<void> {
+  runtimeSuspensionEpoch += 1
+  return runRuntimeTransitionSerially(deactivateDesktopRuntime)
 }
 
 function normalizeRuntimeProjectDirectory(directory?: string | null) {
@@ -231,6 +271,10 @@ const runEnsureSerially = createPromiseChain()
 export async function ensureRuntimeForDirectory(directory?: string | null) {
   const desired = normalizeRuntimeProjectDirectory(directory)
   return runEnsureSerially(async () => {
+    if (!isSetupComplete()) {
+      await suspendRuntimeForSetup()
+      throw new Error('Complete and test setup before starting a cowork session.')
+    }
     if (!runtimeStarted) {
       runtimeProjectDirectory = desired
       await bootRuntime(desired)
@@ -268,15 +312,42 @@ registerRuntimeDirectoryEnsurer(ensureRuntimeForDirectory)
 // event subscription setup. Coalesce them into one in-flight boot.
 const runBootOnce = createSingleFlight()
 
-async function bootRuntime(projectDirectory?: string | null): Promise<void> {
-  if (runtimeStarted) return
+async function bootRuntimeInsideTransition(
+  projectDirectory: string | null | undefined,
+  intent: DesktopRuntimeStartIntent,
+  requestedSuspensionEpoch: number,
+): Promise<void> {
+  if (
+    runtimeStarted
+    || requestedSuspensionEpoch !== runtimeSuspensionEpoch
+    || !canStartDesktopRuntime(isSetupComplete(), intent)
+  ) return
   return runBootOnce(async () => {
-    if (runtimeStarted) return
-    await runBootRuntime(projectDirectory)
+    if (
+      runtimeStarted
+      || requestedSuspensionEpoch !== runtimeSuspensionEpoch
+      || !canStartDesktopRuntime(isSetupComplete(), intent)
+    ) return
+    await runBootRuntime(projectDirectory, intent, requestedSuspensionEpoch)
   })
 }
 
-async function runBootRuntime(projectDirectory?: string | null) {
+export async function bootRuntime(projectDirectory?: string | null): Promise<void> {
+  const requestedSuspensionEpoch = runtimeSuspensionEpoch
+  return runRuntimeTransitionSerially(async () => {
+    await bootRuntimeInsideTransition(projectDirectory, 'validated', requestedSuspensionEpoch)
+    if (
+      requestedSuspensionEpoch !== runtimeSuspensionEpoch
+      || !isSetupComplete()
+    ) await deactivateDesktopRuntime()
+  })
+}
+
+async function runBootRuntime(
+  projectDirectory: string | null | undefined,
+  intent: DesktopRuntimeStartIntent,
+  requestedSuspensionEpoch: number,
+) {
   if (runtimeStarted) return
   setRuntimeInitializationPhase('starting', 'Starting OpenCode runtime...')
   setRuntimeReady(false, null)
@@ -312,38 +383,50 @@ async function runBootRuntime(projectDirectory?: string | null) {
         scheduleReconnect()
       },
     })
+    if (
+      requestedSuspensionEpoch !== runtimeSuspensionEpoch
+      || !canStartDesktopRuntime(isSetupComplete(), intent)
+    ) {
+      await stopRuntime()
+      setRuntimeReady(false, null)
+      return
+    }
     runtimeStarted = true
     runtimeProjectDirectory = normalizeRuntimeProjectDirectory(projectDirectory)
     setRuntimeInitializationPhase('connecting-events', 'Connecting event stream...')
     setRuntimeReady(true)
-    void runWorkflowSchedulerTick()
+    if (intent === 'validated') void runWorkflowSchedulerTick()
     log('main', 'OpenCode runtime started')
-    telemetry.appLaunched()
+    if (intent === 'validated') telemetry.appLaunched()
     // Opt-in, content-free adoption signal (default off). Only coarse
     // platform + version facts are ever sent, and only when a downstream
     // has enabled `telemetry.adoption`. See docs/privacy.md.
-    adoptionTelemetry.appLaunched({ platform: process.platform, appVersion: app.getVersion() })
+    if (intent === 'validated') {
+      adoptionTelemetry.appLaunched({ platform: process.platform, appVersion: app.getVersion() })
+    }
     log('main', `Log file: ${getLogFilePath()}`)
 
     // Tell renderer the runtime is ready so it can load sessions
     const win = getMainWindow()
-    if (win && !win.isDestroyed()) {
+    if (intent === 'validated' && win && !win.isDestroyed()) {
       win.webContents.send('runtime:ready')
     }
 
-    eventSubscriptions.ensure(getRuntimeHomeDir(), client)
-    void getRuntimeCatalogSnapshot(runtimeProjectDirectory ? { directory: runtimeProjectDirectory } : undefined).catch((err) => {
-      log('main', `Runtime catalog warmup skipped: ${err instanceof Error ? err.message : String(err)}`)
-    })
+    if (intent === 'validated') {
+      eventSubscriptions.ensure(getRuntimeHomeDir(), client)
+      void getRuntimeCatalogSnapshot(runtimeProjectDirectory ? { directory: runtimeProjectDirectory } : undefined).catch((err) => {
+        log('main', `Runtime catalog warmup skipped: ${err instanceof Error ? err.message : String(err)}`)
+      })
 
-    setRuntimeInitializationPhase('mcp', 'Checking tools and MCP status...')
-    mcpInterval = restartRuntimeMcpStatusPolling({
-      client,
-      runtimeProjectDirectory,
-      currentInterval: mcpInterval,
-      getMainWindow,
-      scheduleReconnect,
-    })
+      setRuntimeInitializationPhase('mcp', 'Checking tools and MCP status...')
+      mcpInterval = restartRuntimeMcpStatusPolling({
+        client,
+        runtimeProjectDirectory,
+        currentInterval: mcpInterval,
+        getMainWindow,
+        scheduleReconnect,
+      })
+    }
     resolveRuntimeInitializationReady('OpenCode runtime is ready.')
     openMainWindowAfterRuntimeInitialization()
   } catch (err: unknown) {
@@ -364,6 +447,7 @@ const MAX_RECONNECT_DELAY = 60000
 const MAX_RECONNECT_ATTEMPTS = 10
 
 function scheduleReconnect() {
+  if (!isSetupComplete()) return
   if (!shouldScheduleRuntimeReconnect({
     appCleanupStarted,
     appIsQuitting,
@@ -447,6 +531,22 @@ function exitAfterCleanup(exitCode: number) {
   })
 }
 
+function refreshApplicationMenu(voicePttShortcut = loadSettings().voicePttShortcut) {
+  try {
+    Menu.setApplicationMenu(Menu.buildFromTemplate(createApplicationMenuTemplate({
+      brandName: branding.name,
+      helpUrl: branding.helpUrl,
+      isPackaged: app.isPackaged,
+      getMainWindow,
+      openExternalNavigation,
+      voiceEnabled: isDesktopFeatureEnabled(getAppConfig().features, 'voice'),
+      voicePttShortcut,
+    })))
+  } catch (error) {
+    log('error', `Failed to refresh application menu: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 void app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
   app.name = branding.name
@@ -465,17 +565,18 @@ void app.whenReady().then(async () => {
     }
   }
 
-  Menu.setApplicationMenu(Menu.buildFromTemplate(createApplicationMenuTemplate({
-    brandName: branding.name,
-    helpUrl: branding.helpUrl,
-    isPackaged: app.isPackaged,
-    getMainWindow,
-    openExternalNavigation,
-  })))
+  refreshApplicationMenu()
 
   const rendererDevServerUrl = effectiveRendererDevServerUrl(process.env.VITE_DEV_SERVER_URL, app.isPackaged)
 
-  setupIpcHandlers(ipcMain, getMainWindow, { devServerUrl: rendererDevServerUrl })
+  setupIpcHandlers(ipcMain, getMainWindow, {
+    devServerUrl: rendererDevServerUrl,
+    refreshApplicationMenu,
+    restartRuntime: rebootRuntime,
+    restartRuntimeForSetupValidation: rebootRuntimeForSetupValidation,
+    suspendRuntimeForSetup,
+    validateSetupConnection: resolveDevelopmentSetupConnectionValidator({ isPackaged: app.isPackaged }),
+  })
   configureCoordinationService({
     getMainWindow,
     watchDeliveryAdapter: {
@@ -609,5 +710,3 @@ function handleFatalError(kind: 'uncaughtException' | 'unhandledRejection', err:
 
 process.on('uncaughtException', (err) => handleFatalError('uncaughtException', err))
 process.on('unhandledRejection', (reason) => handleFatalError('unhandledRejection', reason))
-
-export { bootRuntime }

@@ -168,25 +168,12 @@ export async function writeE2EWindowReadyProbe(
           throw new Error(label + ' timed out after ' + ms + 'ms');
         }),
       ]);
-      const setupComplete = async () => {
-        const [config, settings] = await Promise.all([
-          api.app.config(),
-          api.settings.get(),
-        ]);
-        if (!settings.effectiveProviderId || !settings.effectiveModel) return false;
-        const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId);
-        if (!provider) return false;
-        const providerCredentials = await api.settings.getProviderCredentials(provider.id, {
-          workspaceId: 'local',
-          purpose: 'credential_editor',
-        });
-        return provider.credentials.every((credential) => {
-          if (credential.required === false) return true;
-          const value = providerCredentials[credential.key];
-          return typeof value === 'string' && value.trim().length > 0;
-        });
-      };
-      if (!(await setupComplete())) {
+      const action = ${JSON.stringify(action)};
+      const setupComplete = async () => (await api.settings.get()).setupComplete === true;
+      if (action === 'create-session' && !(await setupComplete())) {
+        if (${JSON.stringify(options.isPackaged === true)}) {
+          return { waiting: true, waitingReason: 'packaged-create-session-requires-validated-setup' };
+        }
         if (!${JSON.stringify(allowSettingsMutation)}) {
           return { waiting: true, waitingReason: 'setup-incomplete-settings-mutation-disabled' };
         }
@@ -194,9 +181,20 @@ export async function writeE2EWindowReadyProbe(
           selectedProviderId: 'openrouter',
           selectedModelId: 'anthropic/claude-sonnet-4',
           providerCredentials: {
-            openrouter: { apiKey: 'placeholder-key' },
+            openrouter: { apiKey: ${JSON.stringify(env.OPEN_COWORK_E2E_SETUP_VALIDATION_KEY || '')} },
           },
         });
+        const runtime = await withTimeout(
+          api.runtime.restart({ purpose: 'setup_connection_validation' }),
+          60000,
+          'Starting runtime for setup validation',
+        );
+        if (!runtime?.ready) throw new Error(runtime?.error || 'Runtime failed to start for setup validation');
+        await withTimeout(
+          api.provider.testConnection('openrouter', 'anthropic/claude-sonnet-4'),
+          30000,
+          'Validating smoke provider setup',
+        );
         setTimeout(() => window.location.reload(), 0);
         return { reloading: true };
       }
@@ -209,7 +207,6 @@ export async function writeE2EWindowReadyProbe(
       };
       const settings = await api.settings.get();
       const installCapability = await api.updates.installCapability();
-      const action = ${JSON.stringify(action)};
       let sessions = [];
       let initialIds = [];
       let createdSessionId = null;

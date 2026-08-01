@@ -280,12 +280,6 @@ export function PermissionsPanel({
         </div>
       </Card>
 
-      <span className={sectionLabelCls}>{t('settings.permissions.reviewGateHeader', 'Review gates')}</span>
-      <Card className="flex flex-col gap-4">
-        <Card variant="flat" padding="sm" className="text-xs leading-relaxed text-text-muted">
-          {t('settings.permissions.knowledgeReviewDeferred', 'Knowledge review gates will appear here when the Knowledge/Wiki phase is enabled.')}
-        </Card>
-      </Card>
     </div>
   )
 }

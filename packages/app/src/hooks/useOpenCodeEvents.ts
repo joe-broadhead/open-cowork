@@ -226,7 +226,6 @@ export function useOpenCodeEvents() {
     const unsubWorkspaceSessions = window.coworkApi.on.workspaceSessionsUpdated((data) => {
       const store = useSessionStore.getState()
       const workspaceId = normalizeWorkspaceId(data.workspaceId)
-      if (workspaceId !== normalizeWorkspaceId(store.activeWorkspaceId)) return
       // Drop a snapshot that isn't newer than the last we applied (audit P1-X2) — out-of-order
       // delivery must not regress the session list. Payloads without a sequence (e.g. resyncs) apply.
       const sequence = typeof data.lastEventSequence === 'number' && Number.isFinite(data.lastEventSequence)
@@ -237,7 +236,7 @@ export function useOpenCodeEvents() {
         if (applied !== undefined && sequence <= applied) return
         lastAppliedWorkspaceSequence.current.set(workspaceId, sequence)
       }
-      store.setSessions(data.sessions)
+      store.setSessions(data.sessions, workspaceId)
     })
 
     const unsubAuth = window.coworkApi.on.authExpired(() => {

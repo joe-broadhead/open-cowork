@@ -20,6 +20,7 @@ import {
   createCloudProjectionCheckpoint,
   createCloudProjectionFenceToken,
   normalizeWorkflowSteps,
+  redactSecretText,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader-core.js'
 import { initializeLocalSqliteSchema } from '../local-sqlite-schema.js'
@@ -969,16 +970,17 @@ export function markWorkflowRunFailed(runId: string, error: string) {
   const nextStatus = workflow?.status === 'paused' || workflow?.status === 'archived'
     ? workflow.status
     : 'active'
+  const safeError = redactSecretText(error, 1_000)
   let projectionVersion = 0
   withTransaction((db) => {
     db.prepare('update workflow_runs set status = ?, error = ?, finished_at = ? where id = ?')
-      .run('failed', error, now, runId)
+      .run('failed', safeError, now, runId)
     db.prepare(`
       update workflows
       set status = ?, latest_run_id = ?, latest_run_status = 'failed',
         latest_run_summary = ?, next_run_at = ?, updated_at = ?
       where id = ?
-    `).run(nextStatus, runId, error, nextRunAt, now, run.workflowId)
+    `).run(nextStatus, runId, safeError, nextRunAt, now, run.workflowId)
     projectionVersion = bumpWorkflowProjectionVersion(db)
   })
   return withWorkflowRunProjectionFence(getWorkflowRun(runId), projectionVersion)

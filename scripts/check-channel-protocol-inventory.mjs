@@ -30,15 +30,14 @@ function mustContain(rel, needle) {
 
 // Inventory and bounded-decision docs
 mustExist('docs/product-channel-ownership.md')
-mustExist('docs/product-channel-protocol-unification.md')
 mustExist('docs/adr/channel-stack-policy.md')
 mustExist('docs/channel-stack-telemetry.md')
 mustContain('docs/product-channel-ownership.md', 'Protocol / adapter body')
 mustContain('docs/product-channel-ownership.md', 'Time-bounded two-stack exception')
 mustContain('docs/product-channel-ownership.md', 'Gateway & Channels maintainers')
 mustContain('docs/product-channel-ownership.md', '2026-10-31')
-mustContain('docs/product-channel-protocol-unification.md', 'JOE-994')
-mustContain('docs/product-channel-protocol-unification.md', 'time-bounded two-stack decision')
+mustContain('docs/product-channel-ownership.md', 'packages/shared/src/channel-protocol-contract.ts')
+mustContain('docs/product-channel-ownership.md', 'tests/channel-protocol-dual-stack-contract.test.ts')
 mustContain('docs/adr/channel-stack-policy.md', 'Accepted — temporary two-stack exception')
 mustContain('docs/adr/channel-stack-policy.md', 'Mandatory review')
 mustContain('docs/adr/channel-stack-policy.md', '2026-10-31')
@@ -76,10 +75,9 @@ for (const name of [
 ]) {
   mustExist(`products/gateway/src/channels/${name}`)
 }
-mustContain('docs/product-channel-protocol-unification.md', 'Phase 2')
-mustContain('docs/product-channel-protocol-unification.md', 'Phase 3')
-mustContain('docs/product-channel-protocol-unification.md', 'Residual register')
 mustContain('docs/product-channel-ownership.md', 'Protocol stack façades')
+mustContain('docs/adr/channel-stack-policy.md', 'setMyCommands')
+mustContain('docs/adr/channel-stack-policy.md', 'structured rich outbound payloads degrade to text')
 
 // Monorepo provider packages (at least the production set)
 const providerRoot = mustExist('packages')

@@ -535,7 +535,7 @@ describe('Studio primitives', () => {
           live
           currentStepId="running"
           completedStepIds={['queued']}
-          sessionId="ses_test"
+          linkedChat
           steps={[
             { id: 'queued', label: 'Queued' },
             { id: 'running', label: 'Running' },
@@ -547,7 +547,8 @@ describe('Studio primitives', () => {
     expect(screen.getByLabelText('Running')).toHaveClass('studio-presence-dot')
     expect(screen.getByText('Reading')).toBeInTheDocument()
     expect(screen.getByText('Add shared primitive')).toBeInTheDocument()
-    expect(screen.getByText('ses_test')).toBeInTheDocument()
+    expect(screen.getByText('Linked chat')).toBeInTheDocument()
+    expect(screen.queryByText('ses_test')).not.toBeInTheDocument()
     expect(container.querySelector('.studio-run-pill--live')).toBeInTheDocument()
   })
 

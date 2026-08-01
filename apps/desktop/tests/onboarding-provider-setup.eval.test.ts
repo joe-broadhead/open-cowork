@@ -1,56 +1,77 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { launchSmokeApp } from './smoke-helpers.ts'
-import { captureEvidence, completeProviderSetup } from './eval-helpers.ts'
+import {
+  E2E_SETUP_VALIDATION_KEY,
+  cleanupSmokePaths,
+  createSmokePaths,
+  launchSmokeSession,
+  type SmokeSession,
+} from './smoke-helpers.ts'
+import { captureEvidence } from './eval-helpers.ts'
 
 // EVAL FLOW: onboarding / provider-setup reaches "ready".
 //
-// Drives the real first-run journey: force the app back to the SetupScreen by
-// clearing the seeded provider, prove SetupScreen renders, then complete
-// provider setup with a placeholder (offline) credential and prove the app
-// reaches the ready main shell (`data-testid="home-view"`). No LLM call is
-// made — the placeholder key only satisfies `isSetupComplete`.
-test('eval:onboarding — provider setup reaches the ready home shell', async () => {
-  const { page, cleanup } = await launchSmokeApp()
+// Drives first run at the narrow supported viewport, proves an invalid key
+// cannot survive relaunch as "complete", then validates the exact main-owned
+// fixture key and enters Home. The E2E authority is local; no provider is called.
+test('eval:onboarding — durable provider validation gates Home across relaunch at 800px', async () => {
+  const paths = createSmokePaths({ preserveProviderCredentialRequirements: true })
+  let session: SmokeSession | null = null
   try {
-    // launchSmokeApp seeds a provider so the app is already ready. Roll setup
-    // back so we can observe the real onboarding → ready transition.
-    const rolledBack = await page
-      .evaluate(async () => {
-        await window.coworkApi.settings.set({
-          selectedProviderId: null,
-          selectedModelId: null,
-          providerCredentials: {},
-        })
-        return true
-      })
-      .catch(() => false)
+    session = await launchSmokeSession(paths, { bootstrapSettings: false })
+    let page = session.page
+    await page.setViewportSize({ width: 800, height: 900 })
+    await page.getByRole('heading', { name: /Welcome/ }).waitFor({ timeout: 30_000 })
+    assert.equal(await page.locator('[data-testid="home-view"]').count(), 0)
+    assert.equal((await page.evaluate(async () => window.coworkApi.settings.get())).setupComplete, false)
 
-    if (rolledBack) {
-      await page.reload()
-      // SetupScreen shows the "Welcome" heading; the ready shell is absent.
-      const sawSetup = await page
-        .waitForSelector('h1:has-text("Welcome")', { timeout: 15_000 })
-        .then(() => true)
-        .catch(() => false)
-      if (sawSetup) {
-        await captureEvidence(page, 'onboarding', '01-setup-screen')
-      }
-    }
+    const credential = page.getByLabel('OpenRouter API Key')
+    await credential.fill('invalid-e2e-key')
+    await page.getByRole('button', { name: 'Test connection' }).click()
+    await page.getByRole('alert').filter({ hasText: /credential was rejected/i }).first().waitFor({ timeout: 60_000 })
+    assert.equal(await page.getByRole('button', { name: 'Get Started' }).isDisabled(), true)
+    assert.equal((await page.evaluate(async () => window.coworkApi.settings.get())).setupComplete, false)
+    await captureEvidence(page, 'onboarding', '01-invalid-credential')
 
-    // Complete provider setup (offline placeholder credential) and assert the
-    // app reaches the ready main shell.
-    await completeProviderSetup(page)
-    await page.waitForSelector('[data-testid="home-view"]', { timeout: 30_000 })
+    await session.close()
+    session = null
+
+    session = await launchSmokeSession(paths, { bootstrapSettings: false })
+    page = session.page
+    await page.setViewportSize({ width: 800, height: 900 })
+    await page.getByRole('heading', { name: /Welcome/ }).waitFor({ timeout: 30_000 })
+    const relaunched = await page.evaluate(async () => ({
+      settings: await window.coworkApi.settings.get(),
+      width: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    assert.equal(relaunched.settings.setupComplete, false)
+    assert.equal(relaunched.width, 800)
+    assert.ok(relaunched.scrollWidth <= relaunched.width, 'Setup overflowed horizontally at 800px')
+    assert.equal(await page.locator('[data-testid="home-view"]').count(), 0)
+    await captureEvidence(page, 'onboarding', '02-relaunch-still-setup')
+
+    await page.getByLabel('OpenRouter API Key').fill(E2E_SETUP_VALIDATION_KEY)
+    await page.getByRole('button', { name: 'Test connection' }).click()
+    await page.getByText(/Connection tested\. You can start using/).waitFor({ timeout: 60_000 })
+    await page.getByRole('button', { name: 'Get Started' }).click()
+    await page.waitForSelector('[data-testid="home-view"]', { timeout: 60_000 })
 
     const ready = await page.evaluate(async () => {
       const settings = await window.coworkApi.settings.get()
-      return Boolean(settings.effectiveProviderId && settings.effectiveModel)
+      return {
+        setupComplete: settings.setupComplete,
+        providerId: settings.effectiveProviderId,
+        modelId: settings.effectiveModel,
+      }
     })
-    assert.ok(ready, 'provider setup did not resolve an effective provider/model')
+    assert.equal(ready.setupComplete, true)
+    assert.equal(ready.providerId, 'openrouter')
+    assert.ok(ready.modelId, 'provider setup did not retain a validated model')
 
-    await captureEvidence(page, 'onboarding', '02-ready-home')
+    await captureEvidence(page, 'onboarding', '03-ready-home')
   } finally {
-    await cleanup()
+    await session?.close()
+    cleanupSmokePaths(paths)
   }
 })

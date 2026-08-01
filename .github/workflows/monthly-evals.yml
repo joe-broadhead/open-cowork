@@ -2,9 +2,9 @@ name: Monthly UI Evals
 
 # Monthly, real-Electron UI eval flows. These are heavier than the PR-gate
 # smoke suite (they drive full user journeys and capture visual evidence), so
-# they run on a schedule instead of on every push. Moved from daily to monthly
-# to reduce GitHub Actions cost (audit 2026-07-21 P0-2). Still
-# workflow_dispatch-able for ad-hoc runs. Job names are intentionally NOT part
+# they run on a schedule instead of on every push. Monthly cadence controls
+# GitHub Actions cost while workflow_dispatch keeps ad-hoc runs available. Job
+# names are intentionally NOT part
 # of the required-checks set enforced by scripts/verify-release-checks.mjs.
 
 on:
@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       update_baselines:
-        description: 'Re-seed visual-regression baselines (upload for review)'
+        description: 'Update visual-regression baselines (upload for review)'
         type: boolean
         default: false
 
@@ -61,8 +61,10 @@ jobs:
       # Runs every apps/desktop/tests/*.eval.test.ts flow on a virtual display.
       # Each flow captures screenshot evidence under
       # apps/desktop/test-artifacts/evals/<flow>/, and the visual-regression
-      # flow diffs Home + Team (light + dark) against committed baselines
-      # (seeding any that are missing on first run).
+      # flow checks Home across Mercury density/scheme combinations, Team, and
+      # Home, Projects, and Knowledge at 800/1024/1440px against committed
+      # baselines. Missing baselines fail unless an explicit update run writes
+      # them for review.
       #
       # Contract selectors (keep dual-updated if UI renames):
       #   - Admin nav: [data-nav-view="admin"]  (Sidebar ADMIN_NAV_ITEM)
@@ -82,10 +84,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      # On first run (or an explicit re-seed) the visual baselines are written
-      # into the tree but not committed. Upload them so a maintainer can review
-      # and commit the accepted baselines.
-      - name: Upload seeded/updated visual baselines
+      # Explicit update runs write visual baselines into the tree but do not
+      # commit them. Upload the complete set for maintainer review.
+      - name: Upload visual baselines
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

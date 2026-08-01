@@ -1,8 +1,9 @@
-import type {
-  KnowledgeProposalInput,
-  KnowledgeReviewInput,
-  KnowledgeSnapshotOptions,
-  KnowledgeSpaceVisibility,
+import {
+  knowledgeSpaceIdFromCreationId,
+  type KnowledgeProposalInput,
+  type KnowledgeReviewInput,
+  type KnowledgeSnapshotOptions,
+  type KnowledgeSpaceVisibility,
 } from '@open-cowork/shared'
 
 // Minimal structural view of the renderer window we notify on knowledge changes —
@@ -29,6 +30,7 @@ type InternalKnowledgeSnapshotOptions = KnowledgeSnapshotOptions & KnowledgeStor
 type InternalKnowledgeProposalInput = KnowledgeProposalInput & KnowledgeStorageOptions
 type InternalKnowledgeReviewInput = KnowledgeReviewInput & KnowledgeStorageOptions
 type InternalKnowledgeSpaceInput = {
+  creationId?: string
   name: string
   visibility?: KnowledgeSpaceVisibility | null
   icon?: string | null
@@ -58,7 +60,10 @@ export function listKnowledgePageHistory(pageId: string, options: InternalKnowle
 }
 
 export function createKnowledgeSpace(input: InternalKnowledgeSpaceInput) {
-  const space = createSpaceState(input.workspaceId ?? '', input, input)
+  const space = createSpaceState(input.workspaceId ?? '', input, {
+    storageDataDir: input.storageDataDir,
+    ...(input.creationId ? { id: knowledgeSpaceIdFromCreationId(input.creationId) } : {}),
+  })
   publishKnowledgeUpdated()
   return space
 }

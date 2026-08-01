@@ -45,8 +45,6 @@ const BUDGET_BYTES = 220 * 1024
 const LAZY_STARTUP_FEATURES = [
   { name: 'DiffViewer', label: 'DiffViewer', required: true },
   { name: 'ProviderAuthControls', label: 'ProviderAuthControls', required: true },
-  { name: 'HomeReviewSnapshot', label: 'Home review snapshot', required: true },
-  { name: 'LaunchpadMotionGrid', label: 'Launchpad motion grid', required: true },
   { name: 'StatusBar', label: 'Status bar telemetry', required: true },
   { name: 'StudioPrimitives', label: 'Studio primitives shared chunk', required: false },
 ]

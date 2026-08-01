@@ -6,6 +6,7 @@ import {
   NEW_THREAD_SHORTCUT,
   SEARCH_THREADS_SHORTCUT,
   SETTINGS_SHORTCUT,
+  normalizeVoicePttShortcut,
   VOICE_PTT_SHORTCUT,
 } from '@open-cowork/shared'
 
@@ -30,8 +31,11 @@ export function createApplicationMenuTemplate(options: {
   isPackaged: boolean
   getMainWindow: () => BrowserWindow | null
   openExternalNavigation: (url: string) => void
+  voiceEnabled?: boolean
+  voicePttShortcut?: string | null
 }): MenuItemConstructorOptions[] {
   const { brandName, helpUrl, isPackaged, getMainWindow, openExternalNavigation } = options
+  const voicePttShortcut = normalizeVoicePttShortcut(options.voicePttShortcut) || VOICE_PTT_SHORTCUT
   return [
     {
       label: brandName,
@@ -50,15 +54,15 @@ export function createApplicationMenuTemplate(options: {
     {
       label: 'File',
       submenu: [
-        { label: 'New Thread', accelerator: NEW_THREAD_SHORTCUT, click: () => getMainWindow()?.webContents.send('action', 'new-thread') },
+        { label: 'New Chat', accelerator: NEW_THREAD_SHORTCUT, click: () => getMainWindow()?.webContents.send('action', 'new-thread') },
         { type: 'separator' },
         ...Array.from({ length: 9 }, (_value, index) => ({
-          label: `Switch to Project ${index + 1}`,
+          label: `Open Project Chat ${index + 1}`,
           accelerator: `CmdOrCtrl+${index + 1}`,
           click: () => getMainWindow()?.webContents.send('action', `project-switch:${index + 1}`),
         })),
         { type: 'separator' },
-        { label: 'Export Thread...', accelerator: 'CmdOrCtrl+Shift+E', click: () => getMainWindow()?.webContents.send('action', 'export') },
+        { label: 'Export Chat…', accelerator: 'CmdOrCtrl+Shift+E', click: () => getMainWindow()?.webContents.send('action', 'export') },
         { type: 'separator' },
         { role: 'close' },
       ],
@@ -74,13 +78,17 @@ export function createApplicationMenuTemplate(options: {
         { role: 'paste' },
         { role: 'selectAll' },
         { type: 'separator' },
-        { label: 'Search Threads', accelerator: SEARCH_THREADS_SHORTCUT, click: () => getMainWindow()?.webContents.send('action', 'search') },
-        { type: 'separator' },
-        {
-          label: 'Toggle Voice Dictation',
-          accelerator: VOICE_PTT_SHORTCUT,
-          click: () => getMainWindow()?.webContents.send('action', 'voice-ptt-toggle'),
-        },
+        { label: 'Search Chats', accelerator: SEARCH_THREADS_SHORTCUT, click: () => getMainWindow()?.webContents.send('action', 'search') },
+        ...(options.voiceEnabled === true
+          ? [
+              { type: 'separator' as const },
+              {
+                label: 'Toggle Voice Dictation',
+                accelerator: voicePttShortcut,
+                click: () => getMainWindow()?.webContents.send('action', 'voice-ptt-toggle'),
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -88,8 +96,8 @@ export function createApplicationMenuTemplate(options: {
       submenu: [
         { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => getMainWindow()?.webContents.send('action', 'toggle-sidebar') },
         { label: 'Command Palette…', accelerator: COMMAND_PALETTE_SHORTCUT, click: () => getMainWindow()?.webContents.send('action', 'command-palette') },
-        { label: 'Workflows', click: () => getMainWindow()?.webContents.send('navigate', 'playbooks') },
-        { label: 'Agents', accelerator: AGENTS_SHORTCUT, click: () => getMainWindow()?.webContents.send('navigate', 'team') },
+        { label: 'Playbooks', click: () => getMainWindow()?.webContents.send('navigate', 'playbooks') },
+        { label: 'Team', accelerator: AGENTS_SHORTCUT, click: () => getMainWindow()?.webContents.send('navigate', 'team') },
         { label: 'Tools & Skills', accelerator: CAPABILITIES_SHORTCUT, click: () => getMainWindow()?.webContents.send('navigate', 'tools') },
         { type: 'separator' },
         { role: 'togglefullscreen' },

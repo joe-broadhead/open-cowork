@@ -195,8 +195,8 @@ body {
   background:
     linear-gradient(90deg, var(--color-base) 0, transparent var(--space-4)) left center / var(--space-4) 100% no-repeat,
     linear-gradient(270deg, var(--color-base) 0, transparent var(--space-4)) right center / var(--space-4) 100% no-repeat,
-    linear-gradient(90deg, color-mix(in srgb, #000 24%, transparent), transparent var(--space-5)) left center / var(--space-5) 100% no-repeat,
-    linear-gradient(270deg, color-mix(in srgb, #000 24%, transparent), transparent var(--space-5)) right center / var(--space-5) 100% no-repeat;
+    linear-gradient(90deg, color-mix(in srgb, var(--color-shadow-ink) 24%, transparent), transparent var(--space-5)) left center / var(--space-5) 100% no-repeat,
+    linear-gradient(270deg, color-mix(in srgb, var(--color-shadow-ink) 24%, transparent), transparent var(--space-5)) right center / var(--space-5) 100% no-repeat;
   background-attachment: local, local, scroll, scroll;
 }
 
@@ -243,7 +243,7 @@ body {
     inset-inline-end: 0;
     z-index: var(--z-overlay);
     width: min(360px, calc(100% - var(--space-8)));
-    box-shadow: -16px 0 36px color-mix(in srgb, #000 32%, transparent);
+    box-shadow: -16px 0 36px color-mix(in srgb, var(--color-shadow-ink) 32%, transparent);
   }
 }
 

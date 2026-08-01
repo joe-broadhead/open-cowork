@@ -208,7 +208,12 @@ describe('SessionInspector', () => {
 
     render(<SessionInspector onClose={onClose} />)
 
-    expect(screen.getByRole('button', { name: 'Context' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Decisions & deliverables' })).toBeInTheDocument()
+    expect(screen.getByText('Review before you use, export, or share these outputs.')).toBeInTheDocument()
+    expect(screen.queryByText('Nothing ships until you approve.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Session')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+    expect(screen.getByRole('tab', { name: 'Context' })).toBeInTheDocument()
     expect(screen.getByText('Session')).toBeInTheDocument()
     await screen.findByText('90% of 10.0K')
     expect(screen.getByText('OpenAI')).toBeInTheDocument()
@@ -221,7 +226,7 @@ describe('SessionInspector', () => {
     await waitFor(() => expect(api.session.summarize).toHaveBeenCalledWith('session-1'))
     expect(screen.getByRole('button', { name: 'Compaction requested' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Hide' }))
+    await user.click(screen.getByRole('button', { name: 'Close Review' }))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
@@ -230,12 +235,13 @@ describe('SessionInspector', () => {
 
     render(<SessionInspector onClose={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: 'Messages' }))
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+    await user.click(screen.getByRole('tab', { name: 'Messages' }))
     expect(screen.getByText('Raw Messages')).toBeInTheDocument()
     await user.click(screen.getByText('msg-assistant'))
 
     expect(screen.getByText('Release notes look good.')).toBeInTheDocument()
-    expect(screen.getAllByText('Hide')).toHaveLength(2)
+    expect(screen.getByText('Hide')).toBeInTheDocument()
   })
 
   it('renders execution, session, and sub-agent todos with empty-state fallback avoided', async () => {
@@ -262,7 +268,10 @@ describe('SessionInspector', () => {
 
     render(<SessionInspector onClose={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: 'Todos' }))
+    expect(screen.queryByText('Todos tracked')).not.toBeInTheDocument()
+    expect(screen.queryByText('Draft release checklist')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+    await user.click(screen.getByRole('tab', { name: 'Todos' }))
     expect(screen.getByText('Coworker plan')).toBeInTheDocument()
     expect(screen.getByText('Session todos')).toBeInTheDocument()
     expect(screen.getByText('Specialist todos')).toBeInTheDocument()
@@ -320,6 +329,7 @@ describe('SessionInspector', () => {
 
     render(<SessionInspector onClose={vi.fn()} />)
 
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
     await user.click(screen.getByText('Artifacts'))
     expect(screen.getByText('Sandbox Artifacts')).toBeInTheDocument()
     expect(screen.getByText('chart.png')).toBeInTheDocument()
@@ -382,6 +392,7 @@ describe('SessionInspector', () => {
 
     render(<SessionInspector onClose={vi.fn()} />)
 
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
     await user.click(screen.getByText('Artifacts'))
     expect(await screen.findByText('chart.png')).toBeInTheDocument()
     expect(screen.getByText('Preview disabled')).toBeInTheDocument()
@@ -393,5 +404,59 @@ describe('SessionInspector', () => {
     expect(api.artifact.readAttachment).not.toHaveBeenCalled()
     expect(api.artifact.open).not.toHaveBeenCalled()
     expect(api.artifact.export).not.toHaveBeenCalled()
+  })
+
+  it('keeps telemetry behind Advanced and closes on Escape', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+
+    render(<SessionInspector onClose={onClose} />)
+
+    expect(screen.getByRole('heading', { name: 'Decisions & deliverables' })).toBeInTheDocument()
+    expect(screen.queryByText('Provider')).not.toBeInTheDocument()
+    expect(screen.queryByText('Recent Raw Messages')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+    expect(await screen.findByText('Provider')).toBeInTheDocument()
+    expect(screen.getByText('Recent Raw Messages')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps active task telemetry out of default Review and available in Advanced', async () => {
+    const user = userEvent.setup()
+    resetStore({
+      view: createView({
+        executionPlan: [
+          { id: 'plan-active', content: 'Plan the active run', status: 'in_progress', priority: 'high' },
+        ],
+        todos: [
+          { id: 'todo-active', content: 'Track the active run', status: 'pending', priority: 'medium' },
+        ],
+        taskRuns: [createTaskRun({
+          status: 'running',
+          todos: [
+            { id: 'task-todo-active', content: 'Execute the active run', status: 'pending', priority: 'high' },
+          ],
+        })],
+      }),
+    })
+    installInspectorApi()
+
+    render(<SessionInspector onClose={vi.fn()} />)
+
+    expect(screen.queryByText('Coworkers active')).not.toBeInTheDocument()
+    expect(screen.queryByText('1 task runs')).not.toBeInTheDocument()
+    expect(screen.queryByText('Todos tracked')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Advanced' }))
+
+    expect(screen.getByText('Coworkers active')).toBeInTheDocument()
+    expect(screen.getByText('1 task runs')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Todos' }))
+    expect(screen.getByText('Plan the active run')).toBeInTheDocument()
+    expect(screen.getByText('Track the active run')).toBeInTheDocument()
+    expect(screen.getByText('Execute the active run')).toBeInTheDocument()
   })
 })

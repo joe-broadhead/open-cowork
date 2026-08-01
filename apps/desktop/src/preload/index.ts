@@ -268,6 +268,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'capabilities:skills',
   'capabilities:skill-bundle',
   'capabilities:skill-bundle-file',
+  'adoption:feature-value',
   // E2E/eval only (main handler rejects unless OPEN_COWORK_E2E is enabled).
   'eval:emit-permission-request',
 ] as const
@@ -488,7 +489,7 @@ const api: CoworkAPI = {
   runtime: {
     status: () => invoke('runtime:status'),
     awaitInitialization: () => invoke('runtime:await-initialization'),
-    restart: () => invoke('runtime:restart'),
+    restart: (options) => invoke('runtime:restart', options),
   },
   projects: {
     list: () => invoke('projects:list'),
@@ -497,6 +498,9 @@ const api: CoworkAPI = {
   diagnostics: {
     perf: () => invoke('diagnostics:perf'),
     reportRendererError: (payload) => send('diagnostics:renderer-error', payload),
+  },
+  adoption: {
+    featureValue: (input) => invoke('adoption:feature-value', input),
   },
   app: {
     metadata: () => invoke('app:metadata'),

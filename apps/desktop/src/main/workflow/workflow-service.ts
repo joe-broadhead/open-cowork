@@ -2,7 +2,7 @@ import { configureWorkflowToolActions } from '@open-cowork/runtime-host/workflow
 import { attachWorkflowRunSession, claimDueWorkflowRun, createWorkflowRun, createWorkflowWebhookSecurityStore, getWorkflow, getWorkflowRun, getWorkflowWebhookSecret, listWorkflows as listWorkflowState, markWorkflowRunCompleted, markWorkflowRunFailed, regenerateWorkflowWebhookSecret, recoverInterruptedWorkflowRuns, updateWorkflowStatus } from '@open-cowork/runtime-host/workflow/workflow-store'
 import { getThreadIndexService } from '@open-cowork/runtime-host/thread-index/thread-index-service'
 import { toIsoTimestamp } from '@open-cowork/runtime-host/task-run-utils'
-import { getEffectiveSettings } from '@open-cowork/runtime-host/settings'
+import { getEffectiveSettings, isSetupComplete } from '@open-cowork/runtime-host/settings'
 import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '@open-cowork/runtime-host/session-registry'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
 import { getClientForDirectory, getRuntimeHomeDir } from '@open-cowork/runtime-host/runtime'
@@ -33,6 +33,7 @@ import { createKeyedPromiseChain } from '../promise-chain.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
+let isSetupValidated = isSetupComplete
 let showDesktopNotification: ((notification: WorkflowDesktopNotification) => void) | null = null
 let notificationNow = () => new Date()
 let schedulerTimer: NodeJS.Timeout | null = null
@@ -229,10 +230,12 @@ export function configureWorkflowService(options: {
   getMainWindow: () => BrowserWindow | null
   showDesktopNotification?: (notification: WorkflowDesktopNotification) => void
   notificationNow?: () => Date
+  isSetupValidated?: () => boolean
 }) {
   getMainWindow = options.getMainWindow
   showDesktopNotification = options.showDesktopNotification || null
   notificationNow = options.notificationNow || (() => new Date())
+  isSetupValidated = options.isSetupValidated || isSetupComplete
   configureWorkflowToolActions({ publishWorkflowUpdated })
   configureWorkflowWebhookServer(async ({ workflowId, auth, payload }) => {
     const workflow = getWorkflow(workflowId, workflowWebhookBaseUrl())
@@ -279,6 +282,7 @@ export function stopWorkflowService() {
     schedulerTimer = null
   }
   stopWorkflowWebhookServer()
+  isSetupValidated = isSetupComplete
 }
 
 export function listWorkflows(): WorkflowListPayload {
@@ -370,7 +374,7 @@ export function regenerateWebhookSecret(workflowId: string) {
 }
 
 async function runWorkflowSchedulerTickNow(now = new Date()) {
-  if (!isRuntimeReady()) return
+  if (!isRuntimeReady() || !isSetupValidated()) return
   while (true) {
     const run = claimDueWorkflowRun(now)
     if (!run) break

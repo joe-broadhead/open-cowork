@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useEffect } from 'react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -32,7 +33,13 @@ const mockSubscribeLocale = vi.hoisted(() => vi.fn(() => undefined))
 const mockRegisterExtraThemes = vi.hoisted(() => vi.fn())
 const mockSetDefaultThemeId = vi.hoisted(() => vi.fn())
 const mockApplyAppearancePreferences = vi.hoisted(() => vi.fn())
+const mockSaveAppearancePreferences = vi.hoisted(() => vi.fn())
 const mockRegisterExtraStarterTemplates = vi.hoisted(() => vi.fn())
+const featureValueTelemetry = vi.hoisted(() => ({
+  recordFeatureValueDiscovery: vi.fn(),
+}))
+
+vi.mock('./helpers/feature-value-telemetry', () => featureValueTelemetry)
 
 vi.mock('./hooks/useOpenCodeEvents', () => ({
   useOpenCodeEvents: mockUseOpenCodeEvents,
@@ -61,6 +68,7 @@ vi.mock('./helpers/theme-presets', () => ({
 
 vi.mock('./helpers/theme', () => ({
   applyAppearancePreferences: mockApplyAppearancePreferences,
+  saveAppearancePreferences: mockSaveAppearancePreferences,
 }))
 
 vi.mock('./components/agents/starter-templates', () => ({
@@ -94,11 +102,13 @@ vi.mock('./components/layout/Sidebar', () => ({
     onViewChange,
     searchRequestNonce,
     settingsRequestNonce,
+    onSetupRequired,
   }: {
     currentView: string
     onViewChange: (view: AppNavigationTarget) => void
     searchRequestNonce: number
     settingsRequestNonce: number
+    onSetupRequired?: () => void
   }) => (
     <aside
       data-testid="sidebar"
@@ -108,6 +118,7 @@ vi.mock('./components/layout/Sidebar', () => ({
     >
       <button type="button" onClick={() => onViewChange('team')}>Sidebar team</button>
       <button type="button" onClick={() => onViewChange('playbooks')}>Sidebar playbooks</button>
+      <button type="button" onClick={onSetupRequired}>Require setup</button>
     </aside>
   ),
 }))
@@ -175,15 +186,26 @@ vi.mock('./components/chat/ChatView', () => ({
 vi.mock('./components/workflows/WorkflowsPage', () => ({
   WorkflowsPage: ({
     onOpenThread,
+    featureValueDiscoveryEnabled,
     initialTarget,
   }: {
     onOpenThread: (sessionId: string) => void
+    featureValueDiscoveryEnabled?: boolean
     initialTarget?: { workflowId: string; runId?: string | null; run?: WorkflowRun | null } | null
-  }) => (
-    <div data-testid="workflows-page" data-target={JSON.stringify(initialTarget ?? null)}>
-      <button type="button" onClick={() => onOpenThread('workflow-session')}>Open workflow thread</button>
-    </div>
-  ),
+  }) => {
+    useEffect(() => {
+      if (featureValueDiscoveryEnabled) featureValueTelemetry.recordFeatureValueDiscovery('playbooks')
+    }, [featureValueDiscoveryEnabled])
+    return (
+      <div
+        data-testid="workflows-page"
+        data-target={JSON.stringify(initialTarget ?? null)}
+        data-discovery-enabled={String(Boolean(featureValueDiscoveryEnabled))}
+      >
+        <button type="button" onClick={() => onOpenThread('workflow-session')}>Open workflow thread</button>
+      </div>
+    )
+  },
 }))
 
 vi.mock('./components/agents/AgentsPage', () => ({
@@ -282,6 +304,8 @@ const completeSettings: EffectiveAppSettings = {
   privacyShareAnonymizedUsage: false,
   runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
   windowZoomFactor: 1,
+  appearanceColorScheme: 'dark',
+  appearanceThemeId: 'mercury',
   workflowLaunchAtLogin: false,
   workflowRunInBackground: false,
   workflowDesktopNotifications: true,
@@ -289,6 +313,7 @@ const completeSettings: EffectiveAppSettings = {
   workflowQuietHoursEnd: null,
   effectiveProviderId: 'openrouter',
   effectiveModel: 'anthropic/claude-sonnet-4',
+  setupComplete: true,
 }
 
 const config: PublicAppConfig = {
@@ -362,6 +387,16 @@ function resourceEvent(identity: ReturnType<typeof createResourceIdentity>) {
       deepLink: createResourceDeepLink(identity),
     },
   })
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
 }
 
 function resetSessionStore() {
@@ -505,6 +540,28 @@ function installMatchMedia(matchesInitial: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.removeItem('open-cowork-color-scheme')
+  window.localStorage.removeItem('open-cowork-ui-theme')
+  window.localStorage.removeItem('open-cowork-ui-accent')
+  mockApplyAppearancePreferences.mockImplementation(() => ({
+    colorScheme: window.localStorage.getItem('open-cowork-color-scheme') === 'light'
+      || window.localStorage.getItem('open-cowork-color-scheme') === 'system'
+      ? window.localStorage.getItem('open-cowork-color-scheme') as 'light' | 'system'
+      : 'dark',
+    uiTheme: window.localStorage.getItem('open-cowork-ui-theme') || 'mercury',
+    accent: 'theme',
+    uiFont: 'mona',
+    monoFont: 'sfmono',
+    density: 'regular',
+  }))
+  mockSaveAppearancePreferences.mockImplementation((preferences) => ({
+    colorScheme: preferences.colorScheme || 'dark',
+    uiTheme: preferences.uiTheme || 'mercury',
+    accent: 'theme',
+    uiFont: 'mona',
+    monoFont: 'sfmono',
+    density: 'regular',
+  }))
   window.history.replaceState(null, '', '/')
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
@@ -522,6 +579,115 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('records route discovery only after config and runtime make the enabled shell usable', async () => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', {
+      configurable: true,
+      value: true,
+    })
+    window.history.replaceState(null, '', '#/playbooks')
+    const configResult = deferred<PublicAppConfig>()
+    const runtimeResult = deferred<RuntimeStatus>()
+    const { api } = installAppApi()
+    vi.mocked(api.app.config).mockReturnValueOnce(configResult.promise)
+    vi.mocked(api.runtime.status).mockReturnValueOnce(runtimeResult.promise)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('loading-screen')).toBeInTheDocument()
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).not.toHaveBeenCalled()
+
+    await act(async () => {
+      configResult.resolve(config)
+      await configResult.promise
+    })
+    expect(await screen.findByTestId('workflows-page')).toBeInTheDocument()
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).not.toHaveBeenCalled()
+
+    await act(async () => {
+      runtimeResult.resolve(readyRuntime)
+      await runtimeResult.promise
+    })
+    await waitFor(() => expect(featureValueTelemetry.recordFeatureValueDiscovery).toHaveBeenCalledWith('playbooks'))
+  })
+
+  it('does not record discovery for a feature-disabled deep link', async () => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', {
+      configurable: true,
+      value: true,
+    })
+    window.history.replaceState(null, '', '#/playbooks')
+    const { api } = installAppApi({
+      appConfig: {
+        ...config,
+        features: { ...config.features, playbooks: false },
+      },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    await waitFor(() => expect(api.runtime.status).toHaveBeenCalled())
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).not.toHaveBeenCalledWith('playbooks')
+  })
+
+  it('does not record route discovery until protected authentication succeeds', async () => {
+    const user = userEvent.setup()
+    Object.defineProperty(window, '__coworkBrowserRuntime', {
+      configurable: true,
+      value: true,
+    })
+    window.history.replaceState(null, '', '#/playbooks')
+    installAppApi({
+      appConfig: {
+        ...config,
+        auth: { mode: 'google-oauth', enabled: true },
+      },
+      authState: { authenticated: false, email: null },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByTestId('login-screen')).toBeInTheDocument()
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Finish login' }))
+    expect(await screen.findByTestId('workflows-page')).toBeInTheDocument()
+    await waitFor(() => expect(featureValueTelemetry.recordFeatureValueDiscovery).toHaveBeenCalledWith('playbooks'))
+  })
+
+  it('does not record route discovery until required setup completes', async () => {
+    const user = userEvent.setup()
+    const { listeners } = installAppApi({
+      settings: {
+        ...completeSettings,
+        providerCredentials: {},
+        setupComplete: false,
+      },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByTestId('setup-screen')).toBeInTheDocument()
+    act(() => listeners.menuNavigate?.('playbooks'))
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Complete setup' }))
+    expect(await screen.findByTestId('workflows-page')).toBeInTheDocument()
+    await waitFor(() => expect(featureValueTelemetry.recordFeatureValueDiscovery).toHaveBeenCalledWith('playbooks'))
+  })
+
+  it('keeps populated but unvalidated provider settings in Setup', async () => {
+    installAppApi({
+      settings: {
+        ...completeSettings,
+        setupComplete: false,
+      } as EffectiveAppSettings & { setupComplete: boolean },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByTestId('setup-screen')).toBeInTheDocument()
+    expect(screen.queryByTestId('home-page')).not.toBeInTheDocument()
+  })
+
   it('offers a skip link and moves focus only when the app view changes', async () => {
     const user = userEvent.setup()
     installAppApi()
@@ -618,12 +784,101 @@ describe('App', () => {
     expect(window.localStorage.getItem('open-cowork.preview-dismissed.0.0.0')).toBe('true')
   })
 
+  it.each(['light', 'system'] as const)(
+    'reconciles a legacy renderer %s preference into the startup settings mirror',
+    async (colorScheme) => {
+      window.localStorage.setItem('open-cowork-color-scheme', colorScheme)
+      window.localStorage.setItem('open-cowork-ui-theme', 'mercury')
+      const { api } = installAppApi({
+        settings: {
+          ...completeSettings,
+          appearanceColorScheme: undefined,
+          appearanceThemeId: undefined,
+        },
+      })
+
+      render(<App />)
+
+      expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(api.settings.set).toHaveBeenCalledWith({
+          appearanceColorScheme: colorScheme,
+          appearanceThemeId: 'mercury',
+          workspaceId: LOCAL_WORKSPACE_ID,
+        })
+      })
+    },
+  )
+
+  it('hydrates the renderer from the persisted startup appearance instead of overwriting it', async () => {
+    window.localStorage.setItem('open-cowork-color-scheme', 'light')
+    window.localStorage.setItem('open-cowork-ui-theme', 'mercury')
+    const { api } = installAppApi({
+      settings: {
+        ...completeSettings,
+        appearanceColorScheme: 'dark',
+        appearanceThemeId: 'mercury',
+      },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    expect(mockSaveAppearancePreferences).toHaveBeenCalledWith({
+      colorScheme: 'dark',
+      uiTheme: 'mercury',
+    })
+    expect(api.settings.set).not.toHaveBeenCalled()
+  })
+
+  it('writes migrated theme and accent defaults back to a complete retired startup mirror', async () => {
+    window.localStorage.setItem('open-cowork-ui-theme', 'nord')
+    window.localStorage.setItem('open-cowork-ui-accent', 'azure')
+    mockSaveAppearancePreferences.mockImplementationOnce((preferences) => {
+      window.localStorage.setItem('open-cowork-ui-theme', 'mercury')
+      window.localStorage.setItem('open-cowork-ui-accent', 'theme')
+      return {
+        colorScheme: preferences.colorScheme || 'dark',
+        uiTheme: 'mercury',
+        accent: 'theme',
+        uiFont: 'mona',
+        monoFont: 'sfmono',
+        density: 'regular',
+      }
+    })
+    const { api } = installAppApi({
+      settings: {
+        ...completeSettings,
+        appearanceColorScheme: 'dark',
+        appearanceThemeId: 'nord',
+      },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    expect(mockSaveAppearancePreferences).toHaveBeenCalledWith({
+      colorScheme: 'dark',
+      uiTheme: 'nord',
+    })
+    await waitFor(() => {
+      expect(api.settings.set).toHaveBeenCalledWith({
+        appearanceColorScheme: 'dark',
+        appearanceThemeId: 'mercury',
+        workspaceId: LOCAL_WORKSPACE_ID,
+      })
+    })
+    expect(window.localStorage.getItem('open-cowork-ui-theme')).toBe('mercury')
+    expect(window.localStorage.getItem('open-cowork-ui-accent')).toBe('theme')
+  })
+
   it('routes incomplete installs through setup and resumes runtime refresh after completion', async () => {
     const user = userEvent.setup()
     const { api } = installAppApi({
       settings: {
         ...completeSettings,
         providerCredentials: {},
+        setupComplete: false,
       },
     })
 
@@ -634,6 +889,17 @@ describe('App', () => {
 
     expect(await screen.findByTestId('home-page')).toBeInTheDocument()
     expect(api.runtime.status).toHaveBeenCalled()
+  })
+
+  it('returns an already-mounted shell to setup when settings invalidates validation', async () => {
+    const user = userEvent.setup()
+    installAppApi()
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Require setup' }))
+    expect(await screen.findByTestId('setup-screen')).toBeInTheDocument()
   })
 
   it('routes authenticated apps through login before showing the workspace', async () => {

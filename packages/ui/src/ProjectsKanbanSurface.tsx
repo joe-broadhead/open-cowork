@@ -30,6 +30,7 @@ import {
   StudioPageHeader,
   StudioStatusDot,
   type KanbanPriority,
+  type StudioStatusTone,
   type StudioTone,
 } from './StudioPrimitives.js'
 import { cn } from './utils.js'
@@ -51,6 +52,8 @@ const RUN_STEPS = [
 
 const TONES: StudioTone[] = ['lead', 'strategist', 'builder', 'reviewer', 'operator', 'neutral']
 
+type CoworkerCatalogStatus = 'loading' | 'ready' | 'partial' | 'error'
+
 export type ProjectsKanbanSurfaceProps = Omit<ComponentPropsWithoutRef<'section'>, 'onError'> & {
   board: CoordinationBoardPayload | null
   loading?: boolean
@@ -58,8 +61,12 @@ export type ProjectsKanbanSurfaceProps = Omit<ComponentPropsWithoutRef<'section'
   disabled?: boolean
   disabledReason?: string
   agents?: string[]
+  agentCatalogStatus?: CoworkerCatalogStatus
+  agentCatalogMessage?: string
   platformLabel?: string
+  projectStatusLabel?: (status: CoordinationProject['status']) => string
   onReload?: () => Promise<void> | void
+  onReloadAgents?: () => Promise<void> | void
   onCreateProject?: (input: CoordinationProjectInput) => Promise<unknown> | unknown
   onPlanWithCleo?: (
     projectId: string,
@@ -82,6 +89,13 @@ type ProjectStats = {
 type Notice = {
   tone: 'success' | 'warning' | 'neutral'
   message: string
+}
+
+function defaultProjectStatusLabel(status: CoordinationProject['status']) {
+  if (status === 'active') return 'Active'
+  if (status === 'paused') return 'Paused'
+  if (status === 'completed') return 'Completed'
+  return 'Archived'
 }
 
 function percent(done: number, total: number) {
@@ -120,15 +134,13 @@ function toneForName(name: string): StudioTone {
 }
 
 function agentLabel(name: string) {
+  const normalized = name.trim().toLowerCase()
+  if (normalized === 'chief-of-staff' || normalized === 'cleo') return 'Cleo'
   return name
     .split(/[-_.\s]+/)
     .filter(Boolean)
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ') || name
-}
-
-function csv(value: string) {
-  return value.split(',').map((entry) => entry.trim()).filter(Boolean)
 }
 
 function unique(values: Array<string | null | undefined>) {
@@ -141,18 +153,39 @@ function priority(task: CoordinationTask): KanbanPriority {
   return 'medium'
 }
 
+function taskState(task: CoordinationTask): { label: string, tone: StudioStatusTone } {
+  if (task.status === 'failed') return { label: 'Failed', tone: 'danger' }
+  if (task.status === 'blocked') return { label: 'Blocked', tone: 'warning' }
+  if (task.status === 'cancelled') return { label: 'Cancelled', tone: 'warning' }
+  if (task.status === 'completed' || task.column === 'done') return { label: 'Completed', tone: 'success' }
+  if (task.column === 'review') return { label: 'Ready for review', tone: 'neutral' }
+  if (task.status === 'running') return { label: 'Running now', tone: 'accent' }
+  if (task.column === 'doing') return { label: 'In progress', tone: 'accent' }
+  if (task.column === 'planning') return { label: 'Planning', tone: 'neutral' }
+  if (task.assignedSessionId) return { label: 'Linked work', tone: 'neutral' }
+  return { label: 'Queued', tone: 'neutral' }
+}
+
 function taskRunLabel(task: CoordinationTask) {
-  if (task.status === 'running') return 'running'
-  if (task.assignedSessionId) return 'linked'
-  if (task.status === 'completed' || task.column === 'done') return 'done'
-  if (task.column === 'review') return 'review'
-  return null
+  const state = taskState(task)
+  if (state.label === 'Queued' || state.label === 'Planning') return null
+  return state.label
 }
 
 function timelineForTask(task: CoordinationTask) {
+  if (task.status === 'failed' || task.status === 'blocked' || task.status === 'cancelled') {
+    const state = taskState(task)
+    const queued = task.column === 'backlog' || task.column === 'planning'
+    return {
+      stateLabel: state.label,
+      currentStepId: queued ? 'queued' : 'running',
+      completedStepIds: queued ? [] : ['queued'],
+      live: false,
+    }
+  }
   if (task.column === 'done' || task.status === 'completed') {
     return {
-      stateLabel: task.status === 'completed' ? 'Completed, waiting for acceptance' : 'Done',
+      stateLabel: task.status === 'completed' ? 'Completed, waiting for acceptance' : 'Completed',
       currentStepId: 'done',
       completedStepIds: ['queued', 'running', 'review'],
       live: false,
@@ -182,16 +215,8 @@ function timelineForTask(task: CoordinationTask) {
       live: false,
     }
   }
-  if (task.status === 'blocked' || task.status === 'failed') {
-    return {
-      stateLabel: task.status === 'blocked' ? 'Blocked' : 'Failed',
-      currentStepId: 'running',
-      completedStepIds: ['queued'],
-      live: false,
-    }
-  }
   return {
-    stateLabel: 'Queued',
+    stateLabel: task.assignedSessionId ? 'Linked work' : 'Queued',
     currentStepId: 'queued',
     completedStepIds: [],
     live: false,
@@ -221,7 +246,7 @@ function TeamAvatars({ agents, limit = 4 }: { agents: string[], limit?: number }
         <CoworkerAvatar
           key={agent}
           name={agentLabel(agent)}
-          initials={initials(agent)}
+          initials={initials(agentLabel(agent))}
           tone={toneForName(agent)}
           presence={agent.toLowerCase() === 'cleo' || agent.toLowerCase() === 'chief-of-staff' ? 'working' : 'available'}
           size="sm"
@@ -233,20 +258,28 @@ function TeamAvatars({ agents, limit = 4 }: { agents: string[], limit?: number }
 }
 
 function ProjectCreateForm({
+  agents,
+  agentCatalogStatus,
+  agentCatalogMessage,
   disabled,
   disabledReason,
+  onReloadAgents,
   onSubmit,
   onCancel,
 }: {
+  agents: string[]
+  agentCatalogStatus: CoworkerCatalogStatus
+  agentCatalogMessage?: string
   disabled: boolean
   disabledReason?: string
+  onReloadAgents?: () => Promise<void> | void
   onSubmit: (input: CoordinationProjectInput) => Promise<boolean>
   onCancel: () => void
 }) {
   const [title, setTitle] = useState('')
   const [objective, setObjective] = useState('')
   const [description, setDescription] = useState('')
-  const [team, setTeam] = useState('cleo')
+  const [team, setTeam] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -261,13 +294,13 @@ function ProjectCreateForm({
         title: nextTitle,
         objective: nextObjective,
         description: description.trim() || null,
-        team: csv(team),
+        team,
       })
       if (!created) return
       setTitle('')
       setObjective('')
       setDescription('')
-      setTeam('cleo')
+      setTeam([])
     } finally {
       setSubmitting(false)
     }
@@ -280,10 +313,16 @@ function ProjectCreateForm({
           <span>Project</span>
           <input value={title} onChange={(event) => setTitle(event.currentTarget.value)} disabled={disabled || submitting} placeholder="Launch customer billing review" />
         </label>
-        <label>
-          <span>Team</span>
-          <input value={team} onChange={(event) => setTeam(event.currentTarget.value)} disabled={disabled || submitting} placeholder="cleo, engineer, reviewer" />
-        </label>
+        <CoworkerMultiPicker
+          legend="Coworkers"
+          agents={agents}
+          status={agentCatalogStatus}
+          statusMessage={agentCatalogMessage}
+          selected={team}
+          onChange={setTeam}
+          disabled={disabled || submitting}
+          onRetry={onReloadAgents}
+        />
         <label className="span">
           <span>Objective</span>
           <textarea value={objective} onChange={(event) => setObjective(event.currentTarget.value)} disabled={disabled || submitting} placeholder="What outcome should the coworkers produce?" rows={3} />
@@ -306,23 +345,29 @@ function ProjectCreateForm({
 function ProjectPlanForm({
   project,
   agents,
+  agentCatalogStatus,
+  agentCatalogMessage,
   disabled,
   disabledReason,
+  onReloadAgents,
   onPlan,
 }: {
   project: CoordinationProject
   agents: string[]
+  agentCatalogStatus: CoworkerCatalogStatus
+  agentCatalogMessage?: string
   disabled: boolean
   disabledReason?: string
+  onReloadAgents?: () => Promise<void> | void
   onPlan: (input: Omit<CoordinationChiefOfStaffPlanInput, 'projectId'>) => Promise<boolean>
 }) {
   const [objective, setObjective] = useState(project.objective)
-  const [team, setTeam] = useState(project.team.join(', ') || agents.join(', '))
+  const [team, setTeam] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     setObjective(project.objective)
-    setTeam(project.team.join(', ') || agents.join(', '))
+    setTeam(project.team.filter((agent) => agents.includes(agent)))
   }, [agents, project.id, project.objective, project.team])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -332,7 +377,7 @@ function ProjectPlanForm({
     try {
       await onPlan({
         objective: objective.trim() || project.objective,
-        assigneeAgents: csv(team),
+        assigneeAgents: team,
       })
     } finally {
       setSubmitting(false)
@@ -345,14 +390,82 @@ function ProjectPlanForm({
         <span>Objective for Cleo</span>
         <textarea value={objective} onChange={(event) => setObjective(event.currentTarget.value)} rows={3} disabled={disabled || submitting} />
       </label>
-      <label>
-        <span>Coworkers</span>
-        <input value={team} onChange={(event) => setTeam(event.currentTarget.value)} disabled={disabled || submitting} />
-      </label>
+      <CoworkerMultiPicker
+        legend="Coworkers"
+        agents={agents}
+        status={agentCatalogStatus}
+        statusMessage={agentCatalogMessage}
+        selected={team}
+        onChange={setTeam}
+        disabled={disabled || submitting}
+        onRetry={onReloadAgents}
+      />
       <Button type="submit" size="sm" variant="primary" leftIcon="sparkles" disabled={disabled || submitting} disabledReason={disabledReason}>
         Plan with Cleo
       </Button>
     </form>
+  )
+}
+
+function CoworkerMultiPicker({
+  legend,
+  agents,
+  status,
+  statusMessage,
+  selected,
+  onChange,
+  disabled,
+  onRetry,
+}: {
+  legend: string
+  agents: string[]
+  status: CoworkerCatalogStatus
+  statusMessage?: string
+  selected: string[]
+  onChange: (agents: string[]) => void
+  disabled: boolean
+  onRetry?: () => Promise<void> | void
+}) {
+  return (
+    <fieldset className="studio-coworker-picker span">
+      <legend>{legend}</legend>
+      {status === 'loading' ? <p>Loading coworkers…</p> : null}
+      {status === 'partial' ? (
+        <div>
+          <p>{statusMessage || 'Some coworkers could not be loaded. Available coworkers are still shown.'}</p>
+          {onRetry ? <Button type="button" size="sm" variant="secondary" onClick={() => void onRetry()}>Retry coworkers</Button> : null}
+        </div>
+      ) : null}
+      {status === 'error' ? (
+        <div>
+          <p>{statusMessage || 'Couldn’t load coworkers. Retry the roster before assigning a team.'}</p>
+          {onRetry ? <Button type="button" size="sm" variant="secondary" onClick={() => void onRetry()}>Retry coworkers</Button> : null}
+        </div>
+      ) : null}
+      {status === 'ready' && agents.length === 0 ? (
+        <p>No coworkers are available. Add one from Team, then return to this project.</p>
+      ) : agents.length > 0 ? (
+        <div className="studio-stage-chips" role="group" aria-label={legend}>
+          {agents.map((agent) => {
+            const active = selected.includes(agent)
+            return (
+              <button
+                key={agent}
+                type="button"
+                aria-pressed={active}
+                data-active={active ? 'true' : undefined}
+                disabled={disabled}
+                onClick={() => onChange(active
+                  ? selected.filter((entry) => entry !== agent)
+                  : [...selected, agent])}
+              >
+                {agentLabel(agent)}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </fieldset>
   )
 }
 
@@ -400,7 +513,7 @@ function ProjectHeader({
 }
 
 function coworkerAvatar(agent: string) {
-  return <CoworkerAvatar name={agentLabel(agent)} initials={initials(agent)} tone={toneForName(agent)} size="sm" aria-hidden="true" />
+  return <CoworkerAvatar name={agentLabel(agent)} initials={initials(agentLabel(agent))} tone={toneForName(agent)} size="sm" aria-hidden="true" />
 }
 
 /**
@@ -488,6 +601,7 @@ function TaskDrawer({
   }
 
   const timeline = timelineForTask(task)
+  const state = taskState(task)
   const allAgents = unique([task.assigneeAgent, ...agents])
   const selectedAgent = handoffAgent || task.assigneeAgent || allAgents[0] || ''
 
@@ -495,7 +609,7 @@ function TaskDrawer({
     <aside className="studio-task-drawer" aria-label="Task detail">
       <header className="studio-task-drawer__header">
         <div>
-          <StudioStatusDot tone={task.status === 'running' ? 'accent' : task.column === 'done' ? 'success' : 'neutral'} label={task.status} />
+          <StudioStatusDot tone={state.tone} label={state.label} />
           <h2>{task.title}</h2>
           {task.description ? <p>{task.description}</p> : null}
         </div>
@@ -510,7 +624,7 @@ function TaskDrawer({
         steps={RUN_STEPS}
         currentStepId={timeline.currentStepId}
         completedStepIds={timeline.completedStepIds}
-        sessionId={task.assignedSessionId || undefined}
+        linkedChat={Boolean(task.assignedSessionId)}
       />
       <section className="studio-task-drawer__section">
         <h3>Assignee</h3>
@@ -585,8 +699,12 @@ export function ProjectsKanbanSurface({
   disabled = false,
   disabledReason,
   agents = [],
+  agentCatalogStatus = 'ready',
+  agentCatalogMessage,
   platformLabel,
+  projectStatusLabel = defaultProjectStatusLabel,
   onReload,
+  onReloadAgents,
   onCreateProject,
   onPlanWithCleo,
   onMoveTask,
@@ -599,6 +717,11 @@ export function ProjectsKanbanSurface({
 }: ProjectsKanbanSurfaceProps) {
   const projects = useMemo(() => board?.projects || [], [board?.projects])
   const tasks = useMemo(() => board?.tasks || [], [board?.tasks])
+  const [showArchived, setShowArchived] = useState(false)
+  const activeProjects = useMemo(() => projects.filter((project) => project.status !== 'archived'), [projects])
+  const archivedProjects = useMemo(() => projects.filter((project) => project.status === 'archived'), [projects])
+  const isShowingArchived = showArchived && archivedProjects.length > 0
+  const visibleProjects = isShowingArchived ? archivedProjects : activeProjects
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projects[0]?.id || null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
@@ -607,14 +730,18 @@ export function ProjectsKanbanSurface({
   const [notice, setNotice] = useState<Notice | null>(null)
 
   useEffect(() => {
-    if (!projects.length) {
+    if (showArchived && archivedProjects.length === 0) setShowArchived(false)
+  }, [archivedProjects.length, showArchived])
+
+  useEffect(() => {
+    if (!visibleProjects.length) {
       setSelectedProjectId(null)
       return
     }
-    setSelectedProjectId((current) => current && projects.some((project) => project.id === current) ? current : projects[0]?.id || null)
-  }, [projects])
+    setSelectedProjectId((current) => current && visibleProjects.some((project) => project.id === current) ? current : visibleProjects[0]?.id || null)
+  }, [visibleProjects])
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) || projects[0] || null
+  const selectedProject = visibleProjects.find((project) => project.id === selectedProjectId) || visibleProjects[0] || null
   const projectTasks = useMemo(
     () => (selectedProject ? tasks.filter((task) => task.projectId === selectedProject.id) : []),
     [selectedProject, tasks],
@@ -733,7 +860,7 @@ export function ProjectsKanbanSurface({
             priority: priority(task),
             assignee: task.assigneeAgent ? {
               name: agentLabel(task.assigneeAgent),
-              initials: initials(task.assigneeAgent),
+              initials: initials(agentLabel(task.assigneeAgent)),
               tone: toneForName(task.assigneeAgent),
               presence: task.status === 'running' ? { status: 'working', pulse: true } : 'available',
             } : undefined,
@@ -751,20 +878,12 @@ export function ProjectsKanbanSurface({
     tasks: projectTasks.filter((task) => task.column === column.id),
   })) : []
 
-  if (loading && !board) {
-    return (
-      <section {...props} className={cn('studio-projects-surface', className)}>
-        <EmptyState icon="loader-circle" title="Loading projects" body="Hydrating project objectives, task state, and linked OpenCode work." />
-      </section>
-    )
-  }
-
   return (
     <section {...props} className={cn('studio-projects-surface', className)} data-platform={platformLabel || undefined}>
       <StudioPageHeader
         eyebrow={platformLabel}
         title="Projects"
-        description="Turn objectives into planned coworker work, track progress, and open the linked OpenCode sessions when execution exists."
+        description="Turn objectives into coworker tasks, track progress, and return to linked chats when work is ready."
         actions={[
           { id: 'reload', children: 'Refresh', leftIcon: 'rotate-ccw', onClick: () => void onReload?.(), disabled: loading },
           { id: 'new', children: 'New project', leftIcon: 'plus', variant: 'primary', onClick: () => setShowCreate(true), disabled, disabledReason: actionDisabledReason },
@@ -772,29 +891,44 @@ export function ProjectsKanbanSurface({
       />
       {error ? <p className="studio-project-notice" data-tone="warning">{error}</p> : null}
       {notice ? <p className="studio-project-notice" data-tone={notice.tone}>{notice.message}</p> : null}
+      {archivedProjects.length > 0 ? (
+        <div className="studio-stage-chips" role="group" aria-label="Project views">
+          <button type="button" aria-pressed={!showArchived} data-active={!showArchived ? 'true' : undefined} onClick={() => setShowArchived(false)}>
+            Active ({activeProjects.length})
+          </button>
+          <button type="button" aria-pressed={showArchived} data-active={showArchived ? 'true' : undefined} onClick={() => setShowArchived(true)}>
+            Archived ({archivedProjects.length})
+          </button>
+        </div>
+      ) : null}
       {showCreate ? (
         <ProjectCreateForm
+          agents={agents}
+          agentCatalogStatus={agentCatalogStatus}
+          agentCatalogMessage={agentCatalogMessage}
           disabled={disabled || !onCreateProject}
           disabledReason={actionDisabledReason || (!onCreateProject ? 'Project creation is unavailable.' : undefined)}
+          onReloadAgents={onReloadAgents}
           onSubmit={createProject}
           onCancel={() => setShowCreate(false)}
         />
       ) : null}
-      {!projects.length ? (
+      {loading && !board ? (
+        <EmptyState icon="loader-circle" title="Loading projects" body="Loading objectives, tasks, coworkers, and linked chats." />
+      ) : error && !board ? (
+        <EmptyState icon="kanban" title="Couldn’t load projects" body="Refresh to try loading the board again. Your saved projects have not been changed." />
+      ) : !visibleProjects.length ? (
         <EmptyState
           icon="kanban"
-          title="No projects yet"
-          body="Create a project, define the objective, then ask Cleo to plan the first set of tasks."
-          action={onCreateProject ? (
-            <Button size="sm" variant="primary" leftIcon="plus" onClick={() => setShowCreate(true)} disabled={disabled} disabledReason={actionDisabledReason}>
-              New project
-            </Button>
-          ) : undefined}
+          title={isShowingArchived ? 'No archived projects' : 'No projects yet'}
+          body={isShowingArchived
+            ? 'Projects you archive will stay available here for reference.'
+            : 'Create a project, define its objective, then plan the first set of coworker tasks.'}
         />
       ) : (
         <div className="studio-projects-layout">
           <aside className="studio-projects-list" aria-label="Projects list">
-            {projects.map((project) => {
+            {visibleProjects.map((project) => {
               const projectTasksForCard = byProject.get(project.id) || []
               const stats = projectStats(projectTasksForCard)
               const cardAgents = unique([...project.team, ...projectTasksForCard.map((task) => task.assigneeAgent)])
@@ -806,7 +940,7 @@ export function ProjectsKanbanSurface({
                   progress={stats.progress}
                   progressLabel={stats.label}
                   meta={<TeamAvatars agents={cardAgents} />}
-                  status={{ label: project.status, tone: project.status === 'completed' ? 'success' : project.status === 'paused' ? 'warning' : 'accent' }}
+                  status={{ label: projectStatusLabel(project.status), tone: project.status === 'completed' ? 'success' : project.status === 'paused' ? 'warning' : 'accent' }}
                   role="button"
                   tabIndex={0}
                   aria-pressed={selectedProject?.id === project.id}
@@ -840,9 +974,12 @@ export function ProjectsKanbanSurface({
                 {showPlan ? (
                   <ProjectPlanForm
                     project={selectedProject}
-                    agents={allAgents}
+                    agents={agents}
+                    agentCatalogStatus={agentCatalogStatus}
+                    agentCatalogMessage={agentCatalogMessage}
                     disabled={disabled || !onPlanWithCleo}
                     disabledReason={actionDisabledReason || (!onPlanWithCleo ? 'Cleo planning is unavailable.' : undefined)}
+                    onReloadAgents={onReloadAgents}
                     onPlan={(input) => planProject(selectedProject, input)}
                   />
                 ) : null}

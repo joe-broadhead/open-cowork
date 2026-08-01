@@ -268,7 +268,7 @@
 /* Hero accent: the time-of-day word in the greeting carries the aurora gradient
    (periwinkle -> violet -> cyan) — the app's one signature "wow" gradient moment. */
 .studio-greeting-accent {
-  background-image: linear-gradient(112deg, var(--accent), var(--accent-2) 48%, #5fd6ff);
+  background-image: linear-gradient(112deg, var(--accent), var(--accent-2) 48%, var(--color-info));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

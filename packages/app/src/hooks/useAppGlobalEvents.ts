@@ -1,14 +1,16 @@
-import { useEffect, type Dispatch, type SetStateAction } from 'react'
-import { VOICE_PTT_SHORTCUT, type SessionInfo } from '@open-cowork/shared'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { normalizeVoicePttShortcut, VOICE_PTT_SHORTCUT, type SessionInfo } from '@open-cowork/shared'
 
 import { normalizeAppView, type AppView } from '../app-types'
 import { t } from '../helpers/i18n'
 import { switchToSession } from '../helpers/switchToSession'
 import { useSessionStore } from '../stores/session'
+import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from '../stores/session-workspace-keys'
 import { matchesAccelerator, requestVoicePttToggle } from './voice-ptt-hotkey'
 
 type UseAppGlobalEventsOptions = {
   runtimeReady: boolean
+  voiceEnabled: boolean
   view: AppView
   currentSessionId: string | null
   toggleSidebar: () => void
@@ -84,11 +86,15 @@ async function exportCurrentSession(sessionId: string) {
 }
 
 async function switchProjectByIndex(index: number, setView: (view: AppView) => void) {
+  const workspaceId = normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId)
+  if (workspaceId !== LOCAL_WORKSPACE_ID) return
   try {
     const session = await window.coworkApi.projects.switchByIndex(index)
     if (!session) return
     const store = useSessionStore.getState()
-    store.setSessions([session, ...store.sessions.filter((existing) => existing.id !== session.id)])
+    const workspaceSessions = store.sessionsByWorkspace[workspaceId] || []
+    store.setSessions([session, ...workspaceSessions.filter((existing) => existing.id !== session.id)], workspaceId)
+    if (normalizeWorkspaceId(store.activeWorkspaceId) !== workspaceId) return
     setView('chat')
     await switchToSession(session.id, { force: true })
   } catch (err) {
@@ -102,6 +108,7 @@ async function switchProjectByIndex(index: number, setView: (view: AppView) => v
 
 export function useAppGlobalEvents({
   runtimeReady,
+  voiceEnabled,
   view,
   currentSessionId,
   toggleSidebar,
@@ -112,6 +119,46 @@ export function useAppGlobalEvents({
   setAuthenticated,
   setShowCommandPalette,
 }: UseAppGlobalEventsOptions) {
+  const [voicePttShortcut, setVoicePttShortcut] = useState(VOICE_PTT_SHORTCUT)
+
+  useEffect(() => {
+    if (!voiceEnabled) {
+      setVoicePttShortcut(VOICE_PTT_SHORTCUT)
+      return
+    }
+    // Keep the saved accelerator while a previously-ready runtime recovers.
+    // Resetting here would briefly reactivate the default alongside Electron's
+    // persisted menu accelerator. Voice key handling is gated on runtimeReady.
+    if (!runtimeReady) return
+    let cancelled = false
+    let shortcutEventGeneration = 0
+    const applyShortcut = (value: unknown) => {
+      const normalized = normalizeVoicePttShortcut(value)
+      if (!cancelled && normalized) setVoicePttShortcut(normalized)
+    }
+    const handleShortcutChanged = (event: Event) => {
+      const shortcut = (event as CustomEvent<{ shortcut?: unknown }>).detail?.shortcut
+      const normalized = normalizeVoicePttShortcut(shortcut)
+      if (!cancelled && normalized) {
+        shortcutEventGeneration += 1
+        setVoicePttShortcut(normalized)
+      }
+    }
+    window.addEventListener('open-cowork:voice-shortcut-changed', handleShortcutChanged)
+    const settingsReadGeneration = shortcutEventGeneration
+    window.coworkApi.settings.get()
+      .then((settings) => {
+        if (shortcutEventGeneration === settingsReadGeneration) applyShortcut(settings.voicePttShortcut)
+      })
+      .catch(() => {
+        // The shared default remains active if settings are temporarily unavailable.
+      })
+    return () => {
+      cancelled = true
+      window.removeEventListener('open-cowork:voice-shortcut-changed', handleShortcutChanged)
+    }
+  }, [runtimeReady, voiceEnabled])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
@@ -148,10 +195,9 @@ export function useAppGlobalEvents({
         }
       }
 
-      // Voice PTT (JOE-1110): app-focused only. Uses the shared default so we do not
-      // touch settings IPC on the login shell (tests assert settings.get is gated).
-      // Custom accelerators are persisted for menu/docs; in-app matching uses default.
-      if (matchesAccelerator(e, VOICE_PTT_SHORTCUT)) {
+      // Voice PTT stays app-focused. Settings are read only after runtime readiness,
+      // so login shells do not gain a new settings IPC dependency.
+      if (runtimeReady && voiceEnabled && matchesAccelerator(e, voicePttShortcut)) {
         e.preventDefault()
         void requestVoicePttToggle()
         return
@@ -164,7 +210,7 @@ export function useAppGlobalEvents({
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [view, currentSessionId, toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch, setView])
+  }, [view, currentSessionId, toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch, setView, voiceEnabled, voicePttShortcut])
 
   useEffect(() => {
     const handleToggleSidebar = () => toggleSidebar()

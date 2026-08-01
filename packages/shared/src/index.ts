@@ -51,6 +51,7 @@ import type {
   RuntimeContextOptions,
   RuntimeInputDiagnostics,
   RuntimeLoadingStatus,
+  RuntimeRestartOptions,
   RuntimeStatus,
   RuntimeToolDescriptor,
   RecentProject,
@@ -186,6 +187,7 @@ import type {
   VoiceTtsSpeakInput,
   VoiceTtsVoiceInfo,
 } from './voice.js'
+import type { FeatureValueEventInput } from './feature-value-contract.js'
 import type {
   AdminAccess,
   AdminAuditExport,
@@ -234,6 +236,7 @@ export * from './desktop-pairing.js'
 export * from './events.js'
 export * from './explorer.js'
 export * from './extension-descriptor.js'
+export * from './feature-value-contract.js'
 export * from './http-client-source.js'
 export * from './jsonc.js'
 export * from './knowledge.js'
@@ -245,6 +248,7 @@ export * from './opencode-event-translator.js'
 export * from './session-machine-reducers.js'
 export * from './providers.js'
 export * from './project-source.js'
+export * from './product-capability-manifest.js'
 export * from './remote-approval-policy.js'
 export * from './resource-identity.js'
 export * from './runtime.js'
@@ -269,6 +273,7 @@ export * from './setup-health.js'
 export * from './skill-validation.js'
 export * from './threads.js'
 export * from './theme-preset-data.js'
+export * from './startup-appearance.js'
 export * from './tool-trace.js'
 export * from './updates.js'
 export * from './vega-spec.js'
@@ -474,10 +479,10 @@ export interface CoworkAPI {
   runtime: {
     status: () => Promise<RuntimeStatus>
     awaitInitialization: () => Promise<RuntimeLoadingStatus>
-    // User-initiated OpenCode runtime restart, called from the
-    // offline banner. Returns the post-reboot status so the banner
-    // can update without a second round-trip.
-    restart: () => Promise<RuntimeStatus>
+    // Generic retries are allowed only after setup is proven. Setup passes an
+    // explicit connection-validation purpose while bringing up the candidate
+    // provider/model runtime for its authoritative live check.
+    restart: (options?: RuntimeRestartOptions) => Promise<RuntimeStatus>
   }
   projects: {
     list: () => Promise<RecentProject[]>
@@ -489,6 +494,10 @@ export interface CoworkAPI {
     // render panics land in the sanitized diagnostics bundle. Payload
     // fields are all strings so log sanitizer runs uniformly.
     reportRendererError: (payload: { message: string; stack?: string; componentStack?: string; view?: string }) => void
+  }
+  adoption: {
+    /** Content-free, opt-in feature-value stage. Never accepts ids or free-form text. */
+    featureValue: (input: FeatureValueEventInput) => Promise<boolean>
   }
   app: {
     metadata: () => Promise<AppMetadata>

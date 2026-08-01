@@ -3,6 +3,7 @@ import type { ProductMcpLinkKind, ProductMcpProbe } from '@open-cowork/shared'
 import { Button, Card, Input } from '@open-cowork/ui'
 import { t } from '../../helpers/i18n'
 import { confirmMcpRemoval } from '../../helpers/destructive-actions'
+import { recordFeatureValueActivation, recordFeatureValueDiscovery } from '../../helpers/feature-value-telemetry'
 
 /**
  * Soft-link panel for optional local Gateway / Wiki CLIs (JOE-909).
@@ -17,6 +18,10 @@ export function ProductMcpLinkPanel({ onChanged }: { onChanged?: () => void }) {
   const [gatewayCommand, setGatewayCommand] = useState('')
   const [wikiCommand, setWikiCommand] = useState('')
   const [tokenFile, setTokenFile] = useState('')
+
+  useEffect(() => {
+    recordFeatureValueDiscovery('gateway-wiki-linking')
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -54,6 +59,7 @@ export function ProductMcpLinkPanel({ onChanged }: { onChanged?: () => void }) {
         setError(`${result.message} ${result.installHint}`)
         return
       }
+      recordFeatureValueActivation('gateway-wiki-linking')
       await refresh()
       onChanged?.()
     } catch (err) {
@@ -72,7 +78,7 @@ export function ProductMcpLinkPanel({ onChanged }: { onChanged?: () => void }) {
       if (!confirmation) return
       const ok = await window.coworkApi.custom.removeMcp(target, confirmation.token)
       if (!ok) {
-        setError(t('productMcp.unlinkFailed', 'Could not unlink {label}.', { label: probe.label }))
+        setError(t('productMcp.unlinkFailed', 'Could not unlink {{label}}.', { label: probe.label }))
         return
       }
       await refresh()
@@ -126,9 +132,9 @@ export function ProductMcpLinkPanel({ onChanged }: { onChanged?: () => void }) {
                 <div className="text-sm font-medium text-text">{probe.label}</div>
                 <div className="text-xs text-text-muted mt-0.5">
                   {probe.linked
-                    ? t('productMcp.linked', 'Linked as custom MCP “{name}”.', { name: probe.name })
+                    ? t('productMcp.linked', 'Linked as custom MCP “{{name}}”.', { name: probe.name })
                     : probe.found
-                      ? t('productMcp.found', 'Found: {path}', { path: probe.resolvedBinary || probe.name })
+                      ? t('productMcp.found', 'Found: {{path}}', { path: probe.resolvedBinary || probe.name })
                       : t('productMcp.missing', 'Not found on PATH.')}
                 </div>
                 {!probe.found && !probe.linked ? (

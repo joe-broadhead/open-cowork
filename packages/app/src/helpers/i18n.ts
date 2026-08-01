@@ -5,12 +5,13 @@ import {
   loadBuiltInCatalog,
 } from './i18n-catalogs/registry.ts'
 import type { LocaleCatalog } from './i18n-catalogs/types.ts'
+import { isSupportedAutomaticLocale, localeSupportStatus } from './product-support-matrix.ts'
 
 // Renderer-side i18n runtime. Three layers compose the active catalog:
 //
 //   1. Built-in catalogs (`i18n-catalogs/`) ship with the upstream
-//      app. Zero-config: a user whose OS locale matches a built-in
-//      sees the translated UI on first launch.
+//      app. Automatic detection selects supported locales only; incomplete
+//      non-English catalogs require an explicit user or downstream choice.
 //   2. Downstream overrides via `config.i18n.strings` merge on top of
 //      the built-in catalog, so a fork can retune a specific phrase
 //      for their brand without re-translating the whole app.
@@ -67,7 +68,8 @@ async function lookupBuiltInCatalog(locale: string | undefined): Promise<LocaleC
 function detectPreferredLocale(): string | undefined {
   try {
     const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
-    if (stored && stored.trim()) return stored
+    if (stored && stored.trim() && localeSupportStatus(stored) !== 'removed') return stored
+    if (stored) window.localStorage.removeItem(LANGUAGE_STORAGE_KEY)
   } catch {
     /* localStorage unavailable — fall through */
   }
@@ -77,6 +79,11 @@ function detectPreferredLocale(): string | undefined {
 function systemLocale(): string | undefined {
   if (typeof navigator !== 'undefined' && navigator.language) return navigator.language
   return undefined
+}
+
+function supportedAutomaticLocale(): string {
+  const locale = systemLocale()
+  return isSupportedAutomaticLocale(locale) ? (locale || 'en') : 'en'
 }
 
 // Apply document-level locale hints so assistive tech, CSS
@@ -117,12 +124,13 @@ async function rebuildCatalog() {
 
 // Seed the catalog + locale at app boot from the public app config.
 // Called once in App.tsx alongside brand / theme setup. Resolution
-// order: user preference (localStorage) → config.i18n.locale →
-// system locale → undefined (host default formatting, English text).
+// order: user preference (localStorage) → config.i18n.locale → a supported
+// system locale → English. Experimental catalogs require an explicit user or
+// downstream-config choice; OS detection never silently opts into mixed copy.
 export async function configureI18n(config?: AppI18nConfig) {
   const preferred = detectPreferredLocale()
   configuredLocale = config?.locale?.trim() || undefined
-  cachedLocale = preferred || configuredLocale || systemLocale() || undefined
+  cachedLocale = preferred || configuredLocale || supportedAutomaticLocale()
   downstreamStrings = config?.strings ? { ...config.strings } : {}
   await rebuildCatalog()
 }
@@ -132,21 +140,25 @@ export async function configureI18n(config?: AppI18nConfig) {
 // rebuilds the catalog from the matching built-in + downstream
 // overrides. Pass null to clear the user preference and fall back
 // to config + system detection.
-export async function setLocale(locale: string | null) {
+export async function setLocale(locale: string | null): Promise<boolean> {
+  let persisted = false
   try {
     if (locale) {
       window.localStorage.setItem(LANGUAGE_STORAGE_KEY, locale)
+      persisted = window.localStorage.getItem(LANGUAGE_STORAGE_KEY) === locale
     } else {
       window.localStorage.removeItem(LANGUAGE_STORAGE_KEY)
+      persisted = window.localStorage.getItem(LANGUAGE_STORAGE_KEY) === null
     }
   } catch {
     /* non-fatal */
   }
-  cachedLocale = locale || configuredLocale || systemLocale() || undefined
+  cachedLocale = locale || configuredLocale || supportedAutomaticLocale()
   // Clear memoized Intl formatters so subsequent formatDate calls
   // reflect the new locale immediately.
   dateFormatters.clear()
   await rebuildCatalog()
+  return persisted && (locale === null || cachedLocale === locale)
 }
 
 export function getLocale(): string | undefined {
@@ -205,12 +217,18 @@ export function formatDate(value: Date | string | number, options?: Intl.DateTim
 // language in `i18n-catalogs/registry.ts` is a one-line change that
 // flows straight through to the Settings picker with no manual
 // duplication.
-export function getBuiltInLocales(): Array<{ locale: string; nativeLabel: string; rtl: boolean }> {
+export function getBuiltInLocales(): Array<{
+  locale: string
+  nativeLabel: string
+  rtl: boolean
+  support: 'retained' | 'experimental' | 'removed'
+}> {
   return BUILT_IN_LOCALE_METADATA
     .map((catalog) => ({
       locale: catalog.locale,
       nativeLabel: catalog.nativeLabel,
       rtl: catalog.rtl === true,
+      support: localeSupportStatus(catalog.locale),
     }))
     .sort((a, b) => a.nativeLabel.localeCompare(b.nativeLabel))
 }

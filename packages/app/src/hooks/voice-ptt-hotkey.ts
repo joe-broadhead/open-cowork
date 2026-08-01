@@ -4,7 +4,7 @@
  * Menu / global-action paths call requestVoicePttToggle(); the topmost
  * registered composer handler runs. Scope is app-focused only — not OS-wide.
  */
-import { VOICE_PTT_SHORTCUT } from '@open-cowork/shared'
+import { normalizeVoicePttShortcut, VOICE_PTT_SHORTCUT } from '@open-cowork/shared'
 
 export type VoicePttToggleHandler = () => void | Promise<void>
 
@@ -27,30 +27,53 @@ export async function requestVoicePttToggle(): Promise<boolean> {
 
 /** Normalize an Electron-style accelerator for comparison. */
 export function normalizeAccelerator(value: string | null | undefined): string {
-  const trimmed = (value || '').trim()
-  return (trimmed || VOICE_PTT_SHORTCUT).replace(/\s+/g, '')
+  return normalizeVoicePttShortcut(value) || VOICE_PTT_SHORTCUT
+}
+
+type NavigatorPlatformSource = {
+  platform?: string
+  userAgentData?: {
+    platform?: string
+  }
+}
+
+function rendererPlatform(): string {
+  if (typeof navigator === 'undefined') return ''
+  const source = navigator as NavigatorPlatformSource
+  return source.userAgentData?.platform?.trim() || source.platform || ''
 }
 
 /**
- * Match a KeyboardEvent against an Electron accelerator like CmdOrCtrl+Shift+Space.
+ * Match a KeyboardEvent against a validated Electron accelerator.
  * Supports letter keys, Space, and Digit0-9. Intentionally small — not a full parser.
  */
 export function matchesAccelerator(
   event: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
   accelerator: string,
+  platform = rendererPlatform(),
 ): boolean {
   const parts = normalizeAccelerator(accelerator).split('+').filter(Boolean)
   if (parts.length === 0) return false
 
   let wantMetaOrCtrl = false
+  let wantMeta = false
+  let wantCtrl = false
   let wantAlt = false
   let wantShift = false
   let keyToken: string | null = null
 
   for (const part of parts) {
     const token = part.toLowerCase()
-    if (token === 'cmdorctrl' || token === 'commandorcontrol' || token === 'cmd' || token === 'command' || token === 'ctrl' || token === 'control' || token === 'super' || token === 'meta') {
+    if (token === 'cmdorctrl' || token === 'commandorcontrol') {
       wantMetaOrCtrl = true
+      continue
+    }
+    if (token === 'cmd' || token === 'command' || token === 'super' || token === 'meta') {
+      wantMeta = true
+      continue
+    }
+    if (token === 'ctrl' || token === 'control') {
+      wantCtrl = true
       continue
     }
     if (token === 'alt' || token === 'option') {
@@ -66,17 +89,32 @@ export function matchesAccelerator(
 
   if (!keyToken) return false
 
-  const hasMetaOrCtrl = event.metaKey || event.ctrlKey
-  if (wantMetaOrCtrl !== hasMetaOrCtrl) return false
+  if (wantMetaOrCtrl) {
+    const macOS = platform.toLowerCase().includes('mac')
+    if (event.metaKey !== macOS) return false
+    if (event.ctrlKey !== !macOS) return false
+  } else {
+    if (wantMeta !== event.metaKey) return false
+    if (wantCtrl !== event.ctrlKey) return false
+  }
   if (wantAlt !== event.altKey) return false
   if (wantShift !== event.shiftKey) return false
 
-  const eventKey = event.key.length === 1 ? event.key.toLowerCase() : event.key.toLowerCase()
+  const keyAliases: Record<string, string> = {
+    return: 'enter',
+    esc: 'escape',
+    up: 'arrowup',
+    down: 'arrowdown',
+    left: 'arrowleft',
+    right: 'arrowright',
+  }
+  const expectedKey = keyAliases[keyToken] || keyToken
+  const eventKey = event.key.toLowerCase()
   if (keyToken === 'space') {
     return eventKey === ' ' || eventKey === 'space' || event.code === 'Space'
   }
-  if (keyToken.length === 1) {
-    return eventKey === keyToken
+  if (/^\d$/.test(expectedKey)) {
+    return eventKey === expectedKey || event.code === `Digit${expectedKey}`
   }
-  return eventKey === keyToken
+  return eventKey === expectedKey
 }

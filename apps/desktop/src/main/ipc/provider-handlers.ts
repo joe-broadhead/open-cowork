@@ -1,9 +1,14 @@
-import { getEffectiveSettings, getProviderCredentialValue } from '@open-cowork/runtime-host/settings'
+import {
+  getEffectiveSettings,
+  getSetupValidationFingerprint,
+  invalidateSetupValidationProof,
+  isSetupComplete,
+  recordSuccessfulSetupValidation,
+} from '@open-cowork/runtime-host/settings'
 import { sdkErrorMessage } from '@open-cowork/runtime-host/sdk-error'
-import { getClient, writeRuntimeProviderApiAuth } from '@open-cowork/runtime-host/runtime'
-import { listNativeProviders, type ProviderLike } from '@open-cowork/runtime-host/provider-utils'
-import { isModelsDevAuthJsonBuiltin } from '@open-cowork/runtime-host/runtime-config-builder'
-import { connectNativeProviderApiKey, refreshProviderCatalog, modelInfoKeys } from '@open-cowork/runtime-host'
+import { getClient } from '@open-cowork/runtime-host/runtime'
+import { listNativeProviders } from '@open-cowork/runtime-host/provider-utils'
+import { refreshProviderCatalog } from '@open-cowork/runtime-host'
 import { unwrapNativeData } from '@open-cowork/runtime-host'
 import type { IntegrationInfo, IntegrationMethod, OpencodeClient, ProviderV2Info } from '@opencode-ai/sdk/v2'
 import type { IpcHandlerContext } from './context.ts'
@@ -16,14 +21,98 @@ import {
   normalizeProviderAuthMethod,
   resolveKnownProviderId,
 } from './app-handler-support.ts'
-import { getProviderDescriptor, getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '@open-cowork/runtime-host/config'
+import { getProviderDynamicCatalog, getPublicAppConfig, invalidatePublicConfigCache } from '@open-cowork/runtime-host/config'
 import { log } from '@open-cowork/shared/node'
+import { validateRuntimeSetupConnection } from '../setup/connection-validation.ts'
 type ElectronShell = typeof import('electron').shell
 const MAX_PROVIDER_MODEL_ID_LENGTH = 512
-const pendingOauthAttempts = new Map<string, { attemptID: string; mode: 'auto' | 'code' }>()
+const DEFAULT_OAUTH_ATTEMPT_TIMEOUT_MS = 10 * 60 * 1000
+const pendingOauthAttempts = new Map<string, {
+  attemptID: string
+  mode: 'auto' | 'code'
+  client: OpencodeClient
+  timeout: ReturnType<typeof setTimeout>
+}>()
 
 function oauthAttemptKey(providerId: string, method: number) {
   return `${providerId}\0${method}`
+}
+
+function invalidateNativeCredentialProof() {
+  const setupWasComplete = isSetupComplete()
+  invalidateSetupValidationProof()
+  return setupWasComplete
+}
+
+async function suspendUnvalidatedRuntime(context: IpcHandlerContext) {
+  const suspendRuntimeForSetup = context.suspendRuntimeForSetup || (async () => {
+    const runtime = await import('../index.ts')
+    await runtime.suspendRuntimeForSetup()
+  })
+  await suspendRuntimeForSetup()
+}
+
+async function restartRuntimeForSetupValidation(context: IpcHandlerContext) {
+  const restartRuntime = context.restartRuntimeForSetupValidation || (async () => {
+    const runtime = await import('../index.ts')
+    await runtime.rebootRuntimeForSetupValidation()
+  })
+  await restartRuntime()
+}
+
+async function completeNativeOauthCredentialChange(
+  context: IpcHandlerContext,
+  attemptKey: string,
+) {
+  const pending = pendingOauthAttempts.get(attemptKey)
+  if (pending) clearTimeout(pending.timeout)
+  pendingOauthAttempts.delete(attemptKey)
+  await suspendUnvalidatedRuntime(context)
+}
+
+async function cancelNativeOauthAttempt(
+  context: IpcHandlerContext,
+  attemptKey: string,
+  expectedAttemptId?: string,
+  suspend = true,
+) {
+  const pending = pendingOauthAttempts.get(attemptKey)
+  if (!pending || (expectedAttemptId && pending.attemptID !== expectedAttemptId)) return false
+  clearTimeout(pending.timeout)
+  pendingOauthAttempts.delete(attemptKey)
+  try {
+    await pending.client.v2.integration.attempt.cancel({
+      attemptID: pending.attemptID,
+    }, { throwOnError: true })
+  } catch (error) {
+    // Expired/completed attempts may already be gone server-side. The local
+    // ownership record and runtime suspension are still authoritative.
+    context.logHandlerError('provider:oauth-cancel', error)
+  } finally {
+    if (suspend) await suspendUnvalidatedRuntime(context)
+  }
+  return true
+}
+
+function oauthAttemptDelay(expires: unknown, override?: number) {
+  if (override !== undefined) return Math.max(1, override)
+  if (typeof expires !== 'number' || !Number.isFinite(expires)) return DEFAULT_OAUTH_ATTEMPT_TIMEOUT_MS
+  return Math.max(1, Math.min(expires - Date.now(), DEFAULT_OAUTH_ATTEMPT_TIMEOUT_MS))
+}
+
+function scheduleOauthAttemptExpiry(
+  context: IpcHandlerContext,
+  attemptKey: string,
+  attemptId: string,
+  expires: unknown,
+) {
+  const timeout = setTimeout(() => {
+    void cancelNativeOauthAttempt(context, attemptKey, attemptId).catch((error) => {
+      context.logHandlerError('provider:oauth-expire', error)
+    })
+  }, oauthAttemptDelay(expires, context.oauthAttemptTimeoutMs))
+  timeout.unref?.()
+  return timeout
 }
 
 function projectIntegrationMethod(method: IntegrationMethod) {
@@ -79,77 +168,6 @@ function normalizeProviderModelId(value: unknown) {
   return modelId
 }
 
-function findApiKeyCredential(providerId: string) {
-  const descriptor = getProviderDescriptor(providerId)
-  return descriptor?.credentials.find((credential) => {
-    const runtimeKey = credential.runtimeKey || credential.key
-    return runtimeKey === 'apiKey' || /api.*key/i.test(`${credential.key} ${credential.label}`)
-  }) || null
-}
-
-async function syncApiCredentialForConnectionTest(providerId: string) {
-  const client = getClient()
-  if (!client) throw new Error('The model service is not ready yet. Try testing the connection again in a moment.')
-  const credential = findApiKeyCredential(providerId)
-  if (!credential) return false
-
-  const settings = getEffectiveSettings()
-  const key = getProviderCredentialValue(settings, providerId, credential.key)
-  if (!key) return false
-
-  // Match boot: OpenRouter uses auth.json (+ composed openai-compatible config),
-  // not V2 integration.connect.key (which fails with "Key method not found").
-  if (isModelsDevAuthJsonBuiltin(providerId)) {
-    writeRuntimeProviderApiAuth(providerId, key)
-    return true
-  }
-
-  try {
-    await connectNativeProviderApiKey(client, providerId, key)
-  } catch (err) {
-    writeRuntimeProviderApiAuth(providerId, key)
-    log('provider', `Connection-test auth.json fallback for ${providerId}: ${sdkErrorMessage(err)}`)
-  }
-  return true
-}
-
-function providerMatches(provider: ProviderLike, providerId: string) {
-  return provider.id === providerId || provider.name === providerId
-}
-
-function providerHasModel(provider: ProviderLike, modelId: string) {
-  const models = provider.models || {}
-  const keys = Object.keys(models)
-  if (keys.length === 0) return true
-  const providerId = provider.id || provider.name
-  const wanted = new Set(modelInfoKeys(providerId, modelId))
-  return keys.some((key) => (
-    wanted.has(key) ||
-    modelInfoKeys(providerId, key).some((candidate) => candidate === modelId || wanted.has(candidate))
-  ))
-}
-
-async function testRuntimeProviderConnection(providerId: string, modelId: string) {
-  const client = getClient()
-  if (!client) throw new Error('The model service is not ready yet. Try testing the connection again in a moment.')
-  const providerName = getProviderDescriptor(providerId)?.name || providerId
-  const apiCredentialSynced = await syncApiCredentialForConnectionTest(providerId)
-  const providers = await listRuntimeProviders()
-  const provider = providers.find((entry) => providerMatches(entry, providerId))
-
-  if (!provider) {
-    throw new Error(`${providerName} is not available in the model service. Choose another provider or update setup settings.`)
-  }
-  if (!apiCredentialSynced && provider.connected === false) {
-    throw new Error(`${providerName} is not signed in yet. Sign in or enter an API key, then test again.`)
-  }
-  if (!providerHasModel(provider, modelId)) {
-    throw new Error(`${modelId} is not available from ${providerName}. Choose a listed model, then test again.`)
-  }
-
-  return { ok: true, providerId, modelId }
-}
-
 export async function getPublicAppConfigWithRuntimeModels() {
   const config = getPublicAppConfig()
   try {
@@ -187,23 +205,56 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
 
   context.ipcMain.handle('provider:auth-methods', async () => {
     const client = getClient()
-    if (!client) return {}
+    if (!client) throw new Error('Start the setup model service before loading provider sign-in options.')
     try {
       return await getNativeProviderAuthMethods(client)
     } catch (err) {
       context.logHandlerError('provider:auth-methods', err)
-      return {}
+      throw new Error('Provider sign-in options could not be loaded from the model service.', { cause: err })
     }
   })
 
   context.ipcMain.handle('provider:test-connection', async (_event, providerIdInput: unknown, modelIdInput: unknown) => {
     const providerId = resolveKnownProviderId(providerIdInput)
     const modelId = normalizeProviderModelId(modelIdInput)
+    let validationStarted = false
     try {
-      const result = await testRuntimeProviderConnection(providerId, modelId)
+      const settings = getEffectiveSettings()
+      if (settings.effectiveProviderId !== providerId || settings.effectiveModel !== modelId) {
+        throw new Error('Setup settings changed before the connection check. Save and test the selected connection again.')
+      }
+      const expectedFingerprint = getSetupValidationFingerprint()
+      if (!expectedFingerprint) {
+        throw new Error('Complete the required provider credentials before testing the connection.')
+      }
+      const setupWasComplete = invalidateNativeCredentialProof()
+      if (setupWasComplete) await suspendUnvalidatedRuntime(context)
+      if (!getClient() && (context.restartRuntimeForSetupValidation || !context.validateSetupConnection)) {
+        await restartRuntimeForSetupValidation(context)
+      }
+      validationStarted = true
+      const validateConnection = context.validateSetupConnection || validateRuntimeSetupConnection
+      const result = await validateConnection(providerId, modelId)
+      if (!result.ok || result.providerId !== providerId || result.modelId !== modelId) {
+        throw new Error('The connection check did not validate the selected provider and model. Test it again.')
+      }
+      const validatedSettings = recordSuccessfulSetupValidation(expectedFingerprint)
+      if (!validatedSettings.setupComplete) {
+        throw new Error('The connection was tested, but setup validation could not be saved. Test it again.')
+      }
+      // Promote the deliberately limited setup candidate to the full runtime
+      // only after the durable proof exists.
+      if (context.restartRuntime) await context.restartRuntime()
       log('provider', `Tested provider connection for ${providerId}/${modelId}`)
       return result
     } catch (err) {
+      if (validationStarted) {
+        try {
+          await suspendUnvalidatedRuntime(context)
+        } catch (suspendError) {
+          context.logHandlerError(`provider:test-connection suspend ${providerId}`, suspendError)
+        }
+      }
       context.logHandlerError(`provider:test-connection ${providerId}`, err)
       throw err
     }
@@ -215,7 +266,12 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
     const inputs = normalizeProviderAuthInputs(inputsInput)
     const client = getClient()
     if (!client) throw new Error('OpenCode runtime is not running. Save your provider settings first, then try provider login again.')
+    const key = oauthAttemptKey(providerId, method)
+    let invalidatedSetupWasComplete: boolean | null = null
     try {
+      if (pendingOauthAttempts.has(key)) {
+        throw new Error(`A provider login is already pending for ${providerId}. Finish it before starting another.`)
+      }
       const integrationID = await resolveProviderIntegrationId(client, providerId)
       const integrationResponse = await client.v2.integration.get({ integrationID }, { throwOnError: true })
       const integration = unwrapNativeData<IntegrationInfo>(integrationResponse)
@@ -223,6 +279,11 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
       if (!selected || selected.type !== 'oauth') {
         throw new Error(`Provider ${providerId} does not expose OAuth method ${method}.`)
       }
+      // OAuth may replace credentials before the callback is observed (auto
+      // mode). Persist the fail-closed state before the attempt can mutate
+      // auth, while keeping the daemon alive until the pending attempt ends.
+      const setupWasComplete = invalidateNativeCredentialProof()
+      invalidatedSetupWasComplete = setupWasComplete
       const result = await client.v2.integration.connect.oauth({
         integrationID,
         methodID: selected.id,
@@ -234,32 +295,45 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
         url: string
         instructions: string
         mode: 'auto' | 'code'
+        time?: { expires?: number | string }
       }>(result)
-      pendingOauthAttempts.set(oauthAttemptKey(providerId, method), {
-        attemptID: attempt.attemptID,
-        mode: attempt.mode,
-      })
       const authorization = normalizeProviderAuthorization({
         url: attempt.url,
         instructions: attempt.instructions,
         method: attempt.mode,
       })
-      if (authorization?.url) {
-        try {
-          const parsed = new URL(authorization.url)
-          if (!['http:', 'https:'].includes(parsed.protocol)) {
-            throw new Error(`Unsupported auth URL protocol: ${parsed.protocol}`)
-          }
-          if (!electronShell) throw new Error('Electron shell API is unavailable')
-          await electronShell.openExternal(authorization.url)
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err)
-          log('security', `Blocked provider auth URL for ${providerId}: ${message}`)
-          throw new Error('Provider auth URL was blocked because it was not a valid http(s) URL.', { cause: err })
-        }
+      if (!authorization?.url) {
+        throw new Error('Provider login did not return a valid authorization URL.')
       }
+      try {
+        const parsed = new URL(authorization.url)
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          throw new Error(`Unsupported auth URL protocol: ${parsed.protocol}`)
+        }
+        if (!electronShell) throw new Error('Electron shell API is unavailable')
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        log('security', `Blocked provider auth URL for ${providerId}: ${message}`)
+        throw new Error('Provider auth URL was blocked because it was not a valid http(s) URL.', { cause: err })
+      }
+      pendingOauthAttempts.set(key, {
+        attemptID: attempt.attemptID,
+        mode: attempt.mode,
+        client,
+        timeout: scheduleOauthAttemptExpiry(context, key, attempt.attemptID, attempt.time?.expires),
+      })
+      await electronShell.openExternal(authorization.url)
       return authorization
     } catch (err) {
+      if (invalidatedSetupWasComplete !== null) {
+        try {
+          if (!await cancelNativeOauthAttempt(context, key)) {
+            await suspendUnvalidatedRuntime(context)
+          }
+        } catch (suspendError) {
+          context.logHandlerError(`provider:oauth-authorize suspend ${providerId}`, suspendError)
+        }
+      }
       context.logHandlerError(`provider:oauth-authorize ${providerId}`, err)
       throw err
     }
@@ -280,23 +354,26 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
       }, { throwOnError: true })
       const status = unwrapNativeData<{ status: 'pending' | 'complete' | 'failed' | 'expired'; message?: string }>(statusResponse)
       if (status.status === 'complete') {
-        pendingOauthAttempts.delete(key)
+        await completeNativeOauthCredentialChange(context, key)
         return true
       }
       if (status.status === 'failed') {
-        pendingOauthAttempts.delete(key)
+        await completeNativeOauthCredentialChange(context, key)
         throw new Error(status.message || `Provider login failed for ${providerId}.`)
       }
       if (status.status === 'expired') {
-        pendingOauthAttempts.delete(key)
+        await completeNativeOauthCredentialChange(context, key)
         throw new Error(`Provider login expired for ${providerId}. Start login again.`)
       }
       if (pending.mode === 'auto' && !code) return false
-      await client.v2.integration.attempt.complete({
-        attemptID: pending.attemptID,
-        ...(code ? { code } : {}),
-      }, { throwOnError: true })
-      pendingOauthAttempts.delete(key)
+      try {
+        await client.v2.integration.attempt.complete({
+          attemptID: pending.attemptID,
+          ...(code ? { code } : {}),
+        }, { throwOnError: true })
+      } finally {
+        await completeNativeOauthCredentialChange(context, key)
+      }
       return true
     } catch (err) {
       context.logHandlerError(`provider:oauth-callback ${providerId}`, err)
@@ -306,26 +383,33 @@ export function registerProviderHandlers(context: IpcHandlerContext, electronShe
 
   context.ipcMain.handle('provider:auth-remove', async (_event, providerIdInput: unknown) => {
     const providerId = resolveKnownProviderId(providerIdInput)
-    const client = getClient()
-    if (!client) throw new Error('OpenCode runtime is not running. Start the runtime, then try provider sign-out again.')
+    invalidateNativeCredentialProof()
     try {
+      const client = getClient()
+      if (!client) throw new Error('OpenCode runtime is not running. Start the runtime, then try provider sign-out again.')
       const integrationID = await resolveProviderIntegrationId(client, providerId)
       const integrationResponse = await client.v2.integration.get({ integrationID }, { throwOnError: true })
       const integration = unwrapNativeData<IntegrationInfo>(integrationResponse)
       const credentialIds = integration.connections.flatMap((connection) => (
         connection.type === 'credential' ? [connection.id] : []
       ))
+      // Persist the fail-closed state before mutating OpenCode auth. If either
+      // storage or credential removal fails, a successful proof can never be
+      // left behind for credentials that may already be gone.
       await Promise.all(credentialIds.map((credentialID) => (
         client.v2.credential.remove({ credentialID }, { throwOnError: true })
       )))
       for (const key of pendingOauthAttempts.keys()) {
-        if (key.startsWith(`${providerId}\0`)) pendingOauthAttempts.delete(key)
+        if (!key.startsWith(`${providerId}\0`)) continue
+        await cancelNativeOauthAttempt(context, key, undefined, false)
       }
       log('provider', `Removed OpenCode-native auth for ${providerId}`)
       return true
     } catch (err) {
       context.logHandlerError(`provider:auth-remove ${providerId}`, err)
       throw err
+    } finally {
+      await suspendUnvalidatedRuntime(context)
     }
   })
 }

@@ -5,11 +5,11 @@ description: Coordination board for objectives, tasks, and linked OpenCode work 
 
 # Projects
 
-**Product decision (JOE-1052):** Projects is the **coordination board** surface —
+**Product decision:** Projects is the **coordination board** surface —
 objectives, Kanban-style tasks, assignees, and linked OpenCode work chats —
 not a full-text chat history browser.
 
-Quick session switching stays in the **sidebar recent-work list** and thread
+Quick session switching stays in the **sidebar recent-chat list** and chat
 search. Do not document Projects as “facets/tags search history” unless that
 UI ships again under an explicit product decision.
 
@@ -17,8 +17,8 @@ UI ships again under an explicit product decision.
 
 - Browse coordination **projects** (objectives) and their **tasks**
 - Move tasks across board columns
-- Open a linked conversation when the project has a source session
-- Open task work targets when coordination has linked a work session
+- Open a linked chat from a project
+- Open a task's linked chat when work has started
 - Assign work to coworkers from the roster when the authority supports it
 
 ## Authorities
@@ -26,8 +26,9 @@ UI ships again under an explicit product decision.
 | Workspace | Board behavior |
 | --- | --- |
 | Desktop Local | Local coordination store |
-| Desktop Cloud / Cloud Web | Cloud coordination APIs (must not silently fall back to local host paths) |
-| Standalone Gateway (deferred sessions) | Connection-only; board/session ops follow support matrix |
+| Desktop Cloud, Paired, or Gateway workspace | Restricted handoff; Desktop never falls back to the Local coordination store |
+| Cloud Web | Workspace-scoped Cloud coordination APIs; never local host paths |
+| Standalone Gateway | Connection-only; board/session operations follow its support matrix |
 
 ## Empty and restricted states
 
@@ -39,4 +40,4 @@ UI ships again under an explicit product decision.
 
 - [Desktop app guide](desktop-app.md)
 - [Coordination model](coordination-model.md)
-- [Product purity register](product-purity-register.md)
+- [Product contract](product-contract.md)

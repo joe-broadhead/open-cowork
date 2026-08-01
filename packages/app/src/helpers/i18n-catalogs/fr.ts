@@ -209,9 +209,6 @@ const strings: Record<string, string> = {
   'settings.updates.checkFailedGeneric': 'Échec de la vérification des mises à jour.',
 
   'settings.language.label': 'Langue',
-  'settings.language.description': 'Choisissez la langue de l\u2019interface. La sélection est mémorisée sur cet appareil. Les langues avec une traduction partielle afficheront les chaînes non traduites en anglais.',
-  'settings.language.systemDefault': 'Détection automatique (système)',
-  'settings.language.partialOption': '{{label}} — traduit à {{percent}} %',
 
   'settings.storage.supportDiagnostics': 'Diagnostics de support',
   'settings.storage.supportDescription': 'Copie un rapport en texte brut (configuration, entrées du runtime, journaux récents) dans votre presse-papiers. Les identifiants sont masqués afin que le rapport puisse être partagé.',
@@ -262,8 +259,6 @@ const strings: Record<string, string> = {
   // ────────────────────────────────────────────────────────────
   // Tools & Skills page
   // ────────────────────────────────────────────────────────────
-  'capabilities.tab.tools': 'Connexions',
-  'capabilities.tab.skills': 'Capacités',
 
   'workflows.regenerate': 'Régénérer',
   'workflows.copyWebhookUrl': 'Copier l’URL',
@@ -402,10 +397,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': 'Importer',
   'studioTeamPage.eyebrow': 'Équipe',
   'studioTeamPage.title': 'Coéquipiers',
-  'studioTeamPage.subtitle': 'Composez des agents OpenCode en une liste de coéquipiers avec rôles, compétences, outils et affectations de chat clairs.',
+  'studioTeamPage.subtitle': 'Créez une liste de coéquipiers avec des rôles, compétences, outils et affectations de chat clairs.',
   'studioTeamPage.customCount': 'personnalisés',
   'studioTeamPage.builtInCount': 'intégrés',
-  'studioTeamPage.runtimeCount': 'runtime',
   'studioTeamPage.search': 'Rechercher des coéquipiers, compétences, outils ou instructions…',
   'studioTeamPage.filterLabel': 'Filtre des coéquipiers',
   'studioTeamPage.importTitle': 'Importer un coéquipier personnalisé depuis un fichier .cowork-agent.json',
@@ -452,9 +446,6 @@ const strings: Record<string, string> = {
   'capabilities.title': 'Outils et compétences',
   'capabilities.subtitle': 'Inspectez les outils et bundles de compétences disponibles dans le contexte OpenCode actuel, y compris les ajouts intégrés, machine, projet et personnalisés.',
   'capabilities.addTool': 'Ajouter une connexion',
-  'capabilities.addSkillButton': 'Ajouter une capacité',
-  'capabilities.searchTools': 'Rechercher parmi les connexions, descriptions ou coéquipiers…',
-  'capabilities.searchSkills': 'Rechercher parmi les capacités, descriptions ou coéquipiers…',
   'capabilities.details': 'Détails',
   'capabilities.connection': 'Connexion',
   'capabilities.linkedCoworkers': 'Coéquipiers liés',
@@ -669,9 +660,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': 'Que doit traiter votre équipe aujourd\u2019hui ?',
   'studioHome.subtitle': '{{brand}} · Choisissez un collègue responsable, @mentionnez des spécialistes et relisez le travail au même endroit',
   'studioHome.composer.placeholder': 'Posez une question ou @mentionnez un collègue',
-  'studioHome.coachmark': 'Rédigez une demande, joignez du contexte ou @mentionnez un collègue — ⌘K pour les commandes.',
-  'home.statusStrip.ready': 'Prêt',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
 }
 
 export const fr: LocaleCatalog = {

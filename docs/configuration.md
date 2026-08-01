@@ -685,7 +685,7 @@ The upstream core ships these packaged-source MCPs:
 - `skills`
 - `workflows`
 
-It also ships one command-launched bundled MCP (`type: local` with a
+It also ships the command-launched bundled `time-keep` MCP (`type: local` with a
 `command` launcher rather than a packaged `packageName`):
 - `time-keep` — local-first agent clock: IANA timezone operations, calendar
   queries, date arithmetic, business days, offline holidays (2000–2030), and
@@ -1024,15 +1024,20 @@ Downstream builds can ship a partial localization overlay:
 Unset strings fall back to the built-in English copy. `locale` controls
 `Intl.NumberFormat` and `Intl.DateTimeFormat` output.
 
-**Locale coverage policy (2026-07-25).** English is the source of truth;
-the 11 bundled non-English catalogs are intentionally partial, and the
-Settings picker reports each locale's real coverage percentage
-(generated `coverage-status.ts`, pinned by `pnpm i18n:check` in CI).
-New keys are hand-translated — never bulk machine-translated. All 11
-locales stay in the picker while coverage is honestly labeled; a locale
-is only removed if its coverage figure becomes misleading in practice,
-and deepening a locale's coverage is contributor-driven rather than a
-release gate.
+**Maintained selector matrix.** English is the only supported product locale.
+The 11 bundled non-English catalogs are explicit experiments and the Settings
+picker labels their generated coverage percentage; operating-system detection
+never silently selects them. Promotion requires at least 95% of core static
+keys plus a primary-journey no-fallback suite. New keys are hand-translated —
+never bulk machine-translated. The executable matrix and ownership/exit
+criteria live in `packages/app/src/helpers/product-support-matrix.ts` and
+`pnpm i18n:check` fails when its generated coverage input drifts.
+
+The maintained appearance selector exposes the Mercury product theme,
+System/Mercury/Day color modes, and compact/regular/comfy density. Older theme
+and accent ids remain compatibility data for downstream configuration but are
+not public picker options; stored upstream choices migrate to Mercury and its
+theme-matched accent.
 
 Upstream Open Cowork keeps telemetry local on disk. Downstream builds
 that need a remote collector can enable:

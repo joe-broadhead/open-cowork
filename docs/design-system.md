@@ -112,7 +112,7 @@ must not reimplement a second visual system.
 | --- | --- | --- |
 | `ApprovalCard` (`@open-cowork/ui`) | **Adopted — shared base** | Presentational shell used by Approvals queue (`ApprovalsQueueSurface`) and by chat `packages/app/.../chat/ApprovalCard.tsx` (product logic + IPC). No second card chrome. |
 | `ApprovalsQueueSurface` / `ArtifactsLibrarySurface` / `ChannelsGatewaySurface` / `ProjectsKanbanSurface` | **Adopted** | Studio utility pages in `packages/app/src/components/studio/` and Projects board. |
-| `ReviewPanel`, `TaskLane`, `DiffView` | **Adopted** | Session inspector, Home review snapshot, chat diff controller. |
+| `ReviewPanel`, `TaskLane`, `DiffView` | **Adopted** | Chat session inspector, delegated-task lanes, and diff controller. |
 | `StudioPageHeader` | **Adopted** | Studio utility pages. |
 | `AgentCapabilityProfileView` | **Adopted** | Agent builder / Team capability profile. |
 | `CoworkerCard`, `CoworkerAvatar` | **Adopted for list/preview** | Team/list browse cards and gallery. **Agent builder** keeps app-local `AgentCard` (identity form + capability profile) — domain form, not a second card language. |

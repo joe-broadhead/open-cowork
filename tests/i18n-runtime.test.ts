@@ -39,6 +39,7 @@ const { setLocale, getLocale, t, configureI18n, getBuiltInLocales } = await impo
 describe('i18n runtime', () => {
   beforeEach(async () => {
     storage.clear()
+    navLanguage = 'en-US'
     documentEl.lang = ''
     documentEl.dir = ''
     await configureI18n(undefined)
@@ -49,7 +50,9 @@ describe('i18n runtime', () => {
     const codes = locales.map((l) => l.locale).sort()
     assert.deepEqual(codes, ['ar', 'de', 'en', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt', 'ru', 'zh'])
     assert.equal(locales.find((l) => l.locale === 'ar')?.rtl, true)
+    assert.equal(locales.find((l) => l.locale === 'ar')?.support, 'experimental')
     assert.equal(locales.find((l) => l.locale === 'fr')?.rtl, false)
+    assert.equal(locales.find((l) => l.locale === 'en')?.support, 'retained')
   })
 
   it('resolves `fr-CA` to the base French catalog via candidate fallback', async () => {
@@ -107,6 +110,14 @@ describe('i18n runtime', () => {
     navLanguage = 'en-US'
     await configureI18n(undefined)
     assert.equal(getLocale(), 'pt')
+  })
+
+  it('does not silently select an experimental locale from the operating system', async () => {
+    navLanguage = 'de-DE'
+    await configureI18n(undefined)
+    assert.equal(getLocale(), 'en')
+    assert.equal(documentEl.lang, 'en')
+    assert.equal(t('common.save', 'Save'), 'Save')
   })
 
   it('ignores unhyphenated locale keys from older previews', async () => {

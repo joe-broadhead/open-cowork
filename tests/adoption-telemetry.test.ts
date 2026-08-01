@@ -5,6 +5,7 @@ import {
   createAdoptionTelemetry,
   redactAdoptionEvent,
   resolveAdoptionTelemetryConfig,
+  resolveRuntimeAdoptionTelemetryConfig,
   type AdoptionEvent,
   type AdoptionTelemetryConfig,
 } from '@open-cowork/runtime-host/adoption-telemetry'
@@ -40,6 +41,8 @@ const MALICIOUS_PROPS: Record<string, unknown> = {
   surface: '/Users/joe/secret.txt',
   decision: 'the quick brown fox jumped over the lazy dog',
   count: 'joseph.broadhead.dev@gmail.com',
+  feature: '/Users/joe/secret.txt',
+  stage: 'the quick brown fox jumped over the lazy dog',
 }
 
 function assertNoForbiddenContent(serialized: string) {
@@ -75,6 +78,14 @@ test('redactAdoptionEvent keeps only allowlisted coarse values', () => {
   assert.equal(approval.ok, true)
   if (approval.ok) assert.deepEqual(approval.event.props, { decision: 'approved' })
 
+  const featureValue = redactAdoptionEvent('feature.value', {
+    feature: 'projects',
+    stage: 'activated',
+    sessionId: '/Users/joe/secret.txt',
+  })
+  assert.equal(featureValue.ok, true)
+  if (featureValue.ok) assert.deepEqual(featureValue.event.props, { feature: 'projects', stage: 'activated' })
+
   const launch = redactAdoptionEvent('app.launched', {
     platform: 'darwin',
     appVersion: '1.2.3',
@@ -102,19 +113,21 @@ test('emitter transmits only when opted in and never leaks content or paths', ()
 
   // Even the low-level `track` — the only path that accepts arbitrary props —
   // routes through the guard, so injected content cannot reach the transport.
-  telemetry.track('feature.opened', MALICIOUS_PROPS)
-  telemetry.track('session.started', { streamed: true, transcript: 'my secret prompt' })
-  telemetry.approvalResolved('denied')
-  telemetry.appLaunched({ platform: 'linux', appVersion: '9.9.9' })
+  assert.equal(telemetry.track('feature.opened', MALICIOUS_PROPS), true)
+  assert.equal(telemetry.track('session.started', { streamed: true, transcript: 'my secret prompt' }), true)
+  assert.equal(telemetry.approvalResolved('denied'), true)
+  assert.equal(telemetry.featureValue({ feature: 'voice', stage: 'repeated' }), true)
+  assert.equal(telemetry.appLaunched({ platform: 'linux', appVersion: '9.9.9' }), true)
   // Unknown event is dropped before transport.
-  telemetry.track('secret.exfiltration', MALICIOUS_PROPS)
+  assert.equal(telemetry.track('secret.exfiltration', MALICIOUS_PROPS), false)
 
-  assert.equal(captured.length, 4)
+  assert.equal(captured.length, 5)
   assertNoForbiddenContent(JSON.stringify(captured))
   assert.deepEqual(captured[0]?.props, {})
   assert.deepEqual(captured[1]?.props, { streamed: true })
   assert.deepEqual(captured[2]?.props, { decision: 'denied' })
-  assert.deepEqual(captured[3]?.props, { platform: 'linux', appVersion: '9.9.9' })
+  assert.deepEqual(captured[3]?.props, { feature: 'voice', stage: 'repeated' })
+  assert.deepEqual(captured[4]?.props, { platform: 'linux', appVersion: '9.9.9' })
 })
 
 test('emitter is inert when disabled or endpoint-less (opt-in default off)', () => {
@@ -132,11 +145,40 @@ test('emitter is inert when disabled or endpoint-less (opt-in default off)', () 
         calls += 1
       },
     })
-    telemetry.appLaunched({ platform: 'darwin', appVersion: '1.0.0' })
-    telemetry.featureOpened('admin')
-    telemetry.track('feature.opened', MALICIOUS_PROPS)
+    assert.equal(telemetry.appLaunched({ platform: 'darwin', appVersion: '1.0.0' }), false)
+    assert.equal(telemetry.featureOpened('admin'), false)
+    assert.equal(telemetry.track('feature.opened', MALICIOUS_PROPS), false)
     assert.equal(calls, 0, `disabled/endpoint-less config must not transmit: ${JSON.stringify(config)}`)
   }
+})
+
+test('emitter absorbs asynchronous transport failures without retrying', async () => {
+  let calls = 0
+  const telemetry = createAdoptionTelemetry({
+    getConfig: () => ({ enabled: true, endpoint: 'https://collector.example.com/ingest' }),
+    transport: async () => {
+      calls += 1
+      throw new Error('offline')
+    },
+  })
+
+  assert.equal(telemetry.featureValue({ feature: 'projects', stage: 'activated' }), true)
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  assert.equal(calls, 1)
+})
+
+test('feature-value delivery acknowledges only a completed transport', async () => {
+  let shouldFail = true
+  const telemetry = createAdoptionTelemetry({
+    getConfig: () => ({ enabled: true, endpoint: 'https://collector.example.com/ingest' }),
+    transport: async () => {
+      if (shouldFail) throw new Error('offline')
+    },
+  })
+
+  assert.equal(await telemetry.featureValueDelivered({ feature: 'projects', stage: 'discovered' }), false)
+  shouldFail = false
+  assert.equal(await telemetry.featureValueDelivered({ feature: 'projects', stage: 'discovered' }), true)
 })
 
 test('config resolution defaults off and honors env overrides + https-only sink', () => {
@@ -174,4 +216,46 @@ test('config resolution defaults off and honors env overrides + https-only sink'
     { OPEN_COWORK_ADOPTION_TELEMETRY_ENDPOINT: 'https://self-host.example.com/collect' },
   )
   assert.equal(envEndpoint.endpoint, 'https://self-host.example.com/collect')
+})
+
+test('runtime adoption gate requires operator and user consent and fails closed on settings errors', () => {
+  const operatorConfig = () => ({
+    telemetry: {
+      adoption: {
+        enabled: true,
+        endpoint: 'https://collector.example.com/ingest',
+      },
+    },
+  })
+
+  for (const scenario of [
+    { name: 'user declined', userConsent: false, settingsError: false, sends: false },
+    { name: 'dual consent', userConsent: true, settingsError: false, sends: true },
+    { name: 'settings read failed', userConsent: false, settingsError: true, sends: false },
+  ]) {
+    const captured: AdoptionEvent[] = []
+    const telemetry = createAdoptionTelemetry({
+      getConfig: () => resolveRuntimeAdoptionTelemetryConfig({
+        getConfig: operatorConfig,
+        getSettings: () => {
+          if (scenario.settingsError) throw new Error('settings unavailable')
+          return { privacyShareAnonymizedUsage: scenario.userConsent }
+        },
+        env: {},
+      }),
+      transport: (event) => captured.push(event),
+      now: () => new Date('2026-08-01T00:00:00.000Z'),
+    })
+
+    assert.equal(telemetry.featureOpened('tools'), scenario.sends, scenario.name)
+    assert.equal(captured.length, scenario.sends ? 1 : 0, scenario.name)
+    if (scenario.sends) {
+      assert.deepEqual(captured[0], {
+        schema: ADOPTION_TELEMETRY_SCHEMA,
+        ts: '2026-08-01T00:00:00.000Z',
+        event: 'feature.opened',
+        props: { surface: 'tools' },
+      })
+    }
+  }
 })

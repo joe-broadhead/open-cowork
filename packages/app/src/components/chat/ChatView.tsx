@@ -4,7 +4,7 @@ import {
   buildTaskRunAgentBySourceSession, resolveConversationTaskContext, type CoordinationBoardPayload, type PendingQuestion, } from '@open-cowork/shared'
 import type { AppNavigationTarget } from '../../app-types'
 import { useSessionStore, type Message, type PendingApproval, type TaskRun } from '../../stores/session'
-import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
+import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { switchToSession } from '../../helpers/switchToSession'
 import { t } from '../../helpers/i18n'
 import { ThinkingIndicator } from './ThinkingIndicator'
@@ -19,6 +19,8 @@ import {
 import { ChatThreadHeader } from './ChatThreadHeader'
 import { ChatTimelineItem } from './ChatTimelineItem'
 import { Button, WorkbenchLayout } from '@open-cowork/ui'
+import { listSessionArtifacts } from './session-artifacts'
+import { sessionReviewSummary } from './session-review-model'
 
 // Virtualize when the transcript gets long enough that inline
 // rendering starts to bite. Below the threshold we keep the simple
@@ -33,16 +35,41 @@ const VIRTUALIZE_THRESHOLD = 80
 const CHAT_ROW_ESTIMATE_PX = 140
 const THREAD_MAX_WIDTH_WITH_INSPECTOR = 820
 const THREAD_MAX_WIDTH = 'var(--measure)'
+const CHAT_REVIEW_PREFERENCE_KEY = 'open-cowork.chat.review-open'
+const CHAT_REVIEW_DRAWER_QUERY = '(max-width: 920px)'
+
+function readReviewPreference() {
+  try {
+    return window.localStorage.getItem(CHAT_REVIEW_PREFERENCE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function writeReviewPreference(open: boolean) {
+  try {
+    window.localStorage.setItem(CHAT_REVIEW_PREFERENCE_KEY, String(open))
+  } catch {
+    // Cosmetic preference only; storage failures must not block Review.
+  }
+}
+
+function isReviewDrawerMode() {
+  return typeof window.matchMedia === 'function'
+    && window.matchMedia(CHAT_REVIEW_DRAWER_QUERY).matches
+}
 
 type ChatViewProps = {
   onNavigate?: (target: AppNavigationTarget) => void
+  knowledgeEnabled?: boolean
 }
 
-export function ChatView({ onNavigate }: ChatViewProps = {}) {
+export function ChatView({ onNavigate, knowledgeEnabled = false }: ChatViewProps = {}) {
   const currentView = useSessionStore((s) => s.currentView)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const activeWorkspaceId = useSessionStore((s) => s.activeWorkspaceId)
   const sessions = useSessionStore((s) => s.sessions)
+  const chartArtifactsBySession = useSessionStore((s) => s.chartArtifactsBySession)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const [unrevertingSessionId, setUnrevertingSessionId] = useState<string | null>(null)
   const [capturePending, setCapturePending] = useState(false)
@@ -54,12 +81,14 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
   const pendingApprovals = currentView.pendingApprovals
   const pendingQuestions = currentView.pendingQuestions
   const isGenerating = currentView.isGenerating
+  const conversationPaneRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [focusedTaskRunId, setFocusedTaskRunId] = useState<string | null>(null)
   const [focusedTaskContextIds, setFocusedTaskContextIds] = useState<string[]>([])
   const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const restoreReviewTriggerFocusRef = useRef(false)
   const [autoFollowPaused, setAutoFollowPaused] = useState(false)
   const [transcriptAnnouncement, setTranscriptAnnouncement] = useState('')
   const announcedAssistantRef = useRef<{ sessionId: string | null; messageId: string | null }>({ sessionId: null, messageId: null })
@@ -68,6 +97,20 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
   const visibleApprovals = pendingApprovals
   const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
   const activeWorkspaceIsLocal = activeWorkspaceId === LOCAL_WORKSPACE_ID
+  const chartArtifacts = useMemo(
+    () => currentSessionId
+      ? chartArtifactsBySession[sessionWorkspaceKey(activeWorkspaceId, currentSessionId)] || []
+      : [],
+    [activeWorkspaceId, chartArtifactsBySession, currentSessionId],
+  )
+  const reviewArtifacts = useMemo(
+    () => listSessionArtifacts(currentView, chartArtifacts),
+    [chartArtifacts, currentView],
+  )
+  const reviewSummary = useMemo(
+    () => sessionReviewSummary(currentView, reviewArtifacts),
+    [currentView, reviewArtifacts],
+  )
   const currentSession = useMemo(
     () => sessions.find((session) => session.id === currentSessionId) || null,
     [sessions, currentSessionId],
@@ -156,7 +199,7 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
   // Local desktop workspace can capture; the proposal records the session id as a
   // 'thread' link targetId, so a pending one for this session means "already proposed".
   useEffect(() => {
-    if (!activeWorkspaceIsLocal || !currentSessionId) return
+    if (!knowledgeEnabled || !activeWorkspaceIsLocal || !currentSessionId) return
     let disposed = false
     void (async () => {
       try {
@@ -172,7 +215,7 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
       }
     })()
     return () => { disposed = true }
-  }, [activeWorkspaceId, activeWorkspaceIsLocal, currentSessionId])
+  }, [activeWorkspaceId, activeWorkspaceIsLocal, currentSessionId, knowledgeEnabled])
 
   useEffect(() => {
     let disposed = false
@@ -337,9 +380,45 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
     setFocusedQuestionId(null)
   }, [focusedQuestionId, pendingQuestions])
 
+  const inspectorSessionRef = useRef<string | null>(null)
   useEffect(() => {
-    setInspectorOpen(true)
-  }, [currentSessionId])
+    if (inspectorSessionRef.current === currentSessionId) return
+    inspectorSessionRef.current = currentSessionId
+    setInspectorOpen(Boolean(
+      currentSessionId
+      && reviewSummary.totalCount > 0
+      && readReviewPreference()
+      && !isReviewDrawerMode(),
+    ))
+  }, [currentSessionId, reviewSummary.totalCount])
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined
+    const media = window.matchMedia(CHAT_REVIEW_DRAWER_QUERY)
+    const closeUnsafeAutomaticPanel = () => {
+      if (media.matches) setInspectorOpen(false)
+    }
+    closeUnsafeAutomaticPanel()
+    media.addEventListener('change', closeUnsafeAutomaticPanel)
+    return () => media.removeEventListener('change', closeUnsafeAutomaticPanel)
+  }, [])
+
+  const setInspectorPreference = useCallback((open: boolean) => {
+    setInspectorOpen(open)
+    writeReviewPreference(open)
+  }, [])
+
+  const closeInspector = useCallback(() => {
+    restoreReviewTriggerFocusRef.current = isReviewDrawerMode()
+    setInspectorPreference(false)
+  }, [setInspectorPreference])
+
+  useEffect(() => {
+    if (inspectorOpen || !restoreReviewTriggerFocusRef.current) return
+    restoreReviewTriggerFocusRef.current = false
+    conversationPaneRef.current?.querySelector<HTMLButtonElement>('[data-action-id="review"]')
+      ?.focus({ preventScroll: true })
+  }, [inspectorOpen])
 
   const onFocusTask = (taskRun: TaskRun, visibleTaskRuns?: TaskRun[]) => {
     setFocusedTaskRunId(taskRun.id)
@@ -520,12 +599,13 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
   if (!currentSessionId) return null
 
   const conversationPane = (
-    <div className="flex-1 min-w-0 flex flex-col min-h-0">
+    <div ref={conversationPaneRef} className="flex-1 min-w-0 flex flex-col min-h-0">
         <ChatThreadHeader
           currentSession={currentSession}
           currentSessionId={currentSessionId}
           parentSession={parentSession}
           inspectorOpen={inspectorOpen}
+          reviewItemCount={reviewSummary.totalCount}
           unreverting={unrevertingSessionId === currentSessionId}
           taskContext={taskContext}
           onOpenParent={() => {
@@ -534,10 +614,10 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
             }
           }}
           onOpenBoard={taskContext ? () => onNavigate?.('projects') : undefined}
-          onCaptureToKnowledge={activeWorkspaceIsLocal ? captureToKnowledge : undefined}
+          onCaptureToKnowledge={knowledgeEnabled && activeWorkspaceIsLocal ? captureToKnowledge : undefined}
           captureToKnowledgePending={capturePending}
           captureToKnowledgeDone={capturedSessionId === currentSessionId}
-          onToggleInspector={() => setInspectorOpen((open) => !open)}
+          onToggleInspector={() => setInspectorPreference(!inspectorOpen)}
           onUnrevert={() => {
             setUnrevertingSessionId(currentSessionId)
             void window.coworkApi.session.unrevert(currentSessionId)
@@ -627,7 +707,7 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
   )
 
   const reviewPane = inspectorOpen
-    ? <SessionInspector onClose={() => setInspectorOpen(false)} />
+    ? <SessionInspector onClose={closeInspector} />
     : null
   const overlays = focusedTaskRun ? (
         <TaskDrillIn

@@ -3,10 +3,25 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { ensureRuntimeAfterAuthLogin, hasRuntimeSensitiveSettingsUpdate, mergeRuntimeProviderModels } from '../apps/desktop/src/main/ipc/app-handlers.ts'
+import {
+  ensureRuntimeAfterAuthLogin,
+  hasRuntimeSensitiveSettingsUpdate,
+  mergeRuntimeProviderModels,
+  runtimeSensitiveSettingsChanged,
+} from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { validateSettingsUpdate } from '../apps/desktop/src/main/ipc/object-validators.ts'
 import { clearConfigCaches, getPublicAppConfig } from '@open-cowork/runtime-host/config'
 import { createDisabledRuntimeToolingBridgeConsent } from '@open-cowork/shared'
+import { resolveDevelopmentSetupConnectionValidator } from '../apps/desktop/src/main/setup/connection-validation.ts'
+
+test('packaged builds cannot enable the setup fixture validator through environment variables', () => {
+  const env = {
+    OPEN_COWORK_E2E: '1',
+    OPEN_COWORK_E2E_SETUP_VALIDATION_KEY: 'fixture-key',
+  }
+  assert.equal(resolveDevelopmentSetupConnectionValidator({ isPackaged: true, env }), undefined)
+  assert.equal(typeof resolveDevelopmentSetupConnectionValidator({ isPackaged: false, env }), 'function')
+})
 
 test('ensureRuntimeAfterAuthLogin reboots an active runtime after successful sign-in', async () => {
   const calls: string[] = []
@@ -89,6 +104,23 @@ test('small model changes are runtime-sensitive settings updates', () => {
   assert.equal(hasRuntimeSensitiveSettingsUpdate({ workflowDesktopNotifications: false }), false)
 })
 
+test('runtime-sensitive settings only restart the runtime when their effective value changes', () => {
+  const before = {
+    selectedProviderId: 'openrouter',
+    selectedModelId: 'anthropic/claude-sonnet-4',
+    providerCredentials: { openrouter: { apiKey: 'secret' } },
+  }
+  assert.equal(runtimeSensitiveSettingsChanged(before, { ...before }), false)
+  assert.equal(runtimeSensitiveSettingsChanged(before, {
+    ...before,
+    selectedModelId: 'openai/gpt-5.5',
+  }), true)
+  assert.equal(runtimeSensitiveSettingsChanged(before, {
+    ...before,
+    notificationVoiceReplies: false,
+  }), false)
+})
+
 test('tooling bridge IPC accepts only the complete current granular consent contract', () => {
   const runtimeToolingBridge = createDisabledRuntimeToolingBridgeConsent()
   runtimeToolingBridge.categories.sourceControl = true
@@ -120,6 +152,27 @@ test('tooling bridge IPC accepts only the complete current granular consent cont
       },
     }),
     /category "ssh" must be a boolean/,
+  )
+})
+
+test('settings IPC accepts bounded startup appearance mirrors', () => {
+  assert.deepEqual(
+    validateSettingsUpdate({
+      appearanceColorScheme: 'system',
+      appearanceThemeId: 'northstar',
+    }),
+    {
+      appearanceColorScheme: 'system',
+      appearanceThemeId: 'northstar',
+    },
+  )
+  assert.throws(
+    () => validateSettingsUpdate({ appearanceColorScheme: 'sepia' }),
+    /Appearance color scheme must be system, dark, or light/,
+  )
+  assert.throws(
+    () => validateSettingsUpdate({ appearanceThemeId: '../northstar' }),
+    /Appearance theme id must use lowercase letters, numbers, and hyphens/,
   )
 })
 

@@ -1,26 +1,33 @@
 # Visual-regression baselines
 
-Committed baseline PNGs for the nightly `visual-regression.eval.test.ts` flow.
-Each file is a key surface captured in a specific color scheme, e.g.
-`home-dark.png`, `team-light.png`.
+Committed baseline PNGs for the monthly `visual-regression.eval.test.ts` flow.
+Each file is a key surface captured in a specific color scheme, density, and
+(for responsive surfaces) viewport width.
 
 ## How baselines are generated
 
-Baselines are **seeded on first run**, not hand-authored:
+Ordinary eval runs are read-only. A missing baseline fails the suite instead
+of silently blessing the current UI. Baselines are created or replaced only
+in the explicit review/update mode:
 
-1. The monthly `Monthly UI Evals` workflow (`.github/workflows/monthly-evals.yml`) runs the eval suite on a display.
-2. For any surface with no committed baseline, `compareToBaseline`
-   (`apps/desktop/tests/eval-helpers.ts`) writes the current capture here and
-   passes the check with a `seeded` note.
-3. The workflow uploads the seeded PNGs as the `nightly-eval-visual-baselines`
-   artifact. A maintainer reviews them and commits the accepted images into
-   this directory so subsequent runs diff against them.
+1. Run the eval suite with `OPEN_COWORK_EVAL_UPDATE_BASELINES=1` on a machine
+   with a display.
+2. Review every added or changed PNG in this directory. The suite covers the
+   retained Mercury scheme/density matrix plus Home, Projects, and Knowledge
+   states at 800px, 1024px, and 1440px.
+3. Commit only accepted images. Run the suite again without the update flag to
+   prove the committed baseline set is complete and read-only comparison passes.
 
-To (re)generate locally on a machine with a display:
+To validate committed baselines:
 
 ```sh
-pnpm test:e2e:evals                          # seeds any missing baselines
-OPEN_COWORK_EVAL_UPDATE_BASELINES=1 pnpm test:e2e:evals   # force re-seed all
+pnpm test:e2e:evals
+```
+
+To intentionally create or replace baselines for review:
+
+```sh
+OPEN_COWORK_EVAL_UPDATE_BASELINES=1 pnpm test:e2e:evals
 ```
 
 The diff runs inside the renderer via canvas (no image-decoding dependency)

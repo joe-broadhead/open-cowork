@@ -67,13 +67,9 @@ or switch a purely type-level dependency to `import type`.
 
 Large files concentrate responsibility and resist review. Every source file
 under `packages/app/src` has a line budget of **900 lines**, enforced by
-`tests/renderer-modularity-boundaries.test.ts`. A handful of files predate the
-budget and carry explicit, documented exceptions that act as decomposition
-backlogs — they may not grow past their pinned budget:
-
-| File | Budget | Decomposition backlog |
-| --- | --- | --- |
-| `components/HomePage.tsx` | 630 | Extract the launchpad feed, quick-actions, and hero sections into feature components; HomeComposer and its shared interaction helpers already live under `components/home/`. |
+`tests/renderer-modularity-boundaries.test.ts`. There are currently no renderer
+exceptions. Any future exception must carry a lower explicit budget and a
+documented decomposition backlog; it may never silently grow.
 
 JOE-884 decomposed the previous mega-files:
 
@@ -82,9 +78,9 @@ JOE-884 decomposed the previous mega-files:
 - `components/layout/Sidebar.tsx` → `SidebarBranding.tsx` + `WorkspaceSwitcher.tsx`
 - Desktop `event-message-handlers.ts` → native family in `event-message-native-handlers.ts`
 
-Budgets are ratchets: when a file shrinks, lower its budget; never raise a
-budget except to register a new, deliberately documented backlog. New code
-should land under the general 900-line limit from the start.
+Budgets are ratchets: remove an exception when a file falls under the general
+limit; never raise a budget except to register a new, deliberately documented
+backlog. New code should land under the general limit from the start.
 
 ## Where this is enforced
 

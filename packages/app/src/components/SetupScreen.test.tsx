@@ -38,6 +38,7 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     workflowQuietHoursEnd: null,
     effectiveProviderId: 'openrouter',
     effectiveModel: 'anthropic/claude-sonnet-4',
+    setupComplete: false,
     ...overrides,
   }
 }
@@ -273,11 +274,23 @@ describe('SetupScreen', () => {
 
   it('restarts with saved setup choices before testing the connection', async () => {
     const user = userEvent.setup()
-    const set = vi.fn(async () => settings())
+    const set = vi.fn()
+      .mockResolvedValueOnce(settings({ setupComplete: false }))
+      .mockResolvedValue(settings({ setupComplete: true }))
     const restart = vi.fn(async () => ({
       phase: 'ready' as const,
       message: 'Runtime is ready.',
       ready: true,
+      error: null,
+      updatedAt: new Date().toISOString(),
+    }))
+    const status = vi.fn(async () => ({
+      phase: 'ready' as const,
+      message: 'Runtime is ready.',
+      ready: true,
+      running: true,
+      sessions: 0,
+      uptimeMs: 0,
       error: null,
       updatedAt: new Date().toISOString(),
     }))
@@ -299,6 +312,7 @@ describe('SetupScreen', () => {
       runtime: {
         awaitInitialization,
         restart,
+        status,
       },
       provider: {
         testConnection,
@@ -341,16 +355,24 @@ describe('SetupScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Test connection' }))
     await waitFor(() => expect(screen.getByText(/Connection tested/)).toBeInTheDocument())
     await user.click(bridgeToggle)
-    expect(screen.queryByText(/provider or model changed/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/Connection tested/)).toBeInTheDocument()
+    expect(screen.getByText(/connection permissions changed/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Connection tested/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
     expect(screen.queryByText('Runtime is ready.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+    await waitFor(() => expect(screen.getByText(/Connection tested/)).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Get Started' }))
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
     expect(awaitInitialization).not.toHaveBeenCalled()
+    expect(testConnection).toHaveBeenCalledTimes(2)
     expect(testConnection).toHaveBeenCalledWith('openrouter', 'anthropic/claude-sonnet-4')
-    // Once for Test connection, once for Get Started best-effort restart.
-    expect(restart).toHaveBeenCalledTimes(2)
+    // The first unvalidated selection needs an explicit restart. On retest,
+    // settings:set has already applied the validated consent change, so setup
+    // reads status instead of restarting the runtime a second time.
+    expect(restart).toHaveBeenCalledTimes(1)
+    expect(restart).toHaveBeenCalledWith({ purpose: 'setup_connection_validation' })
+    expect(status).toHaveBeenCalledTimes(1)
     expect(set).toHaveBeenCalledWith(expect.objectContaining({
       selectedProviderId: 'openrouter',
       selectedModelId: 'anthropic/claude-sonnet-4',
@@ -408,17 +430,18 @@ describe('SetupScreen', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Runtime config rejected provider options'))
     expect(restart).toHaveBeenCalledTimes(1)
+    expect(restart).toHaveBeenCalledWith({ purpose: 'setup_connection_validation' })
     expect(testConnection).not.toHaveBeenCalled()
-    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Runtime config rejected provider options')
-    // Connection test failure does not block the minimal Get Started path.
-    expect(screen.getByRole('button', { name: 'Get Started' })).not.toBeDisabled()
+    expect(useSessionStore.getState().globalErrors).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+    expect(screen.getByText('Test the connection before continuing.')).toBeInTheDocument()
     expect(onComplete).not.toHaveBeenCalled()
   })
 
   it('keeps setup open and surfaces provider validation failures', async () => {
     const user = userEvent.setup()
     const testConnection = vi.fn(async () => {
-      throw new Error('Provider rejected the API key')
+      throw new Error("Error invoking remote method 'provider:test-connection': SafeSetupConnectionError: Provider rejected the API key")
     })
     const onComplete = vi.fn()
     installRendererTestCoworkApi({
@@ -449,20 +472,26 @@ describe('SetupScreen', () => {
     await user.click(testButton)
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Provider rejected the API key'))
-    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Provider rejected the API key')
-    // Optional connection test failure still allows continuing to chat.
-    expect(screen.getByRole('button', { name: 'Get Started' })).not.toBeDisabled()
+    expect(useSessionStore.getState().globalErrors).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+    expect(screen.getByText('Test the connection before continuing.')).toBeInTheDocument()
     expect(onComplete).not.toHaveBeenCalled()
   })
 
   it('uses model catalog defaults after credentialless provider auth', async () => {
     const user = userEvent.setup()
+    let setupComplete = false
     const set = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings({
       ...updates,
       effectiveProviderId: updates.selectedProviderId || 'github-copilot',
       effectiveModel: updates.selectedModelId || null,
+      setupComplete,
     }))
     const restart = vi.fn(async () => ({ ready: true, error: null }))
+    const testConnection = vi.fn(async (providerId: string, modelId: string) => {
+      setupComplete = true
+      return { ok: true, providerId, modelId }
+    })
     const onComplete = vi.fn()
     installRendererTestCoworkApi({
       provider: {
@@ -482,7 +511,7 @@ describe('SetupScreen', () => {
           defaultModel: 'gpt-5.4',
           models: { 'gpt-5.4': {} },
         }]),
-        testConnection: vi.fn(async (providerId: string, modelId: string) => ({ ok: true, providerId, modelId })),
+        testConnection,
       },
       settings: {
         get: vi.fn(async () => settings({
@@ -532,15 +561,134 @@ describe('SetupScreen', () => {
         'github-copilot': {},
       },
     }))
-    // Auth prepare + Test connection + Get Started best-effort restart.
-    expect(restart).toHaveBeenCalledTimes(3)
+    // Auth preparation and validation each restart once; completion does not.
+    expect(restart).toHaveBeenCalledTimes(2)
   })
 
-  it('allows Get Started without a successful connection test when provider and model are set', async () => {
+  it('revokes credentialless provider readiness immediately when native login is removed', async () => {
     const user = userEvent.setup()
-    const set = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings(updates))
+    let setupComplete = false
+    const connectedProviders = providersWithCopilot.map((provider) => (
+      provider.id === 'github-copilot' ? { ...provider, connected: true } : provider
+    ))
+    installRendererTestCoworkApi({
+      provider: {
+        authMethods: vi.fn(async () => ({
+          'github-copilot': [{ type: 'oauth', label: 'GitHub Copilot' }],
+        })),
+        logout: vi.fn(async () => true),
+        testConnection: vi.fn(async (providerId: string, modelId: string) => {
+          setupComplete = true
+          return { ok: true, providerId, modelId }
+        }),
+      },
+      settings: {
+        get: vi.fn(async () => settings({
+          selectedProviderId: 'github-copilot',
+          selectedModelId: 'gpt-5.4',
+          effectiveProviderId: 'github-copilot',
+          effectiveModel: 'gpt-5.4',
+        })),
+        getProviderCredentials: vi.fn(async () => ({})),
+        set: vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings({
+          ...updates,
+          effectiveProviderId: 'github-copilot',
+          effectiveModel: 'gpt-5.4',
+          setupComplete,
+        })),
+      },
+      runtime: {
+        restart: vi.fn(async () => ({ ready: true, error: null })),
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={connectedProviders}
+        defaultProviderId="github-copilot"
+        defaultModelId="gpt-5.4"
+        onComplete={vi.fn()}
+      />,
+    )
+
+    const testButton = await screen.findByRole('button', { name: 'Test connection' })
+    await waitFor(() => expect(testButton).not.toBeDisabled())
+    await user.click(testButton)
+    await screen.findByText(/Connection tested/)
+    expect(screen.getByText('Ready')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Get Started' })).not.toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Forget login' }))
+
+    await waitFor(() => expect(window.coworkApi.provider.logout).toHaveBeenCalledWith('github-copilot'))
+    expect(screen.queryByText('Ready')).not.toBeInTheDocument()
+    expect(screen.getByText('Not ready')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+  })
+
+  it('requires sign-in or an entered optional credential before an OAuth-capable provider is ready to test', async () => {
+    const optionalCredentialProvider: ProviderDescriptor = {
+      id: 'openai',
+      name: 'OpenAI',
+      description: 'OpenAI models',
+      connected: false,
+      credentials: [{
+        key: 'apiKey',
+        label: 'API key',
+        description: 'Optional when using OpenAI sign-in',
+        placeholder: 'sk-...',
+        secret: true,
+        required: false,
+      }],
+      models: [{ id: 'gpt-5.4', name: 'GPT-5.4' }],
+      defaultModel: 'gpt-5.4',
+    }
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings({
+          selectedProviderId: 'openai',
+          selectedModelId: 'gpt-5.4',
+          effectiveProviderId: 'openai',
+          effectiveModel: 'gpt-5.4',
+        })),
+        getProviderCredentials: vi.fn(async () => ({})),
+      },
+      provider: {
+        authMethods: vi.fn(async () => ({
+          openai: [{ type: 'oauth', label: 'OpenAI' }],
+        })),
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={[optionalCredentialProvider]}
+        defaultProviderId="openai"
+        defaultModelId="gpt-5.4"
+        onComplete={vi.fn()}
+      />,
+    )
+
+    const testButton = await screen.findByRole('button', { name: 'Test connection' })
+    expect(testButton).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+    expect(screen.getAllByText('Sign in to OpenAI or enter API key before testing the connection.')).toHaveLength(2)
+    expect(screen.getByLabelText('Connect a provider: Not complete')).toBeInTheDocument()
+    expect(screen.getByLabelText('Choose model: Not complete')).toBeInTheDocument()
+  })
+
+  it('does not claim readiness or allow Get Started until the current provider credentials and model validate', async () => {
+    const user = userEvent.setup()
+    let setupComplete = false
+    const set = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings({ ...updates, setupComplete }))
     const restart = vi.fn(async () => ({ ready: true, error: null }))
-    const testConnection = vi.fn(async () => ({ ok: true }))
+    const testConnection = vi.fn(async () => {
+      setupComplete = true
+      return { ok: true }
+    })
     const onComplete = vi.fn()
     installRendererTestCoworkApi({
       settings: {
@@ -562,11 +710,133 @@ describe('SetupScreen', () => {
       />,
     )
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Get Started' })).not.toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Test connection' })).not.toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+    expect(screen.getByText('Test the connection before continuing.')).toBeInTheDocument()
+    expect(screen.queryByText('Ready')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+    await screen.findByText(/Connection tested/)
+    expect(screen.getByText('Ready')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Get Started' })).not.toBeDisabled()
+
     await user.click(screen.getByRole('button', { name: 'Get Started' }))
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
-    expect(testConnection).not.toHaveBeenCalled()
+    expect(testConnection).toHaveBeenCalledWith('openrouter', 'anthropic/claude-sonnet-4')
     expect(set).toHaveBeenCalled()
     expect(restart).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not mark provider or model progress complete before required access exists', async () => {
+    const user = userEvent.setup()
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => ({})),
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByLabelText('Connect a provider: Not complete')).toBeInTheDocument()
+    expect(screen.getByLabelText('Choose model: Not complete')).toBeInTheDocument()
+    expect(screen.getByLabelText('Start chatting: Not complete')).toBeInTheDocument()
+
+    await user.type(await screen.findByPlaceholderText('sk-or-...'), 'sk-or-present')
+
+    expect(screen.getByLabelText('Connect a provider: Complete')).toBeInTheDocument()
+    expect(screen.getByLabelText('Choose model: Complete')).toBeInTheDocument()
+    expect(screen.getByLabelText('Start chatting: Not complete')).toBeInTheDocument()
+    expect(screen.queryByText('Ready')).not.toBeInTheDocument()
+  })
+
+  it('keeps setup open when durable validation is invalidated after the live connection test', async () => {
+    const user = userEvent.setup()
+    const set = vi.fn()
+      .mockResolvedValueOnce(settings({ setupComplete: false }))
+      .mockResolvedValueOnce(settings({ setupComplete: false }))
+    const onComplete = vi.fn()
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-ready' })),
+        set,
+      },
+      runtime: {
+        restart: vi.fn(async () => ({ ready: true, error: null })),
+      },
+      provider: {
+        testConnection: vi.fn(async (providerId: string, modelId: string) => ({ ok: true, providerId, modelId })),
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={onComplete}
+      />,
+    )
+
+    const apiKeyInput = await screen.findByPlaceholderText('sk-or-...')
+    await user.clear(apiKeyInput)
+    await user.type(apiKeyInput, 'sk-or-ready')
+    const testButton = await screen.findByRole('button', { name: 'Test connection' })
+    await waitFor(() => expect(testButton).not.toBeDisabled())
+    await user.click(testButton)
+    await screen.findByText(/Connection tested/)
+    await user.click(screen.getByRole('button', { name: 'Get Started' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/test the connection again/i))
+    expect(onComplete).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+  })
+
+  it('explains each missing setup step and exposes a truthful catalog-loading state', async () => {
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings({
+          selectedProviderId: null,
+          selectedModelId: null,
+          effectiveProviderId: null,
+          effectiveModel: null,
+        })),
+      },
+    })
+
+    const { rerender } = render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={[]}
+        defaultProviderId={null}
+        defaultModelId={null}
+        onComplete={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByRole('status', { name: 'Loading model catalog' })).toBeInTheDocument()
+    expect(screen.getAllByText('Wait for the model catalog to load.')).toHaveLength(2)
+
+    rerender(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findAllByText('Enter API key before testing the connection.')).toHaveLength(2)
   })
 })

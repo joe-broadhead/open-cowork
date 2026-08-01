@@ -93,14 +93,25 @@ export interface LaunchSmokeAppOptions {
   // branded `dataDirName` would resolve to, so the loader picks them
   // up during app bootstrap.
   seedBeforeLaunch?: (paths: { tempRoot: string; dataRoot: string }) => void
+  /** Preserve the public Open Cowork name while keeping ids and data isolated. */
+  productBranding?: boolean
+  /** Smoke defaults to Approvals-on for coverage; docs screenshots opt out. */
+  enableApprovals?: boolean
+  /** Secondary Knowledge is enabled only for smoke/eval journeys that cover it. */
+  enableKnowledge?: boolean
+  /** Keep production provider credential requirements for onboarding journeys. */
+  preserveProviderCredentialRequirements?: boolean
 }
 
 export interface LaunchSmokeSessionOptions {
   executablePath?: string
   appShellTimeoutMs?: number
+  /** Leave first-run settings untouched so onboarding/relaunch can be tested. */
+  bootstrapSettings?: boolean
 }
 
 const SMOKE_BRAND_NAME = 'Open Cowork Smoke'
+export const E2E_SETUP_VALIDATION_KEY = 'open-cowork-e2e-authoritative-key'
 const DEFAULT_APP_SHELL_TIMEOUT_MS = 90_000
 const SMOKE_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON = 'desktop smoke test uses source checkout runtime components'
 
@@ -210,19 +221,19 @@ export async function assertRuntimeComponentProvenance(page: Page) {
   }
 }
 
-function writeIsolatedConfig(tempRoot: string) {
+function writeIsolatedConfig(tempRoot: string, options?: LaunchSmokeAppOptions) {
   // Borrow upstream's config but rebrand dataDirName so the test install
   // can't collide with a developer's real Open Cowork state on disk.
   const sourcePath = join(repoRoot, 'open-cowork.config.json')
   const config = JSON.parse(readFileSync(sourcePath, 'utf8')) as Record<string, any>
   config.branding = {
     ...(config.branding || {}),
-    name: SMOKE_BRAND_NAME,
+    name: options?.productBranding ? (config.branding?.name || 'Open Cowork') : SMOKE_BRAND_NAME,
     appId: 'com.opencowork.desktop.smoke',
     dataDirName: 'open-cowork-smoke',
   }
   const openRouterCredentials = config.providers?.descriptors?.openrouter?.credentials
-  if (Array.isArray(openRouterCredentials)) {
+  if (Array.isArray(openRouterCredentials) && !options?.preserveProviderCredentialRequirements) {
     // Smoke runs are about shell/session health, not validating provider
     // credential persistence on first boot. Make the default provider
     // credential optional in the isolated smoke config so packaged tests
@@ -237,8 +248,10 @@ function writeIsolatedConfig(tempRoot: string) {
   // enable that feature in the isolated harness config only.
   config.features = {
     ...(config.features && typeof config.features === 'object' ? config.features : {}),
-    approvals: true,
   }
+  if (options?.enableApprovals === false) delete config.features.approvals
+  else config.features.approvals = true
+  if (options?.enableKnowledge) config.features.knowledge = true
   const targetPath = join(tempRoot, 'open-cowork.smoke.config.json')
   writeFileSync(targetPath, JSON.stringify(config, null, 2))
   return targetPath
@@ -257,7 +270,7 @@ export function createSmokePaths(options?: LaunchSmokeAppOptions): SmokePaths {
     mkdirSync(dir, { recursive: true })
   }
 
-  const configPath = writeIsolatedConfig(tempRoot)
+  const configPath = writeIsolatedConfig(tempRoot, options)
 
   if (options?.seedBeforeLaunch) {
     options.seedBeforeLaunch({ tempRoot, dataRoot })
@@ -301,6 +314,7 @@ function getSmokeEnvironment(paths: SmokePaths) {
     OPEN_COWORK_SANDBOX_DIR: paths.sandboxDir,
     OPEN_COWORK_CHART_TIMEOUT_MS: '1500',
     OPEN_COWORK_E2E: '1',
+    OPEN_COWORK_E2E_SETUP_VALIDATION_KEY: E2E_SETUP_VALIDATION_KEY,
     OPEN_COWORK_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON: SMOKE_RUNTIME_COMPONENT_DEV_OVERRIDE_REASON,
   }
 }
@@ -756,43 +770,30 @@ async function closeSmokeApp(app: ElectronApplication) {
 }
 
 async function bootstrapSmokeSettings(page: Page, appShellTimeoutMs = DEFAULT_APP_SHELL_TIMEOUT_MS) {
-  const setupComplete = await page.evaluate(async () => {
-    const [config, settings] = await Promise.all([
-      window.coworkApi.app.config(),
-      window.coworkApi.settings.get(),
-    ])
-    if (!settings.effectiveProviderId || !settings.effectiveModel) return false
-    const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId)
-    if (!provider) return false
-    const providerCredentials = await window.coworkApi.settings.getProviderCredentials(provider.id, {
-      workspaceId: 'local',
-      purpose: 'credential_editor',
-    })
-    return provider.credentials.every((credential) => {
-      if (credential.required === false) return true
-      const value = providerCredentials[credential.key]
-      return typeof value === 'string' && value.trim().length > 0
-    })
-  })
+  const setupComplete = await page.evaluate(async () => (
+    await window.coworkApi.settings.get()
+  ).setupComplete)
 
   if (setupComplete) {
     await waitForAppShell(page, appShellTimeoutMs)
     return
   }
 
-  // Seed a provider selection + fake credential so `isSetupComplete`
-  // returns true and the app enters the main UI instead of parking on
-  // the first-run SetupScreen. The fake key never hits a real provider
-  // in smoke — no test depends on successful external LLM calls.
-  await page.evaluate(async () => {
+  // The main process owns this E2E fixture secret and accepts only an exact
+  // match. That proves the full save → runtime → validation → durable-proof
+  // path without contacting an external model provider.
+  await page.evaluate(async (fixtureKey) => {
     await window.coworkApi.settings.set({
       selectedProviderId: 'openrouter',
       selectedModelId: 'anthropic/claude-sonnet-4',
       providerCredentials: {
-        openrouter: { apiKey: 'placeholder-key' },
+        openrouter: { apiKey: fixtureKey },
       },
     })
-  })
+    const runtime = await window.coworkApi.runtime.restart({ purpose: 'setup_connection_validation' })
+    if (!runtime.ready) throw new Error(runtime.error || 'Smoke runtime failed to start for setup validation.')
+    await window.coworkApi.provider.testConnection('openrouter', 'anthropic/claude-sonnet-4')
+  }, E2E_SETUP_VALIDATION_KEY)
 
   // Reload so App.tsx re-reads settings + config on next mount. After
   // the reload the main UI replaces the SetupScreen.
@@ -835,7 +836,9 @@ export async function launchSmokeSession(
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
       await waitForCdpPage(browser, appShellTimeoutMs)
       const page = await waitForCdpAppPage(browser, appShellTimeoutMs)
-      await bootstrapSmokeSettings(page, appShellTimeoutMs)
+      if (options?.bootstrapSettings !== false) {
+        await bootstrapSmokeSettings(page, appShellTimeoutMs)
+      }
 
       return {
         page,
@@ -889,7 +892,9 @@ export async function launchSmokeSession(
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
       await waitForCdpPage(browser, appShellTimeoutMs)
       const page = await waitForCdpAppPage(browser, appShellTimeoutMs)
-      await bootstrapSmokeSettings(page, appShellTimeoutMs)
+      if (options?.bootstrapSettings !== false) {
+        await bootstrapSmokeSettings(page, appShellTimeoutMs)
+      }
 
       return {
         page,
@@ -930,7 +935,9 @@ export async function launchSmokeSession(
   // settings bridge because the bootstrap path below depends on it.
   const page = await waitForElectronAppPage(app, appShellTimeoutMs)
 
-  await bootstrapSmokeSettings(page, appShellTimeoutMs)
+  if (options?.bootstrapSettings !== false) {
+    await bootstrapSmokeSettings(page, appShellTimeoutMs)
+  }
 
   return {
     app,

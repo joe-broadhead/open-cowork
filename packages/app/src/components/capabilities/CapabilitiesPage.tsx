@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   BuiltInAgentDetail, CapabilitySkill, CapabilitySkillBundle, CapabilityTool, CustomAgentConfig, CustomAgentSummary, CustomMcpConfig, CustomSkillConfig, RuntimeToolDescriptor, WorkflowListPayload, } from '@open-cowork/shared'
+import { productSurfaceForRoute } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
 import { ProductMcpLinkPanel } from './ProductMcpLinkPanel'
 import { Button, Card, ErrorState, IconButton, Input, SegmentedControl, Skeleton, StudioPageHeader, Tooltip } from '@open-cowork/ui'
 import { useSessionStore } from '../../stores/session'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { useEscape } from '../../hooks/useEscape'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
 import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard'
@@ -28,7 +30,7 @@ import {
   type Tab,
 } from './capabilities-page-support.ts'
 import { EmptyGrid } from './capabilities-page-components.tsx'
-import { CapabilitySkillDetailView, CapabilityToolDetailView } from './CapabilitiesDetailViews'
+import { CapabilityReadOnlyNotice, CapabilitySkillDetailView, CapabilityToolDetailView } from './CapabilitiesDetailViews'
 import { CapabilityMapView } from './CapabilityMapView'
 import { CapabilityRelationshipView } from './CapabilityRelationshipView'
 
@@ -36,6 +38,8 @@ export type CapabilityNavigationTarget = {
   kind: 'tool' | 'skill'
   id: string
 }
+
+const TOOLS_SURFACE = productSurfaceForRoute('tools')
 
 export function CapabilitiesPage({
   onClose,
@@ -50,6 +54,7 @@ export function CapabilitiesPage({
 }) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
+  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const [tab, setTab] = useState<Tab>('map')
   const [search, setSearch] = useState('')
   const [tools, setTools] = useState<CapabilityTool[]>([])
@@ -68,60 +73,101 @@ export function CapabilitiesPage({
   const [workflowList, setWorkflowList] = useState<WorkflowListPayload | null>(null)
   const [selectedToolDetail, setSelectedToolDetail] = useState<CapabilityTool | null>(null)
   const [selectedSkillBundle, setSelectedSkillBundle] = useState<CapabilitySkillBundle | null>(null)
+  const [developerToolsOpen, setDeveloperToolsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const loadGenerationRef = useRef(0)
+  const toolDetailGenerationRef = useRef(0)
+  const skillDetailGenerationRef = useRef(0)
   const relationshipEnabled = isCapabilityRelationshipGraphEnabled()
+  const canConfigureLocalCapabilities = activeWorkspaceId === LOCAL_WORKSPACE_ID
 
   const currentProjectDirectory = useMemo(
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
     [currentSessionId, sessions],
   )
   const toolOptions = useMemo(
-    () => currentSessionId ? { sessionId: currentSessionId } : undefined,
-    [currentSessionId],
+    () => {
+      const workspaceId = activeWorkspaceId === LOCAL_WORKSPACE_ID ? undefined : activeWorkspaceId
+      return currentSessionId || workspaceId ? { sessionId: currentSessionId || undefined, workspaceId } : undefined
+    },
+    [activeWorkspaceId, currentSessionId],
   )
   const contextOptions = useMemo(
-    () => currentProjectDirectory ? { directory: currentProjectDirectory } : undefined,
-    [currentProjectDirectory],
+    () => {
+      const workspaceId = activeWorkspaceId === LOCAL_WORKSPACE_ID ? undefined : activeWorkspaceId
+      return currentProjectDirectory || workspaceId
+        ? { directory: currentProjectDirectory || undefined, workspaceId }
+        : undefined
+    },
+    [activeWorkspaceId, currentProjectDirectory],
   )
 
   const loadAll = useCallback(() => {
+    const generation = ++loadGenerationRef.current
     setLoading(true)
     setLoadError(null)
-    const base = Promise.all([
+    setTools([])
+    setSkills([])
+    setCustomMcps([])
+    setCustomSkills([])
+    setRuntimeTools([])
+    setCustomAgents([])
+    setBuiltInAgents([])
+    setWorkflowList(null)
+    const requests = [
       window.coworkApi.capabilities.tools(toolOptions),
       window.coworkApi.capabilities.skills(contextOptions),
       window.coworkApi.custom.listMcps(contextOptions),
       window.coworkApi.custom.listSkills(contextOptions),
-      window.coworkApi.tools.list(toolOptions).catch(() => []),
-    ]).then(([nextTools, nextSkills, nextMcps, nextCustomSkills, nextRuntimeTools]) => {
-      setTools(nextTools)
-      setSkills(nextSkills)
-      setCustomMcps(nextMcps)
-      setCustomSkills(nextCustomSkills)
-      setRuntimeTools(nextRuntimeTools)
-    })
-    const relationships = relationshipEnabled
-      ? Promise.all([
-          window.coworkApi.agents.list(contextOptions).catch(() => []),
-          window.coworkApi.app.builtinAgents().catch(() => []),
-          window.coworkApi.workflows.list().catch(() => null),
-        ]).then(([nextCustomAgents, nextBuiltInAgents, nextWorkflowList]) => {
-          setCustomAgents(nextCustomAgents)
-          setBuiltInAgents(nextBuiltInAgents)
-          setWorkflowList(nextWorkflowList)
-        })
-      : Promise.resolve().then(() => {
+      window.coworkApi.tools.list(toolOptions),
+    ] as const
+    void Promise.allSettled(requests).then((results) => {
+      if (generation !== loadGenerationRef.current) return
+      const failures: string[] = []
+      const [toolResult, skillResult, mcpResult, customSkillResult, runtimeToolResult] = results
+      if (toolResult.status === 'fulfilled') setTools(toolResult.value)
+      else failures.push(t('capabilities.discoveryTools', 'tools'))
+      if (skillResult.status === 'fulfilled') setSkills(skillResult.value)
+      else failures.push(t('capabilities.discoverySkills', 'skills'))
+      if (mcpResult.status === 'fulfilled') setCustomMcps(mcpResult.value)
+      else failures.push(t('capabilities.discoveryCustomTools', 'custom tools'))
+      if (customSkillResult.status === 'fulfilled') setCustomSkills(customSkillResult.value)
+      else failures.push(t('capabilities.discoveryCustomSkills', 'custom skills'))
+      if (runtimeToolResult.status === 'fulfilled') setRuntimeTools(runtimeToolResult.value)
+      else failures.push(t('capabilities.discoveryRuntimeMethods', 'runtime methods'))
+
+      const relationshipRequests = relationshipEnabled
+        ? Promise.allSettled([
+            window.coworkApi.agents.list(contextOptions),
+            window.coworkApi.app.builtinAgents(),
+            window.coworkApi.workflows.list(),
+          ] as const)
+        : Promise.resolve([])
+      return relationshipRequests.then((relationshipResults) => {
+        if (generation !== loadGenerationRef.current) return
+        if (relationshipEnabled) {
+          const [customAgentResult, builtInResult, workflowResult] = relationshipResults
+          if (customAgentResult?.status === 'fulfilled') setCustomAgents(customAgentResult.value)
+          else failures.push(t('capabilities.discoveryCoworkers', 'coworker links'))
+          if (builtInResult?.status === 'fulfilled') setBuiltInAgents(builtInResult.value)
+          else failures.push(t('capabilities.discoveryBuiltIns', 'built-in coworker links'))
+          if (workflowResult?.status === 'fulfilled') setWorkflowList(workflowResult.value)
+          else failures.push(t('capabilities.discoveryPlaybooks', 'playbook links'))
+        } else {
           setCustomAgents([])
           setBuiltInAgents([])
           setWorkflowList(null)
-        })
-    // A failed inventory load must not masquerade as an empty grid — capture
-    // the error so the surface can show a designed, recoverable error state
-    // instead of "No tools discovered yet".
-    void Promise.all([base, relationships])
-      .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setLoading(false))
+        }
+        if (failures.length > 0) {
+          setLoadError(t('capabilities.partialDiscovery', 'Some catalog sources are unavailable: {{sources}}.', {
+            sources: failures.join(', '),
+          }))
+        }
+      })
+    }).finally(() => {
+      if (generation === loadGenerationRef.current) setLoading(false)
+    })
   }, [contextOptions, relationshipEnabled, toolOptions])
 
   useEffect(() => {
@@ -142,22 +188,50 @@ export function CapabilitiesPage({
   }, [initialTarget, loading, onInitialTargetHandled])
 
   useEffect(() => {
+    const generation = ++toolDetailGenerationRef.current
     if (selection?.type !== 'tool') {
       setSelectedToolDetail(null)
       return
     }
 
-    window.coworkApi.capabilities.tool(selection.id, toolOptions).then(setSelectedToolDetail).catch(() => setSelectedToolDetail(null))
-    window.coworkApi.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
+    setSelectedToolDetail(null)
+    window.coworkApi.capabilities.tool(selection.id, toolOptions)
+      .then((detail) => {
+        if (generation === toolDetailGenerationRef.current) setSelectedToolDetail(detail)
+      })
+      .catch(() => {
+        if (generation === toolDetailGenerationRef.current) setSelectedToolDetail(null)
+      })
+    window.coworkApi.tools.list(toolOptions)
+      .then((nextRuntimeTools) => {
+        if (generation === toolDetailGenerationRef.current) setRuntimeTools(nextRuntimeTools)
+      })
+      .catch(() => {
+        if (generation === toolDetailGenerationRef.current) setRuntimeTools([])
+      })
+    return () => {
+      if (generation === toolDetailGenerationRef.current) toolDetailGenerationRef.current += 1
+    }
   }, [selection, toolOptions])
 
   useEffect(() => {
+    const generation = ++skillDetailGenerationRef.current
     if (selection?.type !== 'skill') {
       setSelectedSkillBundle(null)
       return
     }
 
-    window.coworkApi.capabilities.skillBundle(selection.name, contextOptions).then(setSelectedSkillBundle).catch(() => setSelectedSkillBundle(null))
+    setSelectedSkillBundle(null)
+    window.coworkApi.capabilities.skillBundle(selection.name, contextOptions)
+      .then((bundle) => {
+        if (generation === skillDetailGenerationRef.current) setSelectedSkillBundle(bundle)
+      })
+      .catch(() => {
+        if (generation === skillDetailGenerationRef.current) setSelectedSkillBundle(null)
+      })
+    return () => {
+      if (generation === skillDetailGenerationRef.current) skillDetailGenerationRef.current += 1
+    }
   }, [selection, contextOptions])
 
   // Escape closes whichever full-page sub-view is open, routing through the same
@@ -245,13 +319,15 @@ export function CapabilitiesPage({
     [builtInAgents, customAgents, relationshipEnabled, runtimeTools, skills, tools, workflowList],
   )
   const selectedTool = selection?.type === 'tool'
-    ? selectedToolDetail || tools.find((tool) => tool.id === selection.id) || null
+    ? (selectedToolDetail?.id === selection.id ? selectedToolDetail : null)
+      || tools.find((tool) => tool.id === selection.id)
+      || null
     : null
   const selectedSkill = selection?.type === 'skill'
     ? skills.find((skill) => skill.name === selection.name) || null
     : null
 
-  if (mcpForm) {
+  if (canConfigureLocalCapabilities && mcpForm) {
     return (
       <CustomMcpForm
         projectDirectory={currentProjectDirectory}
@@ -262,7 +338,7 @@ export function CapabilitiesPage({
     )
   }
 
-  if (skillForm) {
+  if (canConfigureLocalCapabilities && skillForm) {
     return (
       <CustomSkillForm
         projectDirectory={currentProjectDirectory}
@@ -304,13 +380,14 @@ export function CapabilitiesPage({
           loadAll()
         }}
         onOpenSkill={(skillName) => setSelection({ type: 'skill', name: skillName })}
+        canConfigure={canConfigureLocalCapabilities}
       />
     )
   }
 
   if (selectedSkill) {
     const custom = customSkills.find((entry) => entry.name === selectedSkill.name) || null
-    const bundle = selectedSkillBundle || null
+    const bundle = selectedSkillBundle?.name === selectedSkill.name ? selectedSkillBundle : null
     const linkedTools = linkedToolsForSkill(selectedSkill, tools)
 
     return (
@@ -340,6 +417,7 @@ export function CapabilitiesPage({
           loadAll()
         }}
         onOpenTool={(toolId) => setSelection({ type: 'tool', id: toolId })}
+        canConfigure={canConfigureLocalCapabilities}
       />
     )
   }
@@ -349,19 +427,25 @@ export function CapabilitiesPage({
     : tab === 'relationships'
       ? t('capabilities.searchRelationships', 'Search capabilities, coworkers, playbooks, risks, credentials, or policies...')
       : tab === 'tools'
-        ? t('capabilities.searchTools', 'Search connections, descriptions, or coworkers...')
-        : t('capabilities.searchSkills', 'Search abilities, descriptions, or coworkers...')
+        ? t('capabilities.searchTools', 'Search tools, descriptions, or coworkers...')
+        : t('capabilities.searchSkills', 'Search skills, descriptions, or coworkers...')
   const addButtonLabel = tab === 'skills'
-    ? t('capabilities.addSkillButton', 'Add ability')
+    ? t('capabilities.addSkillButton', 'Add skill')
     : t('capabilities.addTool', 'Add connection')
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div
+      className="flex-1 overflow-y-auto"
+      data-testid="tools-skills-surface"
+      data-load-state={loading && tools.length === 0 && skills.length === 0 ? 'loading' : loadError && tools.length === 0 && skills.length === 0 ? 'error' : loadError ? 'partial' : 'ready'}
+    >
       <div className="feature-page-shell">
         <StudioPageHeader
           className="mb-6"
-          eyebrow={t('capabilities.eyebrow', 'Capabilities')}
+          eyebrow={t('capabilities.eyebrow', 'Workspace catalog')}
           title={t('capabilities.title', 'Tools & Skills')}
-          description={t('capabilities.subtitle', 'Inspect the OpenCode tools and skills available to coworkers and playbooks in the current workspace.')}
+          description={canConfigureLocalCapabilities
+            ? TOOLS_SURFACE?.outcome || t('capabilities.subtitle', 'Inspect and configure the tools and skills available in this workspace.')
+            : t('capabilities.readOnlySubtitle', 'Inspect the tools and skills available in this workspace.')}
           meta={<GlossaryHelp />}
           actions={[{
             id: 'back-to-chat',
@@ -371,10 +455,18 @@ export function CapabilitiesPage({
           }]}
         />
 
+        {!canConfigureLocalCapabilities ? <CapabilityReadOnlyNotice /> : null}
+
         <MetricRibbon
           metrics={[
-            { label: t('capabilities.metricTools', 'Tools'), value: tools.length },
-            { label: t('capabilities.metricSkills', 'Skills'), value: skills.length },
+            {
+              label: t('capabilities.metricTools', 'Available tools'),
+              value: tools.length,
+            },
+            {
+              label: t('capabilities.metricSkills', 'Available skills'),
+              value: skills.length,
+            },
             { label: t('capabilities.metricCustom', 'Custom'), value: customToolIds.size + customSkillNames.size },
             { label: t('capabilities.metricProject', 'Project'), value: projectCount },
           ]}
@@ -407,22 +499,27 @@ export function CapabilitiesPage({
                 : value === 'relationships'
                   ? t('capabilities.tab.relationships', 'Relationships')
                   : value === 'tools'
-                    ? t('capabilities.tab.tools', 'Connections')
-                    : t('capabilities.tab.skills', 'Abilities'),
+                    ? t('capabilities.tab.tools', 'Tools')
+                    : t('capabilities.tab.skills', 'Skills'),
             }))}
           />
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon="plus"
-            onClick={() => tab === 'skills' ? setSkillForm('new') : setMcpForm('new')}
-          >
-            {addButtonLabel}
-          </Button>
+          {canConfigureLocalCapabilities ? (
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon="plus"
+              onClick={() => tab === 'skills' ? setSkillForm('new') : setMcpForm('new')}
+            >
+              {addButtonLabel}
+            </Button>
+          ) : null}
         </div>
-        {tab === 'tools' || tab === 'map' ? (
-          <div className="mb-4">
-            <ProductMcpLinkPanel onChanged={loadAll} />
+        {loadError && (tools.length > 0 || skills.length > 0) ? (
+          <div role="alert" className="mb-4 rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-xs text-amber">
+            <span className="font-semibold">{t('capabilities.partialTitle', 'Catalog partially loaded.')}</span> {loadError}
+            <Button size="sm" variant="ghost" className="ml-2" onClick={loadAll}>
+              {t('capabilities.reload', 'Reload')}
+            </Button>
           </div>
         ) : null}
 
@@ -481,7 +578,7 @@ export function CapabilitiesPage({
                           isCustom={Boolean(custom)}
                           linkedSkills={linkedSkillsForTool(tool, skills)}
                           onOpen={() => setSelection({ type: 'tool', id: tool.id })}
-                          onRemove={custom
+                          onRemove={canConfigureLocalCapabilities && custom
                             ? async () => {
                                 const target = {
                                   name: custom.name,
@@ -545,7 +642,7 @@ export function CapabilitiesPage({
                                 isCustom={Boolean(custom)}
                                 linkedTools={linkedToolsForSkill(skill, tools)}
                                 onOpen={() => setSelection({ type: 'skill', name: skill.name })}
-                                onRemove={custom
+                                onRemove={canConfigureLocalCapabilities && custom
                                   ? async () => {
                                       const target = {
                                         name: custom.name,
@@ -571,6 +668,26 @@ export function CapabilitiesPage({
             </div>
           )
         )}
+
+        {canConfigureLocalCapabilities && (tab === 'tools' || tab === 'map') ? (
+          <details
+            className="mt-6 rounded-lg border border-border-subtle bg-elevated/40 p-4"
+            open={developerToolsOpen}
+            onToggle={(event) => setDeveloperToolsOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer text-sm font-semibold text-text">
+              {t('capabilities.developerTools', 'Advanced developer tools')}
+            </summary>
+            <p className="mt-2 text-xs leading-relaxed text-text-muted">
+              {t('capabilities.developerToolsHelp', 'Detect and link optional local Durable Gateway or Wiki command-line tools.')}
+            </p>
+            {developerToolsOpen ? (
+              <div className="mt-3">
+                <ProductMcpLinkPanel onChanged={loadAll} />
+              </div>
+            ) : null}
+          </details>
+        ) : null}
       </div>
     </div>
   )

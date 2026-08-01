@@ -1,4 +1,10 @@
-import type { RuntimeLoadingPhase, RuntimeLoadingStatus } from '@open-cowork/shared'
+import {
+  parseStartupSurfaceState,
+  STARTUP_THEME_CSS_PROPERTIES,
+  type RuntimeLoadingPhase,
+  type RuntimeLoadingStatus,
+  type StartupSurfaceState,
+} from '@open-cowork/shared'
 
 import './styles/loading.css'
 
@@ -20,6 +26,21 @@ const actionsEl = document.querySelector<HTMLDivElement>('#runtime-actions')
 const restartButton = document.querySelector<HTMLButtonElement>('#runtime-restart')
 const diagnosticsButton = document.querySelector<HTMLButtonElement>('#runtime-diagnostics')
 const brandEl = document.querySelector<HTMLParagraphElement>('#runtime-brand')
+
+function applyStartupSurfaceState(state: StartupSurfaceState) {
+  const root = document.documentElement
+  root.dataset.colorScheme = state.colorScheme
+  root.dataset.uiTheme = state.themeId
+  root.style.setProperty('color-scheme', state.colorScheme)
+  for (const [token, property] of Object.entries(STARTUP_THEME_CSS_PROPERTIES)) {
+    root.style.setProperty(property, state.tokens[token as keyof StartupSurfaceState['tokens']])
+  }
+  document.title = `${state.brandName} starting`
+  if (brandEl) brandEl.textContent = state.brandName
+}
+
+const startupState = parseStartupSurfaceState(window.location.search)
+if (startupState) applyStartupSurfaceState(startupState)
 
 function renderStatus(status: RuntimeLoadingStatus) {
   if (messageEl) messageEl.textContent = status.message
@@ -55,9 +76,19 @@ void window.coworkApi.runtime.awaitInitialization().then(renderStatus).catch((er
 
 restartButton?.addEventListener('click', () => {
   restartButton.disabled = true
-  void window.coworkApi.runtime.restart().finally(() => {
-    restartButton.disabled = false
-  })
+  void window.coworkApi.runtime.restart()
+    .catch((error: unknown) => {
+      renderStatus({
+        phase: 'error',
+        message: 'Runtime restart was blocked.',
+        ready: false,
+        error: error instanceof Error ? error.message : String(error),
+        updatedAt: new Date().toISOString(),
+      })
+    })
+    .finally(() => {
+      restartButton.disabled = false
+    })
 })
 
 diagnosticsButton?.addEventListener('click', () => {
