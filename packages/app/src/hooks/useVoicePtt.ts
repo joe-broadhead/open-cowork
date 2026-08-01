@@ -14,6 +14,10 @@ import {
   type VoiceHostStatus,
 } from '@open-cowork/shared'
 import { isDesktopRuntime } from '../runtime-env'
+import {
+  recordFeatureValueActivation,
+  recordFeatureValueDiscovery,
+} from '../helpers/lazy-feature-value-telemetry'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
 import { registerVoicePttToggleHandler } from './voice-ptt-hotkey'
 import { stopReadAloud } from './voice-read-aloud'
@@ -76,6 +80,9 @@ export function useVoicePtt(options: {
   const [errorReason, setErrorReason] = useState<string | null>(null)
   const sessionIdRef = useRef<string | null>(null)
   const busyRef = useRef(false)
+  const pendingStartRef = useRef(false)
+  const lifecycleGenerationRef = useRef(0)
+  const lifecycleScopeRef = useRef<string | null>(null)
   /** Composer text at the moment listening began; partials replace after this. */
   const baselineRef = useRef<string | null>(null)
   const getComposerTextRef = useRef(options.getComposerText)
@@ -131,13 +138,13 @@ export function useVoicePtt(options: {
       }
       if (event.type === 'partial') {
         // Ignore events for a session we already finished/cancelled.
-        if (sessionIdRef.current && event.event.sessionId !== sessionIdRef.current) return
+        if (!sessionIdRef.current || event.event.sessionId !== sessionIdRef.current) return
         if (baselineRef.current === null) return
         const text = event.event.text?.trim() || ''
         if (text) applyDictation(text)
       }
       if (event.type === 'final') {
-        if (sessionIdRef.current && event.event.sessionId !== sessionIdRef.current) return
+        if (!sessionIdRef.current || event.event.sessionId !== sessionIdRef.current) return
         const text = event.event.text?.trim() || ''
         if (text) {
           applyDictation(text)
@@ -151,6 +158,7 @@ export function useVoicePtt(options: {
         setErrorReason(null)
       }
       if (event.type === 'error') {
+        if (!sessionIdRef.current || event.sessionId !== sessionIdRef.current) return
         const message = event.message || 'Voice failed'
         restoreBaseline()
         setErrorReason(message)
@@ -175,6 +183,39 @@ export function useVoicePtt(options: {
     && workspaceSupport.flags.canPrompt
     && captureReady
     && (sttReady || uiPhase === 'listening')
+  const lifecycleScope = baseEnabled
+    ? `${workspaceSupport.workspaceId}\u0000${options.openCodeSessionId || ''}`
+    : null
+
+  // A capture belongs to the eligible composer + workspace/session that
+  // started it. Route changes, policy loss, and unmount must release the host
+  // microphone even when the user never gets a chance to press Stop.
+  useEffect(() => {
+    const generation = lifecycleGenerationRef.current + 1
+    lifecycleGenerationRef.current = generation
+    lifecycleScopeRef.current = lifecycleScope
+    busyRef.current = false
+    setUiPhase('idle')
+    setErrorReason(null)
+
+    return () => {
+      if (lifecycleGenerationRef.current === generation) {
+        lifecycleGenerationRef.current += 1
+      }
+      lifecycleScopeRef.current = null
+      busyRef.current = false
+      const sessionId = sessionIdRef.current
+      sessionIdRef.current = null
+      restoreBaseline()
+      if (sessionId && window.coworkApi?.voice) {
+        void window.coworkApi.voice.cancel(sessionId).catch(() => undefined)
+      }
+    }
+  }, [lifecycleScope, restoreBaseline])
+
+  useEffect(() => {
+    if (visible) recordFeatureValueDiscovery('voice')
+  }, [visible])
 
   let disabledReason: string | null = null
   if (!desktop) disabledReason = 'Private voice is Desktop only.'
@@ -194,36 +235,50 @@ export function useVoicePtt(options: {
   }
 
   const start = useCallback(async () => {
-    if (!window.coworkApi?.voice || busyRef.current) return
+    const generation = lifecycleGenerationRef.current
+    const scope = lifecycleScopeRef.current
+    if (!window.coworkApi?.voice || busyRef.current || pendingStartRef.current || !scope) return
+    pendingStartRef.current = true
     busyRef.current = true
     setErrorReason(null)
     setUiPhase('listening')
     try {
       // Barge-in prep (JOE-1103): stop local TTS before opening the mic session.
       await stopReadAloud()
+      if (lifecycleGenerationRef.current !== generation || lifecycleScopeRef.current !== scope) return
       // Snapshot before start so partials never include mid-start keystrokes only.
+      sessionIdRef.current = null
       baselineRef.current = getComposerTextRef.current()
       const snapshot = await window.coworkApi.voice.startSession({
         mode: 'ptt',
         openCodeSessionId: options.openCodeSessionId || null,
         workspaceId: workspaceSupport.isLocal ? 'local' : workspaceSupport.workspaceId,
       })
+      if (lifecycleGenerationRef.current !== generation || lifecycleScopeRef.current !== scope) {
+        await window.coworkApi.voice.cancel(snapshot.id).catch(() => undefined)
+        return
+      }
       sessionIdRef.current = snapshot.id
+      recordFeatureValueActivation('voice')
       setUiPhase('listening')
     } catch (error) {
+      if (lifecycleGenerationRef.current !== generation || lifecycleScopeRef.current !== scope) return
       const message = error instanceof Error ? error.message : String(error)
-      baselineRef.current = null
+      restoreBaseline()
       sessionIdRef.current = null
       setUiPhase('error')
       setErrorReason(message)
       onErrorRef.current?.(message)
     } finally {
+      pendingStartRef.current = false
       busyRef.current = false
     }
-  }, [options.openCodeSessionId, workspaceSupport.isLocal, workspaceSupport.workspaceId])
+  }, [options.openCodeSessionId, restoreBaseline, workspaceSupport.isLocal, workspaceSupport.workspaceId])
 
   const stop = useCallback(async () => {
     if (!window.coworkApi?.voice || busyRef.current) return
+    const generation = lifecycleGenerationRef.current
+    const scope = lifecycleScopeRef.current
     const sessionId = sessionIdRef.current
     if (!sessionId) {
       setUiPhase('idle')
@@ -233,11 +288,12 @@ export function useVoicePtt(options: {
     setUiPhase('transcribing')
     try {
       await window.coworkApi.voice.stopSession(sessionId)
-      // Final text arrives via voiceEvent; clear session id after stop.
-      // Keep baseline until final/error so late partials still replace correctly.
-      sessionIdRef.current = null
+      if (lifecycleGenerationRef.current !== generation || lifecycleScopeRef.current !== scope) return
+      // Keep the session id and baseline until final/error so late events can
+      // still be matched to this capture without accepting another session.
       if (uiPhase !== 'error') setUiPhase('idle')
     } catch (error) {
+      if (lifecycleGenerationRef.current !== generation || lifecycleScopeRef.current !== scope) return
       const message = error instanceof Error ? error.message : String(error)
       restoreBaseline()
       sessionIdRef.current = null
@@ -251,26 +307,34 @@ export function useVoicePtt(options: {
 
   const cancel = useCallback(async () => {
     if (!window.coworkApi?.voice) return
+    lifecycleGenerationRef.current += 1
     const sessionId = sessionIdRef.current
     sessionIdRef.current = null
+    if (!pendingStartRef.current) busyRef.current = false
     restoreBaseline()
     setUiPhase('idle')
     setErrorReason(null)
-    try {
-      await window.coworkApi.voice.cancel(sessionId)
-    } catch {
-      // Cancel is best-effort.
+    if (sessionId) {
+      try {
+        await window.coworkApi.voice.cancel(sessionId)
+      } catch {
+        // Cancel is best-effort.
+      }
     }
   }, [restoreBaseline])
 
   const toggle = useCallback(async () => {
     if (uiPhase === 'listening') {
+      if (busyRef.current && !sessionIdRef.current) {
+        await cancel()
+        return
+      }
       await stop()
       return
     }
     if (uiPhase === 'transcribing') return
     await start()
-  }, [start, stop, uiPhase])
+  }, [cancel, start, stop, uiPhase])
 
   const isActive = uiPhase === 'listening' || uiPhase === 'transcribing'
   const enabled = baseEnabled && uiPhase !== 'transcribing'

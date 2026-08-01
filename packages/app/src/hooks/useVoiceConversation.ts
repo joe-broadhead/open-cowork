@@ -11,6 +11,10 @@ import {
   type VoiceHostEvent,
 } from '@open-cowork/shared'
 import { isDesktopRuntime } from '../runtime-env'
+import {
+  recordFeatureValueActivation,
+  recordFeatureValueDiscovery,
+} from '../helpers/lazy-feature-value-telemetry'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
 import { useSessionStore } from '../stores/session'
 import { registerVoicePttToggleHandler } from './voice-ptt-hotkey'
@@ -67,7 +71,10 @@ export function useVoiceConversation(options: {
   continuousVadRef.current = continuousVad
   const voiceSessionIdRef = useRef<string | null>(null)
   const busyRef = useRef(false)
+  const pendingListenRef = useRef(false)
   const awaitingFinalRef = useRef(false)
+  const lifecycleGenerationRef = useRef(0)
+  const lifecycleScopeRef = useRef<string | null>(null)
   const onPromptRef = useRef(options.onPrompt)
   const onAbortRef = useRef(options.onAbort)
   const onErrorRef = useRef(options.onError)
@@ -115,7 +122,15 @@ export function useVoiceConversation(options: {
   }, [])
 
   const runEffects = useCallback(async (effects: VoiceConversationEffect[]) => {
+    const generation = lifecycleGenerationRef.current
+    const scope = lifecycleScopeRef.current
+    const isCurrent = () => (
+      scope !== null
+      && lifecycleGenerationRef.current === generation
+      && lifecycleScopeRef.current === scope
+    )
     for (const effect of effects) {
+      if (!isCurrent()) break
       try {
         switch (effect.type) {
           case 'stop_read_aloud':
@@ -126,19 +141,30 @@ export function useVoiceConversation(options: {
             break
           case 'start_listen': {
             if (!window.coworkApi?.voice) throw new Error('Voice host unavailable')
-            const support = workspaceRef.current
-            const snapshot = await window.coworkApi.voice.startSession({
-              mode: 'conversation',
-              openCodeSessionId: openCodeSessionIdRef.current || null,
-              workspaceId: support.isLocal ? 'local' : support.workspaceId,
-              continuousVad: continuousVadRef.current === true,
-            })
-            voiceSessionIdRef.current = snapshot.id
-            awaitingFinalRef.current = continuousVadRef.current
-            // Manual PTT still sets awaitingFinal on stop_listen; continuous
-            // finalizes via host VAD so we arm awaitingFinal immediately.
-            if (continuousVadRef.current) awaitingFinalRef.current = true
-            setPrivacyListening(true)
+            if (!isCurrent()) break
+            pendingListenRef.current = true
+            try {
+              const support = workspaceRef.current
+              const snapshot = await window.coworkApi.voice.startSession({
+                mode: 'conversation',
+                openCodeSessionId: openCodeSessionIdRef.current || null,
+                workspaceId: support.isLocal ? 'local' : support.workspaceId,
+                continuousVad: continuousVadRef.current === true,
+              })
+              if (!isCurrent()) {
+                await window.coworkApi.voice.cancel(snapshot.id).catch(() => undefined)
+                break
+              }
+              voiceSessionIdRef.current = snapshot.id
+              recordFeatureValueActivation('voice')
+              awaitingFinalRef.current = continuousVadRef.current
+              // Manual PTT still sets awaitingFinal on stop_listen; continuous
+              // finalizes via host VAD so we arm awaitingFinal immediately.
+              if (continuousVadRef.current) awaitingFinalRef.current = true
+              setPrivacyListening(true)
+            } finally {
+              pendingListenRef.current = false
+            }
             break
           }
           case 'stop_listen': {
@@ -147,22 +173,22 @@ export function useVoiceConversation(options: {
             if (window.coworkApi?.voice && id) {
               await window.coworkApi.voice.stopSession(id)
             }
-            setPrivacyListening(false)
+            if (isCurrent()) setPrivacyListening(false)
             break
           }
           case 'cancel_listen': {
             const id = voiceSessionIdRef.current
             voiceSessionIdRef.current = null
             awaitingFinalRef.current = false
-            if (window.coworkApi?.voice) {
+            if (window.coworkApi?.voice && id) {
               await window.coworkApi.voice.cancel(id)
             }
-            setPrivacyListening(false)
+            if (isCurrent()) setPrivacyListening(false)
             break
           }
           case 'prompt':
             await onPromptRef.current(effect.text)
-            dispatchRef.current({ type: 'PROMPT_SENT' })
+            if (isCurrent()) dispatchRef.current({ type: 'PROMPT_SENT' })
             break
           case 'abort_generation':
             await onAbortRef.current()
@@ -174,8 +200,9 @@ export function useVoiceConversation(options: {
             }
             try {
               await window.coworkApi.voice.speak({ text: effect.text })
-              dispatchRef.current({ type: 'SPEAK_DONE' })
+              if (isCurrent()) dispatchRef.current({ type: 'SPEAK_DONE' })
             } catch (error) {
+              if (!isCurrent()) break
               const message = error instanceof Error ? error.message : String(error)
               dispatchRef.current({ type: 'SPEAK_ERROR', message })
             }
@@ -184,6 +211,7 @@ export function useVoiceConversation(options: {
             break
         }
       } catch (error) {
+        if (!isCurrent()) continue
         const message = error instanceof Error ? error.message : String(error)
         if (effect.type === 'start_listen' || effect.type === 'stop_listen') {
           dispatchRef.current({ type: 'STT_ERROR', message })
@@ -225,7 +253,7 @@ export function useVoiceConversation(options: {
         // Continuous VAD may auto-stop without an explicit stop_listen; accept finals
         // while listening or finalizing when session matches.
         const phase = machineRef.current.phase
-        const sessionMatch = !voiceSessionIdRef.current || event.event.sessionId === voiceSessionIdRef.current
+        const sessionMatch = event.event.sessionId === voiceSessionIdRef.current
         if (!sessionMatch) return
         if (!awaitingFinalRef.current && phase !== 'listening' && phase !== 'finalizing') return
         awaitingFinalRef.current = false
@@ -238,6 +266,7 @@ export function useVoiceConversation(options: {
         dispatchRef.current({ type: 'STT_FINAL', text })
       }
       if (event.type === 'vad') {
+        if (event.event.sessionId && event.event.sessionId !== voiceSessionIdRef.current) return
         if (event.event.reason === 'armed' || event.event.speechActive) {
           setPrivacyListening(true)
         }
@@ -260,6 +289,7 @@ export function useVoiceConversation(options: {
         }
       }
       if (event.type === 'error') {
+        if (event.sessionId && event.sessionId !== voiceSessionIdRef.current) return
         if (machineRef.current.phase === 'listening' || machineRef.current.phase === 'finalizing') {
           awaitingFinalRef.current = false
           voiceSessionIdRef.current = null
@@ -302,6 +332,47 @@ export function useVoiceConversation(options: {
     && workspaceSupport.flags.canVoiceConversation
   const visible = desktop && featureOn && authorityOk
   const baseEnabled = visible && workspaceSupport.flags.canPrompt && hostReady
+  const lifecycleScope = baseEnabled
+    ? `${workspaceSupport.workspaceId}\u0000${options.openCodeSessionId || ''}`
+    : null
+
+  // Host capture/TTS outlives React unless explicitly released. Tie every
+  // conversation turn to the eligible workspace/session and invalidate any
+  // deferred start before a route, policy, or session transition can orphan it.
+  useEffect(() => {
+    const generation = lifecycleGenerationRef.current + 1
+    lifecycleGenerationRef.current = generation
+    lifecycleScopeRef.current = lifecycleScope
+    busyRef.current = false
+    awaitingFinalRef.current = false
+    setPrivacyListening(false)
+    setConversationModeState(false)
+    setContinuousVadState(false)
+    const initial = createInitialVoiceConversationState()
+    machineRef.current = initial
+    setMachine(initial)
+
+    return () => {
+      if (lifecycleGenerationRef.current === generation) {
+        lifecycleGenerationRef.current += 1
+      }
+      lifecycleScopeRef.current = null
+      busyRef.current = false
+      awaitingFinalRef.current = false
+      const sessionId = voiceSessionIdRef.current
+      voiceSessionIdRef.current = null
+      if (window.coworkApi?.voice) {
+        if (sessionId) void window.coworkApi.voice.cancel(sessionId).catch(() => undefined)
+        if (lifecycleScope !== null) {
+          void window.coworkApi.voice.cancelSpeak().catch(() => undefined)
+        }
+      }
+    }
+  }, [lifecycleScope])
+
+  useEffect(() => {
+    if (visible) recordFeatureValueDiscovery('voice')
+  }, [visible])
   const phase = machine.phase
   const isActive = phase !== 'idle' && phase !== 'error'
   const enabled = baseEnabled && (
@@ -331,7 +402,13 @@ export function useVoiceConversation(options: {
   const toggle = useCallback(async () => {
     if (busyRef.current) return
     const current = machineRef.current.phase
+    if (pendingListenRef.current && current !== 'listening') return
     if (current === 'listening') {
+      if (!voiceSessionIdRef.current) {
+        lifecycleGenerationRef.current += 1
+        dispatch({ type: 'CANCEL' })
+        return
+      }
       busyRef.current = true
       try {
         dispatch({ type: 'STOP_LISTEN' })
@@ -342,6 +419,7 @@ export function useVoiceConversation(options: {
     }
     if (current === 'finalizing' || current === 'prompting') return
     if (current === 'streaming' || current === 'speaking') {
+      lifecycleGenerationRef.current += 1
       busyRef.current = true
       try {
         dispatch({ type: 'BARGE_IN' })
@@ -350,6 +428,7 @@ export function useVoiceConversation(options: {
       }
       return
     }
+    lifecycleGenerationRef.current += 1
     busyRef.current = true
     try {
       dispatch({ type: 'START_LISTEN' })
@@ -359,6 +438,7 @@ export function useVoiceConversation(options: {
   }, [dispatch])
 
   const cancel = useCallback(async () => {
+    lifecycleGenerationRef.current += 1
     dispatch({ type: 'CANCEL' })
   }, [dispatch])
 
@@ -372,6 +452,7 @@ export function useVoiceConversation(options: {
   const setConversationMode = useCallback((on: boolean) => {
     setConversationModeState(on)
     if (!on) {
+      lifecycleGenerationRef.current += 1
       setContinuousVadState(false)
       dispatch({ type: 'SET_CONTINUOUS', continuous: false })
       if (machineRef.current.phase !== 'idle') dispatch({ type: 'CANCEL' })

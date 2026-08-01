@@ -410,6 +410,12 @@ export class VoiceHost {
 
   async cancel(sessionId?: string | null): Promise<VoiceHostStatus> {
     const active = this.session
+    // A scoped cancellation belongs only to the session that requested it.
+    // Late renderer cleanup must never reset the phase/VAD state of a newer
+    // capture that has already taken ownership of the host.
+    if (sessionId && active?.id !== sessionId) {
+      return this.getStatus()
+    }
     if (active && (!sessionId || active.id === sessionId)) {
       this.stopPartialLoop()
       await this.waitForPartialIdle()

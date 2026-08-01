@@ -14,7 +14,7 @@ describe('voice-ptt-hotkey', () => {
     expect(normalizeAccelerator(' CmdOrCtrl + Shift + V ')).toBe('CmdOrCtrl+Shift+V')
   })
 
-  it('matches CmdOrCtrl+Shift+Space', () => {
+  it('matches CmdOrCtrl with only the platform-specific modifier', () => {
     expect(matchesAccelerator({
       key: ' ',
       code: 'Space',
@@ -22,7 +22,7 @@ describe('voice-ptt-hotkey', () => {
       ctrlKey: false,
       altKey: false,
       shiftKey: true,
-    }, VOICE_PTT_SHORTCUT)).toBe(true)
+    }, VOICE_PTT_SHORTCUT, 'MacIntel')).toBe(true)
 
     expect(matchesAccelerator({
       key: ' ',
@@ -31,7 +31,45 @@ describe('voice-ptt-hotkey', () => {
       ctrlKey: true,
       altKey: false,
       shiftKey: true,
-    }, VOICE_PTT_SHORTCUT)).toBe(true)
+    }, VOICE_PTT_SHORTCUT, 'MacIntel')).toBe(false)
+
+    expect(matchesAccelerator({
+      key: ' ',
+      code: 'Space',
+      metaKey: true,
+      ctrlKey: true,
+      altKey: false,
+      shiftKey: true,
+    }, VOICE_PTT_SHORTCUT, 'MacIntel')).toBe(false)
+
+    for (const platform of ['Win32', 'Linux x86_64']) {
+      expect(matchesAccelerator({
+        key: ' ',
+        code: 'Space',
+        metaKey: false,
+        ctrlKey: true,
+        altKey: false,
+        shiftKey: true,
+      }, VOICE_PTT_SHORTCUT, platform)).toBe(true)
+
+      expect(matchesAccelerator({
+        key: ' ',
+        code: 'Space',
+        metaKey: true,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: true,
+      }, VOICE_PTT_SHORTCUT, platform)).toBe(false)
+
+      expect(matchesAccelerator({
+        key: ' ',
+        code: 'Space',
+        metaKey: true,
+        ctrlKey: true,
+        altKey: false,
+        shiftKey: true,
+      }, VOICE_PTT_SHORTCUT, platform)).toBe(false)
+    }
 
     // Missing shift
     expect(matchesAccelerator({
@@ -41,7 +79,7 @@ describe('voice-ptt-hotkey', () => {
       ctrlKey: false,
       altKey: false,
       shiftKey: false,
-    }, VOICE_PTT_SHORTCUT)).toBe(false)
+    }, VOICE_PTT_SHORTCUT, 'MacIntel')).toBe(false)
 
     // Command palette binding must not match
     expect(matchesAccelerator({
@@ -51,7 +89,54 @@ describe('voice-ptt-hotkey', () => {
       ctrlKey: false,
       altKey: false,
       shiftKey: true,
-    }, VOICE_PTT_SHORTCUT)).toBe(false)
+    }, VOICE_PTT_SHORTCUT, 'MacIntel')).toBe(false)
+  })
+
+  it('keeps explicit Command and Control accelerators platform-independent and exact', () => {
+    expect(matchesAccelerator({
+      key: 'ArrowUp',
+      code: 'ArrowUp',
+      metaKey: true,
+      ctrlKey: false,
+      altKey: true,
+      shiftKey: false,
+    }, 'Command+Alt+Up', 'Win32')).toBe(true)
+
+    expect(matchesAccelerator({
+      key: 'Escape',
+      code: 'Escape',
+      metaKey: false,
+      ctrlKey: true,
+      altKey: false,
+      shiftKey: false,
+    }, 'Control+Esc', 'MacIntel')).toBe(true)
+
+    expect(matchesAccelerator({
+      key: '!',
+      code: 'Digit1',
+      metaKey: false,
+      ctrlKey: true,
+      altKey: false,
+      shiftKey: true,
+    }, 'Control+Shift+1', 'Linux x86_64')).toBe(true)
+
+    expect(matchesAccelerator({
+      key: 'v',
+      code: 'KeyV',
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+    }, 'Control+V', 'Linux x86_64')).toBe(false)
+
+    expect(matchesAccelerator({
+      key: 'ArrowUp',
+      code: 'ArrowUp',
+      metaKey: true,
+      ctrlKey: true,
+      altKey: true,
+      shiftKey: false,
+    }, 'Command+Alt+Up', 'MacIntel')).toBe(false)
   })
 
   it('invokes the last registered toggle handler', async () => {
