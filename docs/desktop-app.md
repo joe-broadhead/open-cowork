@@ -13,16 +13,17 @@ Default sidebar nav when `features` is omitted or partial:
 - `Playbooks` — workflow-backed repeatable tasks created from Workflow Designer setup chats, with manual, scheduled, and webhook runs
 - `Tools & Skills` — MCP tools, OpenCode skills, credentials, and capability relationships
 
-**Secondary Studio surfaces (default off — progressive disclosure)**
+**Secondary features and Studio surfaces (default off — progressive disclosure)**
 
-These remain in the product and in docs, but stay hidden from default nav until
-enabled with `features.<key>: true` in `open-cowork.config.json` (or an overlay).
+These remain in the product and in docs, but stay hidden from the default path
+until enabled with `features.<key>: true` in `open-cowork.config.json` (or an overlay).
 See [Progressive disclosure](progressive-disclosure.md).
 
 - `Knowledge` — in-app knowledge spaces, pages, proposals, and graph (`features.knowledge`). Not the optional Wiki product (`cowork-wiki`).
 - `Approvals` — cross-session permission and question review queue (`features.approvals`)
 - `Channels` — Channel Gateway connections, bindings, and delivery status (`features.channels`)
 - `Artifacts` — library of generated files, charts, reports, and deliverables (`features.artifacts`)
+- `Voice` — private Desktop Local dictation controls when local capture and speech-to-text are available (`features.voice`)
 
 In-thread chat approvals, questions, and session artifacts still work when the
 secondary nav surfaces are off — only the dedicated Studio pages are gated.
@@ -33,8 +34,8 @@ secondary nav surfaces are off — only the dedicated Studio pages are gated.
 - `Settings` — appearance, models, permissions, storage, and playbook run behavior
 - `Admin` — cloud org administration when the signed-in principal has admin permissions (not shown for pure local Desktop)
 
-Feature keys: `projects`, `knowledge`, `approvals`, `team`, `playbooks`,
-`channels`, `tools`, `artifacts`. Primary keys default **on** when omitted;
+Feature keys: `projects`, `team`, `playbooks`, `tools`, `knowledge`, `approvals`,
+`channels`, `artifacts`, `voice`. Primary keys default **on** when omitted;
 secondary keys default **off**. Set a key to `true`/`false` to override.
 See `isDesktopFeatureEnabled` / `DESKTOP_SECONDARY_FEATURE_KEYS` in
 `packages/shared/src/app-config.ts`.
@@ -50,7 +51,7 @@ skill and agent.
 
 ```mermaid
 flowchart TD
-    Home["Home<br/>composer · attachments · @coworker pills"]
+    Home["Home<br/>composer · attachments · lead picker"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
     Projects["Projects<br/>Kanban · objectives · linked chats"]
     Knowledge["Knowledge<br/>spaces · proposals"]
@@ -63,7 +64,7 @@ flowchart TD
     Settings["Settings<br/>models · permissions · storage"]
 
     Home -->|submit prompt| Chat
-    Home -->|open recent work| Projects
+    Home -->|resume recent conversation| Chat
     Projects -->|open project chat| Chat
     Approvals -->|open session| Chat
     Knowledge -->|linked sessions| Chat
@@ -133,16 +134,24 @@ and bulk-safe actions. Use cards for browse/detail previews, not as the only
 way to manage large inventories. Empty states should offer a direct next
 action and avoid marketing copy.
 
+## Setup
+
+![First-run setup for connecting a model provider and choosing a default model](assets/auto/setup.png)
+
+First run asks only for the provider, credentials or provider-native sign-in,
+default model, and a successful connection check. Team/server deployment and
+runtime-tool bridging remain optional, explicitly disclosed paths.
+
 ## Home
 
-![Home composer with greeting, @mention coworker suggestions, and the execution status strip](assets/auto/home.png)
+![Home composer with lead assignment and the first-conversation starter](assets/auto/home.png)
 
 Home is the fastest path into useful work:
 
 - model and reasoning controls match the in-thread composer
 - file attachments use the same validation path as Chat
-- coworker suggestion cards pre-fill native OpenCode agent mentions
-- recent project chats let users return to active work without a separate overview page
+- a compact lead-coworker picker sets the primary mode, while typing `@` opens inline specialist mentions
+- recent conversations in the active workspace let users resume work without a separate overview page
 
 Submitting from Home creates or activates an OpenCode session and routes
 directly into Chat. Home should not accumulate status dashboards or secondary
@@ -150,7 +159,7 @@ workflow-monitoring cards.
 
 ## Chat
 
-![Chat composer mid-chat with the @-mention picker open over the coworker list](assets/auto/chat-mention-picker.png)
+![New Chat composer with Review collapsed by default](assets/auto/chat.png)
 
 Chat is the runtime surface. OpenCode owns execution; Open Cowork projects the
 events into a desktop-friendly transcript with:
@@ -167,9 +176,11 @@ second execution model in the renderer.
 
 ## Projects
 
+![Projects coordination board with objective and task states](assets/auto/projects.png)
+
 Projects is the **coordination board**: objectives, Kanban tasks, assignees, and
 linked OpenCode work chats. Quick recall of recent chats stays in the sidebar
-thread list. See [Projects](projects.md) for the product decision (JOE-1052).
+thread list. See [Projects](projects.md) for the product decision.
 
 ## Knowledge
 
@@ -192,7 +203,7 @@ whether or not this nav surface is enabled.
 
 ## Playbooks
 
-![Playbooks page showing the Add playbook setup-chat entry point](assets/auto/workflows-overview.png)
+![Playbooks first-run state with one Add playbook path](assets/auto/playbooks.png)
 
 Playbooks are saved repeatable tasks created from normal OpenCode chats and
 stored as workflow definitions.
@@ -214,7 +225,7 @@ separate agent runtime or operations dashboard.
 
 ## Team
 
-![Team page showing built-in and custom coworkers in a portrait grid](assets/auto/agents.png)
+![Team page showing built-in coworkers with provenance filters](assets/auto/team.png)
 
 Coworkers are OpenCode-native agent configurations composed by Open Cowork. The
 Team surface should make it clear:
@@ -239,7 +250,7 @@ in [Product Contract](product-contract.md).
 
 ## Tools & Skills
 
-![Tools & Skills page listing tools and skills with type, source, and tool counts](assets/auto/capabilities-tools.png)
+![Tools & Skills catalog with catalog content before advanced product linking](assets/auto/tools-skills.png)
 
 Tools & Skills is the capability catalog. It should answer:
 

@@ -23,10 +23,10 @@ nearly every non-trivial capability in the desktop app.</p>
 
 ## What ships in the box
 
-Open Cowork ships seven MCPs out of the box: six packaged-source servers
-(`agents`, `charts`, `knowledge`, `semantic-ui`, `skills`, `workflows`) plus
-one command-launched bundled binary (`time-keep`), and six bundled skills.
-The cards below cover the most useful examples.
+Open Cowork's public config bundles packaged-source MCP servers and the
+command-launched `time-keep` binary alongside reusable skills. The live
+**Tools & Skills** catalog is authoritative for an installed workspace; the
+cards below cover useful examples without duplicating its totals.
 When an agent calls a bundled MCP tool through OpenCode 1.18+, the runtime tool
 id uses OpenCode’s `${server}_${tool}` form, for example `charts_bar_chart` or
 `time-keep_current_time`. Open Cowork permission patterns still accept the
@@ -41,7 +41,7 @@ may still refer to the short tool name such as `bar_chart`.
     ---
 
     Renders Vega-Lite charts and Mermaid diagrams entirely inside the main
-    process. 18+ chart tools; runtime ids include
+    process. Runtime ids include
     `charts_bar_chart`, `charts_line_chart`,
     `charts_sankey`, `charts_mermaid`, and
     `charts_custom_spec` (permission patterns also accept

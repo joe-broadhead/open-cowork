@@ -1,11 +1,10 @@
 ---
-title: Cloud sync dogfood (Desktop ↔ Web ↔ Channel)
-description: Optional extension of product purity dogfood for the sync promise (JOE-1073).
+title: Cloud continuity smoke (Desktop ↔ Web ↔ Channel)
+description: Release validation for the cross-surface Cloud continuity promise.
 ---
 
-# Cloud sync dogfood
+# Cloud continuity smoke
 
-**Linear:** JOE-1073
 **Promise:** Cloud workspaces sync across Desktop Cloud, Cloud Web, and Channel Gateway.
 
 ## Preconditions
@@ -25,11 +24,10 @@ description: Optional extension of product purity dogfood for the sync promise (
 
 ## Capture
 
-- Redacted evidence on JOE-1073 / JOE-1029
+- Store redacted evidence in the release ticket or private operations system
 - Gaps → severity + owner (no secrets)
 
 ## Related
 
-- [Product purity dogfood](product-purity-dogfood.md)
 - [Product contract](../product-contract.md)
-- [Cloud sync residual JOE-1094](cloud-sync-dogfood-residual-joe-1094.md) (when live env unavailable)
+- [Release checklist](../release-checklist.md)

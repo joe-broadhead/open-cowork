@@ -83,7 +83,7 @@ owner-only token files over embedding bearer tokens in config.
 
 ### Desktop soft link (default off)
 
-In **Tools & Skills → Connections**, use **Link local Gateway**. Desktop
+In **Tools & Skills → Advanced developer tools**, use **Link local Gateway**. Desktop
 detects `cowork-gateway` / `opencode-gateway` on `PATH` (or a path you enter),
 writes a **machine-scope** custom MCP, and never embeds bearer secrets (token
 **file paths** only). Fresh installs have no Gateway MCP until you link.

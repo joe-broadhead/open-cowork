@@ -128,7 +128,7 @@ The stable vocabulary is:
 - **Team** for reusable OpenCode-native coworkers.
 - **Tools & Skills** for scoped authority and repeatable know-how.
 - **Playbooks** for reviewed recurring work around OpenCode-native execution.
-- **Projects** for history and recall.
+- **Projects** for objectives, Kanban tasks, and linked work chats.
 - **Artifacts** for generated files, charts, reports, and saved outputs.
 
 Primary navigation should support one of those concepts or the workspace

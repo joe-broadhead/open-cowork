@@ -21,7 +21,7 @@ Sibling work:
 - **Aurum** — on-device speech-to-text (`aurum-stt` / whisper.cpp; PCM-first library API). Optional remote paths exist but are never the default.
 - **ZephyrFlow** — macOS menu-bar dictation product (Whisper, Local Only). Reference UX for PTT; **not** a TTS engine and not the Open Cowork voice host.
 
-Open Cowork already removed fake Settings “voice replies” teasers (product purity JOE-1031). Voice must not reappear as a half-wired toggle.
+Open Cowork does not ship placeholder “voice replies” controls. Voice must not appear as a half-wired toggle.
 
 ## Decision
 
@@ -67,7 +67,7 @@ Rules:
 6. **STT (JOE-1101):** on release/stop, host runs **Aurum** with **local provider only** (`--provider local`, cleanup via rules). Default model `tiny-q5_1`. **local_only** fail-closed unless `OPEN_COWORK_AURUM_ALLOW_DOWNLOAD=1`. OpenRouter/cloud ASR is never on the default path. Final text is emitted as a `voice:event` final payload (text only).
 7. **PTT UI (JOE-1105):** Chat and Home composers show a mic control when `features.voice` is on **and** the workspace support matrix allows `voice.capture` + `voice.stt` (Desktop Local). **Click-to-toggle** is the shipped interaction (start → Listening → click again → Transcribing → inject text into the composer). Control is hidden on Cloud Web / unsupported authorities.
 8. **Partials during PTT (JOE-1102):** While listening, the host runs a **PartialClock** (min ~1s audio, ~15s rolling window, ~1.2s interval, RMS energy gate) and emits `voice:event` **partial** payloads (text only). This is **not** a continuous Whisper stream — the host decides when to call STT. The composer snapshots a **baseline** at PTT start; partials/finals replace the dictation segment after the baseline (cancel/error restores baseline).
-9. **PTT hotkey (JOE-1110):** Default accelerator `CmdOrCtrl+Shift+Space` (Edit menu “Toggle Voice Dictation”). Scope is **app-focused** only — not OS-wide Accessibility paste into other apps. Settings → Privacy shows a configurable Electron accelerator when `features.voice` is on; menu bar uses the default until process restart; in-app key matching uses the saved value after Save. Avoid colliding with the command palette (`CmdOrCtrl+Shift+P`).
+9. **PTT hotkey (JOE-1110, JOE-1188):** Default accelerator `CmdOrCtrl+Shift+Space` (Edit menu “Toggle Voice Dictation”). Scope is **app-focused** only — not OS-wide Accessibility paste into other apps. Settings → Privacy validates a configurable Electron accelerator when `features.voice` is on; a valid saved value updates both the focused-window matcher and Edit menu immediately and is restored on restart. Product shortcut conflicts such as the command palette (`CmdOrCtrl+Shift+P`) are rejected before save.
 10. **Local TTS (JOE-1108):** Sibling of Aurum STT. **Decision:** MVP uses **OS system voices** (macOS `say` synthesize to temp AIFF + `afplay` playback). **Not** Aurum, **not** cloud TTS, **not** Chromium `speechSynthesis` in the renderer. Host owns synthesize + playback; IPC carries **text only** (`voice:tts:speak` / `cancel` / `voices`). Linux/Windows OS backends and Piper/neural packaging are explicit follow-ups (no download on default path). Claim boundary: “local OS speech when available” — not “neural private TTS GA”.
 11. **Read-aloud (JOE-1103):** Per-message **Read aloud** on completed assistant bubbles when `features.voice` + `voice.tts` authority + host TTS ready. **Default off** (no auto-read of streaming tokens). Streaming strategy: **wait for complete message** only (live placeholders have no actions). Stop cancels host playback immediately; optional skip drains the next queued item. Starting PTT calls `stopReadAloud` (barge-in prep). Markdown is stripped to plain text before speak.
 12. **Conversation controller (JOE-1107):** Pure state machine `Idle → Listening → FinalizingSTT → Prompting → Streaming → Speaking → Idle` drives **PTT-gated** voice turns when the user enables conversation mode (default **off**). Release mic → STT final → `session.prompt` → wait for generation idle → local TTS of the latest assistant message. **Cancel / barge-in** stops TTS, cancels listen, and aborts generation.
@@ -127,7 +127,7 @@ Rules:
 | R-VOICE-06 | Aurum/ffmpeg not pre-bundled in CI packages | Packaging README + fail-closed status; optional drop-in |
 | R-VOICE-07 | Windows/Linux OS TTS residual | Best-effort claim; unavailable status when tools missing |
 
-Automated gates: `tests/voice-security.test.ts`, `tests/voice-packaging.test.ts` (plus existing STT/TTS/scaffold tests). Dogfood: [voice-private-dogfood.md](../runbooks/voice-private-dogfood.md). Close-out: [voice-private-epic-closeout.md](../voice-private-epic-closeout.md).
+Automated gates: `tests/voice-security.test.ts`, `tests/voice-packaging.test.ts` (plus existing STT/TTS/scaffold tests). Dogfood and release-claim checks live in [voice-private-dogfood.md](../runbooks/voice-private-dogfood.md).
 
 ## Consequences
 
@@ -147,7 +147,7 @@ polish next. Record the outcome here.
 ## Related
 
 - [Progressive disclosure](../progressive-disclosure.md)
-- [Product purity register](../product-purity-register.md)
+- [Product contract](../product-contract.md)
 - [Release checklist](../release-checklist.md)
 - Aurum: https://github.com/joe-broadhead/aurum
 - ZephyrFlow: https://github.com/joe-broadhead/zephyr-flow

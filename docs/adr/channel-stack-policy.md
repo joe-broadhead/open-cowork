@@ -58,8 +58,17 @@ The monorepo stack also supports provider kinds not implemented as Durable
 native adapters. Conversely, Durable Discord and WhatsApp accept their native
 platform protocols, while the corresponding monorepo providers are signed
 relay bridges. Deleting native adapters now would require new relay
-infrastructure and would silently change operator-facing endpoints. Telegram's
-monorepo façade also has documented HA cursor and rich-message residuals.
+infrastructure and would silently change operator-facing endpoints.
+
+The current façade compatibility limits are removal constraints, not evidence
+that the native stack is redundant:
+
+- Telegram's monorepo path uses the grammy poll offset rather than the Durable
+  HA operational-sidecar cursor, degrades rich HTML `sendRichMessage` output to
+  text, and does not mirror native `setMyCommands` registration.
+- Discord and WhatsApp use bridge relays rather than native Graph or
+  Interactions endpoints. The relay must verify the native platform signature,
+  and structured rich outbound payloads degrade to text on the bridge path.
 
 At this decision, production channel source is approximately 3,644 lines under
 `products/gateway/src/channels` and 5,453 lines across

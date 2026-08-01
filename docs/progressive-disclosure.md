@@ -55,5 +55,5 @@ and must **not** auto-register Wiki or durable Gateway MCP entries.
 
 ## Related
 
-- [Product purity register](product-purity-register.md)
+- [Product contract](product-contract.md)
 - [Desktop app guide](desktop-app.md)

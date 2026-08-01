@@ -516,15 +516,15 @@ Two things happen when this is set:
 
 ### Launch posture: English-first, non-English is experimental
 
-**Maturity (JOE-860):** Localization outside English is **experimental /
-partial**, not a marketed multilingual product. Do not advertise Open Cowork
+Localization outside English is **experimental / partial**, not a marketed
+multilingual product. Do not advertise Open Cowork
 as fully localized in non-English languages until coverage is raised for
 priority locales. The language picker and Settings copy surface the honest
 partial-coverage figure; English fallbacks are intentional.
 
 The public build is **English-first**. The built-in non-English
 catalogs (ar, de, es, fr, hi, it, ja, ko, pt, ru, zh) currently
-translate roughly a third of the renderer's strings; everything
+translate roughly a quarter of the renderer's strings; everything
 else renders its inline English fallback. That state is deliberate
 policy, not drift:
 
@@ -534,10 +534,12 @@ policy, not drift:
   can only shrink or be made visible — never grow silently.
 - Strings are **never machine-translated in bulk**; catalog entries
   are added deliberately so a native reader can trust what ships.
-- The language picker shows the honest coverage figure per locale
-  ("Deutsch — zu 32 % übersetzt"), generated from the live backlog
+- The language picker marks each non-English locale as experimental and shows
+  its honest coverage figure, generated from the live backlog
   by `node scripts/i18n-coverage.mjs --write-status` and kept in
   sync by the `i18n:check` gate.
+- Automatic system-locale detection uses supported languages only. A partial
+  locale requires an explicit user or downstream-config choice.
 
 The upstream source hasn't migrated every string to the catalog
 yet — only the highest-visibility ones (see the focused roadmap in

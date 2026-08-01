@@ -16,13 +16,13 @@ hide:
 <div class="cowork-stats" markdown>
 
 <div class="stat" markdown>
-  <div class="stat-value">8 MCPs · 7 skills</div>
-  <div class="stat-label">Configured capabilities</div>
+  <div class="stat-value">Workspace-derived</div>
+  <div class="stat-label">Tools & skills catalog</div>
 </div>
 
 <div class="stat" markdown>
-  <div class="stat-value">18+</div>
-  <div class="stat-label">Built-in chart tools</div>
+  <div class="stat-value">Local rendering</div>
+  <div class="stat-label">Charts & diagrams</div>
 </div>
 
 <div class="stat" markdown>
@@ -64,13 +64,13 @@ own branding, providers, skills, and workflows.
 
     [:octicons-arrow-right-24: Desktop App Guide](desktop-app.md)
 
--   :material-text-search:{ .lg } **Searchable project history**
+-   :material-view-kanban:{ .lg } **Projects coordination board**
 
     ---
 
-    A dedicated Projects workspace for indexed history search, metadata
-    facets, user tags, saved filters, and suggestion-only categorization.
-    The compact sidebar list stays focused on quick switching.
+    Organize objectives and Kanban tasks, assign coworkers, and open the
+    linked work chats that carry each task forward. The compact sidebar
+    recent-chat list handles quick switching.
 
     [:octicons-arrow-right-24: Projects](projects.md)
 
@@ -88,12 +88,12 @@ own branding, providers, skills, and workflows.
 
     ---
 
-    Ships with `agents`, `charts`, `knowledge`, `semantic-ui`, `skills`,
-    `workflows`, and `time-keep` MCPs for agent authoring, visuals,
-    time-aware reasoning, knowledge-wiki proposals, approval-gated UI actions,
-    skill-bundle management, and repeatable workflow setup. Add your own
-    stdio or HTTP MCPs from Settings, with SSRF and shell-metacharacter
-    policies enforced at save time.
+    The configured catalog combines bundled MCPs for coworker authoring,
+    visualization, in-app knowledge proposals, approval-gated UI actions,
+    skill management, repeatable workflow setup, and local time operations.
+    The live **Tools & Skills** catalog is authoritative for an installed
+    workspace. Add your own stdio or HTTP MCPs from Settings, with SSRF and
+    shell-metacharacter policies enforced at save time.
 
     [:octicons-arrow-right-24: Skills & MCPs](skills-and-mcps.md)
 
