@@ -204,10 +204,16 @@ export type KnowledgeReviewInput = WorkspaceOptions & {
 }
 
 export type KnowledgeSpaceInput = WorkspaceOptions & {
+  /** Renderer-generated operation identity used to correlate an ambiguous create response. */
+  creationId?: string
   name: string
   visibility?: KnowledgeSpaceVisibility | null
   icon?: string | null
   hue?: string | null
+}
+
+export function knowledgeSpaceIdFromCreationId(creationId: string): string {
+  return `space:creation:${creationId}`
 }
 
 export function isKnowledgeSpaceVisibility(value: unknown): value is KnowledgeSpaceVisibility {

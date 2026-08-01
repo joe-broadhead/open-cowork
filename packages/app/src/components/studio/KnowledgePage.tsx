@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   KnowledgePage as KnowledgePageRecord, KnowledgePageBlock as KnowledgePageBlockRecord, KnowledgePageLink, KnowledgePageVersion, KnowledgeProposal, KnowledgeSnapshotPayload, KnowledgeSpace, } from '@open-cowork/shared'
 import type { KnowledgeSpaceVisibility } from '@open-cowork/shared'
-import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
+import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeSpaceIdFromCreationId, knowledgeVisibilityLabel } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
@@ -54,9 +54,9 @@ const NEW_SPACE_OVERVIEW_TITLE = 'Overview'
 
 type NewSpaceCreationProgress = {
   workspaceId: string
+  creationId: string
   name: string
   visibility: KnowledgeSpaceVisibility
-  knownSpaceIds: Set<string>
   space?: KnowledgeSpace
   proposalId?: string
   pageId?: string
@@ -68,9 +68,7 @@ function reconcileNewSpaceCreation(
   next: KnowledgeSnapshotPayload,
 ) {
   progress.space ||= next.spaces.find((space) => (
-    !progress.knownSpaceIds.has(space.id)
-    && space.name === progress.name
-    && space.visibility === progress.visibility
+    space.id === knowledgeSpaceIdFromCreationId(progress.creationId)
   ))
   if (!progress.space) return
 
@@ -617,9 +615,9 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
     if (!existingProgress || existingProgress.workspaceId !== activeWorkspaceId) {
       progress = {
         workspaceId: activeWorkspaceId,
+        creationId: crypto.randomUUID(),
         name,
         visibility,
-        knownSpaceIds: new Set(snapshot.spaces.map((space) => space.id)),
       }
       newSpaceCreationRef.current = progress
     } else {
@@ -657,14 +655,14 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
     try {
       if (progress.uncertainStage) {
         const uncertainStage = progress.uncertainStage
-        const next = await reconcile()
+        await reconcile()
         progress.uncertainStage = undefined
         if (uncertainStage === 'space' && !progress.space) {
           progress = {
             workspaceId: activeWorkspaceId,
+            creationId: crypto.randomUUID(),
             name,
             visibility,
-            knownSpaceIds: new Set(next.spaces.map((space) => space.id)),
           }
           newSpaceCreationRef.current = progress
         }
@@ -674,6 +672,7 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
           'space',
           () => window.coworkApi.knowledge.createSpace({
             workspaceId: activeWorkspaceId,
+            creationId: progress.creationId,
             name: progress.name,
             visibility: progress.visibility,
           }),
@@ -732,7 +731,7 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
     } finally {
       setNewSpaceBusy(false)
     }
-  }, [activeWorkspaceId, snapshot.spaces])
+  }, [activeWorkspaceId])
 
   const canPropose = selectedSpace ? knowledgeRoleCanPropose(selectedSpace.role) : false
   const canReview = selectedSpace ? knowledgeRoleCanReview(selectedSpace.role) : false
@@ -1001,6 +1000,9 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
         <KnowledgeNewSpaceDialog
           busy={newSpaceBusy}
           error={newSpaceError}
+          initialName={newSpaceCreationRef.current?.name}
+          initialVisibility={newSpaceCreationRef.current?.visibility}
+          resuming={Boolean(newSpaceCreationRef.current)}
           onSubmit={(input) => void createSpace(input)}
           onClose={() => setNewSpaceOpen(false)}
         />

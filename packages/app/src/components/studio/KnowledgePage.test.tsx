@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { KnowledgeSnapshotPayload } from '@open-cowork/shared'
+import { knowledgeSpaceIdFromCreationId, type KnowledgeSnapshotPayload } from '@open-cowork/shared'
 import { KnowledgePage } from './KnowledgePage'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
@@ -11,6 +11,8 @@ const featureValueTelemetry = vi.hoisted(() => ({
   activate: vi.fn(),
   discover: vi.fn(),
 }))
+
+const NEW_SPACE_CREATION_ID = '00000000-0000-4000-8000-000000000001'
 
 vi.mock('../../helpers/feature-value-telemetry', () => ({
   recordFeatureValueActivation: featureValueTelemetry.activate,
@@ -143,7 +145,7 @@ function localStarterSnapshot(overrides: Partial<KnowledgeSnapshotPayload> = {})
 function newSpaceScenario() {
   const starter = localStarterSnapshot()
   const createdSpace = {
-    id: 'space:onboarding',
+    id: knowledgeSpaceIdFromCreationId(NEW_SPACE_CREATION_ID),
     name: 'Onboarding',
     visibility: 'company' as const,
     role: 'Maintainer' as const,
@@ -291,6 +293,7 @@ describe('KnowledgePage clarity redesign', () => {
     vi.clearAllMocks()
     installViewport(1440)
     useSessionStore.setState({ activeWorkspaceId: LOCAL_WORKSPACE_ID })
+    vi.spyOn(window.crypto, 'randomUUID').mockReturnValue(NEW_SPACE_CREATION_ID)
   })
 
   afterEach(() => {
@@ -356,6 +359,7 @@ describe('KnowledgePage clarity redesign', () => {
     await screen.findByRole('heading', { level: 1, name: 'Overview' })
     expect(createSpace).toHaveBeenCalledWith({
       workspaceId: LOCAL_WORKSPACE_ID,
+      creationId: NEW_SPACE_CREATION_ID,
       name: 'Onboarding',
       visibility: 'company',
     })
@@ -401,7 +405,7 @@ describe('KnowledgePage clarity redesign', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Proposal service unavailable.')
 
-    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
     await screen.findByRole('heading', { level: 1, name: 'Overview' })
 
     expect(createSpace).toHaveBeenCalledTimes(1)
@@ -409,7 +413,7 @@ describe('KnowledgePage clarity redesign', () => {
     expect(acceptProposal).toHaveBeenCalledTimes(1)
   })
 
-  it('reconciles an ambiguous Space write and ignores changed retry input', async () => {
+  it('reconciles an ambiguous Space write by creation id and resumes explicitly after dismissal', async () => {
     const user = userEvent.setup()
     const { starter, createdSpace, proposal, createdPage, createdOnlySnapshot, nextSnapshot } = newSpaceScenario()
     const createSpace = vi.fn(async () => {
@@ -437,17 +441,26 @@ describe('KnowledgePage clarity redesign', () => {
     render(<KnowledgePage />)
 
     await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
-    const name = screen.getByRole('textbox', { name: 'Name' })
+    let name = screen.getByRole('textbox', { name: 'Name' })
     await user.type(name, 'Onboarding')
     await user.click(screen.getByRole('button', { name: 'Create' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Create response was lost.')
 
-    await user.clear(name)
-    await user.type(name, 'Different Space')
-    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(name).toBeDisabled()
+    expect(screen.getByText('Finish publishing the Overview page for this Space before starting another one.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Create a Space' }))
+    name = screen.getByRole('textbox', { name: 'Name' })
+    expect(name).toHaveValue('Onboarding')
+    expect(name).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
     await screen.findByRole('heading', { level: 1, name: 'Overview' })
 
     expect(createSpace).toHaveBeenCalledTimes(1)
+    expect(createSpace).toHaveBeenCalledWith(expect.objectContaining({
+      creationId: NEW_SPACE_CREATION_ID,
+    }))
     expect(propose).toHaveBeenCalledWith(expect.objectContaining({
       spaceId: createdSpace.id,
       summary: 'Create the first page for Onboarding.',
@@ -494,11 +507,13 @@ describe('KnowledgePage clarity redesign', () => {
 
     expect(createSpace).toHaveBeenNthCalledWith(1, {
       workspaceId: LOCAL_WORKSPACE_ID,
+      creationId: NEW_SPACE_CREATION_ID,
       name: 'Invalid Space',
       visibility: 'company',
     })
     expect(createSpace).toHaveBeenNthCalledWith(2, {
       workspaceId: LOCAL_WORKSPACE_ID,
+      creationId: NEW_SPACE_CREATION_ID,
       name: 'Onboarding',
       visibility: 'company',
     })
@@ -538,7 +553,7 @@ describe('KnowledgePage clarity redesign', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Review service unavailable.')
 
-    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
     await screen.findByRole('heading', { level: 1, name: 'Overview' })
 
     expect(createSpace).toHaveBeenCalledTimes(1)

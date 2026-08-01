@@ -80,10 +80,17 @@ function normalizeProposalInput(value: Record<string, unknown>): KnowledgePropos
 
 function normalizeSpaceInput(value: Record<string, unknown>): KnowledgeSpaceInput {
   const workspaceId = readWorkspaceIdOption(value)
+  const creationId = value.creationId === undefined
+    ? undefined
+    : assertKnowledgeId(value.creationId, 'Space creation id')
+  if (creationId && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(creationId)) {
+    throw new Error('Space creation id must be a UUID.')
+  }
   // Default visibility handling lives in the store; only pass through an explicit
   // valid value. The store re-validates `name`, so pass it through as-is.
   return {
     ...(workspaceId ? { workspaceId } : {}),
+    ...(creationId ? { creationId } : {}),
     name: value.name as KnowledgeSpaceInput['name'],
     ...(isKnowledgeSpaceVisibility(value.visibility) ? { visibility: value.visibility } : {}),
   }

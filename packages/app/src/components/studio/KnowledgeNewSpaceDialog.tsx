@@ -7,14 +7,17 @@ import {
 import { Button, Dialog, Input, Select } from '@open-cowork/ui'
 import { t } from '../../helpers/i18n'
 
-export function KnowledgeNewSpaceDialog({ busy, error, onSubmit, onClose }: {
+export function KnowledgeNewSpaceDialog({ busy, error, initialName = '', initialVisibility = 'company', resuming = false, onSubmit, onClose }: {
   busy: boolean
   error: string | null
+  initialName?: string
+  initialVisibility?: KnowledgeSpaceVisibility
+  resuming?: boolean
   onSubmit: (input: { name: string; visibility: KnowledgeSpaceVisibility }) => void
   onClose: () => void
 }) {
-  const [name, setName] = useState('')
-  const [visibility, setVisibility] = useState<KnowledgeSpaceVisibility>('company')
+  const [name, setName] = useState(initialName)
+  const [visibility, setVisibility] = useState<KnowledgeSpaceVisibility>(initialVisibility)
   const trimmedName = name.trim()
   const canSubmit = Boolean(trimmedName) && !busy
   const visibilityOptions = useMemo(
@@ -39,21 +42,27 @@ export function KnowledgeNewSpaceDialog({ busy, error, onSubmit, onClose }: {
             disabledReason={!trimmedName ? t('knowledge.newSpace.needName', 'Add a name') : undefined}
             onClick={() => onSubmit({ name: trimmedName, visibility })}
           >
-            {busy ? t('knowledge.newSpace.creating', 'Creating') : t('knowledge.newSpace.create', 'Create')}
+            {busy
+              ? t('knowledge.newSpace.creating', 'Creating')
+              : resuming
+                ? t('knowledge.newSpace.finish', 'Finish')
+                : t('knowledge.newSpace.create', 'Create')}
           </Button>
         </>
       )}
     >
       <div className="studio-wiki-propose">
         <p className="studio-wiki-propose__hint">
-          {t('knowledge.newSpace.hint', 'Spaces group related pages and set who can read, propose, and review them.')}
+          {resuming
+            ? t('knowledge.newSpace.resumeHint', 'Finish publishing the Overview page for this Space before starting another one.')
+            : t('knowledge.newSpace.hint', 'Spaces group related pages and set who can read, propose, and review them.')}
         </p>
         <label className="studio-wiki-propose__field">
           <span>{t('knowledge.newSpace.nameLabel', 'Name')}</span>
           <Input
             value={name}
             placeholder={t('knowledge.newSpace.namePlaceholder', 'e.g. Onboarding')}
-            disabled={busy}
+            disabled={busy || resuming}
             autoFocus
             onChange={(event) => setName(event.target.value)}
           />
@@ -64,7 +73,7 @@ export function KnowledgeNewSpaceDialog({ busy, error, onSubmit, onClose }: {
             label={t('knowledge.newSpace.visibilityLabel', 'Visibility')}
             value={visibility}
             options={visibilityOptions}
-            disabled={busy}
+            disabled={busy || resuming}
             onChange={(value) => setVisibility(value as KnowledgeSpaceVisibility)}
           />
         </label>
