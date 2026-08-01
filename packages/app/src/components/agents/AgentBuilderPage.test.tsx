@@ -1,10 +1,16 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSummary, PublicAppConfig } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { AgentBuilderPage } from './AgentBuilderPage'
+
+const featureValueTelemetry = vi.hoisted(() => ({
+  recordFeatureValueActivation: vi.fn(),
+}))
+
+vi.mock('../../helpers/feature-value-telemetry', () => featureValueTelemetry)
 
 // The canonical <Select> renders a custom listbox: a trigger <button> named
 // "<label>: <selectedLabel>" that opens a role="listbox" of role="option"
@@ -124,6 +130,10 @@ function builtInAgent(overrides: Partial<BuiltInAgentDetail> = {}): BuiltInAgent
 }
 
 describe('AgentBuilderPage', () => {
+  beforeEach(() => {
+    featureValueTelemetry.recordFeatureValueActivation.mockClear()
+  })
+
   it('creates a project-scoped custom agent from the four-step hire wizard', async () => {
     const user = userEvent.setup()
     const { create, onSaved } = renderBuilder()
@@ -153,7 +163,9 @@ describe('AgentBuilderPage', () => {
     )
 
     await user.click(screen.getByRole('radio', { name: 'Project' }))
-    await user.click(screen.getAllByRole('button', { name: 'Hire coworker' })[0]!)
+    const hireButton = screen.getAllByRole('button', { name: 'Hire coworker' })[0]!
+    await waitFor(() => expect(hireButton).toBeEnabled())
+    await user.click(hireButton)
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
@@ -168,6 +180,27 @@ describe('AgentBuilderPage', () => {
     }))
     expect(create.mock.calls[0]?.[0]).not.toHaveProperty('permissionOverrides')
     expect(onSaved).toHaveBeenCalledTimes(1)
+    expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledWith('custom-team')
+  }, 15_000)
+
+  it('does not count or close when the custom coworker save returns false', async () => {
+    const user = userEvent.setup()
+    const { create, onSaved } = renderBuilder()
+    create.mockResolvedValueOnce(false)
+
+    await user.click(screen.getByRole('button', { name: /Writer/ }))
+    await user.type(screen.getByPlaceholderText('agent-id'), 'failed-writer')
+    await user.type(
+      screen.getByPlaceholderText('What is this coworker specialised to do?'),
+      'Drafts updates.',
+    )
+    const hireButton = screen.getAllByRole('button', { name: 'Hire coworker' })[0]!
+    await waitFor(() => expect(hireButton).toBeEnabled())
+    await user.click(hireButton)
+
+    expect(await screen.findByText('The coworker was not saved. Refresh and try again.')).toBeInTheDocument()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(featureValueTelemetry.recordFeatureValueActivation).not.toHaveBeenCalled()
   })
 
   it('renders built-in OpenCode agents as read-only and augments native tools for preview', async () => {

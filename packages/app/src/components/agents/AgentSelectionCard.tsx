@@ -22,11 +22,12 @@ type CommonProps = {
   avatar?: string | null
   typeLabel: TypeLabel
   scope: AgentScope
+  editingLabel: string
   toolCount: number
   skillCount: number
   modelLabel?: string | null
   statusNode?: React.ReactNode  // e.g. "Off" / "Needs attention" pill
-  onOpen: () => void
+  onOpen?: () => void
   footer?: React.ReactNode
 }
 
@@ -38,6 +39,7 @@ function SelectionCardShell({
   avatar,
   typeLabel,
   scope,
+  editingLabel,
   toolCount,
   skillCount,
   modelLabel,
@@ -45,6 +47,51 @@ function SelectionCardShell({
   onOpen,
   footer,
 }: CommonProps) {
+  const content = (
+    <>
+      <div className="flex items-start gap-3">
+        <AgentAvatar name={label || name} color={color ?? undefined} src={avatar} size="lg" className="shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+            <TypeChip typeLabel={typeLabel} />
+            {statusNode}
+          </div>
+          <div className="font-display text-role-card-title font-semibold text-text truncate leading-tight">
+            {label || name}
+          </div>
+          <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
+            {description || t('agentCard.noDescription', 'No description')}
+          </div>
+        </div>
+      </div>
+
+      {/* Instrument-readout meta line — tabular counts + a single scope dot, no
+          pill chrome. The one colour here is a 6px scope dot. */}
+      <div className="flex flex-wrap items-center gap-2 text-2xs text-text-muted">
+        <span className="tabular">
+          <span className="text-text-secondary font-[560]">{skillCount}</span> skill{skillCount === 1 ? '' : 's'}
+        </span>
+        <span className="text-text-muted/60" aria-hidden>·</span>
+        <span className="tabular">
+          <span className="text-text-secondary font-[560]">{toolCount}</span> tool{toolCount === 1 ? '' : 's'}
+        </span>
+        <span className="text-text-muted/60" aria-hidden>·</span>
+        <span>{t('agentCard.editingLabel', 'Editing: {{value}}', { value: editingLabel })}</span>
+        <span className="text-text-muted/60" aria-hidden>·</span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: scopeTone(scope) }} aria-hidden />
+          {t('agentCard.toolAccessLabel', 'Tool access: {{value}}', { value: scopeLabel(scope) })}
+        </span>
+        {modelLabel && (
+          <>
+            <span className="text-text-muted/60" aria-hidden>·</span>
+            <span className="font-mono truncate">{modelLabel}</span>
+          </>
+        )}
+      </div>
+    </>
+  )
+
   return (
     <Card
       variant="surface"
@@ -53,49 +100,18 @@ function SelectionCardShell({
       style={{ '--spine': agentChroma(color) } as React.CSSProperties}
       className="group relative flex flex-col gap-0 overflow-hidden !p-0 transition-colors duration-[120ms] hover:border-border-strong before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:bg-[color-mix(in_srgb,var(--spine)_60%,transparent)] before:opacity-0 group-hover:before:opacity-100 before:transition-opacity before:duration-[120ms]"
     >
-      <button
-        onClick={onOpen}
-        className="w-full text-start p-4 flex flex-col gap-3 group-hover:bg-surface-hover transition-colors duration-[120ms] cursor-pointer"
-      >
-        <div className="flex items-start gap-3">
-          <AgentAvatar name={label || name} color={color ?? undefined} src={avatar} size="lg" className="shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-              <TypeChip typeLabel={typeLabel} />
-              {statusNode}
-            </div>
-            <div className="font-display text-role-card-title font-semibold text-text truncate leading-tight">
-              {label || name}
-            </div>
-            <div className="text-2xs text-text-muted mt-0.5 leading-relaxed line-clamp-2">
-              {description || t('agentCard.noDescription', 'No description')}
-            </div>
-          </div>
+      {onOpen ? (
+        <button
+          onClick={onOpen}
+          className="w-full text-start p-4 flex flex-col gap-3 group-hover:bg-surface-hover transition-colors duration-[120ms] cursor-pointer"
+        >
+          {content}
+        </button>
+      ) : (
+        <div className="w-full p-4 flex flex-col gap-3 text-start">
+          {content}
         </div>
-
-        {/* Instrument-readout meta line — tabular counts + a single scope dot, no
-            pill chrome. The one colour here is a 6px scope dot. */}
-        <div className="flex items-center gap-2 text-2xs text-text-muted">
-          <span className="tabular">
-            <span className="text-text-secondary font-[560]">{skillCount}</span> skill{skillCount === 1 ? '' : 's'}
-          </span>
-          <span className="text-text-muted/60" aria-hidden>·</span>
-          <span className="tabular">
-            <span className="text-text-secondary font-[560]">{toolCount}</span> tool{toolCount === 1 ? '' : 's'}
-          </span>
-          <span className="text-text-muted/60" aria-hidden>·</span>
-          <span className="inline-flex items-center gap-1">
-            <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: scopeTone(scope) }} aria-hidden />
-            {scopeLabel(scope)}
-          </span>
-          {modelLabel && (
-            <>
-              <span className="text-text-muted/60" aria-hidden>·</span>
-              <span className="font-mono truncate">{modelLabel}</span>
-            </>
-          )}
-        </div>
-      </button>
+      )}
 
       {footer}
     </Card>
@@ -112,14 +128,16 @@ export function CustomSelectionCard({
   onExport,
   onStartChat,
   onTest,
+  readOnly = false,
 }: {
   agent: CustomAgentSummary
   catalog: AgentCatalog | null
-  onOpen: () => void
-  onDelete: () => void
-  onExport: () => void
+  onOpen?: () => void
+  onDelete?: () => void
+  onExport?: () => void
   onStartChat?: () => void
   onTest?: () => void
+  readOnly?: boolean
 }) {
   const scope: AgentScope = catalog ? computeAgentScope(agent.toolIds, catalog, agent.permissionOverrides) : 'read-only'
   return (
@@ -131,12 +149,13 @@ export function CustomSelectionCard({
       avatar={agent.avatar}
       typeLabel="Custom"
       scope={scope}
+      editingLabel={readOnly ? t('agentCard.managed', 'Managed') : t('agentCard.editable', 'Editable')}
       toolCount={agent.toolIds.length}
       skillCount={agent.skillNames.length}
       modelLabel={agent.model ? agent.model.split('/').pop()! : null}
       statusNode={<EnabledStatusPill enabled={agent.enabled} valid={agent.valid} />}
       onOpen={onOpen}
-      footer={
+      footer={onStartChat || onTest || onOpen || onExport || onDelete ? (
         <CardFooter mention={agent.name}>
           {onStartChat && agent.enabled && agent.valid && agent.mode === 'primary' && (
             <Button variant="ghost" size="sm" onClick={onStartChat}>{t('agentCard.startChat', 'Start chat')}</Button>
@@ -144,24 +163,38 @@ export function CustomSelectionCard({
           {onTest && agent.enabled && agent.valid && agent.mode !== 'primary' && (
             <Button variant="ghost" size="sm" onClick={onTest}>{t('agentCard.test', 'Test')}</Button>
           )}
-          <Button variant="ghost" size="sm" onClick={onOpen}>{t('agentCard.edit', 'Edit')}</Button>
-          <Button variant="ghost" size="sm" onClick={onExport} title={t('agentCard.exportTitle', 'Export this coworker as a shareable JSON bundle')}>{t('agentCard.export', 'Export')}</Button>
-          <Button variant="ghost" size="sm" onClick={onDelete}>{t('common.delete', 'Delete')}</Button>
+          {onOpen ? <Button variant="ghost" size="sm" onClick={onOpen}>{t('agentCard.edit', 'Edit')}</Button> : null}
+          {onExport ? <Button variant="ghost" size="sm" onClick={onExport} title={t('agentCard.exportTitle', 'Export this coworker as a shareable JSON bundle')}>{t('agentCard.export', 'Export')}</Button> : null}
+          {onDelete ? <Button variant="ghost" size="sm" onClick={onDelete}>{t('common.delete', 'Delete')}</Button> : null}
         </CardFooter>
-      }
+      ) : undefined}
     />
   )
 }
 
 export function BuiltInSelectionCard({
   agent,
+  catalog,
   onOpen,
   onTest,
 }: {
   agent: BuiltInAgentDetail
+  catalog: AgentCatalog | null
   onOpen: () => void
   onTest?: () => void
 }) {
+  const configuredScope = catalog ? computeAgentScope(agent.configuredToolIds, catalog) : 'read-only'
+  const nativeWriteFamilies = new Set(agent.nativeToolIds.flatMap((id) => {
+    const normalized = id.toLowerCase()
+    if (normalized === 'bash' || normalized === 'task' || normalized === 'external_directory') return [normalized]
+    if (normalized === 'edit' || normalized === 'write' || normalized === 'apply_patch') return ['edit']
+    return []
+  }))
+  const scope: AgentScope = configuredScope === 'powerful' || nativeWriteFamilies.size >= 3
+    ? 'powerful'
+    : configuredScope === 'standard' || nativeWriteFamilies.size > 0
+      ? 'standard'
+      : 'read-only'
   return (
     <SelectionCardShell
       name={agent.name}
@@ -170,11 +203,12 @@ export function BuiltInSelectionCard({
       color={agent.color}
       avatar={agent.avatar}
       typeLabel="Built-in"
-      scope="read-only"
+      scope={scope}
+      editingLabel={t('agentCard.managed', 'Managed')}
       toolCount={agent.toolAccess.length}
       skillCount={agent.skills.length}
       modelLabel={agent.model ? agent.model.split('/').pop()! : null}
-      statusNode={<ModeStatusPill mode={agent.mode} disabled={agent.disabled} hidden={agent.hidden} />}
+      statusNode={agent.disabled ? <DisabledPill /> : null}
       onOpen={onOpen}
       footer={onTest && !agent.disabled && !agent.hidden && agent.mode !== 'primary' ? (
         <CardTestFooter name={agent.name} onTest={onTest} />
@@ -201,6 +235,7 @@ export function RuntimeSelectionCard({
       color={agent.color || 'info'}
       typeLabel="Runtime"
       scope={agent.writeAccess ? 'standard' : 'read-only'}
+      editingLabel={t('agentCard.integrationManaged', 'Managed by integration')}
       toolCount={toolCount}
       skillCount={0}
       modelLabel={agent.model ? agent.model.split('/').pop()! : null}
@@ -260,12 +295,6 @@ function EnabledStatusPill({ enabled, valid }: { enabled: boolean; valid: boolea
     )
   }
   return <StatusDotLabel label="Off" />
-}
-
-function ModeStatusPill({ mode, disabled, hidden }: { mode: 'primary' | 'subagent'; disabled: boolean; hidden: boolean }) {
-  if (disabled) return <DisabledPill />
-  const label = mode === 'primary' ? 'Top-level' : hidden ? 'Internal' : 'Sub-agent'
-  return <StatusDotLabel label={label} />
 }
 
 function DisabledPill() {
