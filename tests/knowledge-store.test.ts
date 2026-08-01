@@ -313,11 +313,25 @@ test('knowledge store bounds snapshots and graph page nodes', () => withMemoryKn
     )
   }
 
+  for (let index = 0; index < 105; index += 1) {
+    insertSpace(db, {
+      workspaceId,
+      id: `space:${workspaceId}:generated-${index}`,
+      name: `Z generated Space ${String(index).padStart(3, '0')}`,
+      role: 'Maintainer',
+    })
+  }
+  const lateSpaceId = `space:${workspaceId}:generated-104`
+
   const bounded = listKnowledgeSnapshot({ workspaceId })
   assert.equal(bounded.limit, 100)
   assert.equal(bounded.truncated, true)
   assert.equal(bounded.pages.length, 100)
   assert.equal(bounded.graph.nodes.filter((node) => node.kind === 'page').length, 100)
+  assert.equal(bounded.spaces.some((space) => space.id === lateSpaceId), false)
+
+  const exactSpace = listKnowledgeSnapshot({ workspaceId, spaceId: lateSpaceId })
+  assert.deepEqual(exactSpace.spaces.map((space) => space.id), [lateSpaceId])
 
   const explicit = listKnowledgeSnapshot({ workspaceId, limit: 12 })
   assert.equal(explicit.limit, 12)

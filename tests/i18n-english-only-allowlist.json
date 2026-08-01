@@ -653,6 +653,7 @@
     "knowledge.newSpace.namePlaceholder",
     "knowledge.newSpace.needName",
     "knowledge.newSpace.refreshFailed",
+    "knowledge.newSpace.resumeAction",
     "knowledge.newSpace.resumeHint",
     "knowledge.newSpace.title",
     "knowledge.newSpace.visibilityLabel",

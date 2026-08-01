@@ -374,7 +374,7 @@ describe('KnowledgePage clarity redesign', () => {
     expect(screen.queryByText('No readable pages')).not.toBeInTheDocument()
   })
 
-  it('resumes at the proposal stage without creating a duplicate Space', async () => {
+  it('resumes a persisted proposal stage after the Knowledge route remounts', async () => {
     const user = userEvent.setup()
     const { starter, createdSpace, proposal, createdPage, createdOnlySnapshot, nextSnapshot } = newSpaceScenario()
     const createSpace = vi.fn(async () => createdSpace)
@@ -387,45 +387,7 @@ describe('KnowledgePage clarity redesign', () => {
         snapshot: vi.fn()
           .mockResolvedValueOnce(starter)
           .mockResolvedValueOnce(createdOnlySnapshot)
-          .mockResolvedValue(nextSnapshot),
-        history: vi.fn(async () => []),
-        createSpace,
-        propose,
-        acceptProposal,
-        declineProposal: vi.fn(async () => undefined),
-        restoreVersion: vi.fn(async () => undefined),
-      },
-      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
-    })
-
-    render(<KnowledgePage />)
-
-    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
-    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Onboarding')
-    await user.click(screen.getByRole('button', { name: 'Create' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Proposal service unavailable.')
-
-    await user.click(screen.getByRole('button', { name: 'Finish' }))
-    await screen.findByRole('heading', { level: 1, name: 'Overview' })
-
-    expect(createSpace).toHaveBeenCalledTimes(1)
-    expect(propose).toHaveBeenCalledTimes(2)
-    expect(acceptProposal).toHaveBeenCalledTimes(1)
-  })
-
-  it('reconciles an ambiguous Space write by creation id and resumes explicitly after dismissal', async () => {
-    const user = userEvent.setup()
-    const { starter, createdSpace, proposal, createdPage, createdOnlySnapshot, nextSnapshot } = newSpaceScenario()
-    const createSpace = vi.fn(async () => {
-      throw new Error('Create response was lost.')
-    })
-    const propose = vi.fn(async () => proposal)
-    const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
-    installRendererTestCoworkApi({
-      knowledge: {
-        snapshot: vi.fn()
-          .mockResolvedValueOnce(starter)
-          .mockRejectedValueOnce(new Error('Reconciliation temporarily unavailable.'))
+          .mockResolvedValueOnce(createdOnlySnapshot)
           .mockResolvedValueOnce(createdOnlySnapshot)
           .mockResolvedValue(nextSnapshot),
         history: vi.fn(async () => []),
@@ -438,9 +400,77 @@ describe('KnowledgePage clarity redesign', () => {
       on: { knowledgeUpdated: vi.fn(() => () => undefined) },
     })
 
-    render(<KnowledgePage />)
+    const firstRender = render(<KnowledgePage />)
 
     await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Proposal service unavailable.')
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    firstRender.unmount()
+    render(<KnowledgePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Finish Space' }))
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Onboarding')
+    expect(screen.getByRole('textbox', { name: 'Name' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
+    await screen.findByRole('heading', { level: 1, name: 'Overview' })
+
+    expect(createSpace).toHaveBeenCalledTimes(1)
+    expect(propose).toHaveBeenCalledTimes(2)
+    expect(acceptProposal).toHaveBeenCalledTimes(1)
+  })
+
+  it('reconciles an ambiguous Space beyond the full-snapshot limit by exact creation id', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, nextSnapshot } = newSpaceScenario()
+    const cappedStarter = localStarterSnapshot({
+      spaces: [
+        ...Array.from({ length: 99 }, (_, index) => ({
+          id: `space:a-${String(index).padStart(3, '0')}`,
+          name: `A Space ${String(index).padStart(3, '0')}`,
+          visibility: 'company' as const,
+          role: 'Maintainer' as const,
+        })),
+        ...starter.spaces,
+      ],
+      truncated: true,
+    })
+    const exactCreatedSnapshot = localStarterSnapshot({
+      spaces: [createdSpace],
+      pages: [],
+      graph: {
+        nodes: [{ id: createdSpace.id, kind: 'space', label: createdSpace.name, spaceId: createdSpace.id }],
+        edges: [],
+      },
+    })
+    const createSpace = vi.fn(async () => {
+      throw new Error('Create response was lost.')
+    })
+    const propose = vi.fn(async () => proposal)
+    const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
+    const snapshotApi = vi.fn()
+      .mockResolvedValueOnce(cappedStarter)
+      .mockRejectedValueOnce(new Error('Reconciliation temporarily unavailable.'))
+      .mockResolvedValueOnce(exactCreatedSnapshot)
+      .mockResolvedValue(nextSnapshot)
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: snapshotApi,
+        history: vi.fn(async () => []),
+        createSpace,
+        propose,
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    render(<KnowledgePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'New Space' }))
     let name = screen.getByRole('textbox', { name: 'Name' })
     await user.type(name, 'Onboarding')
     await user.click(screen.getByRole('button', { name: 'Create' }))
@@ -449,7 +479,7 @@ describe('KnowledgePage clarity redesign', () => {
     expect(name).toBeDisabled()
     expect(screen.getByText('Finish publishing the Overview page for this Space before starting another one.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    await user.click(screen.getByRole('button', { name: 'Create a Space' }))
+    await user.click(screen.getByRole('button', { name: 'Finish Space' }))
     name = screen.getByRole('textbox', { name: 'Name' })
     expect(name).toHaveValue('Onboarding')
     expect(name).toBeDisabled()
@@ -461,6 +491,14 @@ describe('KnowledgePage clarity redesign', () => {
     expect(createSpace).toHaveBeenCalledWith(expect.objectContaining({
       creationId: NEW_SPACE_CREATION_ID,
     }))
+    expect(snapshotApi).toHaveBeenNthCalledWith(2, {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      spaceId: createdSpace.id,
+    })
+    expect(snapshotApi).toHaveBeenNthCalledWith(3, {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      spaceId: createdSpace.id,
+    })
     expect(propose).toHaveBeenCalledWith(expect.objectContaining({
       spaceId: createdSpace.id,
       summary: 'Create the first page for Onboarding.',
