@@ -188,6 +188,17 @@ async function seedKnowledgePage(page: Page) {
   await page.getByRole('heading', { name: pageTitle, exact: true }).waitFor({ timeout: 15_000 })
 }
 
+async function normalizeKnowledgeTimestamps(page: Page) {
+  await page.locator('.knowledge-workbench span').evaluateAll((spans) => {
+    for (const span of spans) {
+      const text = span.textContent?.trim() || ''
+      if (/^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M$/.test(text)) {
+        span.textContent = 'Aug 1, 2026, 1:00 PM'
+      }
+    }
+  })
+}
+
 test('eval:visual — retained Mercury theme and density classes match baselines', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
@@ -283,6 +294,10 @@ test('eval:visual — Knowledge empty and populated layouts remain usable across
       await setKnowledgeViewport(page, cdp, viewport)
       await page.locator(`.knowledge-workbench--${viewport.mode}`).waitFor({ timeout: 10_000 })
       await assertKnowledgeViewport(page, viewport, 'populated')
+      // Knowledge writes are timestamped in Electron's main process, which is
+      // outside Playwright's renderer clock. Normalize the visible timestamps
+      // so a monthly baseline does not encode the wall-clock run time.
+      await normalizeKnowledgeTimestamps(page)
       const result = await compareToBaseline(
         page,
         `knowledge-populated-mercury-regular-dark-${viewport.width}`,
