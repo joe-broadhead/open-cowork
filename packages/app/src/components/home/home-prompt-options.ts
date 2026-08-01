@@ -1,4 +1,4 @@
-import type { SessionComposerPreferences, SessionPromptOptions } from '@open-cowork/shared'
+import type { SessionComposerPreferences, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 
 export type HomePromptOptions = SessionPromptOptions & {
   modelId?: string | null
@@ -22,4 +22,18 @@ export function composerPreferencesFromHomeOptions(options?: HomePromptOptions):
     preferences.reasoningVariant = options.variant ?? null
   }
   return preferences
+}
+
+export function previousHomeComposerPreferences(
+  session: Pick<SessionInfo, 'composerModelId' | 'composerReasoningVariant'> | undefined,
+  changedPreferences: SessionComposerPreferences,
+): SessionComposerPreferences {
+  const previous: SessionComposerPreferences = {}
+  if (Object.prototype.hasOwnProperty.call(changedPreferences, 'modelId')) {
+    previous.modelId = session?.composerModelId ?? null
+  }
+  if (Object.prototype.hasOwnProperty.call(changedPreferences, 'reasoningVariant')) {
+    previous.reasoningVariant = session?.composerReasoningVariant ?? null
+  }
+  return previous
 }

@@ -110,7 +110,6 @@ function renderHome(overrides: Partial<ComponentProps<typeof HomePage>> = {}) {
       brandName="Open Cowork"
       onStartThread={createStartThreadMock()}
       onOpenThread={vi.fn()}
-      onNavigate={vi.fn()}
       {...overrides}
     />,
   )
@@ -132,19 +131,18 @@ describe('HomePage', () => {
         brandName="Open Cowork"
         onStartThread={createStartThreadMock()}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
     // Time-of-day greeting ("Good morning/afternoon/evening.") rendered at 44px with
     // the time word in accent; assert on the stable "Good" lead, not the hour-dependent word.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Good /)
-    expect(screen.getByText('Open Cowork · Choose a lead coworker, @mention specialists, and review the work in one place')).toBeTruthy()
+    expect(screen.getByText('Open Cowork · Start a conversation or resume recent work')).toBeTruthy()
     expect(screen.getByPlaceholderText('Ask anything, or @mention a coworker')).toBeTruthy()
     await waitFor(() => expect(window.coworkApi.app.builtinAgents).toHaveBeenCalledTimes(1))
   })
 
-  it('renders downstream-configured Home copy without changing the launchpad shell', async () => {
+  it('renders downstream-configured Home copy without rebuilding a dashboard', async () => {
     vi.mocked(window.coworkApi.app.builtinAgents).mockResolvedValue([researchAgent])
 
     render(
@@ -159,16 +157,16 @@ describe('HomePage', () => {
         }}
         onStartThread={createStartThreadMock()}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
     expect(screen.getByText('What should Acme Cowork work on today?')).toBeTruthy()
     expect(screen.getByText('Ask a question or delegate to an approved agent.')).toBeTruthy()
     expect(screen.getByPlaceholderText('Ask Acme Cowork anything')).toBeTruthy()
-    expect(await screen.findByText('Start with a handoff')).toBeTruthy()
-    expect(await screen.findByRole('button', { name: /Your team/i })).toBeTruthy()
-    expect(screen.getByText('Online')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Recent work' })).toBeTruthy()
+    expect(screen.queryByText('Online')).toBeNull()
+    expect(screen.queryByText('Your team')).toBeNull()
+    expect(screen.queryByText('Review Snapshot')).toBeNull()
   })
 
   it('exposes the same model, mode, and attachment controls as the in-thread composer', async () => {
@@ -181,7 +179,6 @@ describe('HomePage', () => {
         brandName="Open Cowork"
         onStartThread={onStartThread}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
@@ -212,7 +209,6 @@ describe('HomePage', () => {
         brandName="Open Cowork"
         onStartThread={createStartThreadMock()}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
@@ -234,7 +230,6 @@ describe('HomePage', () => {
         brandName="Open Cowork"
         onStartThread={onStartThread}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
@@ -284,7 +279,6 @@ describe('HomePage', () => {
         brandName="Open Cowork"
         onStartThread={onStartThread}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
@@ -317,7 +311,6 @@ describe('HomePage', () => {
         brandName="Open Cowork"
         onStartThread={onStartThread}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
@@ -343,7 +336,7 @@ describe('HomePage', () => {
     })
   })
 
-  it('prefills the Home composer from first-run example prompt cards', async () => {
+  it('prefills and focuses the Home composer from the single empty-state starter', async () => {
     const user = userEvent.setup()
     installHomeRuntime()
 
@@ -352,15 +345,17 @@ describe('HomePage', () => {
         brandName="Open Cowork"
         onStartThread={createStartThreadMock()}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: /Plan a release/i }))
+    const starter = await screen.findByRole('button', { name: 'Try a starter' })
+    await user.click(starter)
 
-    expect(screen.getByPlaceholderText('Ask anything, or @mention a coworker')).toHaveValue('Draft a release plan for the next milestone.')
+    const composer = screen.getByPlaceholderText('Ask anything, or @mention a coworker')
+    expect(composer).toHaveValue('Draft a release plan for the next milestone.')
+    await waitFor(() => expect(document.activeElement).toBe(composer))
     expect(useSessionStore.getState().agentMode).toBe('plan')
-    expect(screen.getByText('Start with a handoff')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Try a starter' })).toHaveLength(1)
   })
 
   it('falls back starter suggestions to an allowed cloud primary agent', async () => {
@@ -387,6 +382,7 @@ describe('HomePage', () => {
     })
     act(() => {
       useSessionStore.getState().setActiveWorkspace('cloud:test')
+      useSessionStore.getState().setSessions([])
       useWorkspaceSupportStore.setState((state) => ({
         supportByWorkspace: { ...state.supportByWorkspace, 'cloud:test': cloudPromptSupport },
         loadedByWorkspace: { ...state.loadedByWorkspace, 'cloud:test': true },
@@ -398,8 +394,7 @@ describe('HomePage', () => {
     renderHome({ onStartThread })
 
     await waitFor(() => expect(window.coworkApi.workspace.policy).toHaveBeenCalledWith('cloud:test'))
-    expect(await screen.findByText('1 coworkers · manage')).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: /Plan a release/i }))
+    await user.click(await screen.findByRole('button', { name: 'Try a starter' }))
     expect(screen.getByPlaceholderText('Ask anything, or @mention a coworker')).toHaveValue('Draft a release plan for the next milestone.')
     await user.click(screen.getByRole('button', { name: 'Send message' }))
 
@@ -439,6 +434,7 @@ describe('HomePage', () => {
     })
     act(() => {
       useSessionStore.getState().setActiveWorkspace('cloud:pending-policy')
+      useSessionStore.getState().setSessions([])
       useWorkspaceSupportStore.setState((state) => ({
         supportByWorkspace: { ...state.supportByWorkspace, 'cloud:pending-policy': cloudPromptSupport },
         loadedByWorkspace: { ...state.loadedByWorkspace, 'cloud:pending-policy': true },
@@ -450,7 +446,7 @@ describe('HomePage', () => {
     renderHome()
 
     await waitFor(() => expect(window.coworkApi.workspace.policy).toHaveBeenCalledWith('cloud:pending-policy'))
-    expect(screen.queryByRole('button', { name: /Plan a release/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Try a starter' })).toBeNull()
     expect(screen.getByRole('button', { name: /Profile default/i })).toBeDisabled()
 
     await act(async () => {
@@ -466,7 +462,7 @@ describe('HomePage', () => {
       await policyPromise
     })
 
-    expect(await screen.findByRole('button', { name: /Plan a release/i })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Try a starter' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Build.*default/i })).toBeEnabled()
   })
 
@@ -494,6 +490,7 @@ describe('HomePage', () => {
     })
     act(() => {
       useSessionStore.getState().setActiveWorkspace('cloud:test')
+      useSessionStore.getState().setSessions([])
       useWorkspaceSupportStore.setState((state) => ({
         supportByWorkspace: { ...state.supportByWorkspace, 'cloud:test': cloudPromptSupport },
         loadedByWorkspace: { ...state.loadedByWorkspace, 'cloud:test': true },
@@ -505,10 +502,8 @@ describe('HomePage', () => {
     renderHome({ onStartThread })
 
     await waitFor(() => expect(window.coworkApi.workspace.policy).toHaveBeenCalledWith('cloud:test'))
-    expect(await screen.findByText('1 coworkers · manage')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Plan a release/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Try a starter' })).toBeNull()
     expect(await screen.findByRole('button', { name: /Profile default/i })).toBeDisabled()
-    expect(screen.getAllByText('No primary lead in this profile')).toHaveLength(4)
 
     await user.type(screen.getByPlaceholderText('Ask anything, or @mention a coworker'), 'Summarize workspace health')
     await user.click(screen.getByRole('button', { name: 'Send message' }))
@@ -547,6 +542,7 @@ describe('HomePage', () => {
     })
     act(() => {
       useSessionStore.getState().setActiveWorkspace('cloud:test')
+      useSessionStore.getState().setSessions([])
       useWorkspaceSupportStore.setState((state) => ({
         supportByWorkspace: { ...state.supportByWorkspace, 'cloud:test': cloudPromptSupport },
         loadedByWorkspace: { ...state.loadedByWorkspace, 'cloud:test': true },
@@ -575,7 +571,6 @@ describe('HomePage', () => {
         brandName="Open Cowork"
         onStartThread={onStartThread}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 
@@ -595,7 +590,7 @@ describe('HomePage', () => {
     })
   })
 
-  it('renders assign-to controls and routes suggestions through the selected lead', async () => {
+  it('preserves assign-to controls and keyboard session start behavior', async () => {
     const user = userEvent.setup()
     const onStartThread = createStartThreadMock()
     installHomeRuntime()
@@ -606,11 +601,8 @@ describe('HomePage', () => {
     await user.click(await screen.findByRole('menuitemradio', { name: /Cleo/i }))
     expect(useSessionStore.getState().agentMode).toBe('chief-of-staff')
 
-    await user.click(screen.getByRole('button', { name: /Create a workflow/i }))
     const composer = screen.getByPlaceholderText('Ask anything, or @mention a coworker')
-    expect(composer).toHaveValue('Help me turn a repeated task into a saved workflow.')
-    await waitFor(() => expect(document.activeElement).toBe(composer))
-
+    await user.type(composer, 'Help me turn a repeated task into a saved workflow.')
     await user.keyboard('{Enter}')
     await waitFor(() => {
       expect(onStartThread).toHaveBeenCalledWith(
@@ -622,225 +614,73 @@ describe('HomePage', () => {
     })
   })
 
-  it('renders live launchpad feed columns and deep-links rows', async () => {
+  it('renders explicit loading and error states and retries through the app session loader', async () => {
     const user = userEvent.setup()
-    const onOpenThread = vi.fn()
-    const onNavigate = vi.fn()
-    installHomeRuntime({
-      launchpad: {
-        feed: vi.fn(async () => ({
-          generatedAt: '2026-01-02T00:00:00.000Z',
-          inProgress: [{
-            id: 'task-1',
-            kind: 'task',
-            title: 'Implement launchpad parity',
-            projectId: 'project-1',
-            projectTitle: 'Studio redesign',
-            taskId: 'task-1',
-            taskTitle: 'Implement launchpad parity',
-            sessionId: 'session-task',
-            runId: 'run-1',
-            assigneeAgent: 'build',
-            status: 'running',
-            priority: 'high',
-            when: '2026-01-02T10:00:00.000Z',
-            updatedAt: '2026-01-02T10:00:00.000Z',
-          }],
-          waitingOnYou: [{
-            id: 'permission:session-review:approval-1',
-            kind: 'permission',
-            status: 'pending',
-            title: 'Approve test command',
-            projectId: 'project-1',
-            projectTitle: 'Studio redesign',
-            taskId: 'task-2',
-            taskTitle: 'Review launchpad',
-            sessionId: 'session-review',
-            runId: 'run-2',
-            assigneeAgent: 'review',
-            when: '2026-01-02T10:10:00.000Z',
-            updatedAt: '2026-01-02T10:10:00.000Z',
-          }],
-          freshArtifacts: [{
-            id: 'artifact:session-artifact:artifact-1',
-            artifactId: 'artifact-1',
-            kind: 'document',
-            status: 'draft',
-            title: 'launchpad-spec.md',
-            projectId: 'project-1',
-            projectTitle: 'Studio redesign',
-            taskId: 'task-3',
-            taskTitle: 'Document launchpad',
-            sessionId: 'session-artifact',
-            runId: 'run-3',
-            assigneeAgent: 'build',
-            authorAgentId: 'build',
-            when: '2026-01-02T10:20:00.000Z',
-            createdAt: '2026-01-02T10:20:00.000Z',
-            updatedAt: '2026-01-02T10:20:00.000Z',
-          }],
-          totals: { inProgress: 1, waitingOnYou: 1, freshArtifacts: 1 },
-          truncated: { inProgress: false, waitingOnYou: false, freshArtifacts: false },
-        })),
-      },
+    const onReloadSessions = vi.fn(async () => undefined)
+    useSessionStore.setState({
+      sessionListStatusByWorkspace: { local: 'loading' },
+      sessionListErrorByWorkspace: { local: null },
     })
 
-    renderHome({ onOpenThread, onNavigate })
+    const { rerender } = renderHome({ onReloadSessions })
 
-    expect(await screen.findByText('Implement launchpad parity')).toBeTruthy()
-    expect(screen.getByText('Approve test command')).toBeTruthy()
-    expect(screen.getByText('launchpad-spec.md')).toBeTruthy()
-
-    await user.click(screen.getByRole('button', { name: /Implement launchpad parity/i }))
-    expect(onOpenThread).toHaveBeenCalledWith('session-task')
-
-    await user.click(screen.getByRole('button', { name: /Approve test command/i }))
-    expect(onOpenThread).toHaveBeenCalledWith('session-review')
-
-    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
-    await user.click(screen.getByRole('button', { name: /launchpad-spec\.md/i }))
-    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'open-cowork:open-resource',
-    }))
-    dispatchSpy.mockRestore()
-  })
-
-  it('refreshes the launchpad feed when existing session metadata changes', async () => {
-    const feed = vi.fn(async () => ({
-      generatedAt: '2026-01-02T10:00:00.000Z',
-      inProgress: [],
-      waitingOnYou: [],
-      freshArtifacts: [],
-      totals: { inProgress: 0, waitingOnYou: 0, freshArtifacts: 0 },
-      truncated: { inProgress: false, waitingOnYou: false, freshArtifacts: false },
-    }))
-    installHomeRuntime({ launchpad: { feed } })
-
-    renderHome()
-    await waitFor(() => expect(feed).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('status', { name: 'Loading recent work' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try a starter' })).not.toBeInTheDocument()
 
     act(() => {
-      useSessionStore.getState().setSessions([{
-        id: 'session-existing',
-        title: 'Existing work',
-        createdAt: '2026-01-02T10:00:00.000Z',
-        updatedAt: '2026-01-02T10:05:00.000Z',
-      }])
+      useSessionStore.getState().setSessionListError('Session service is offline.')
     })
+    rerender(
+      <HomePage
+        brandName="Open Cowork"
+        onStartThread={createStartThreadMock()}
+        onOpenThread={vi.fn()}
+        onReloadSessions={onReloadSessions}
+      />,
+    )
 
-    await waitFor(() => expect(feed).toHaveBeenCalledTimes(2))
-
-    act(() => {
-      useSessionStore.getState().setSessions([{
-        id: 'session-existing',
-        title: 'Existing work',
-        createdAt: '2026-01-02T10:00:00.000Z',
-        updatedAt: '2026-01-02T10:10:00.000Z',
-      }])
-    })
-
-    await waitFor(() => expect(feed).toHaveBeenCalledTimes(3))
+    expect(screen.getByRole('alert')).toHaveTextContent('Session service is offline.')
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(onReloadSessions).toHaveBeenCalledTimes(1)
   })
 
-  it('opens the source thread for privacy-preserving local artifact ids', async () => {
+  it('sorts, bounds, and resumes recent conversations while excluding workflow runs', async () => {
     const user = userEvent.setup()
     const onOpenThread = vi.fn(async () => undefined)
-    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
-    installHomeRuntime({
-      launchpad: {
-        feed: vi.fn(async () => ({
-          generatedAt: '2026-01-02T10:30:00.000Z',
-          inProgress: [],
-          waitingOnYou: [],
-          freshArtifacts: [{
-            id: 'artifact:session-artifact:local-artifact-private',
-            artifactId: 'local-artifact-private',
-            kind: 'document',
-            status: 'draft',
-            title: 'private-artifact.md',
-            projectId: 'project-1',
-            projectTitle: 'Studio redesign',
-            taskId: 'task-3',
-            taskTitle: 'Document launchpad',
-            sessionId: 'session-artifact',
-            runId: 'run-3',
-            assigneeAgent: 'build',
-            authorAgentId: 'build',
-            when: '2026-01-02T10:20:00.000Z',
-            createdAt: '2026-01-02T10:20:00.000Z',
-            updatedAt: '2026-01-02T10:20:00.000Z',
-          }],
-          totals: { inProgress: 0, waitingOnYou: 0, freshArtifacts: 1 },
-          truncated: { inProgress: false, waitingOnYou: false, freshArtifacts: false },
-        })),
-      },
-    })
+    useSessionStore.getState().setSessions([
+      { id: 'old', title: 'Older work', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T01:00:00.000Z' },
+      { id: 'new', title: 'Most recent work', createdAt: '2026-01-02T00:00:00.000Z', updatedAt: '2026-01-02T02:00:00.000Z' },
+      { id: 'middle', title: 'Middle work', createdAt: '2026-01-02T00:00:00.000Z', updatedAt: '2026-01-02T01:00:00.000Z' },
+      { id: 'fourth', title: 'Fourth work', createdAt: '2025-12-31T00:00:00.000Z', updatedAt: '2025-12-31T01:00:00.000Z' },
+      { id: 'fifth', title: 'Fifth work', createdAt: '2025-12-30T00:00:00.000Z', updatedAt: '2025-12-30T01:00:00.000Z' },
+      { id: 'run', title: 'Workflow run', kind: 'workflow_run', createdAt: '2026-01-03T00:00:00.000Z', updatedAt: '2026-01-03T01:00:00.000Z' },
+    ])
 
     renderHome({ onOpenThread })
 
-    await user.click(await screen.findByRole('button', { name: /private-artifact\.md/i }))
-    expect(onOpenThread).toHaveBeenCalledWith('session-artifact')
-    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({
-      type: 'open-cowork:open-resource',
-    }))
-    dispatchSpy.mockRestore()
+    const resumeButtons = screen.getAllByRole('button', { name: /^Resume / })
+    expect(resumeButtons).toHaveLength(4)
+    expect(resumeButtons[0]).toHaveAccessibleName('Resume Most recent work')
+    expect(screen.queryByText('Workflow run')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try a starter' })).not.toBeInTheDocument()
+
+    resumeButtons[0]?.focus()
+    await user.keyboard('{Enter}')
+    expect(onOpenThread).toHaveBeenCalledWith('new')
   })
 
-  it('counts the full team even when the avatar strip is capped', async () => {
-    const allowedAgents = ['build', 'plan', 'chief-of-staff', ...Array.from({ length: 6 }, (_, index) => `custom-agent-${index + 1}`)]
-    const cloudPromptSupport: WorkspaceApiSupport[] = [{
-      api: 'sessions.prompt',
-      status: 'supported',
-      verdict: { allowed: true, reason: null },
-    }]
-    installHomeRuntime({
-      app: {
-        builtinAgents: vi.fn(async () => []),
-      },
-      workspace: {
-        policy: vi.fn(async () => ({
-          features: {},
-          allowedAgents,
-          allowedTools: null,
-          allowedMcps: null,
-          localFiles: 'disabled',
-          localStdioMcps: 'disabled',
-          machineRuntimeConfig: 'disabled',
-        })),
-        support: vi.fn(async () => cloudPromptSupport),
-      },
-      agents: {
-        list: vi.fn(async () => Array.from({ length: 6 }, (_, index) => ({
-          name: `custom-agent-${index + 1}`,
-          description: 'Specialist coworker',
-          enabled: true,
-          valid: true,
-        }))),
-      },
-    })
-    act(() => {
-      useSessionStore.getState().setActiveWorkspace('cloud:team-count')
-      useWorkspaceSupportStore.setState((state) => ({
-        supportByWorkspace: { ...state.supportByWorkspace, 'cloud:team-count': cloudPromptSupport },
-        loadedByWorkspace: { ...state.loadedByWorkspace, 'cloud:team-count': true },
-        loadingByWorkspace: { ...state.loadingByWorkspace, 'cloud:team-count': false },
-        errorByWorkspace: { ...state.errorByWorkspace, 'cloud:team-count': null },
-      }))
-    })
+  it('keeps the composer before one compact empty-state treatment', () => {
+    installHomeRuntime()
 
     renderHome()
 
-    expect(await screen.findByText('9 coworkers · manage')).toBeTruthy()
-  })
-
-  it('routes the team strip into the Team surface', async () => {
-    const user = userEvent.setup()
-    const onNavigate = vi.fn()
-    installHomeRuntime()
-
-    renderHome({ onNavigate })
-
-    await user.click(await screen.findByRole('button', { name: /Your team/i }))
-    expect(onNavigate).toHaveBeenCalledWith('team')
+    const composer = screen.getByPlaceholderText('Ask anything, or @mention a coworker')
+    const recentHeading = screen.getByRole('heading', { name: 'Recent work' })
+    expect(composer.compareDocumentPosition(recentHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText('Start your first conversation')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Try a starter' })).toHaveLength(1)
+    expect(screen.queryByText('In motion')).not.toBeInTheDocument()
+    expect(screen.queryByText('Your team')).not.toBeInTheDocument()
+    expect(screen.queryByText('Review Snapshot')).not.toBeInTheDocument()
   })
 })

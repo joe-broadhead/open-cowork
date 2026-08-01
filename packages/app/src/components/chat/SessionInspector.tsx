@@ -11,7 +11,8 @@ import { countTodos, summarizeTodoCounts } from './todo-utils'
 import {
   computeBreakdown, formatCost, formatDateTime, formatInteger, formatModelLabel, formatProviderLabel, formatTokens, serializeToolPayload, } from './session-inspector-utils'
 import { getModelContextLimit } from '../../helpers/model-info'
-import { DiffView, ReviewPanel, TaskLane, type DiffViewFile } from '@open-cowork/ui'
+import { Button, DiffView, IconButton, ReviewPanel, TaskLane, type DiffViewFile } from '@open-cowork/ui'
+import { sessionReviewSummary } from './session-review-model'
 
 type InspectorTab = 'context' | 'messages' | 'todos' | 'artifacts'
 
@@ -167,6 +168,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
     [activeWorkspaceId, chartArtifactsBySession, currentSessionId],
   )
   const [tab, setTab] = useState<InspectorTab>('context')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [runtimeModel, setRuntimeModel] = useState<RuntimeModelState>({
     providerId: null,
     modelId: null,
@@ -196,6 +198,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const showArtifactsTab = canReadPrivateArtifacts || visibleArtifacts.length > 0
 
   useEffect(() => {
+    if (!advancedOpen) return undefined
     let cancelled = false
 
     async function loadRuntimeModel() {
@@ -230,7 +233,22 @@ export function SessionInspector({ onClose }: InspectorProps) {
     return () => {
       cancelled = true
     }
-  }, [activeWorkspaceId, currentSessionId])
+  }, [activeWorkspaceId, advancedOpen, currentSessionId])
+
+  useEffect(() => {
+    setAdvancedOpen(false)
+    setTab('context')
+  }, [currentSessionId])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
 
   useEffect(() => {
     if (tab === 'artifacts' && !showArtifactsTab) {
@@ -258,24 +276,25 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const totalTokens = currentView.sessionTokens.input + currentView.sessionTokens.output + currentView.sessionTokens.reasoning
   const rawMessages = currentView.messages.slice().sort((left, right) => left.order - right.order)
   const reviewFiles = useMemo(() => reviewFilesFromArtifacts(allArtifacts), [allArtifacts])
-  const openDecisionCount = currentView.pendingApprovals.length + currentView.pendingQuestions.length
-  const activeTaskRuns = currentView.taskRuns.filter((task) => task.status === 'running' || task.status === 'queued').length
-  const todoCount = currentView.todos.length + currentView.executionPlan.length + currentView.taskRuns.reduce((count, task) => count + task.todos.length, 0)
+  const reviewSummary = useMemo(
+    () => sessionReviewSummary(currentView, allArtifacts),
+    [allArtifacts, currentView],
+  )
   // serializeToolPayload JSON-stringifies every tool input AND output; computeBreakdown then scans
   // every message and payload. The view slices are referentially stable between streamed patches,
   // so memoizing keeps these off the critical path for the far more frequent re-renders that don't
   // touch the transcript (tab switches, hover, parent re-renders).
-  const toolPayloads = useMemo(() => [
+  const toolPayloads = useMemo(() => advancedOpen ? [
     ...currentView.toolCalls.map((tool) => `${tool.name} ${serializeToolPayload(tool.input)} ${serializeToolPayload(tool.output)}`),
     ...currentView.taskRuns.flatMap((taskRun) =>
       taskRun.toolCalls.map((tool) => `${tool.name} ${serializeToolPayload(tool.input)} ${serializeToolPayload(tool.output)}`),
     ),
-  ], [currentView.toolCalls, currentView.taskRuns])
-  const breakdown = useMemo(() => computeBreakdown({
+  ] : [], [advancedOpen, currentView.toolCalls, currentView.taskRuns])
+  const breakdown = useMemo(() => advancedOpen ? computeBreakdown({
     messages: currentView.messages,
     toolPayloads,
     totalContextTokens: contextTokens,
-  }), [currentView.messages, toolPayloads, contextTokens])
+  }) : [], [advancedOpen, currentView.messages, toolPayloads, contextTokens])
 
   if (!currentSessionId) return null
 
@@ -285,41 +304,47 @@ export function SessionInspector({ onClose }: InspectorProps) {
       style={{ background: 'color-mix(in srgb, var(--color-base) 94%, var(--color-elevated) 6%)' }}
     >
       <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          {([
-            { id: 'context', label: 'Context' },
-            { id: 'messages', label: 'Messages' },
-            { id: 'todos', label: 'Todos' },
-            ...(showArtifactsTab ? [{ id: 'artifacts', label: 'Artifacts' } as const] : []),
-          ] as const).map((entry) => (
-            <button
-              key={entry.id}
-              onClick={() => setTab(entry.id)}
-              className="px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-colors"
-              style={{
-                background: tab === entry.id ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
-                color: tab === entry.id ? 'var(--color-text)' : 'var(--color-text-muted)',
-                border: `1px solid ${tab === entry.id ? 'var(--color-accent)' : 'var(--color-border-subtle)'}`,
-              }}
-            >
-              {entry.label}
-            </button>
-          ))}
+        <div className="min-w-0">
+          <h2 className="font-display text-sm font-semibold text-text">
+            {t('sessionInspector.reviewTitle', 'Review')}
+          </h2>
+          <p className="mt-0.5 text-2xs text-text-muted">
+            {reviewSummary.totalCount > 0
+              ? t('sessionInspector.itemCount', '{{count}} items', { count: reviewSummary.totalCount })
+              : t('sessionInspector.noItems', 'No decisions or deliverables yet')}
+          </p>
         </div>
-        <button onClick={onClose} className="text-2xs text-text-muted hover:text-text-secondary transition-colors cursor-pointer">
-          Hide
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon="activity"
+            aria-expanded={advancedOpen}
+            aria-controls="session-advanced-inspector"
+            onClick={() => setAdvancedOpen((open) => !open)}
+          >
+            {advancedOpen
+              ? t('sessionInspector.hideAdvanced', 'Hide advanced')
+              : t('sessionInspector.showAdvanced', 'Advanced')}
+          </Button>
+          <IconButton
+            icon="x"
+            size="sm"
+            label={t('sessionInspector.close', 'Close Review')}
+            onClick={onClose}
+          />
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         <ReviewPanel
-          title={t('sessionInspector.reviewTitle', 'Review')}
-          summary={t('sessionInspector.reviewSummary', 'Session state projected from OpenCode messages, tools, delegated tasks, approvals, questions, and artifacts.')}
+          title={t('sessionInspector.reviewArtifactsTitle', 'Decisions & deliverables')}
+          summary={t('sessionInspector.reviewSummary', 'The outcomes and choices that may need your attention.')}
           status={{
-            label: openDecisionCount > 0
+            label: reviewSummary.decisionCount > 0
               ? t('sessionInspector.reviewNeedsInput', 'Needs input')
               : t('sessionInspector.reviewReady', 'Ready'),
-            tone: openDecisionCount > 0 ? 'warning' : 'success',
+            tone: reviewSummary.decisionCount > 0 ? 'warning' : 'success',
           }}
           className="mb-5"
         >
@@ -353,18 +378,6 @@ export function SessionInspector({ onClose }: InspectorProps) {
                   meta: t('sessionInspector.artifactCount', '{{count}} artifacts', { count: allArtifacts.length }),
                   status: { label: t('sessionInspector.review', 'Review'), tone: 'accent' as const },
                 }] : []),
-                ...(todoCount > 0 ? [{
-                  id: 'todos',
-                  title: t('sessionInspector.todosTracked', 'Todos tracked'),
-                  meta: t('sessionInspector.todoCount', '{{count}} items', { count: todoCount }),
-                  status: { label: t('sessionInspector.live', 'Live'), tone: 'neutral' as const },
-                }] : []),
-                ...(activeTaskRuns > 0 ? [{
-                  id: 'coworkers',
-                  title: t('sessionInspector.activeCoworkers', 'Coworkers active'),
-                  meta: t('sessionInspector.taskCount', '{{count}} task runs', { count: activeTaskRuns }),
-                  status: { label: t('sessionInspector.running', 'Running'), tone: 'accent' as const },
-                }] : []),
               ]}
               emptyLabel={t('sessionInspector.noDeliverables', 'No deliverables yet')}
             />
@@ -381,9 +394,56 @@ export function SessionInspector({ onClose }: InspectorProps) {
           className="mb-5"
         >
           <p className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-xs text-text-secondary">
-            {t('sessionInspector.nothingShips', 'Nothing ships until you approve.')}
+            {t('sessionInspector.reviewBeforeShare', 'Review before you use, export, or share these outputs.')}
           </p>
         </DiffView>
+
+        {advancedOpen ? (
+          <section
+            id="session-advanced-inspector"
+            aria-label={t('sessionInspector.advancedLabel', 'Advanced session inspector')}
+            className="border-t border-border-subtle pt-4"
+          >
+            <div className="mb-4">
+              <h3 className="font-display text-sm font-semibold text-text">
+                {t('sessionInspector.advancedTitle', 'Advanced inspector')}
+              </h3>
+              <p className="mt-1 text-2xs text-text-muted">
+                {t('sessionInspector.advancedSummary', 'Execution telemetry and diagnostic controls for this session.')}
+              </p>
+              {reviewSummary.activeTaskCount > 0 ? (
+                <p className="mt-2 flex items-center gap-2 text-2xs text-text-secondary">
+                  <span className="font-medium text-text">
+                    {t('sessionInspector.activeCoworkers', 'Coworkers active')}
+                  </span>
+                  <span>{t('sessionInspector.taskCount', '{{count}} task runs', { count: reviewSummary.activeTaskCount })}</span>
+                </p>
+              ) : null}
+            </div>
+            <div className="mb-4 flex flex-wrap items-center gap-2" role="tablist" aria-label={t('sessionInspector.advancedTabs', 'Advanced inspector sections')}>
+              {([
+                { id: 'context', label: t('sessionInspector.contextTab', 'Context') },
+                { id: 'messages', label: t('sessionInspector.messagesTab', 'Messages') },
+                { id: 'todos', label: t('sessionInspector.todosTab', 'Todos') },
+                ...(showArtifactsTab ? [{ id: 'artifacts', label: t('sessionInspector.artifactsTab', 'Artifacts') } as const] : []),
+              ] as const).map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === entry.id}
+                  onClick={() => setTab(entry.id)}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-colors"
+                  style={{
+                    background: tab === entry.id ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
+                    color: tab === entry.id ? 'var(--color-text)' : 'var(--color-text-muted)',
+                    border: `1px solid ${tab === entry.id ? 'var(--color-accent)' : 'var(--color-border-subtle)'}`,
+                  }}
+                >
+                  {entry.label}
+                </button>
+              ))}
+            </div>
 
         {tab === 'context' && (
           <div className="flex flex-col gap-5">
@@ -489,6 +549,8 @@ export function SessionInspector({ onClose }: InspectorProps) {
             </div>
           </div>
         )}
+          </section>
+        ) : null}
       </div>
     </aside>
   )

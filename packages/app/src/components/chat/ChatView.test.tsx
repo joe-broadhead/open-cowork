@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -290,6 +290,7 @@ function seedCurrentSession(view: SessionView = emptySessionView()) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.clear()
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     value: undefined,
@@ -361,7 +362,7 @@ describe('ChatView', () => {
 
     expect(document.querySelector('[data-workbench-layout="true"]')).toBeInTheDocument()
     expect(document.querySelector('[data-workbench-pane="conversation"]')).toBeInTheDocument()
-    expect(document.querySelector('[data-workbench-pane="review"]')).toHaveTextContent('Session inspector')
+    expect(document.querySelector('[data-workbench-pane="review"]')).toBeNull()
     expect(screen.getByRole('toolbar', { name: 'Chat actions' })).toBeInTheDocument()
     expect(screen.getByText('Launch analysis')).toBeInTheDocument()
     expect(screen.getByText('/tmp/workspace/app')).toBeInTheDocument()
@@ -379,6 +380,10 @@ describe('ChatView', () => {
     expect(screen.getByText('Provider paused')).toBeInTheDocument()
     expect(screen.queryByTestId('thinking-indicator')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Chat prompt' })).toBeInTheDocument()
+    expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('2 Review items')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show Review' }))
     expect(screen.getByTestId('session-inspector')).toBeInTheDocument()
 
     await waitFor(() => expect(api.app.builtinAgents).toHaveBeenCalledTimes(1))
@@ -398,16 +403,157 @@ describe('ChatView', () => {
     expect(screen.getByTestId('session-inspector')).toBeInTheDocument()
   })
 
-  it('hides desktop Knowledge capture for cloud workspaces', async () => {
+  it('keeps empty Review collapsed and updates the badge without forcing it open', async () => {
     installChatViewApi()
+    seedCurrentSession(emptySessionView({
+      executionPlan: [
+        { id: 'plan-running', content: 'Plan the run', status: 'in_progress', priority: 'high' },
+      ],
+      todos: [
+        { id: 'todo-running', content: 'Track the run', status: 'pending', priority: 'medium' },
+      ],
+      taskRuns: [{
+        id: 'task-running',
+        title: 'Running task',
+        agent: 'researcher',
+        status: 'running',
+        sourceSessionId: 'child-running',
+        parentSessionId: null,
+        content: '',
+        transcript: [],
+        toolCalls: [],
+        compactions: [],
+        todos: [
+          { id: 'task-todo-running', content: 'Execute the run', status: 'pending', priority: 'high' },
+        ],
+        error: null,
+        sessionCost: 0,
+        sessionTokens,
+        order: 1,
+      }],
+    }))
+
+    render(<ChatView />)
+
+    expect(screen.getByRole('button', { name: 'Show Review' })).toBeInTheDocument()
+    expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Review items/)).not.toBeInTheDocument()
+
+    act(() => {
+      useSessionStore.getState().setSessionView('session-1', emptySessionView({
+        pendingApprovals: [
+          { id: 'approval-late', sessionId: 'session-1', tool: 'shell.run', input: {}, description: 'Run tests', order: 1 },
+        ],
+      }))
+    })
+
+    expect(await screen.findByLabelText('1 Review items')).toBeInTheDocument()
+    expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument()
+  })
+
+  it('persists an explicit Review preference for useful sessions but keeps new empty sessions closed', async () => {
+    const user = userEvent.setup()
+    installChatViewApi()
+    seedCurrentSession(emptySessionView({
+      pendingApprovals: [
+        { id: 'approval-1', sessionId: 'session-1', tool: 'shell.run', input: {}, description: 'Run tests', order: 1 },
+      ],
+    }))
+
+    render(<ChatView />)
+    await user.click(screen.getByRole('button', { name: 'Show Review' }))
+    expect(window.localStorage.getItem('open-cowork.chat.review-open')).toBe('true')
+
+    act(() => {
+      useSessionStore.getState().addSession({
+        id: 'session-2',
+        title: 'Populated follow-up',
+        createdAt: '2026-05-03T00:00:00.000Z',
+        updatedAt: '2026-05-03T00:00:00.000Z',
+      })
+      useSessionStore.getState().setSessionView('session-2', emptySessionView({
+        pendingQuestions: [{ id: 'question-2', sessionId: 'session-2', questions: [] }],
+      }))
+      useSessionStore.getState().setCurrentSession('session-2')
+    })
+
+    expect(await screen.findByTestId('session-inspector')).toBeInTheDocument()
+
+    act(() => {
+      useSessionStore.getState().addSession({
+        id: 'session-3',
+        title: 'Empty follow-up',
+        createdAt: '2026-05-04T00:00:00.000Z',
+        updatedAt: '2026-05-04T00:00:00.000Z',
+      })
+      useSessionStore.getState().setSessionView('session-3', emptySessionView())
+      useSessionStore.getState().setCurrentSession('session-3')
+    })
+
+    await waitFor(() => expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument())
+    expect(window.localStorage.getItem('open-cowork.chat.review-open')).toBe('true')
+  })
+
+  it('does not auto-open a saved Review preference in a narrow drawer and restores trigger focus', async () => {
+    const user = userEvent.setup()
+    const media = {
+      matches: true,
+      media: '(max-width: 920px)',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockReturnValue(media),
+    })
+    window.localStorage.setItem('open-cowork.chat.review-open', 'true')
+    installChatViewApi()
+    seedCurrentSession(emptySessionView({
+      pendingApprovals: [
+        { id: 'approval-1', sessionId: 'session-1', tool: 'shell.run', input: {}, description: 'Run tests', order: 1 },
+      ],
+    }))
+
+    render(<ChatView />)
+
+    const opener = screen.getByRole('button', { name: 'Show Review' })
+    expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument()
+    await user.click(opener)
+    const drawer = screen.getByRole('complementary', { name: 'Review' })
+    await waitFor(() => expect(document.activeElement).toBe(drawer))
+
+    await user.click(screen.getByRole('button', { name: 'Close inspector' }))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show Review' })))
+  })
+
+  it('hides desktop Knowledge capture for cloud workspaces', async () => {
+    const api = installChatViewApi()
     seedCurrentSession()
     useSessionStore.setState({ activeWorkspaceId: 'cloud:test' })
+
+    render(<ChatView knowledgeEnabled />)
+
+    await screen.findByRole('toolbar', { name: 'Chat actions' })
+    expect(screen.queryByRole('button', { name: 'Capture to knowledge' })).not.toBeInTheDocument()
+    expect(document.querySelector('[data-action-id="capture-knowledge"]')).not.toBeInTheDocument()
+    expect(api.knowledge.snapshot).not.toHaveBeenCalled()
+  })
+
+  it('does not expose or hydrate Knowledge capture when the secondary surface is disabled', async () => {
+    const api = installChatViewApi()
+    seedCurrentSession()
+    useSessionStore.setState({ activeWorkspaceId: 'local' })
 
     render(<ChatView />)
 
     await screen.findByRole('toolbar', { name: 'Chat actions' })
     expect(screen.queryByRole('button', { name: 'Capture to knowledge' })).not.toBeInTheDocument()
     expect(document.querySelector('[data-action-id="capture-knowledge"]')).not.toBeInTheDocument()
+    expect(api.knowledge.snapshot).not.toHaveBeenCalled()
   })
 
   it('captures the conversation to Knowledge and flips the action to pending', async () => {
@@ -416,7 +562,7 @@ describe('ChatView', () => {
     seedCurrentSession()
     useSessionStore.setState({ activeWorkspaceId: 'local' })
 
-    render(<ChatView />)
+    render(<ChatView knowledgeEnabled />)
     await screen.findByRole('toolbar', { name: 'Chat actions' })
 
     await user.click(await screen.findByRole('button', { name: 'Capture to knowledge' }))
@@ -462,7 +608,7 @@ describe('ChatView', () => {
     seedCurrentSession()
     useSessionStore.setState({ activeWorkspaceId: 'local' })
 
-    render(<ChatView />)
+    render(<ChatView knowledgeEnabled />)
     await screen.findByRole('toolbar', { name: 'Chat actions' })
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Proposed/ })).toBeInTheDocument())

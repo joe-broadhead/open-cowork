@@ -324,7 +324,7 @@ export function HomeComposer({
           border: dragOver ? dropBorder : restBorder,
           boxShadow: dragOver
             ? '0 18px 48px color-mix(in srgb, var(--color-accent) 16%, transparent)'
-            : '0 26px 70px color-mix(in srgb, #000 40%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 40px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px color-mix(in srgb, #fff 5%, transparent)',
+            : '0 26px 70px color-mix(in srgb, var(--color-shadow-ink) 40%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 40px color-mix(in srgb, var(--accent) 10%, transparent), var(--specular-strong)',
         }}
       >
         <div className="home-composer-assign-row">

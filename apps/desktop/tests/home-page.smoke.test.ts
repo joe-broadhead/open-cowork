@@ -2,10 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { launchSmokeApp } from './smoke-helpers.ts'
 
-// Smoke: Home is the welcoming landing surface. It should stay aligned
-// with the Studio launchpad: greeting, composer, assign-to picker,
-// starter cards, team strip, and runtime status. Empty motion feed is
-// intentionally hidden (product purity JOE-1050).
+// Smoke: Home is the welcoming landing surface. It should stay focused on
+// the greeting, primary composer, one recent-work empty state, and runtime
+// status. Removed dashboard sections must not drift back into the journey.
 
 test('home renders the Studio launchpad, composer, status strip, and no removed dashboard content', async () => {
   const { page, cleanup } = await launchSmokeApp()
@@ -29,8 +28,8 @@ test('home renders the Studio launchpad, composer, status strip, and no removed 
     await page.getByText('Assign to', { exact: true }).waitFor({ timeout: 10_000 })
     await page.getByRole('button', { name: /Build.*default/i }).waitFor({ timeout: 10_000 })
 
-    await page.getByText('Start with a handoff', { exact: true }).waitFor({ timeout: 10_000 })
-    await page.getByText('Your team', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByText('Start your first conversation', { exact: true }).waitFor({ timeout: 10_000 })
+    assert.equal(await page.getByRole('button', { name: 'Try a starter', exact: true }).count(), 1)
 
     // Empty workspaces hide the motion grid entirely — do not require
     // "In motion" / column headers when there is nothing to show.
@@ -41,13 +40,20 @@ test('home renders the Studio launchpad, composer, status strip, and no removed 
       await page.getByText('Fresh artifacts', { exact: true }).waitFor({ timeout: 5_000 })
     }
 
-    // The status strip stays on Home and reports the managed runtime
-    // connection state without reintroducing a separate dashboard route.
-    await page.locator('main').getByText(/MCPs/i).first().waitFor({ timeout: 5_000 })
+    // The shell status strip remains visible from Home and reports the managed
+    // runtime connection state without reintroducing a dashboard route.
+    await page.getByText(/MCPs/i).first().waitFor({ timeout: 5_000 })
 
     // These headings belonged to the removed Pulse/dashboard surface.
     // If they reappear on Home, the strip-back regressed.
-    for (const heading of ['Workspace state', 'Cost and tokens by sub-agent', 'Threads, tokens, and cost', 'Pulse']) {
+    for (const heading of [
+      'Start with a handoff',
+      'Your team',
+      'Workspace state',
+      'Cost and tokens by sub-agent',
+      'Threads, tokens, and cost',
+      'Pulse',
+    ]) {
       const count = await page.locator(`text=${heading}`).count()
       assert.equal(count, 0, `Home should not show the Pulse heading "${heading}" — regression`)
     }
