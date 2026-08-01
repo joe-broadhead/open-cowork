@@ -30,8 +30,11 @@ import {
 } from '@open-cowork/ui'
 import { KnowledgeNewSpaceDialog } from './KnowledgeNewSpaceDialog'
 import {
+  clearNewSpaceCreationProgress,
   persistNewSpaceCreationProgress,
   readNewSpaceCreationProgress,
+  runNewSpaceCreationSingleFlight,
+  subscribeNewSpaceCreationCompletion,
   type NewSpaceCreationProgress,
 } from './knowledge-space-creation-recovery'
 import { useKnowledgeLayoutMode } from './useKnowledgeLayoutMode'
@@ -436,12 +439,26 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
     persistNewSpaceCreationProgress(progress, activeWorkspaceId)
   }, [activeWorkspaceId])
 
+  const clearNewSpaceProgress = useCallback((creationId: string) => {
+    if (newSpaceCreationRef.current?.creationId === creationId) {
+      newSpaceCreationRef.current = null
+      setNewSpaceCreation(null)
+    }
+    clearNewSpaceCreationProgress(creationId, activeWorkspaceId)
+  }, [activeWorkspaceId])
+
   useEffect(() => {
     newSpaceCreationRef.current = readNewSpaceCreationProgress(activeWorkspaceId)
     setNewSpaceCreation(newSpaceCreationRef.current)
     setNewSpaceOpen(false)
     setNewSpaceError(null)
   }, [activeWorkspaceId])
+
+  useEffect(() => subscribeNewSpaceCreationCompletion((workspaceId, creationId) => {
+    if (workspaceId !== activeWorkspaceId || newSpaceCreationRef.current?.creationId !== creationId) return
+    newSpaceCreationRef.current = null
+    setNewSpaceCreation(null)
+  }), [activeWorkspaceId])
 
   // The review-queue panel only renders in the pages view, so the rail shortcut
   // switches back to pages (if needed) and arms a reveal. Coming from graph view
@@ -664,14 +681,15 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
         }
         if (!committed()) {
           progress.uncertainStage = undefined
-          persistNewSpaceProgress(stage === 'space' ? null : progress)
+          if (stage === 'space') clearNewSpaceProgress(progress.creationId)
+          else persistNewSpaceProgress(progress)
           throw writeError
         }
         progress.uncertainStage = undefined
         persistNewSpaceProgress(progress)
       }
     }
-    try {
+    const creationRun = runNewSpaceCreationSingleFlight(progress.creationId, async () => {
       if (progress.needsReconciliation || progress.uncertainStage) {
         await reconcile()
         progress.needsReconciliation = undefined
@@ -722,27 +740,41 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
       }
       if (!progress.pageId) throw new Error('The Overview page could not be created.')
 
-      const pageId = progress.pageId
-      persistNewSpaceProgress(null)
       recordFeatureValueActivation('knowledge')
-      setSelectedPageId(pageId)
-      setNewSpaceOpen(false)
       try {
-        const next = await window.coworkApi.knowledge.snapshot({ workspaceId: activeWorkspaceId })
-        setSnapshot(next)
-        setError(null)
+        return {
+          pageId: progress.pageId,
+          snapshot: await window.coworkApi.knowledge.snapshot({ workspaceId: activeWorkspaceId }),
+        }
       } catch {
+        return { pageId: progress.pageId }
+      }
+    })
+    try {
+      const result = await creationRun.promise
+      clearNewSpaceProgress(progress.creationId)
+      setSelectedPageId(result.pageId)
+      setNewSpaceOpen(false)
+      if (result.snapshot) {
+        setSnapshot(result.snapshot)
+        setError(null)
+      } else {
         setError(t(
           'knowledge.newSpace.refreshFailed',
           'The Space and Overview page were created, but Knowledge could not refresh. Select Reload to show the new page.',
         ))
       }
     } catch (createError) {
+      if (creationRun.joined) {
+        const recovered = readNewSpaceCreationProgress(activeWorkspaceId)
+        newSpaceCreationRef.current = recovered
+        setNewSpaceCreation(recovered)
+      }
       setNewSpaceError(createError instanceof Error ? createError.message : String(createError))
     } finally {
       setNewSpaceBusy(false)
     }
-  }, [activeWorkspaceId, persistNewSpaceProgress])
+  }, [activeWorkspaceId, clearNewSpaceProgress, persistNewSpaceProgress])
 
   const canPropose = selectedSpace ? knowledgeRoleCanPropose(selectedSpace.role) : false
   const canReview = selectedSpace ? knowledgeRoleCanReview(selectedSpace.role) : false

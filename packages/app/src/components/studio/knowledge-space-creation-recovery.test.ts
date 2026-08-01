@@ -1,8 +1,10 @@
 import { knowledgeSpaceIdFromCreationId } from '@open-cowork/shared'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  clearNewSpaceCreationProgress,
   persistNewSpaceCreationProgress,
   readNewSpaceCreationProgress,
+  runNewSpaceCreationSingleFlight,
 } from './knowledge-space-creation-recovery'
 
 const WORKSPACE_ID = 'local'
@@ -47,5 +49,44 @@ describe('Knowledge Space creation recovery', () => {
     }))
     expect(readNewSpaceCreationProgress(WORKSPACE_ID)).toBeNull()
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
+  it('joins an active creation run and releases the lease after it settles', async () => {
+    let resolve!: (value: number) => void
+    const deferred = new Promise<number>((done) => { resolve = done })
+    let runCount = 0
+    const first = runNewSpaceCreationSingleFlight('single-flight-test', async () => {
+      runCount += 1
+      return deferred
+    })
+    const joined = runNewSpaceCreationSingleFlight('single-flight-test', async () => {
+      runCount += 1
+      return 99
+    })
+
+    expect(first.joined).toBe(false)
+    expect(joined.joined).toBe(true)
+    resolve(7)
+    await expect(first.promise).resolves.toBe(7)
+    await expect(joined.promise).resolves.toBe(7)
+    expect(runCount).toBe(1)
+
+    const next = runNewSpaceCreationSingleFlight('single-flight-test', async () => 11)
+    expect(next.joined).toBe(false)
+    await expect(next.promise).resolves.toBe(11)
+  })
+
+  it('does not let an obsolete completion clear a newer operation', () => {
+    persistNewSpaceCreationProgress({
+      workspaceId: WORKSPACE_ID,
+      creationId: CREATION_ID,
+      name: 'Newer Space',
+      visibility: 'company',
+    }, WORKSPACE_ID)
+
+    clearNewSpaceCreationProgress('00000000-0000-4000-8000-000000000002', WORKSPACE_ID)
+    expect(readNewSpaceCreationProgress(WORKSPACE_ID)?.creationId).toBe(CREATION_ID)
+    clearNewSpaceCreationProgress(CREATION_ID, WORKSPACE_ID)
+    expect(readNewSpaceCreationProgress(WORKSPACE_ID)).toBeNull()
   })
 })

@@ -3,6 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { knowledgeSpaceIdFromCreationId, type KnowledgeSnapshotPayload } from '@open-cowork/shared'
 import { KnowledgePage } from './KnowledgePage'
+import {
+  readNewSpaceCreationProgress,
+} from './knowledge-space-creation-recovery'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
@@ -13,6 +16,12 @@ const featureValueTelemetry = vi.hoisted(() => ({
 }))
 
 const NEW_SPACE_CREATION_ID = '00000000-0000-4000-8000-000000000001'
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => { resolve = done })
+  return { promise, resolve }
+}
 
 vi.mock('../../helpers/feature-value-telemetry', () => ({
   recordFeatureValueActivation: featureValueTelemetry.activate,
@@ -420,6 +429,94 @@ describe('KnowledgePage clarity redesign', () => {
     expect(createSpace).toHaveBeenCalledTimes(1)
     expect(propose).toHaveBeenCalledTimes(2)
     expect(acceptProposal).toHaveBeenCalledTimes(1)
+  })
+
+  it('joins an in-flight creation after the Knowledge route remounts', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, createdOnlySnapshot, nextSnapshot } = newSpaceScenario()
+    const pendingProposal = deferred<typeof proposal>()
+    const createSpace = vi.fn(async () => createdSpace)
+    const propose = vi.fn(() => pendingProposal.promise)
+    const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: vi.fn()
+          .mockResolvedValueOnce(starter)
+          .mockResolvedValueOnce(createdOnlySnapshot)
+          .mockResolvedValue(nextSnapshot),
+        history: vi.fn(async () => []),
+        createSpace,
+        propose,
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    const firstRender = render(<KnowledgePage />)
+    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(propose).toHaveBeenCalledTimes(1))
+
+    firstRender.unmount()
+    render(<KnowledgePage />)
+    await user.click(await screen.findByRole('button', { name: 'Finish Space' }))
+    await user.click(screen.getByRole('button', { name: 'Finish' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Creating' })).toBeDisabled())
+    expect(createSpace).toHaveBeenCalledTimes(1)
+    expect(propose).toHaveBeenCalledTimes(1)
+    expect(acceptProposal).not.toHaveBeenCalled()
+
+    await act(async () => { pendingProposal.resolve(proposal) })
+    await screen.findByRole('heading', { level: 1, name: 'Overview' })
+    expect(createSpace).toHaveBeenCalledTimes(1)
+    expect(propose).toHaveBeenCalledTimes(1)
+    expect(acceptProposal).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears matching remounted recovery when the background owner completes', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, nextSnapshot } = newSpaceScenario()
+    const finalSnapshot = deferred<KnowledgeSnapshotPayload>()
+    const snapshotApi = vi.fn()
+      .mockResolvedValueOnce(starter)
+      .mockReturnValueOnce(finalSnapshot.promise)
+      .mockResolvedValue(nextSnapshot)
+    const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: snapshotApi,
+        history: vi.fn(async () => []),
+        createSpace: vi.fn(async () => createdSpace),
+        propose: vi.fn(async () => proposal),
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    const firstRender = render(<KnowledgePage />)
+    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => {
+      expect(acceptProposal).toHaveBeenCalledTimes(1)
+      expect(snapshotApi).toHaveBeenCalledTimes(2)
+    })
+    expect(readNewSpaceCreationProgress(LOCAL_WORKSPACE_ID)?.creationId).toBe(NEW_SPACE_CREATION_ID)
+
+    firstRender.unmount()
+    render(<KnowledgePage />)
+    await screen.findByRole('button', { name: 'Finish Space' })
+
+    await act(async () => { finalSnapshot.resolve(nextSnapshot) })
+    await waitFor(() => {
+      expect(readNewSpaceCreationProgress(LOCAL_WORKSPACE_ID)).toBeNull()
+      expect(screen.getByRole('button', { name: 'New Space' })).toBeInTheDocument()
+    })
   })
 
   it('reconciles an ambiguous Space beyond the full-snapshot limit by exact creation id', async () => {

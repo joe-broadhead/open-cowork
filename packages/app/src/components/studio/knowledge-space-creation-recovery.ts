@@ -18,6 +18,18 @@ export type NewSpaceCreationProgress = {
 
 const STORAGE_KEY_PREFIX = 'open-cowork.knowledge.new-space.v1.'
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const activeCreationRuns = new Map<string, Promise<unknown>>()
+const completionListeners = new Set<(workspaceId: string, creationId: string) => void>()
+
+function publishCompletion(workspaceId: string, creationId: string) {
+  for (const listener of completionListeners) {
+    try {
+      listener(workspaceId, creationId)
+    } catch {
+      // A stale subscriber cannot turn a committed Space into a failed operation.
+    }
+  }
+}
 
 function storageKey(workspaceId: string) {
   return `${STORAGE_KEY_PREFIX}${encodeURIComponent(workspaceId)}`
@@ -95,4 +107,43 @@ export function persistNewSpaceCreationProgress(progress: NewSpaceCreationProgre
   } catch {
     // Recovery remains available for the current mount when storage is unavailable.
   }
+}
+
+export function clearNewSpaceCreationProgress(creationId: string, workspaceId: string) {
+  const key = storageKey(workspaceId)
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return
+    const candidate = JSON.parse(raw) as { creationId?: unknown }
+    if (candidate?.creationId === creationId) {
+      window.localStorage.removeItem(key)
+      publishCompletion(workspaceId, creationId)
+    }
+  } catch {
+    // A later read validates and removes malformed recovery state.
+  }
+}
+
+export function subscribeNewSpaceCreationCompletion(listener: (workspaceId: string, creationId: string) => void) {
+  completionListeners.add(listener)
+  return () => {
+    completionListeners.delete(listener)
+  }
+}
+
+export function runNewSpaceCreationSingleFlight<T>(creationId: string, run: () => Promise<T>): {
+  joined: boolean
+  promise: Promise<T>
+} {
+  const existing = activeCreationRuns.get(creationId) as Promise<T> | undefined
+  if (existing) return { joined: true, promise: existing }
+
+  let promise: Promise<T>
+  promise = Promise.resolve()
+    .then(run)
+    .finally(() => {
+      if (activeCreationRuns.get(creationId) === promise) activeCreationRuns.delete(creationId)
+    })
+  activeCreationRuns.set(creationId, promise)
+  return { joined: false, promise }
 }
