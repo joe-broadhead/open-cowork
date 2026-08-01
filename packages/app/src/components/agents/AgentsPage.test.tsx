@@ -362,7 +362,7 @@ describe('AgentsPage', () => {
     const api = renderAgentsPage()
 
     expect(await screen.findByRole('heading', { name: 'Coworkers' })).toBeInTheDocument()
-    expect(screen.getByText('market-analyst')).toBeInTheDocument()
+    expect(await screen.findByText('market-analyst')).toBeInTheDocument()
     expect(screen.getByText('Workflow Designer')).toBeInTheDocument()
     expect(screen.queryByText('Top-level')).not.toBeInTheDocument()
     expect(screen.queryByText('Sub-agent')).not.toBeInTheDocument()
