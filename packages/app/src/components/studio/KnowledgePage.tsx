@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   KnowledgePage as KnowledgePageRecord, KnowledgePageBlock as KnowledgePageBlockRecord, KnowledgePageLink, KnowledgePageVersion, KnowledgeProposal, KnowledgeSnapshotPayload, KnowledgeSpace, } from '@open-cowork/shared'
 import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
@@ -27,9 +27,12 @@ import {
   Skeleton,
   StudioPageHeader,
 } from '@open-cowork/ui'
-import { KnowledgeNewSpaceDialog } from './KnowledgeNewSpaceDialog'
 import { useKnowledgeSpaceCreation } from './useKnowledgeSpaceCreation'
 import { useKnowledgeLayoutMode } from './useKnowledgeLayoutMode'
+
+const KnowledgeNewSpaceDialog = lazy(() => import('./KnowledgeNewSpaceDialog').then((module) => ({
+  default: module.KnowledgeNewSpaceDialog,
+})))
 
 const EMPTY_SNAPSHOT: KnowledgeSnapshotPayload = {
   spaces: [],
@@ -858,15 +861,27 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
         />
       ) : null}
       {newSpace.open ? (
-        <KnowledgeNewSpaceDialog
-          busy={newSpace.busy}
-          error={newSpace.error}
-          initialName={newSpace.creation?.name}
-          initialVisibility={newSpace.creation?.visibility}
-          resuming={newSpace.recoveryAvailable}
-          onSubmit={(input) => void newSpace.submit(input)}
-          onClose={newSpace.closeDialog}
-        />
+        <Suspense fallback={(
+          <Dialog
+            title={t('knowledge.newSpace.title', 'New Space')}
+            size="sm"
+            onClose={newSpace.closeDialog}
+          >
+            <p role="status" aria-live="polite" className="text-xs text-text-muted">
+              {t('common.loading', 'Loading…')}
+            </p>
+          </Dialog>
+        )}>
+          <KnowledgeNewSpaceDialog
+            busy={newSpace.busy}
+            error={newSpace.error}
+            initialName={newSpace.creation?.name}
+            initialVisibility={newSpace.creation?.visibility}
+            resuming={newSpace.recoveryAvailable}
+            onSubmit={(input) => void newSpace.submit(input)}
+            onClose={newSpace.closeDialog}
+          />
+        </Suspense>
       ) : null}
     </div>
   )

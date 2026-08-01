@@ -4,8 +4,8 @@ import {
   clearNewSpaceCreationProgress,
   persistNewSpaceCreationProgress,
   readNewSpaceCreationProgress,
-  runNewSpaceCreationSingleFlight,
 } from './knowledge-space-creation-recovery'
+import { runNewSpaceCreationSingleFlight } from './knowledge-space-creation-runner'
 
 const WORKSPACE_ID = 'local'
 const CREATION_ID = '00000000-0000-4000-8000-000000000001'

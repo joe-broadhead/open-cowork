@@ -331,7 +331,7 @@ describe('KnowledgePage clarity redesign', () => {
     expect(await screen.findByRole('heading', { name: 'Start your knowledge base' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Create a Space' }))
     expect(screen.getByRole('dialog', { name: 'New Space' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Create' })).toBeDisabled()
     expect(screen.queryByRole('heading', { name: 'Review queue' })).not.toBeInTheDocument()
   })
 

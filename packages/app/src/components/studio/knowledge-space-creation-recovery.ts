@@ -18,7 +18,6 @@ export type NewSpaceCreationProgress = {
 
 const STORAGE_KEY_PREFIX = 'open-cowork.knowledge.new-space.v1.'
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const activeCreationRuns = new Map<string, Promise<unknown>>()
 const completionListeners = new Set<(workspaceId: string, creationId: string) => void>()
 
 function publishCompletion(workspaceId: string, creationId: string) {
@@ -129,21 +128,4 @@ export function subscribeNewSpaceCreationCompletion(listener: (workspaceId: stri
   return () => {
     completionListeners.delete(listener)
   }
-}
-
-export function runNewSpaceCreationSingleFlight<T>(creationId: string, run: () => Promise<T>): {
-  joined: boolean
-  promise: Promise<T>
-} {
-  const existing = activeCreationRuns.get(creationId) as Promise<T> | undefined
-  if (existing) return { joined: true, promise: existing }
-
-  let promise: Promise<T>
-  promise = Promise.resolve()
-    .then(run)
-    .finally(() => {
-      if (activeCreationRuns.get(creationId) === promise) activeCreationRuns.delete(creationId)
-    })
-  activeCreationRuns.set(creationId, promise)
-  return { joined: false, promise }
 }
