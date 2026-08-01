@@ -213,6 +213,12 @@ export function ModelsPanel({
                 providerName={provider.name}
                 connected={provider.connected}
                 onBeforeAuthorize={persistBeforeProviderAuth}
+                onAuthInvalidated={async () => {
+                  // OAuth authorize/callback failures may have invalidated the
+                  // durable setup proof in main. Persist once more so Settings
+                  // consumes that authoritative result and returns to Setup.
+                  await onPersistSettings()
+                }}
                 onAuthUpdated={async () => {
                   const persisted = await onPersistSettings()
                   if (!persisted) return false

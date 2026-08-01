@@ -62,6 +62,15 @@ function capabilityStatusPriority(status: RuntimeCapabilityStatus) {
   }
 }
 
+function capabilityAppliesToProductMode(
+  capability: RuntimeCapabilityProvenanceRecord,
+  productMode: string,
+) {
+  return capability.productMode
+    .split(',')
+    .some((mode) => mode.trim() === productMode)
+}
+
 type CapabilityRecoveryDetails = {
   singular: string
   plural: string
@@ -291,10 +300,15 @@ export function HealthCenterPage() {
   ), [snapshot.runtimeInputs])
   const runtimeCapabilities = useMemo(() => allRuntimeCapabilities.slice(0, 12), [allRuntimeCapabilities])
   const runtimeConflicts = snapshot.runtimeInputs?.conflicts || []
-  const criticalCapabilities = allRuntimeCapabilities.filter((capability) => capabilityStatusPriority(capability.status) === 0)
+  const healthRuntimeCapabilities = useMemo(() => (
+    allRuntimeCapabilities.filter((capability) => (
+      capabilityAppliesToProductMode(capability, 'desktop-local')
+    ))
+  ), [allRuntimeCapabilities])
+  const criticalCapabilities = healthRuntimeCapabilities.filter((capability) => capabilityStatusPriority(capability.status) === 0)
   const criticalCapabilityGroups = useMemo(() => {
     const groups = new Map<RuntimeCapabilityProvenanceRecord['kind'], number>()
-    for (const capability of allRuntimeCapabilities) {
+    for (const capability of healthRuntimeCapabilities) {
       if (capabilityStatusPriority(capability.status) !== 0) continue
       groups.set(capability.kind, (groups.get(capability.kind) || 0) + 1)
     }
@@ -303,7 +317,7 @@ export function HealthCenterPage() {
       count,
       details: capabilityRecoveryDetails(kind),
     }))
-  }, [allRuntimeCapabilities])
+  }, [healthRuntimeCapabilities])
   const unhealthyWorkspaces = snapshot.workspaces.filter(({ workspace }) => (
     workspace.status === 'auth_required'
     || workspace.status === 'offline'

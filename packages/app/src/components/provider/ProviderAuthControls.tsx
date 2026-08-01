@@ -41,6 +41,7 @@ interface Props {
   copyMode?: CopyMode
   onBeforeAuthorize?: () => Promise<boolean>
   onAuthUpdated?: (connected: boolean) => boolean | void | Promise<boolean | void>
+  onAuthInvalidated?: () => void | Promise<void>
 }
 
 type PendingAuth =
@@ -89,6 +90,7 @@ export function ProviderAuthControls({
   copyMode = 'settings',
   onBeforeAuthorize,
   onAuthUpdated,
+  onAuthInvalidated,
 }: Props) {
   const pollDelayTimersRef = useRef(new Set<{
     id: ReturnType<typeof setTimeout>
@@ -149,6 +151,16 @@ export function ProviderAuthControls({
     setMethodInputs({})
     void loadMethods()
   }, [loadMethods])
+
+  const notifyAuthInvalidated = useCallback(async () => {
+    try {
+      await onAuthInvalidated?.()
+    } catch {
+      // The provider failure is the actionable status for this control. The
+      // parent owns surfacing settings-refresh failures separately, so a
+      // recovery callback must never replace the original auth error here.
+    }
+  }, [onAuthInvalidated])
 
   const oauthMethods = useMemo(
     () => methods
@@ -213,6 +225,7 @@ export function ProviderAuthControls({
       }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
+      await notifyAuthInvalidated()
     } finally {
       setAuthorizing(null)
     }
@@ -251,6 +264,7 @@ export function ProviderAuthControls({
       }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
+      await notifyAuthInvalidated()
     } finally {
       setAuthorizing(null)
     }
@@ -318,6 +332,7 @@ export function ProviderAuthControls({
       setStatus(t('providerAuth.connected', 'Provider login completed.'))
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
+      await notifyAuthInvalidated()
     } finally {
       setAuthorizing(null)
     }

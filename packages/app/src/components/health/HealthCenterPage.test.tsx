@@ -51,7 +51,7 @@ const runtimeInputs: RuntimeInputDiagnostics = {
       status: 'unsupported',
       reasonCode: 'plugin.product-mode-unsupported',
       source: 'opencode-compatibility-registry',
-      productMode: 'cloud-worker,desktop-local',
+      productMode: 'desktop-cloud,cloud-web,cloud-channel-gateway,paired-desktop,headless-host',
       redacted: true,
     },
   ],
@@ -162,7 +162,7 @@ describe('HealthCenterPage', () => {
     expect(await screen.findByText('Health Center')).toBeTruthy()
     expect(await screen.findByText('Open Cowork needs attention')).toBeTruthy()
     expect(screen.getAllByText('Acme Cloud')[0]).toBeVisible()
-    expect(screen.getByText('OpenCode extension is unavailable')).toBeTruthy()
+    expect(screen.queryByText('OpenCode extension is unavailable')).not.toBeInTheDocument()
     expect(screen.queryByText('opencode-plugin-remote-fail-closed')).not.toBeInTheDocument()
     expect(screen.queryByText('Run Desktop locally')).not.toBeInTheDocument()
     expect(screen.queryByText('desktop_local')).not.toBeInTheDocument()
@@ -258,7 +258,7 @@ describe('HealthCenterPage', () => {
     const status = vi.fn(async () => ({ ready: true, error: null }))
     installRendererTestCoworkApi({
       runtime: { status },
-      app: { runtimeInputs: vi.fn(async () => ({ ...runtimeInputs, capabilities: (runtimeInputs.capabilities || []).slice(0, 2), conflicts: [] })) },
+      app: { runtimeInputs: vi.fn(async () => ({ ...runtimeInputs, conflicts: [] })) },
       workspace: {
         list: vi.fn(async () => [workspaces[0]!]),
         support: vi.fn(async () => []),

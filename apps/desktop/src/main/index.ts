@@ -50,7 +50,7 @@ import { registerBrandingAssetProtocol } from './branding-protocol.ts'
 import type { ManagedOpencodeSupervisorProcess } from '@open-cowork/runtime-host'
 import { isDesktopFeatureEnabled } from '@open-cowork/shared'
 import { resolveDevelopmentSetupConnectionValidator } from './setup/connection-validation.ts'
-import { canStartDesktopRuntime, type DesktopRuntimeStartIntent } from './runtime-start-policy.ts'
+import { canStartDesktopRuntime, type DesktopRuntimeStartIntent } from './setup/runtime-start-policy.ts'
 
 // Inject Electron's utilityProcess as the managed OpenCode server's supervisor
 // forker (desktop-only; the cloud forks via node:child_process instead). Set at

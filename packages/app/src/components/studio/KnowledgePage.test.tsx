@@ -140,6 +140,71 @@ function localStarterSnapshot(overrides: Partial<KnowledgeSnapshotPayload> = {})
   }
 }
 
+function newSpaceScenario() {
+  const starter = localStarterSnapshot()
+  const createdSpace = {
+    id: 'space:onboarding',
+    name: 'Onboarding',
+    visibility: 'company' as const,
+    role: 'Maintainer' as const,
+  }
+  const proposal = {
+    id: 'proposal:onboarding:overview',
+    pageId: null,
+    pageTitle: 'Overview',
+    spaceId: createdSpace.id,
+    by: 'Local user',
+    when: '2026-08-01T12:00:00.000Z',
+    summary: 'Create the first page for Onboarding.',
+    add: 1,
+    del: 0,
+    status: 'pending' as const,
+    links: [],
+    body: [{ id: 'overview-intro', type: 'p' as const, text: 'Use this page to capture reviewed context for Onboarding.' }],
+  }
+  const createdPage = {
+    id: 'page:onboarding:overview',
+    pageId: 'page:onboarding:overview',
+    versionId: 'version:onboarding:overview:1',
+    proposalId: proposal.id,
+    spaceId: createdSpace.id,
+    title: 'Overview',
+    updatedBy: 'Local user',
+    updatedAt: '2026-08-01T12:00:00.000Z',
+    version: 1,
+    revision: 'onboarding-overview-revision',
+    links: [],
+    body: proposal.body,
+  }
+  const createdOnlySnapshot = localStarterSnapshot({
+    spaces: [...starter.spaces, createdSpace],
+    graph: {
+      nodes: [
+        ...starter.graph.nodes,
+        { id: createdSpace.id, kind: 'space', label: createdSpace.name, spaceId: createdSpace.id },
+      ],
+      edges: [...starter.graph.edges],
+    },
+  })
+  const pendingSnapshot = {
+    ...createdOnlySnapshot,
+    proposals: [proposal],
+  }
+  const nextSnapshot = localStarterSnapshot({
+    spaces: [...starter.spaces, createdSpace],
+    pages: [...starter.pages, createdPage],
+    graph: {
+      nodes: [
+        ...starter.graph.nodes,
+        { id: createdSpace.id, kind: 'space', label: createdSpace.name, spaceId: createdSpace.id },
+        { id: createdPage.id, kind: 'page', label: createdPage.title, spaceId: createdSpace.id },
+      ],
+      edges: [...starter.graph.edges],
+    },
+  })
+  return { starter, createdSpace, proposal, createdPage, createdOnlySnapshot, pendingSnapshot, nextSnapshot }
+}
+
 function installKnowledgeApi(payload = snapshot()) {
   return installRendererTestCoworkApi({
     knowledge: {
@@ -256,6 +321,268 @@ describe('KnowledgePage clarity redesign', () => {
     expect(screen.getByRole('dialog', { name: 'New Space' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled()
     expect(screen.queryByRole('heading', { name: 'Review queue' })).not.toBeInTheDocument()
+  })
+
+  it('publishes and selects an initial page when creating a Space', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, nextSnapshot } = newSpaceScenario()
+    const createSpace = vi.fn(async () => createdSpace)
+    const propose = vi.fn(async () => proposal)
+    const acceptProposal = vi.fn(async () => ({
+      proposal,
+      page: createdPage,
+    }))
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: vi.fn()
+          .mockResolvedValueOnce(starter)
+          .mockResolvedValue(nextSnapshot),
+        history: vi.fn(async () => []),
+        createSpace,
+        propose,
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    render(<KnowledgePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await screen.findByRole('heading', { level: 1, name: 'Overview' })
+    expect(createSpace).toHaveBeenCalledWith({
+      workspaceId: LOCAL_WORKSPACE_ID,
+      name: 'Onboarding',
+      visibility: 'company',
+    })
+    expect(propose).toHaveBeenCalledWith(expect.objectContaining({
+      workspaceId: LOCAL_WORKSPACE_ID,
+      spaceId: createdSpace.id,
+      pageTitle: 'Overview',
+    }))
+    expect(acceptProposal).toHaveBeenCalledWith('proposal:onboarding:overview', {
+      workspaceId: LOCAL_WORKSPACE_ID,
+    })
+    expect(screen.queryByText('No readable pages')).not.toBeInTheDocument()
+  })
+
+  it('resumes at the proposal stage without creating a duplicate Space', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, createdOnlySnapshot, nextSnapshot } = newSpaceScenario()
+    const createSpace = vi.fn(async () => createdSpace)
+    const propose = vi.fn()
+      .mockRejectedValueOnce(new Error('Proposal service unavailable.'))
+      .mockResolvedValue(proposal)
+    const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: vi.fn()
+          .mockResolvedValueOnce(starter)
+          .mockResolvedValueOnce(createdOnlySnapshot)
+          .mockResolvedValue(nextSnapshot),
+        history: vi.fn(async () => []),
+        createSpace,
+        propose,
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    render(<KnowledgePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Proposal service unavailable.')
+
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await screen.findByRole('heading', { level: 1, name: 'Overview' })
+
+    expect(createSpace).toHaveBeenCalledTimes(1)
+    expect(propose).toHaveBeenCalledTimes(2)
+    expect(acceptProposal).toHaveBeenCalledTimes(1)
+  })
+
+  it('reconciles an ambiguous Space write and ignores changed retry input', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, createdOnlySnapshot, nextSnapshot } = newSpaceScenario()
+    const createSpace = vi.fn(async () => {
+      throw new Error('Create response was lost.')
+    })
+    const propose = vi.fn(async () => proposal)
+    const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: vi.fn()
+          .mockResolvedValueOnce(starter)
+          .mockRejectedValueOnce(new Error('Reconciliation temporarily unavailable.'))
+          .mockResolvedValueOnce(createdOnlySnapshot)
+          .mockResolvedValue(nextSnapshot),
+        history: vi.fn(async () => []),
+        createSpace,
+        propose,
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    render(<KnowledgePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    const name = screen.getByRole('textbox', { name: 'Name' })
+    await user.type(name, 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Create response was lost.')
+
+    await user.clear(name)
+    await user.type(name, 'Different Space')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await screen.findByRole('heading', { level: 1, name: 'Overview' })
+
+    expect(createSpace).toHaveBeenCalledTimes(1)
+    expect(propose).toHaveBeenCalledWith(expect.objectContaining({
+      spaceId: createdSpace.id,
+      summary: 'Create the first page for Onboarding.',
+    }))
+    expect(acceptProposal).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses corrected input after reconciliation confirms a Space write failed', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, nextSnapshot } = newSpaceScenario()
+    const createSpace = vi.fn()
+      .mockRejectedValueOnce(new Error('Space name is invalid.'))
+      .mockResolvedValue(createdSpace)
+    const propose = vi.fn(async () => proposal)
+    const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: vi.fn()
+          .mockResolvedValueOnce(starter)
+          .mockResolvedValueOnce(starter)
+          .mockResolvedValue(nextSnapshot),
+        history: vi.fn(async () => []),
+        createSpace,
+        propose,
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    render(<KnowledgePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    const name = screen.getByRole('textbox', { name: 'Name' })
+    await user.type(name, 'Invalid Space')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Space name is invalid.')
+
+    await user.clear(name)
+    await user.type(name, 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await screen.findByRole('heading', { level: 1, name: 'Overview' })
+
+    expect(createSpace).toHaveBeenNthCalledWith(1, {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      name: 'Invalid Space',
+      visibility: 'company',
+    })
+    expect(createSpace).toHaveBeenNthCalledWith(2, {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      name: 'Onboarding',
+      visibility: 'company',
+    })
+    expect(propose).toHaveBeenCalledWith(expect.objectContaining({
+      summary: 'Create the first page for Onboarding.',
+    }))
+  })
+
+  it('resumes at the accept stage without recreating the Space or proposal', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, pendingSnapshot, nextSnapshot } = newSpaceScenario()
+    const createSpace = vi.fn(async () => createdSpace)
+    const propose = vi.fn(async () => proposal)
+    const acceptProposal = vi.fn()
+      .mockRejectedValueOnce(new Error('Review service unavailable.'))
+      .mockResolvedValue({ proposal, page: createdPage })
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: vi.fn()
+          .mockResolvedValueOnce(starter)
+          .mockResolvedValueOnce(pendingSnapshot)
+          .mockResolvedValue(nextSnapshot),
+        history: vi.fn(async () => []),
+        createSpace,
+        propose,
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    render(<KnowledgePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Review service unavailable.')
+
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await screen.findByRole('heading', { level: 1, name: 'Overview' })
+
+    expect(createSpace).toHaveBeenCalledTimes(1)
+    expect(propose).toHaveBeenCalledTimes(1)
+    expect(acceptProposal).toHaveBeenCalledTimes(2)
+  })
+
+  it('closes a completed creation and offers page-level refresh recovery when its snapshot fails', async () => {
+    const user = userEvent.setup()
+    const { starter, createdSpace, proposal, createdPage, nextSnapshot } = newSpaceScenario()
+    const createSpace = vi.fn(async () => createdSpace)
+    const propose = vi.fn(async () => proposal)
+    const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
+    installRendererTestCoworkApi({
+      knowledge: {
+        snapshot: vi.fn()
+          .mockResolvedValueOnce(starter)
+          .mockRejectedValueOnce(new Error('Snapshot service unavailable.'))
+          .mockResolvedValue(nextSnapshot),
+        history: vi.fn(async () => []),
+        createSpace,
+        propose,
+        acceptProposal,
+        declineProposal: vi.fn(async () => undefined),
+        restoreVersion: vi.fn(async () => undefined),
+      },
+      on: { knowledgeUpdated: vi.fn(() => () => undefined) },
+    })
+
+    render(<KnowledgePage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Create a Space' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Onboarding')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The Space and Overview page were created')
+    expect(screen.queryByRole('dialog', { name: 'New Space' })).not.toBeInTheDocument()
+    expect(createSpace).toHaveBeenCalledTimes(1)
+    expect(propose).toHaveBeenCalledTimes(1)
+    expect(acceptProposal).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: 'Reload' }))
+    await screen.findByRole('heading', { level: 1, name: 'Overview' })
+    expect(createSpace).toHaveBeenCalledTimes(1)
   })
 
   it('never hides a modified starter page behind first-run guidance', async () => {

@@ -122,10 +122,14 @@ export function useAppGlobalEvents({
   const [voicePttShortcut, setVoicePttShortcut] = useState(VOICE_PTT_SHORTCUT)
 
   useEffect(() => {
-    if (!runtimeReady || !voiceEnabled) {
+    if (!voiceEnabled) {
       setVoicePttShortcut(VOICE_PTT_SHORTCUT)
       return
     }
+    // Keep the saved accelerator while a previously-ready runtime recovers.
+    // Resetting here would briefly reactivate the default alongside Electron's
+    // persisted menu accelerator. Voice key handling is gated on runtimeReady.
+    if (!runtimeReady) return
     let cancelled = false
     let shortcutEventGeneration = 0
     const applyShortcut = (value: unknown) => {
@@ -193,7 +197,7 @@ export function useAppGlobalEvents({
 
       // Voice PTT stays app-focused. Settings are read only after runtime readiness,
       // so login shells do not gain a new settings IPC dependency.
-      if (voiceEnabled && matchesAccelerator(e, voicePttShortcut)) {
+      if (runtimeReady && voiceEnabled && matchesAccelerator(e, voicePttShortcut)) {
         e.preventDefault()
         void requestVoicePttToggle()
         return

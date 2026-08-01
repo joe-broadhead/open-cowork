@@ -345,6 +345,88 @@ describe('SettingsPanel', () => {
     expect(window.coworkApi.runtime.restart).not.toHaveBeenCalled()
   })
 
+  it('reconciles failed Settings OAuth authorization and returns invalidated installs to setup', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onSetupRequired = vi.fn()
+    const settingsSet = vi.fn()
+      .mockResolvedValueOnce(settings({ setupComplete: true }))
+      .mockResolvedValueOnce(settings({ setupComplete: false }))
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      provider: {
+        authMethods: vi.fn(async () => ({
+          openrouter: [{ type: 'oauth', label: 'OpenRouter' }],
+        })),
+        authorize: vi.fn(async () => {
+          throw new Error('Provider login authorization expired.')
+        }),
+      },
+      settings: {
+        get: vi.fn(async () => settings({ setupComplete: true })),
+        getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-existing' })),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={onClose} onSetupRequired={onSetupRequired} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Model/ }))
+    await user.click(await screen.findByRole('button', { name: 'Sign in with OpenRouter' }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('Provider login authorization expired.')).toBeInTheDocument()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onSetupRequired).toHaveBeenCalledTimes(1)
+  })
+
+  it('reconciles expired Settings OAuth callbacks and returns invalidated installs to setup', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onSetupRequired = vi.fn()
+    const settingsSet = vi.fn()
+      .mockResolvedValueOnce(settings({ setupComplete: true }))
+      .mockResolvedValueOnce(settings({ setupComplete: false }))
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      provider: {
+        authMethods: vi.fn(async () => ({
+          openrouter: [{ type: 'oauth', label: 'OpenRouter' }],
+        })),
+        authorize: vi.fn(async () => ({
+          url: 'https://auth.example.test',
+          method: 'auto',
+          instructions: '',
+        })),
+        callback: vi.fn(async () => {
+          throw new Error('Provider login expired for openrouter. Start login again.')
+        }),
+      },
+      settings: {
+        get: vi.fn(async () => settings({ setupComplete: true })),
+        getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-existing' })),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={onClose} onSetupRequired={onSetupRequired} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Model/ }))
+    await user.click(await screen.findByRole('button', { name: 'Sign in with OpenRouter' }))
+    await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('Provider login expired for openrouter. Start login again.')).toBeInTheDocument()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onSetupRequired).toHaveBeenCalledTimes(1)
+  })
+
   it('persists explicit Studio permission modes', async () => {
     const settingsSet = vi.mocked(window.coworkApi.settings.set)
     const user = userEvent.setup()

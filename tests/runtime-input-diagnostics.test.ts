@@ -101,11 +101,13 @@ test('getRuntimeInputDiagnostics reports effective provider inputs and override 
       diagnostics.compatibility?.assumptions.some((entry) => entry.id === 'opencode-plugin-remote-fail-closed' && entry.status === 'blocked'),
       true,
     )
-    assert.equal(diagnostics.capabilities?.some((capability) => (
+    const remotePluginPolicy = diagnostics.capabilities?.find((capability) => (
       capability.kind === 'opencode-plugin'
       && capability.status === 'unsupported'
       && capability.reasonCode === 'plugin.product-mode-unsupported'
-    )), true)
+    ))
+    assert.equal(remotePluginPolicy?.id, 'opencode-plugin-remote-fail-closed')
+    assert.equal(remotePluginPolicy?.productMode.split(',').includes('desktop-local'), false)
     assert.equal(diagnostics.capabilities?.some((capability) => (
       capability.kind === 'agent'
       && capability.id === 'subagent-delegation'

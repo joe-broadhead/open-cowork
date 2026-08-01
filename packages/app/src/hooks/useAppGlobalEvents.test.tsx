@@ -100,9 +100,17 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function Harness({ view = 'chat', voiceEnabled = true }: { view?: AppView; voiceEnabled?: boolean }) {
+function Harness({
+  view = 'chat',
+  voiceEnabled = true,
+  runtimeReady = true,
+}: {
+  view?: AppView
+  voiceEnabled?: boolean
+  runtimeReady?: boolean
+}) {
   useAppGlobalEvents({
-    runtimeReady: true,
+    runtimeReady,
     voiceEnabled,
     view,
     currentSessionId: 'session-1',
@@ -362,6 +370,41 @@ describe('useAppGlobalEvents', () => {
     })
     expect(toggle).toHaveBeenCalledTimes(1)
 
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'v',
+        ctrlKey: true,
+        altKey: true,
+      }))
+    })
+    expect(toggle).toHaveBeenCalledTimes(1)
+    unregister()
+  })
+
+  it('keeps the saved Voice shortcut inert across a runtime drop and recovery', async () => {
+    const toggle = vi.fn()
+    const unregister = registerVoicePttToggleHandler(toggle)
+    const api = installGlobalEventsApi({ voicePttShortcut: 'CmdOrCtrl+Alt+V' })
+    const { rerender } = render(<Harness runtimeReady />)
+
+    await waitFor(() => expect(api.settings.get).toHaveBeenCalledTimes(1))
+    rerender(<Harness runtimeReady={false} />)
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'v',
+        ctrlKey: true,
+        altKey: true,
+      }))
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'm',
+        ctrlKey: true,
+        shiftKey: true,
+      }))
+    })
+    expect(toggle).not.toHaveBeenCalled()
+
+    rerender(<Harness runtimeReady />)
     act(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', {
         key: 'v',
