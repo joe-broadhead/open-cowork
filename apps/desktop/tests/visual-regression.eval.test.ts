@@ -31,6 +31,12 @@ async function pinVisualCaptureTime(page: Page) {
   await page.clock.setFixedTime(VISUAL_CAPTURE_TIME)
   const session = await page.context().newCDPSession(page)
   await session.send('Emulation.setTimezoneOverride', { timezoneId: 'UTC' })
+  // Home may already have rendered its time-of-day greeting before the clock
+  // override was installed. Reload under the fixed clock so the first capture
+  // is as deterministic as every later capture that inherits the override.
+  await page.reload()
+  await waitForAppShell(page, 30_000)
+  await waitForStableConnectionStatus(page)
 }
 
 async function gotoHome(page: Page) {
