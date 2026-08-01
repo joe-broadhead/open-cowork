@@ -1,9 +1,25 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  WORKSPACE_SUPPORT_APIS,
+  workspaceApiSupportContextForAuthority,
+  type ChannelProviderStatus,
+  type WorkspaceApiSupport,
+} from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { useSessionStore } from '../../stores/session'
+import { useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { StudioApprovalsPage, StudioArtifactsPage, StudioChannelsPage } from './StudioUtilityPages'
+
+const featureValueTelemetry = vi.hoisted(() => ({
+  recordFeatureValueActivation: vi.fn(),
+  recordFeatureValueDiscovery: vi.fn(),
+}))
+
+vi.mock('../../helpers/feature-value-telemetry', () => featureValueTelemetry)
+
+const localSupport = useWorkspaceSupportStore.getState().supportByWorkspace[LOCAL_WORKSPACE_ID] || []
 
 function resetSessionStore() {
   useSessionStore.setState({
@@ -21,6 +37,12 @@ function resetSessionStore() {
     awaitingQuestionSessions: new Set(),
     sessionStateById: {},
     chartArtifactsBySession: {},
+  })
+  useWorkspaceSupportStore.setState({
+    supportByWorkspace: { [LOCAL_WORKSPACE_ID]: localSupport },
+    loadedByWorkspace: { [LOCAL_WORKSPACE_ID]: true },
+    loadingByWorkspace: {},
+    errorByWorkspace: {},
   })
 }
 
@@ -318,6 +340,13 @@ describe('StudioArtifactsPage', () => {
       suggestedName: 'board-review.md',
       workspaceId: undefined,
     }))
+    expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledTimes(2)
+
+    featureValueTelemetry.recordFeatureValueActivation.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Export all' }))
+    await waitFor(() => expect(exportArtifact.mock.calls.length).toBeGreaterThan(1))
+    expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledTimes(1)
+    expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledWith('artifacts')
 
     // Inspect opens a redacted-metadata dialog: provenance fields are shown, but
     // no local path or object-store key leaks (the surface holds metadata only).
@@ -471,8 +500,19 @@ describe('StudioArtifactsPage', () => {
 
 describe('StudioChannelsPage', () => {
   beforeEach(() => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', { configurable: true, value: undefined })
     resetSessionStore()
+    featureValueTelemetry.recordFeatureValueActivation.mockClear()
+    featureValueTelemetry.recordFeatureValueDiscovery.mockClear()
   })
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((promiseResolve) => {
+      resolve = promiseResolve
+    })
+    return { promise, resolve }
+  }
 
   it('renders the provider grid, People roles, Watches, and desktop channel actions', async () => {
     const connectBinding = vi.fn(async () => ({ bindingId: 'binding-new', agentId: 'agent-1', provider: 'whatsapp', displayName: 'WhatsApp channel', status: 'auth_required', settings: {} }))
@@ -580,6 +620,7 @@ describe('StudioChannelsPage', () => {
     fireEvent.click(discordConnect)
 
     await waitFor(() => expect(connectBinding).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'agent-1', provider: 'discord' })))
+    expect(featureValueTelemetry.recordFeatureValueActivation).not.toHaveBeenCalledWith('channels')
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
 
@@ -599,5 +640,282 @@ describe('StudioChannelsPage', () => {
       }),
     }))
     expect(connectBinding).not.toHaveBeenCalledWith(expect.objectContaining({ provider: 'slack' }))
+  })
+
+  it('activates Channels only when a persisted binding transitions from auth required to active', async () => {
+    let bindingStatus: 'auth_required' | 'active' = 'auth_required'
+    const bindings = vi.fn(async () => [{
+      bindingId: 'binding-1',
+      agentId: 'agent-1',
+      provider: 'telegram' as const,
+      displayName: 'Team Telegram',
+      status: bindingStatus,
+      settings: { defaultChatId: 'chat-1' },
+    }])
+    installRendererTestCoworkApi({
+      channels: {
+        providers: vi.fn(async () => [{
+          id: 'telegram',
+          provider: 'telegram',
+          label: 'Telegram',
+          available: true,
+          connected: bindingStatus === 'active',
+          bindingCount: 1,
+          activeBindingCount: bindingStatus === 'active' ? 1 : 0,
+          status: bindingStatus === 'active' ? 'connected' : 'available',
+        }]),
+        agents: vi.fn(async () => [{ agentId: 'agent-1', name: 'Channel coworker', profileName: 'default', status: 'active' }]),
+        bindings,
+        people: vi.fn(async () => []),
+        deliveries: vi.fn(async () => []),
+        watches: vi.fn(async () => []),
+      },
+    })
+
+    render(<StudioChannelsPage onOpenSettings={vi.fn()} />)
+
+    await waitFor(() => expect(bindings).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('button', { name: 'Refresh' })).toBeEnabled()
+    expect(featureValueTelemetry.recordFeatureValueActivation).not.toHaveBeenCalledWith('channels')
+
+    bindingStatus = 'active'
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+    expect(await screen.findByText('Team Telegram')).toBeInTheDocument()
+    await waitFor(() => expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledWith('channels'))
+    expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(bindings).toHaveBeenCalledTimes(3))
+    expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects null and false Channel mutations instead of reporting false success', async () => {
+    const disconnectBinding = vi.fn(async () => null)
+    const pauseWatch = vi.fn(async () => null)
+    const resumeWatch = vi.fn(async () => null)
+    const deleteWatch = vi.fn(async () => false)
+    installRendererTestCoworkApi({
+      channels: {
+        providers: vi.fn(async () => []),
+        agents: vi.fn(async () => [{ agentId: 'agent-1', name: 'Channel coworker', profileName: 'default', status: 'active' }]),
+        bindings: vi.fn(async () => [{
+          bindingId: 'binding-1',
+          agentId: 'agent-1',
+          provider: 'telegram',
+          displayName: 'Team Telegram',
+          status: 'active',
+          settings: { defaultChatId: 'chat-1' },
+        }]),
+        people: vi.fn(async () => []),
+        deliveries: vi.fn(async () => []),
+        watches: vi.fn(async () => [
+          {
+            id: 'watch-active',
+            kind: 'watch',
+            workspaceId: LOCAL_WORKSPACE_ID,
+            ownerAuthority: 'desktop_local',
+            executionAuthority: 'desktop_local',
+            stateOwner: 'desktop_local_store',
+            status: 'active',
+            target: { kind: 'project', id: 'project-active' },
+            events: ['needs_input'],
+            channel: { provider: 'telegram', agentId: 'agent-1', channelBindingId: 'binding-1', target: {} },
+            recipient: { role: 'approver', label: 'Approver' },
+            deliverySurface: 'gateway_channel',
+            verbosity: 'normal',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'watch-paused',
+            kind: 'watch',
+            workspaceId: LOCAL_WORKSPACE_ID,
+            ownerAuthority: 'desktop_local',
+            executionAuthority: 'desktop_local',
+            stateOwner: 'desktop_local_store',
+            status: 'paused',
+            target: { kind: 'project', id: 'project-paused' },
+            events: ['task.moved'],
+            channel: { provider: 'telegram', agentId: 'agent-1', channelBindingId: 'binding-1', target: {} },
+            recipient: { role: 'viewer', label: 'Viewer' },
+            deliverySurface: 'gateway_channel',
+            verbosity: 'normal',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ]),
+        disconnectBinding,
+        pauseWatch,
+        resumeWatch,
+        deleteWatch,
+      },
+    })
+
+    render(<StudioChannelsPage onOpenSettings={vi.fn()} />)
+    const noMutation = 'The channel action did not change anything. Refresh and try again.'
+
+    const bindingCard = (await screen.findByText('Team Telegram')).closest('article')
+    expect(bindingCard).not.toBeNull()
+    fireEvent.click(within(bindingCard as HTMLElement).getByRole('button', { name: 'Disconnect' }))
+    const disconnectDialog = await screen.findByRole('dialog', { name: 'Disconnect this channel?' })
+    fireEvent.click(within(disconnectDialog).getByRole('button', { name: 'Disconnect' }))
+    await waitFor(() => expect(disconnectBinding).toHaveBeenCalledWith('binding-1', { workspaceId: LOCAL_WORKSPACE_ID }))
+    expect(await screen.findByText(noMutation)).toBeInTheDocument()
+    expect(screen.queryByText('Channel disconnected.')).not.toBeInTheDocument()
+
+    const activeWatch = screen.getByText('project / project-active').closest('.studio-channel-watch')
+    expect(activeWatch).not.toBeNull()
+    fireEvent.click(within(activeWatch as HTMLElement).getByRole('button', { name: 'Pause' }))
+    await waitFor(() => expect(pauseWatch).toHaveBeenCalledWith('watch-active', { workspaceId: LOCAL_WORKSPACE_ID }))
+    expect(await screen.findByText(noMutation)).toBeInTheDocument()
+    expect(screen.queryByText('Watch paused.')).not.toBeInTheDocument()
+
+    const pausedWatch = screen.getByText('project / project-paused').closest('.studio-channel-watch')
+    expect(pausedWatch).not.toBeNull()
+    fireEvent.click(within(pausedWatch as HTMLElement).getByRole('button', { name: 'Resume' }))
+    await waitFor(() => expect(resumeWatch).toHaveBeenCalledWith('watch-paused', { workspaceId: LOCAL_WORKSPACE_ID }))
+    expect(await screen.findByText(noMutation)).toBeInTheDocument()
+    expect(screen.queryByText('Watch resumed.')).not.toBeInTheDocument()
+
+    fireEvent.click(within(activeWatch as HTMLElement).getByRole('button', { name: 'Delete' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Delete this watch?' })
+    fireEvent.click(within(deleteDialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(deleteWatch).toHaveBeenCalledWith('watch-active', { workspaceId: LOCAL_WORKSPACE_ID }))
+    expect(await screen.findByText(noMutation)).toBeInTheDocument()
+    expect(screen.queryByText('Watch deleted.')).not.toBeInTheDocument()
+  })
+
+  it('hands remote workspaces to Cloud Web without calling Local-only Channel IPC', async () => {
+    const channelReads = {
+      providers: vi.fn(async () => []),
+      agents: vi.fn(async () => []),
+      bindings: vi.fn(async () => []),
+      people: vi.fn(async () => []),
+      deliveries: vi.fn(async () => []),
+      watches: vi.fn(async () => []),
+    }
+    installRendererTestCoworkApi({ channels: channelReads })
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:test' })
+
+    render(<StudioChannelsPage onOpenSettings={vi.fn()} />)
+
+    expect(await screen.findByText('Manage Cloud channels in Cloud Web')).toBeInTheDocument()
+    expect(screen.getByText(/Desktop has no workspace-scoped Channels adapter/)).toBeInTheDocument()
+    for (const channelRead of Object.values(channelReads)) {
+      expect(channelRead).not.toHaveBeenCalled()
+    }
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).not.toHaveBeenCalledWith('channels')
+  })
+
+  it('uses the workspace-scoped Channels adapter inside Cloud Web', async () => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', { configurable: true, value: true })
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:web' })
+    const providers = vi.fn(async () => [])
+    const bindings = vi.fn(async () => [])
+    installRendererTestCoworkApi({
+      channels: {
+        providers,
+        agents: vi.fn(async () => []),
+        bindings,
+        people: vi.fn(async () => []),
+        deliveries: vi.fn(async () => []),
+        watches: vi.fn(async () => []),
+      },
+    })
+
+    render(<StudioChannelsPage onOpenSettings={vi.fn()} />)
+
+    await waitFor(() => expect(providers).toHaveBeenCalledWith({ workspaceId: 'cloud:web' }))
+    expect(bindings).toHaveBeenCalledWith({ workspaceId: 'cloud:web', limit: 100 })
+    expect(screen.queryByText('Manage Cloud channels in Cloud Web')).not.toBeInTheDocument()
+    expect(featureValueTelemetry.recordFeatureValueDiscovery).toHaveBeenCalledWith('channels')
+  })
+
+  it('hides the previous Cloud snapshot and ignores stale refreshes after switching workspaces', async () => {
+    Object.defineProperty(window, '__coworkBrowserRuntime', { configurable: true, value: true })
+    const firstWorkspaceId = 'cloud:first'
+    const secondWorkspaceId = 'cloud:second'
+    const cloudSupport: WorkspaceApiSupport[] = WORKSPACE_SUPPORT_APIS.map((api) => ({
+      api,
+      status: 'supported',
+      verdict: { allowed: true, reason: null },
+      context: workspaceApiSupportContextForAuthority('cloud_worker'),
+    }))
+    useSessionStore.setState({ activeWorkspaceId: firstWorkspaceId })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: {
+        [LOCAL_WORKSPACE_ID]: localSupport,
+        [firstWorkspaceId]: cloudSupport,
+        [secondWorkspaceId]: cloudSupport,
+      },
+      loadedByWorkspace: {
+        [LOCAL_WORKSPACE_ID]: true,
+        [firstWorkspaceId]: true,
+        [secondWorkspaceId]: true,
+      },
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    })
+    const staleFirstRefresh = deferred<ChannelProviderStatus[]>()
+    const secondLoad = deferred<ChannelProviderStatus[]>()
+    const firstProviders: ChannelProviderStatus[] = [{
+      id: 'telegram',
+      provider: 'telegram',
+      label: 'First workspace provider',
+      available: true,
+      connected: false,
+      bindingCount: 0,
+      activeBindingCount: 0,
+      status: 'available',
+    }]
+    const secondProviders: ChannelProviderStatus[] = [{
+      id: 'slack',
+      provider: 'slack',
+      label: 'Second workspace provider',
+      available: true,
+      connected: false,
+      bindingCount: 0,
+      activeBindingCount: 0,
+      status: 'available',
+    }]
+    const providers = vi.fn()
+      .mockResolvedValueOnce(firstProviders)
+      .mockReturnValueOnce(staleFirstRefresh.promise)
+      .mockReturnValueOnce(secondLoad.promise)
+    installRendererTestCoworkApi({
+      channels: {
+        providers,
+        agents: vi.fn(async () => []),
+        bindings: vi.fn(async () => []),
+        people: vi.fn(async () => []),
+        deliveries: vi.fn(async () => []),
+        watches: vi.fn(async () => []),
+      },
+    })
+
+    render(<StudioChannelsPage onOpenSettings={vi.fn()} />)
+
+    expect(await screen.findByText('First workspace provider')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(providers).toHaveBeenCalledTimes(2))
+
+    act(() => useSessionStore.setState({ activeWorkspaceId: secondWorkspaceId }))
+
+    await waitFor(() => expect(providers).toHaveBeenCalledTimes(3))
+    expect(screen.queryByText('First workspace provider')).not.toBeInTheDocument()
+
+    await act(async () => {
+      secondLoad.resolve(secondProviders)
+      await secondLoad.promise
+    })
+    expect(await screen.findByText('Second workspace provider')).toBeInTheDocument()
+
+    await act(async () => {
+      staleFirstRefresh.resolve(firstProviders)
+      await staleFirstRefresh.promise
+    })
+    expect(screen.getByText('Second workspace provider')).toBeInTheDocument()
+    expect(screen.queryByText('First workspace provider')).not.toBeInTheDocument()
   })
 })

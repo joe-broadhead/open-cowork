@@ -672,7 +672,7 @@ export type RunTimelineProps = ComponentPropsWithoutRef<'section'> & {
   steps: RunTimelineStep[]
   currentStepId: string
   completedStepIds?: string[]
-  sessionId?: string
+  linkedChat?: boolean
 }
 
 export function RunTimeline({
@@ -681,7 +681,7 @@ export function RunTimeline({
   steps,
   currentStepId,
   completedStepIds = [],
-  sessionId,
+  linkedChat = false,
   className,
   ...props
 }: RunTimelineProps) {
@@ -702,7 +702,7 @@ export function RunTimeline({
           )
         })}
       </ol>
-      {sessionId ? <div className="studio-run-timeline__meta">Session <code>{sessionId}</code></div> : null}
+      {linkedChat ? <div className="studio-run-timeline__meta">Linked chat</div> : null}
     </section>
   )
 }

@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   KnowledgePage as KnowledgePageRecord, KnowledgePageBlock as KnowledgePageBlockRecord, KnowledgePageLink, KnowledgePageVersion, KnowledgeProposal, KnowledgeSnapshotPayload, KnowledgeSpace, } from '@open-cowork/shared'
 import type { KnowledgeSpaceVisibility } from '@open-cowork/shared'
-import { KNOWLEDGE_VISIBILITIES, knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
+import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
+import { recordFeatureValueActivation, recordFeatureValueDiscovery } from '../../helpers/feature-value-telemetry'
 import { RestrictedState } from '../RestrictedState'
 import {
   Badge,
@@ -24,16 +25,51 @@ import {
   type KnowledgePageBlock,
   type KnowledgeSpace as KnowledgeSpaceChrome,
   SegmentedControl,
-  Select,
   Skeleton,
   StudioPageHeader,
 } from '@open-cowork/ui'
+import { KnowledgeNewSpaceDialog } from './KnowledgeNewSpaceDialog'
+import { useKnowledgeLayoutMode } from './useKnowledgeLayoutMode'
 
 const EMPTY_SNAPSHOT: KnowledgeSnapshotPayload = {
   spaces: [],
   pages: [],
   proposals: [],
   graph: { nodes: [], edges: [] },
+}
+
+// The local store intentionally seeds one starter Space + page on first touch.
+// Treat only that byte-identifiable, unmodified starter as first-run; accepted
+// edits increment the page version/revision, while any created content changes
+// the collection cardinality. This keeps user-authored knowledge impossible to
+// hide behind onboarding.
+const LOCAL_STARTER_KNOWLEDGE = {
+  spaceId: 'space:local:company-os',
+  pageId: 'page:local:operating-model',
+  revision: 'ffed82865231a17c4aee4da9dba33e731491806b1afcc0a513772e53000f7ec6',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+} as const
+
+function isKnowledgeFirstRun(snapshot: KnowledgeSnapshotPayload) {
+  if (snapshot.spaces.length === 0) return true
+  if (snapshot.spaces.length !== 1 || snapshot.pages.length !== 1 || snapshot.proposals.length !== 0) return false
+
+  const [space] = snapshot.spaces
+  const [page] = snapshot.pages
+  return space?.id === LOCAL_STARTER_KNOWLEDGE.spaceId
+    && space.name === 'Company OS'
+    && space.icon === 'book-open'
+    && space.hue === 'azure'
+    && space.visibility === 'company'
+    && space.role === 'Maintainer'
+    && page?.id === LOCAL_STARTER_KNOWLEDGE.pageId
+    && page.spaceId === space.id
+    && page.title === 'Operating model'
+    && page.updatedBy === 'Open Cowork'
+    && page.updatedAt === LOCAL_STARTER_KNOWLEDGE.updatedAt
+    && page.version === 1
+    && page.revision === LOCAL_STARTER_KNOWLEDGE.revision
+    && page.links.length === 0
 }
 
 function formatDate(value: string | null | undefined) {
@@ -137,8 +173,9 @@ function AccessPanel({ space, canPropose, canReview }: {
   )
 }
 
-// First-run guidance: when a workspace has no Spaces yet, teach the
-// capture -> review -> publish model instead of showing an empty 3-column scaffold.
+// First-run guidance: before a workspace has knowledge beyond its built-in
+// starter, teach the capture -> review -> publish model instead of showing the
+// full workbench around boilerplate content.
 function KnowledgeFirstRun({ onNewSpace }: { onNewSpace: () => void }) {
   const steps: Array<{ icon: IconName; title: string; body: string }> = [
     { icon: 'message-square', title: t('knowledge.firstRun.captureTitle', 'Capture'), body: t('knowledge.firstRun.captureBody', 'Coworkers turn useful chat outcomes into draft pages.') },
@@ -172,7 +209,7 @@ function KnowledgeFirstRun({ onNewSpace }: { onNewSpace: () => void }) {
       </div>
       <div className="mt-5 flex justify-center">
         <Button variant="primary" leftIcon="plus" onClick={onNewSpace}>
-          {t('knowledge.firstRun.action', 'Create your first Space')}
+          {t('knowledge.firstRun.action', 'Create a Space')}
         </Button>
       </div>
     </Card>
@@ -328,76 +365,10 @@ function VersionHistory({ versions, currentVersion, canRestore, busyVersionId, o
   )
 }
 
-function NewSpaceDialog({ busy, error, onSubmit, onClose }: {
-  busy: boolean
-  error: string | null
-  onSubmit: (input: { name: string; visibility: KnowledgeSpaceVisibility }) => void
-  onClose: () => void
-}) {
-  const [name, setName] = useState('')
-  const [visibility, setVisibility] = useState<KnowledgeSpaceVisibility>('company')
-  const trimmedName = name.trim()
-  const canSubmit = Boolean(trimmedName) && !busy
-  const visibilityOptions = useMemo(
-    () => KNOWLEDGE_VISIBILITIES.map((value) => ({ value, label: knowledgeVisibilityLabel(value) })),
-    [],
-  )
-
-  return (
-    <Dialog
-      title={t('knowledge.newSpace.title', 'New Space')}
-      size="sm"
-      onClose={onClose}
-      footer={(
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            {t('knowledge.newSpace.cancel', 'Cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            leftIcon="plus"
-            disabled={!canSubmit}
-            disabledReason={!trimmedName ? t('knowledge.newSpace.needName', 'Add a name') : undefined}
-            onClick={() => onSubmit({ name: trimmedName, visibility })}
-          >
-            {busy ? t('knowledge.newSpace.creating', 'Creating') : t('knowledge.newSpace.create', 'Create')}
-          </Button>
-        </>
-      )}
-    >
-      <div className="studio-wiki-propose">
-        <p className="studio-wiki-propose__hint">
-          {t('knowledge.newSpace.hint', 'Spaces group related pages and set who can read, propose, and review them.')}
-        </p>
-        <label className="studio-wiki-propose__field">
-          <span>{t('knowledge.newSpace.nameLabel', 'Name')}</span>
-          <Input
-            value={name}
-            placeholder={t('knowledge.newSpace.namePlaceholder', 'e.g. Onboarding')}
-            disabled={busy}
-            autoFocus
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label className="studio-wiki-propose__field">
-          <span>{t('knowledge.newSpace.visibilityLabel', 'Visibility')}</span>
-          <Select
-            label={t('knowledge.newSpace.visibilityLabel', 'Visibility')}
-            value={visibility}
-            options={visibilityOptions}
-            disabled={busy}
-            onChange={(value) => setVisibility(value as KnowledgeSpaceVisibility)}
-          />
-        </label>
-        {error ? <p role="alert" className="studio-wiki-propose__error">{error}</p> : null}
-      </div>
-    </Dialog>
-  )
-}
-
-export function KnowledgePage() {
+export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { featureValueDiscoveryEnabled?: boolean } = {}) {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const activeWorkspaceIsLocal = activeWorkspaceId === LOCAL_WORKSPACE_ID
+  const layoutMode = useKnowledgeLayoutMode()
   const [snapshot, setSnapshot] = useState<KnowledgeSnapshotPayload>(EMPTY_SNAPSHOT)
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null)
   const [versions, setVersions] = useState<KnowledgePageVersion[]>([])
@@ -415,6 +386,11 @@ export function KnowledgePage() {
   const [pageQuery, setPageQuery] = useState('')
   const reviewQueueRef = useRef<HTMLDivElement | null>(null)
   const [pendingReviewReveal, setPendingReviewReveal] = useState(false)
+  const [spacesDrawerOpen, setSpacesDrawerOpen] = useState(false)
+  const [detailsDrawerOpen, setDetailsDrawerOpen] = useState(false)
+  const spacesDrawerTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const detailsDrawerTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const mainContentRef = useRef<HTMLElement | null>(null)
 
   // The review-queue panel only renders in the pages view, so the rail shortcut
   // switches back to pages (if needed) and arms a reveal. Coming from graph view
@@ -423,8 +399,13 @@ export function KnowledgePage() {
   // the pages view (and the ref) is mounted.
   const revealReviewQueue = useCallback(() => {
     setView('pages')
-    setPendingReviewReveal(true)
-  }, [])
+    if (layoutMode === 'wide') {
+      setPendingReviewReveal(true)
+      return
+    }
+    setSpacesDrawerOpen(false)
+    setDetailsDrawerOpen(true)
+  }, [layoutMode])
 
   // Scroll to the review queue only after the pages view has committed and the
   // ref is attached. Keying on `view` re-runs this when switching back from graph
@@ -438,6 +419,17 @@ export function KnowledgePage() {
     setPendingReviewReveal(false)
   }, [pendingReviewReveal, view])
 
+  // A viewport change swaps rails between inline and drawer presentation. The
+  // page selection and view state stay untouched; only obsolete drawers close.
+  useEffect(() => {
+    const closeSpaces = layoutMode !== 'compact' && spacesDrawerOpen
+    const closeDetails = layoutMode === 'wide' && detailsDrawerOpen
+    if (!closeSpaces && !closeDetails) return
+    if (closeSpaces) setSpacesDrawerOpen(false)
+    if (closeDetails) setDetailsDrawerOpen(false)
+    mainContentRef.current?.focus({ preventScroll: true })
+  }, [detailsDrawerOpen, layoutMode, spacesDrawerOpen])
+
   const loadSnapshot = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -450,6 +442,7 @@ export function KnowledgePage() {
     try {
       const next = await window.coworkApi.knowledge.snapshot({ workspaceId: activeWorkspaceId })
       setSnapshot(next)
+      if (featureValueDiscoveryEnabled) recordFeatureValueDiscovery('knowledge')
       setSelectedPageId((current) => current && next.pages.some((page) => page.id === current)
         ? current
         : firstReadablePage(next)?.id || null)
@@ -460,7 +453,7 @@ export function KnowledgePage() {
     } finally {
       setLoading(false)
     }
-  }, [activeWorkspaceId, activeWorkspaceIsLocal])
+  }, [activeWorkspaceId, activeWorkspaceIsLocal, featureValueDiscoveryEnabled])
 
   useEffect(() => {
     void loadSnapshot()
@@ -510,6 +503,7 @@ export function KnowledgePage() {
       const result = await window.coworkApi.knowledge.acceptProposal(proposal.id, {
         workspaceId: activeWorkspaceId,
       })
+      recordFeatureValueActivation('knowledge')
       setSelectedPageId(result.page.id)
       await loadSnapshot()
     } catch (actionError) {
@@ -541,6 +535,7 @@ export function KnowledgePage() {
       await window.coworkApi.knowledge.restoreVersion(version.pageId, version.versionId, {
         workspaceId: activeWorkspaceId,
       })
+      recordFeatureValueActivation('knowledge')
       await Promise.all([loadSnapshot(), loadHistory()])
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError))
@@ -563,6 +558,7 @@ export function KnowledgePage() {
         links: selectedPage.links,
         body,
       })
+      recordFeatureValueActivation('knowledge')
       setProposeOpen(false)
       await loadSnapshot()
     } catch (proposeException) {
@@ -581,6 +577,7 @@ export function KnowledgePage() {
         name,
         visibility,
       })
+      recordFeatureValueActivation('knowledge')
       const next = await window.coworkApi.knowledge.snapshot({ workspaceId: activeWorkspaceId })
       setSnapshot(next)
       // Select the new Space by opening its first page when it has one. A brand-new
@@ -616,13 +613,94 @@ export function KnowledgePage() {
     )
   }
 
+  const spacesRail = (
+    <div className="knowledge-workbench__rail-content" data-knowledge-rail="spaces">
+      <Button
+        variant="secondary"
+        size="sm"
+        leftIcon="plus"
+        fullWidth
+        onClick={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
+      >
+        {t('knowledge.newSpace.action', 'New Space')}
+      </Button>
+      {totalPages > 6 ? (
+        <Input
+          leftIcon="search"
+          value={pageQuery}
+          placeholder={t('knowledge.search.placeholder', 'Find a page')}
+          aria-label={t('knowledge.search.label', 'Find a page')}
+          onChange={(event) => setPageQuery(event.target.value)}
+        />
+      ) : null}
+      <KnowledgeSpaceRail
+        aria-label={t('knowledge.spaces.label', 'Knowledge Spaces')}
+        spaces={filteredSpacesForRail}
+        activePageId={selectedPage?.id}
+        viewToggle={(
+          <SegmentedControl
+            label={t('knowledge.view.label', 'Knowledge view')}
+            value={view}
+            onChange={(next) => setView(next === 'graph' ? 'graph' : 'pages')}
+            options={[
+              { value: 'pages', label: t('knowledge.view.pages', 'Pages') },
+              { value: 'graph', label: t('knowledge.view.graph', 'Graph') },
+            ]}
+          />
+        )}
+        reviewAction={(
+          <button
+            type="button"
+            onClick={revealReviewQueue}
+            aria-label={t('knowledge.review.railLabel', 'Review queue')}
+            className="flex w-full items-center justify-between rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-xs text-text-secondary hover:bg-surface-hover hover:text-text"
+          >
+            <span className="inline-flex items-center gap-2"><Icon name="circle-help" size={16} /> {t('knowledge.review.railLabel', 'Review queue')}</span>
+            <Badge tone={snapshot.proposals.length ? 'warning' : 'neutral'}>{snapshot.proposals.length}</Badge>
+          </button>
+        )}
+        onSelectPage={(_, page) => {
+          setSelectedPageId(page.id)
+          if (layoutMode === 'compact') setSpacesDrawerOpen(false)
+        }}
+      />
+      {pageQuery.trim() && filteredSpacesForRail.length === 0 ? (
+        <p className="px-1 text-2xs text-text-muted">{t('knowledge.search.noMatch', 'No pages match your search.')}</p>
+      ) : null}
+    </div>
+  )
+
+  const detailsRail = (
+    <div className="knowledge-workbench__rail-content" data-knowledge-rail="details">
+      <div ref={reviewQueueRef}>
+        <ReviewQueue
+          snapshot={snapshot}
+          busyProposalId={busyProposalId}
+          onAccept={(proposal) => void acceptProposal(proposal)}
+          onDecline={(proposal) => void declineProposal(proposal)}
+        />
+      </div>
+      <VersionHistory
+        versions={versions}
+        currentVersion={selectedPage?.version || 0}
+        canRestore={canReview}
+        busyVersionId={busyVersionId}
+        onRestore={(version) => void restoreVersion(version)}
+      />
+      <AccessPanel space={selectedSpace} canPropose={canPropose} canReview={canReview} />
+    </div>
+  )
+
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-base text-text">
+    <div
+      className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto bg-base text-text"
+      data-knowledge-viewport={layoutMode}
+    >
       <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 px-6 py-6">
         <StudioPageHeader
-          eyebrow={t('knowledge.eyebrow', 'Shared wiki')}
+          eyebrow={t('knowledge.eyebrow', 'Shared team knowledge')}
           title={t('knowledge.title', 'Knowledge')}
-          description={t('knowledge.description', 'A shared wiki your coworkers help keep current. Pages live in Spaces; edits are proposed, reviewed, then published — and every version is saved.')}
+          description={t('knowledge.description', 'A shared knowledge base your coworkers help keep current. Pages live in Spaces; edits are proposed, reviewed, then published — and every version is saved.')}
           actions={[{
             id: 'reload',
             children: loading ? t('knowledge.loading', 'Loading') : t('knowledge.reload', 'Reload'),
@@ -640,69 +718,60 @@ export function KnowledgePage() {
         ) : null}
 
         {loading && snapshot.spaces.length === 0 ? (
-          <div className="grid min-h-[480px] grid-cols-[260px_minmax(0,1fr)] gap-4">
-            <div className="flex flex-col gap-2">
-              <Skeleton className="h-9 w-full rounded-lg" />
-              <Skeleton className="h-44 w-full rounded-lg" />
-            </div>
+          <div
+            className={`knowledge-workbench knowledge-workbench--${layoutMode} knowledge-workbench--loading`}
+            data-knowledge-layout={layoutMode}
+          >
+            {layoutMode !== 'compact' ? (
+              <div className="flex flex-col gap-2" aria-hidden="true">
+                <Skeleton className="h-9 w-full rounded-lg" />
+                <Skeleton className="h-44 w-full rounded-lg" />
+              </div>
+            ) : null}
             <Skeleton className="h-[480px] w-full rounded-lg" />
+            {layoutMode === 'wide' ? <Skeleton className="h-64 w-full rounded-lg" /> : null}
           </div>
-        ) : !error && snapshot.spaces.length === 0 ? (
+        ) : !error && isKnowledgeFirstRun(snapshot) ? (
           <KnowledgeFirstRun onNewSpace={() => { setNewSpaceError(null); setNewSpaceOpen(true) }} />
         ) : (
-        <div className={`grid min-h-[720px] gap-4 ${view === 'graph' ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-[260px_minmax(0,1fr)_330px]'}`}>
-          <div className="flex min-h-0 flex-col gap-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon="plus"
-              fullWidth
-              onClick={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
-            >
-              {t('knowledge.newSpace.action', 'New Space')}
-            </Button>
-            {totalPages > 6 ? (
-              <Input
-                leftIcon="search"
-                value={pageQuery}
-                placeholder={t('knowledge.search.placeholder', 'Find a page')}
-                aria-label={t('knowledge.search.label', 'Find a page')}
-                onChange={(event) => setPageQuery(event.target.value)}
-              />
-            ) : null}
-            <KnowledgeSpaceRail
-            spaces={filteredSpacesForRail}
-            activePageId={selectedPage?.id}
-            viewToggle={(
-              <SegmentedControl
-                label={t('knowledge.view.label', 'Knowledge view')}
-                value={view}
-                onChange={(next) => setView(next === 'graph' ? 'graph' : 'pages')}
-                options={[
-                  { value: 'pages', label: t('knowledge.view.pages', 'Pages') },
-                  { value: 'graph', label: t('knowledge.view.graph', 'Graph') },
-                ]}
-              />
-            )}
-            reviewAction={(
-              <button
-                type="button"
-                onClick={revealReviewQueue}
-                aria-label={t('knowledge.review.railLabel', 'Review queue')}
-                className="flex w-full items-center justify-between rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-xs text-text-secondary hover:bg-surface-hover hover:text-text"
-              >
-                <span className="inline-flex items-center gap-2"><Icon name="circle-help" size={16} /> {t('knowledge.review.railLabel', 'Review queue')}</span>
-                <Badge tone={snapshot.proposals.length ? 'warning' : 'neutral'}>{snapshot.proposals.length}</Badge>
-              </button>
-            )}
-            onSelectPage={(_, page) => setSelectedPageId(page.id)}
-            />
-            {pageQuery.trim() && filteredSpacesForRail.length === 0 ? (
-              <p className="px-1 text-2xs text-text-muted">{t('knowledge.search.noMatch', 'No pages match your search.')}</p>
-            ) : null}
-          </div>
+          <div
+            className={`knowledge-workbench knowledge-workbench--${layoutMode}${view === 'graph' ? ' knowledge-workbench--graph' : ''}`}
+            data-knowledge-layout={layoutMode}
+          >
+            {layoutMode !== 'compact' ? spacesRail : null}
 
-          <div className="min-w-0 space-y-4">
+            <section
+              ref={mainContentRef}
+              className="knowledge-workbench__main space-y-4"
+              tabIndex={-1}
+              aria-label={t('knowledge.content.label', 'Knowledge content')}
+            >
+              {layoutMode !== 'wide' ? (
+                <div className="knowledge-workbench__rail-actions" role="toolbar" aria-label={t('knowledge.rails.label', 'Knowledge panels')}>
+                  {layoutMode === 'compact' ? (
+                    <Button
+                      ref={spacesDrawerTriggerRef}
+                      size="sm"
+                      variant="secondary"
+                      leftIcon="panel-left"
+                      aria-expanded={spacesDrawerOpen}
+                      onClick={() => setSpacesDrawerOpen(true)}
+                    >
+                      {t('knowledge.spaces.open', 'Open Spaces')}
+                    </Button>
+                  ) : null}
+                  <Button
+                    ref={detailsDrawerTriggerRef}
+                    size="sm"
+                    variant="secondary"
+                    leftIcon="panel-right-open"
+                    aria-expanded={detailsDrawerOpen}
+                    onClick={() => { setView('pages'); setDetailsDrawerOpen(true) }}
+                  >
+                    {t('knowledge.details.open', 'Open Review & details')}
+                  </Button>
+                </div>
+              ) : null}
             {view === 'graph' ? (
               <KnowledgeGraphPanel
                 snapshot={snapshot}
@@ -747,31 +816,34 @@ export function KnowledgePage() {
                 />
               </Card>
             )}
-          </div>
+            </section>
 
-          {view !== 'graph' && (
-          <div className="space-y-4">
-            <div ref={reviewQueueRef}>
-              <ReviewQueue
-                snapshot={snapshot}
-                busyProposalId={busyProposalId}
-                onAccept={(proposal) => void acceptProposal(proposal)}
-                onDecline={(proposal) => void declineProposal(proposal)}
-              />
-            </div>
-            <VersionHistory
-              versions={versions}
-              currentVersion={selectedPage?.version || 0}
-              canRestore={canReview}
-              busyVersionId={busyVersionId}
-              onRestore={(version) => void restoreVersion(version)}
-            />
-            <AccessPanel space={selectedSpace} canPropose={canPropose} canReview={canReview} />
+            {layoutMode === 'wide' && view !== 'graph' ? detailsRail : null}
           </div>
-          )}
-        </div>
         )}
       </div>
+      {spacesDrawerOpen && layoutMode === 'compact' ? (
+        <Dialog
+          title={t('knowledge.spaces.drawerTitle', 'Spaces')}
+          variant="drawer"
+          side="left"
+          returnFocusRef={spacesDrawerTriggerRef}
+          onClose={() => setSpacesDrawerOpen(false)}
+        >
+          {spacesRail}
+        </Dialog>
+      ) : null}
+      {detailsDrawerOpen && layoutMode !== 'wide' ? (
+        <Dialog
+          title={t('knowledge.details.drawerTitle', 'Review & page details')}
+          variant="drawer"
+          side="right"
+          returnFocusRef={detailsDrawerTriggerRef}
+          onClose={() => setDetailsDrawerOpen(false)}
+        >
+          {detailsRail}
+        </Dialog>
+      ) : null}
       {proposeOpen && selectedPage && selectedSpace ? (
         <KnowledgeProposeEditDialog
           pageTitle={selectedPage.title}
@@ -784,7 +856,7 @@ export function KnowledgePage() {
         />
       ) : null}
       {newSpaceOpen ? (
-        <NewSpaceDialog
+        <KnowledgeNewSpaceDialog
           busy={newSpaceBusy}
           error={newSpaceError}
           onSubmit={(input) => void createSpace(input)}

@@ -8,6 +8,8 @@ import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-wo
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
 import { displaySessionTitle } from '../../helpers/session-title'
+import { recordFeatureValueActivation, recordFeatureValueDiscovery } from '../../helpers/feature-value-telemetry'
+import { isDesktopRuntime } from '../../runtime-env'
 import {
   Badge, Button, Card, Dialog, Icon, StudioPageHeader } from '@open-cowork/ui'
 import { ConfirmDialog } from '../ConfirmDialog'
@@ -132,19 +134,61 @@ const EMPTY_CHANNEL_SNAPSHOT: ChannelSnapshot = {
   watches: [],
 }
 
+async function requireChannelMutation<T>(action: () => Promise<T>): Promise<T> {
+  const result = await action()
+  if (!result) {
+    throw new Error(t('studio.channels.noMutation', 'The channel action did not change anything. Refresh and try again.'))
+  }
+  return result
+}
+
 type ChannelConfirm =
   | { kind: 'disconnect'; bindingId: string }
   | { kind: 'deleteWatch'; watchId: string }
 
-export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function StudioChannelsPage({
+  onOpenSettings,
+  featureValueDiscoveryEnabled = true,
+}: {
+  onOpenSettings: () => void
+  featureValueDiscoveryEnabled?: boolean
+}) {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const workspaceSupport = useActiveWorkspaceSupport()
-  const [snapshot, setSnapshot] = useState<ChannelSnapshot>(EMPTY_CHANNEL_SNAPSHOT)
+  const [snapshotState, setSnapshotState] = useState<{
+    workspaceId: string | null
+    payload: ChannelSnapshot
+  }>({ workspaceId: null, payload: EMPTY_CHANNEL_SNAPSHOT })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingConfirm, setPendingConfirm] = useState<ChannelConfirm | null>(null)
+  const bindingStatusesRef = useRef<{
+    workspaceId: string | null
+    statuses: Map<string, ChannelBindingPublicRecord['status']>
+  }>({ workspaceId: null, statuses: new Map() })
+  const loadSequenceRef = useRef(0)
+  const snapshot = snapshotState.workspaceId === activeWorkspaceId
+    ? snapshotState.payload
+    : EMPTY_CHANNEL_SNAPSHOT
+  const snapshotLoading = loading || snapshotState.workspaceId !== activeWorkspaceId
 
   const loadChannels = useCallback(async () => {
+    const loadSequence = loadSequenceRef.current + 1
+    loadSequenceRef.current = loadSequence
+    const workspaceId = activeWorkspaceId
+    if (bindingStatusesRef.current.workspaceId !== workspaceId) {
+      bindingStatusesRef.current = { workspaceId, statuses: new Map() }
+    }
+    // Desktop channel IPC is backed by the Local store and rejects every remote
+    // workspace. Cloud Web owns the Cloud Channel Gateway adapter, so do not make
+    // misleading Desktop IPC calls while a Cloud, Paired, or Gateway workspace is active.
+    if (isDesktopRuntime() && !workspaceSupport.isLocal) {
+      bindingStatusesRef.current = { workspaceId, statuses: new Map() }
+      setSnapshotState({ workspaceId, payload: EMPTY_CHANNEL_SNAPSHOT })
+      setError(null)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -156,21 +200,41 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
         deliveries,
         watches,
       ] = await Promise.all([
-        window.coworkApi.channels.providers({ workspaceId: activeWorkspaceId }),
-        window.coworkApi.channels.agents({ workspaceId: activeWorkspaceId, limit: 100 }),
-        window.coworkApi.channels.bindings({ workspaceId: activeWorkspaceId, limit: 100 }),
-        window.coworkApi.channels.people({ workspaceId: activeWorkspaceId, limit: 100 }),
-        window.coworkApi.channels.deliveries({ workspaceId: activeWorkspaceId, limit: 50 }),
-        window.coworkApi.channels.watches({ workspaceId: activeWorkspaceId, limit: 500 }),
+        window.coworkApi.channels.providers({ workspaceId }),
+        window.coworkApi.channels.agents({ workspaceId, limit: 100 }),
+        window.coworkApi.channels.bindings({ workspaceId, limit: 100 }),
+        window.coworkApi.channels.people({ workspaceId, limit: 100 }),
+        window.coworkApi.channels.deliveries({ workspaceId, limit: 50 }),
+        window.coworkApi.channels.watches({ workspaceId, limit: 500 }),
       ])
-      setSnapshot({ providers, agents, bindings, people, deliveries, watches })
+      if (loadSequenceRef.current !== loadSequence) return
+      const previousBindings = bindingStatusesRef.current
+      const bindingActivated = previousBindings.workspaceId === workspaceId
+        && bindings.some((binding) => (
+          binding.status === 'active'
+          && previousBindings.statuses.get(binding.bindingId) === 'auth_required'
+        ))
+      bindingStatusesRef.current = {
+        workspaceId,
+        statuses: new Map(bindings.map((binding) => [binding.bindingId, binding.status])),
+      }
+      setSnapshotState({ workspaceId, payload: { providers, agents, bindings, people, deliveries, watches } })
+      const localDesktopNeedsGateway = isDesktopRuntime()
+        && workspaceSupport.isLocal
+        && workspaceSupport.flags.authority === 'desktop_local'
+        && bindings.length === 0
+      if (featureValueDiscoveryEnabled && !localDesktopNeedsGateway) {
+        recordFeatureValueDiscovery('channels')
+      }
+      if (bindingActivated) recordFeatureValueActivation('channels')
     } catch (loadError) {
+      if (loadSequenceRef.current !== loadSequence) return
       setError(loadError instanceof Error ? loadError.message : String(loadError))
-      setSnapshot(EMPTY_CHANNEL_SNAPSHOT)
+      setSnapshotState({ workspaceId, payload: EMPTY_CHANNEL_SNAPSHOT })
     } finally {
-      setLoading(false)
+      if (loadSequenceRef.current === loadSequence) setLoading(false)
     }
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, featureValueDiscoveryEnabled, workspaceSupport.flags.authority, workspaceSupport.isLocal])
 
   useEffect(() => {
     void loadChannels()
@@ -232,8 +296,8 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
     if (!confirm || !deferred) return
     try {
       const result = confirm.kind === 'disconnect'
-        ? await window.coworkApi.channels.disconnectBinding(confirm.bindingId, { workspaceId: activeWorkspaceId })
-        : await window.coworkApi.channels.deleteWatch(confirm.watchId, { workspaceId: activeWorkspaceId })
+        ? await requireChannelMutation(() => window.coworkApi.channels.disconnectBinding(confirm.bindingId, { workspaceId: activeWorkspaceId }))
+        : await requireChannelMutation(() => window.coworkApi.channels.deleteWatch(confirm.watchId, { workspaceId: activeWorkspaceId }))
       deferred.resolve(result)
     } catch (confirmError) {
       deferred.reject(confirmError)
@@ -263,14 +327,30 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
 
   const authority = workspaceSupport.flags.authority || 'desktop_local'
   const isLocalAuthority = authority === 'desktop_local'
+  const showRemoteRestricted = isDesktopRuntime() && !workspaceSupport.isLocal
   // Empty Local Desktop should not imply channel connect works without Cloud Channel Gateway.
   // If bindings already exist (tests / hybrid setups), keep the operational surface.
-  const showLocalRestricted = isLocalAuthority && !loading && snapshot.bindings.length === 0
-  const canManageChannels = !showLocalRestricted
+  const showLocalRestricted = !showRemoteRestricted && isLocalAuthority && !snapshotLoading && snapshot.bindings.length === 0
+  const canManageChannels = !showRemoteRestricted && !showLocalRestricted
 
   return (
     <StudioPageShell>
-      {showLocalRestricted ? (
+      {showRemoteRestricted ? (
+        <RestrictedState
+          icon="activity"
+          title={t('studio.channels.remoteTitle', 'Manage Cloud channels in Cloud Web')}
+          body={t(
+            'studio.channels.remoteBody',
+            'Desktop has no workspace-scoped Channels adapter for Cloud, Paired, or Gateway workspaces. Open this workspace in Cloud Web to manage Channel Gateway bindings and delivery.',
+          )}
+          reason={t('studio.channels.remoteReason', 'Switch to Local for Desktop-hosted channel state, or continue in Cloud Web for this workspace.')}
+          action={(
+            <Button variant="secondary" size="sm" leftIcon="settings-2" onClick={onOpenSettings}>
+              {t('studio.channels.settings', 'Open settings')}
+            </Button>
+          )}
+        />
+      ) : showLocalRestricted ? (
         <RestrictedState
           icon="activity"
           title={t('studio.channels.localTitle', 'Channels need Cloud + Channel Gateway')}
@@ -293,7 +373,7 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
           people={snapshot.people}
           deliveries={snapshot.deliveries}
           watches={snapshot.watches}
-          loading={loading}
+          loading={snapshotLoading}
           error={error}
           platformLabel={`${activeWorkspaceId} · ${authority}`}
           canManage={canManageChannels}
@@ -302,12 +382,12 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
           onDisconnectBinding={(bindingId) => requestConfirm({ kind: 'disconnect', bindingId })}
           onResolvePerson={(input) => window.coworkApi.channels.resolvePerson(input)}
           onCreateWatch={createWatch}
-          onPauseWatch={(watchId) => window.coworkApi.channels.pauseWatch(watchId, { workspaceId: activeWorkspaceId })}
-          onResumeWatch={(watchId) => window.coworkApi.channels.resumeWatch(watchId, { workspaceId: activeWorkspaceId })}
+          onPauseWatch={(watchId) => requireChannelMutation(() => window.coworkApi.channels.pauseWatch(watchId, { workspaceId: activeWorkspaceId }))}
+          onResumeWatch={(watchId) => requireChannelMutation(() => window.coworkApi.channels.resumeWatch(watchId, { workspaceId: activeWorkspaceId }))}
           onDeleteWatch={(watchId) => requestConfirm({ kind: 'deleteWatch', watchId })}
         />
       )}
-      {!showLocalRestricted ? (
+      {!showRemoteRestricted && !showLocalRestricted ? (
         <div className="flex justify-end">
           <Button variant="ghost" size="sm" leftIcon="settings-2" onClick={onOpenSettings}>
             {t('studio.channels.settings', 'Open settings')}
@@ -356,7 +436,10 @@ function buildArtifactInspectorRows(artifact: ArtifactIndexEntry): Array<{ label
     .map((row) => ({ label: row.label, value: row.value.trim() }))
 }
 
-export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
+export function StudioArtifactsPage({
+  onOpenChat,
+  featureValueDiscoveryEnabled = true,
+}: OpenChatProps & { featureValueDiscoveryEnabled?: boolean }) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
@@ -390,6 +473,7 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
       })
       if (loadSequenceRef.current !== loadSequence) return
       setArtifactIndexState({ workspaceId, payload: result })
+      if (featureValueDiscoveryEnabled) recordFeatureValueDiscovery('artifacts')
     } catch (loadError) {
       if (loadSequenceRef.current !== loadSequence) return
       setError(loadError instanceof Error ? loadError.message : String(loadError))
@@ -397,7 +481,7 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
     } finally {
       if (loadSequenceRef.current === loadSequence) setLoading(false)
     }
-  }, [activeWorkspaceId, activeWorkspaceIsLocal])
+  }, [activeWorkspaceId, activeWorkspaceIsLocal, featureValueDiscoveryEnabled])
 
   useEffect(() => {
     void loadArtifacts()
@@ -411,7 +495,8 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
   }), [activeWorkspaceId, activeWorkspaceIsLocal])
 
   const openArtifact = useCallback(async (artifact: ArtifactIndexEntry) => {
-    await window.coworkApi.artifact.open(artifactRequest(artifact))
+    const opened = await window.coworkApi.artifact.open(artifactRequest(artifact))
+    if (opened) recordFeatureValueActivation('artifacts')
   }, [artifactRequest])
 
   // Inspect surfaces the artifact's already-redacted provenance metadata in a
@@ -421,14 +506,18 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
     setInspectedArtifact(artifact)
   }, [])
 
-  const exportArtifact = useCallback(async (artifact: ArtifactIndexEntry) => {
-    await window.coworkApi.artifact.export(artifactRequest(artifact))
+  const exportArtifact = useCallback(async (artifact: ArtifactIndexEntry, trackValue = true) => {
+    const exported = await window.coworkApi.artifact.export(artifactRequest(artifact))
+    if (exported && trackValue) recordFeatureValueActivation('artifacts')
+    return Boolean(exported)
   }, [artifactRequest])
 
   const exportVisibleArtifacts = useCallback(async (artifacts: ArtifactIndexEntry[]) => {
+    let exportedAny = false
     for (const artifact of artifacts) {
-      await exportArtifact(artifact)
+      exportedAny = await exportArtifact(artifact, false) || exportedAny
     }
+    if (exportedAny) recordFeatureValueActivation('artifacts')
   }, [exportArtifact])
 
   const advanceArtifactStatus = useCallback(async (artifact: ArtifactIndexEntry, nextStatus: ArtifactStatus) => {
