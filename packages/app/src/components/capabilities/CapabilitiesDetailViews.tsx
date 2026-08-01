@@ -18,6 +18,17 @@ function CapabilitiesBackButton({ onBack }: { onBack: () => void }) {
   )
 }
 
+export function CapabilityReadOnlyNotice() {
+  return (
+    <p className="mb-4 text-2xs text-text-muted" role="note">
+      {t(
+        'capabilities.readOnlyNote',
+        'This workspace shows a read-only catalog. Configure tools and skills in Desktop Local.',
+      )}
+    </p>
+  )
+}
+
 export function CapabilityToolDetailView({
   selectedTool,
   custom,
@@ -28,6 +39,7 @@ export function CapabilityToolDetailView({
   onEditTool,
   onRemoveTool,
   onOpenSkill,
+  canConfigure,
 }: {
   selectedTool: CapabilityTool
   custom: CustomMcpConfig | null
@@ -38,11 +50,13 @@ export function CapabilityToolDetailView({
   onEditTool: () => void
   onRemoveTool: () => Promise<void>
   onOpenSkill: (skillName: string) => void
+  canConfigure: boolean
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="feature-page-shell">
         <CapabilitiesBackButton onBack={onBack} />
+        {!canConfigure ? <CapabilityReadOnlyNotice /> : null}
 
         <Card padding="lg" className="mb-5">
           <div className="flex items-start justify-between gap-4">
@@ -58,33 +72,35 @@ export function CapabilityToolDetailView({
               <h1 className="font-display text-xl font-semibold text-text mb-1">{selectedTool.name}</h1>
               <p className="text-sm text-text-secondary leading-relaxed">{selectedTool.description}</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                onClick={onCreateAgent}
-                variant="secondary"
-                size="sm"
-              >
-                Create coworker
-              </Button>
-              {custom ? (
-                <>
-                  <Button
-                    onClick={onEditTool}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    Edit tool
-                  </Button>
-                  <Button
-                    onClick={() => void onRemoveTool()}
-                    variant="danger"
-                    size="sm"
-                  >
-                    Remove tool
-                  </Button>
-                </>
-              ) : null}
-            </div>
+            {canConfigure ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  onClick={onCreateAgent}
+                  variant="secondary"
+                  size="sm"
+                >
+                  Create coworker
+                </Button>
+                {custom ? (
+                  <>
+                    <Button
+                      onClick={onEditTool}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      Edit tool
+                    </Button>
+                    <Button
+                      onClick={() => void onRemoveTool()}
+                      variant="danger"
+                      size="sm"
+                    >
+                      Remove tool
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </Card>
 
@@ -148,7 +164,7 @@ export function CapabilityToolDetailView({
               </Card>
             ) : null}
 
-            {selectedTool.integrationId && selectedTool.authMode ? (
+            {canConfigure && selectedTool.integrationId && selectedTool.authMode ? (
               <ToolIntegrationToggleCard
                 integrationId={selectedTool.integrationId}
                 authMode={selectedTool.authMode}
@@ -156,7 +172,7 @@ export function CapabilityToolDetailView({
               />
             ) : null}
 
-            {selectedTool.credentials && selectedTool.credentials.length > 0 && selectedTool.integrationId ? (
+            {canConfigure && selectedTool.credentials && selectedTool.credentials.length > 0 && selectedTool.integrationId ? (
               <ToolCredentialsCard
                 integrationId={selectedTool.integrationId}
                 credentials={selectedTool.credentials}
@@ -219,6 +235,7 @@ export function CapabilitySkillDetailView({
   onEditSkill,
   onRemoveSkill,
   onOpenTool,
+  canConfigure,
 }: {
   selectedSkill: CapabilitySkill
   custom: CustomSkillConfig | null
@@ -230,11 +247,13 @@ export function CapabilitySkillDetailView({
   onEditSkill: () => void
   onRemoveSkill: () => Promise<void>
   onOpenTool: (toolId: string) => void
+  canConfigure: boolean
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="feature-page-shell">
         <CapabilitiesBackButton onBack={onBack} />
+        {!canConfigure ? <CapabilityReadOnlyNotice /> : null}
 
         <Card padding="lg" className="mb-5">
           <div className="flex items-start justify-between gap-4">
@@ -247,33 +266,35 @@ export function CapabilitySkillDetailView({
               <h1 className="font-display text-xl font-semibold text-text mb-1">{selectedSkill.label}</h1>
               <p className="text-sm text-text-secondary leading-relaxed">{selectedSkill.description}</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                onClick={onCreateAgent}
-                variant="secondary"
-                size="sm"
-              >
-                Create coworker
-              </Button>
-              {custom ? (
-                <>
-                  <Button
-                    onClick={onEditSkill}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    Edit skill
-                  </Button>
-                  <Button
-                    onClick={() => void onRemoveSkill()}
-                    variant="danger"
-                    size="sm"
-                  >
-                    Remove skill
-                  </Button>
-                </>
-              ) : null}
-            </div>
+            {canConfigure ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  onClick={onCreateAgent}
+                  variant="secondary"
+                  size="sm"
+                >
+                  Create coworker
+                </Button>
+                {custom ? (
+                  <>
+                    <Button
+                      onClick={onEditSkill}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      Edit skill
+                    </Button>
+                    <Button
+                      onClick={() => void onRemoveSkill()}
+                      variant="danger"
+                      size="sm"
+                    >
+                      Remove skill
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </Card>
 

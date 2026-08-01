@@ -123,7 +123,7 @@ const pairing: DesktopPairingPublicRecord = {
 }
 
 describe('HealthCenterPage', () => {
-  it('renders setup paths, authority health, pairings, and recovery actions', async () => {
+  it('shows user recovery first and keeps topology, commands, and provenance under Advanced', async () => {
     const login = vi.fn(async () => ({
       ...workspaces[1],
       status: 'online',
@@ -160,22 +160,32 @@ describe('HealthCenterPage', () => {
     render(<HealthCenterPage />)
 
     expect(await screen.findByText('Health Center')).toBeTruthy()
+    expect(await screen.findByText('Open Cowork needs attention')).toBeTruthy()
+    expect(screen.getAllByText('Acme Cloud')[0]).toBeVisible()
+    expect(screen.getByText('OpenCode extension is unavailable')).toBeTruthy()
+    expect(screen.queryByText('opencode-plugin-remote-fail-closed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Run Desktop locally')).not.toBeInTheDocument()
+    expect(screen.queryByText('desktop_local')).not.toBeInTheDocument()
+    expect(screen.queryByText('Runtime Capability Provenance')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    await waitFor(() => expect(login).toHaveBeenCalledWith('cloud:acme'))
+
+    await userEvent.click(screen.getByText('Advanced operator diagnostics'))
     expect(screen.getByText('Run Desktop locally')).toBeTruthy()
     expect(screen.getByText('Deploy Gateway')).toBeTruthy()
     expect(screen.getByText('Connect Cloud')).toBeTruthy()
-    expect(screen.getByText('Acme Cloud')).toBeTruthy()
+    expect(screen.getAllByText('Acme Cloud').length).toBeGreaterThan(0)
     expect(screen.getByText('Laptop Pairing')).toBeTruthy()
     expect(screen.getByText('Desktop runtime ready')).toBeTruthy()
     expect(screen.getByText('Cloud workspace authenticated')).toBeTruthy()
     expect(screen.getByText('Runtime Capability Provenance')).toBeTruthy()
     expect(screen.getByTestId('runtime-capability-mcp-oauth-example')).toBeTruthy()
+    expect(screen.getByText('opencode-plugin-remote-fail-closed')).toBeTruthy()
     expect(screen.getByText('mcp.awaiting-oauth-opt-in')).toBeTruthy()
     expect(screen.getByText('plugin.product-mode-unsupported')).toBeTruthy()
     expect(screen.getByText('model.source-conflict-winner')).toBeTruthy()
     expect(screen.getByText(/winner settings/)).toBeTruthy()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-    await waitFor(() => expect(login).toHaveBeenCalledWith('cloud:acme'))
 
     await userEvent.click(screen.getByRole('button', { name: 'Restart runtime' }))
     await waitFor(() => expect(restart).toHaveBeenCalledTimes(1))
@@ -201,6 +211,7 @@ describe('HealthCenterPage', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Some health checks could not be loaded')
+    expect(screen.getByText('Some checks are incomplete')).toBeInTheDocument()
     expect(alert).toHaveTextContent('runtime status')
     expect(alert).toHaveTextContent('runtime inputs')
     expect(alert).toHaveTextContent('workspaces')
@@ -237,9 +248,151 @@ describe('HealthCenterPage', () => {
 
     render(<HealthCenterPage />)
 
-    expect(await screen.findByText('Acme Cloud')).toBeTruthy()
+    expect(await screen.findByText('Open Cowork is ready')).toBeTruthy()
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
     expect(runtimeInputsProbe).not.toHaveBeenCalled()
     expect(pairings).not.toHaveBeenCalled()
+  })
+
+  it('keeps a healthy state concise and preserves focus while refreshing', async () => {
+    const status = vi.fn(async () => ({ ready: true, error: null }))
+    installRendererTestCoworkApi({
+      runtime: { status },
+      app: { runtimeInputs: vi.fn(async () => ({ ...runtimeInputs, capabilities: (runtimeInputs.capabilities || []).slice(0, 2), conflicts: [] })) },
+      workspace: {
+        list: vi.fn(async () => [workspaces[0]!]),
+        support: vi.fn(async () => []),
+      },
+      desktopPairing: { list: vi.fn(async () => []) },
+    })
+
+    render(<HealthCenterPage />)
+
+    expect(await screen.findByText('Open Cowork is ready')).toBeInTheDocument()
+    expect(screen.queryByText('What to do next')).not.toBeInTheDocument()
+    expect(screen.queryByText('Runtime Capability Provenance')).not.toBeInTheDocument()
+
+    const refresh = screen.getByRole('button', { name: 'Refresh' })
+    refresh.focus()
+    await userEvent.click(refresh)
+    await waitFor(() => expect(status).toHaveBeenCalledTimes(2))
+    expect(refresh).toHaveFocus()
+  })
+
+  it('counts critical capability failures across the full diagnostics catalog', async () => {
+    const criticalCapabilities = Array.from({ length: 13 }, (_, index) => ({
+      id: `blocked-tool-${String(index).padStart(2, '0')}`,
+      kind: 'tool' as const,
+      status: 'runtime-failure' as const,
+      reasonCode: 'tool.runtime-failure',
+      source: 'runtime' as const,
+      productMode: 'desktop-local',
+      redacted: true,
+    }))
+    installRendererTestCoworkApi({
+      runtime: { status: vi.fn(async () => ({ ready: true, error: null })) },
+      app: {
+        runtimeInputs: vi.fn(async () => ({
+          ...runtimeInputs,
+          capabilities: [
+            ...(runtimeInputs.capabilities || []).filter((capability) => capability.status !== 'unsupported'),
+            ...criticalCapabilities,
+          ],
+          conflicts: [],
+        })),
+      },
+      workspace: {
+        list: vi.fn(async () => [workspaces[0]!]),
+        support: vi.fn(async () => []),
+      },
+      desktopPairing: { list: vi.fn(async () => []) },
+    })
+
+    render(<HealthCenterPage />)
+
+    expect(await screen.findByText('Open Cowork needs attention')).toBeInTheDocument()
+    expect(screen.getByText('13 Tools are unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Open Tools & Skills, then reconnect or re-enable the affected tools.')).toBeInTheDocument()
+    expect(screen.queryByText('blocked-tool-00')).not.toBeInTheDocument()
+    expect(screen.queryByText('blocked-tool-12')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByText('Advanced operator diagnostics'))
+    expect(screen.getAllByTestId(/runtime-capability-tool-blocked-tool-/)).toHaveLength(12)
+  })
+
+  it('groups recovery by safe user-facing capability class with class-specific guidance', async () => {
+    const criticalCapabilities = [
+      {
+        id: 'provider-internal-topology-id',
+        kind: 'provider' as const,
+        status: 'runtime-failure' as const,
+        reasonCode: 'provider.runtime-failure',
+        source: 'runtime' as const,
+        productMode: 'desktop-local',
+        redacted: true,
+      },
+      {
+        id: 'mcp-internal-topology-id',
+        kind: 'mcp' as const,
+        status: 'blocked' as const,
+        reasonCode: 'mcp.blocked',
+        source: 'runtime' as const,
+        productMode: 'desktop-local',
+        redacted: true,
+      },
+      {
+        id: 'workflow-internal-topology-id',
+        kind: 'workflow' as const,
+        status: 'unsupported' as const,
+        reasonCode: 'workflow.unsupported',
+        source: 'runtime' as const,
+        productMode: 'desktop-local',
+        redacted: true,
+      },
+      {
+        id: 'plugin-internal-topology-id',
+        kind: 'opencode-plugin' as const,
+        status: 'unsupported' as const,
+        reasonCode: 'plugin.unsupported',
+        source: 'runtime' as const,
+        productMode: 'desktop-local',
+        redacted: true,
+      },
+      {
+        id: 'second-plugin-internal-topology-id',
+        kind: 'opencode-plugin' as const,
+        status: 'runtime-failure' as const,
+        reasonCode: 'plugin.runtime-failure',
+        source: 'runtime' as const,
+        productMode: 'desktop-local',
+        redacted: true,
+      },
+    ]
+    installRendererTestCoworkApi({
+      runtime: { status: vi.fn(async () => ({ ready: true, error: null })) },
+      app: {
+        runtimeInputs: vi.fn(async () => ({
+          ...runtimeInputs,
+          capabilities: criticalCapabilities,
+          conflicts: [],
+        })),
+      },
+      workspace: {
+        list: vi.fn(async () => [workspaces[0]!]),
+        support: vi.fn(async () => []),
+      },
+      desktopPairing: { list: vi.fn(async () => []) },
+    })
+
+    render(<HealthCenterPage />)
+
+    expect(await screen.findByText('Model provider is unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Tool connection is unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Playbook is unavailable')).toBeInTheDocument()
+    expect(screen.getByText('2 OpenCode extensions are unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Open Settings, then reconnect the affected model provider.')).toBeInTheDocument()
+    expect(screen.getByText('Open Tools & Skills, then reconnect the affected tool connection.')).toBeInTheDocument()
+    expect(screen.getByText('Open Playbooks, then repair or re-enable the affected playbook.')).toBeInTheDocument()
+    expect(screen.getByText('Update or re-enable the affected OpenCode extensions, then restart the runtime.')).toBeInTheDocument()
+    expect(screen.queryByText(/internal-topology-id/)).not.toBeInTheDocument()
   })
 })

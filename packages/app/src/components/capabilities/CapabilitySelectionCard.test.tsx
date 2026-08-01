@@ -51,7 +51,9 @@ describe('CapabilitySelectionCard', () => {
     expect(screen.getByText('Analyst')).toBeInTheDocument()
     expect(screen.getByText('Project')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Warehouse Query/i }))
+    const details = screen.getByRole('button', { name: 'Details for Warehouse Query' })
+    expect(details).toHaveAccessibleDescription('Run bounded analytical queries.')
+    fireEvent.click(details)
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
 
@@ -92,10 +94,26 @@ describe('CapabilitySelectionCard', () => {
     expect(screen.getByText('Project')).toBeInTheDocument()
     expect(screen.getByText('Warehouse Query')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Resolve canonical metrics/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Details for Analyst' }))
     expect(onOpen).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     expect(onRemove).toHaveBeenCalledTimes(1)
+  })
+
+  it('announces only a concise summary until Details is opened', () => {
+    const longInstructions = `Run bounded analytical queries. ${'Never announce these operator instructions on initial traversal. '.repeat(8)}`
+    render(
+      <ToolSelectionCard
+        tool={{ ...tool, description: longInstructions }}
+        methodsCount={2}
+        isCustom={false}
+        onOpen={vi.fn()}
+      />,
+    )
+
+    const details = screen.getByRole('button', { name: 'Details for Warehouse Query' })
+    expect(details).toHaveAccessibleDescription('Run bounded analytical queries.')
+    expect(screen.queryByText(/Never announce these operator instructions/)).not.toBeInTheDocument()
   })
 })

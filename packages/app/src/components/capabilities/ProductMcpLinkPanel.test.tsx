@@ -1,9 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installRendererTestCoworkApi } from '../../test/setup'
+import { recordFeatureValueActivation, recordFeatureValueDiscovery } from '../../helpers/feature-value-telemetry'
 import { ProductMcpLinkPanel } from './ProductMcpLinkPanel'
 
+vi.mock('../../helpers/feature-value-telemetry', () => ({
+  recordFeatureValueActivation: vi.fn(),
+  recordFeatureValueDiscovery: vi.fn(),
+}))
+
 describe('ProductMcpLinkPanel', () => {
+  beforeEach(() => {
+    vi.mocked(recordFeatureValueActivation).mockClear()
+    vi.mocked(recordFeatureValueDiscovery).mockClear()
+  })
+
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
@@ -36,6 +47,7 @@ describe('ProductMcpLinkPanel', () => {
 
     render(<ProductMcpLinkPanel />)
     expect(await screen.findByText('Link local durable Gateway / Wiki CLIs')).toBeTruthy()
+    expect(recordFeatureValueDiscovery).toHaveBeenCalledWith('gateway-wiki-linking')
     expect(screen.getAllByText('Not found on PATH.').length).toBe(2)
     expect(screen.getByText(/Install Gateway standalone/)).toBeTruthy()
   })
@@ -104,7 +116,8 @@ describe('ProductMcpLinkPanel', () => {
 
     const onChanged = vi.fn()
     render(<ProductMcpLinkPanel onChanged={onChanged} />)
-    expect(await screen.findByText(/Found:/)).toBeTruthy()
+    expect(await screen.findByText('Found: /usr/local/bin/cowork-gateway')).toBeTruthy()
+    expect(screen.queryByText(/\{path\}|\{name\}|\{label\}/)).not.toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('button', { name: 'Link' })[0]!)
     await waitFor(() => {
       expect(productMcpLink).toHaveBeenCalledWith(expect.objectContaining({ kind: 'gateway' }))
@@ -113,6 +126,38 @@ describe('ProductMcpLinkPanel', () => {
       expect(screen.getByText(/Linked as custom MCP/)).toBeTruthy()
     })
     expect(onChanged).toHaveBeenCalled()
+    expect(recordFeatureValueActivation).toHaveBeenCalledWith('gateway-wiki-linking')
+  })
+
+  it('does not track a rejected link as an activation', async () => {
+    const productMcpLink = vi.fn(async () => ({
+      ok: false as const,
+      code: 'not_ready',
+      message: 'Gateway is not ready.',
+      installHint: 'Start Gateway and try again.',
+    }))
+    installRendererTestCoworkApi({
+      custom: {
+        productMcpProbe: vi.fn(async () => [{
+          kind: 'gateway' as const,
+          name: 'cowork-gateway',
+          label: 'Gateway',
+          found: true,
+          resolvedBinary: '/usr/local/bin/cowork-gateway',
+          linked: false,
+          installHint: '',
+          docsPath: 'docs/opencode-gateway.md',
+        }]),
+        productMcpLink,
+        removeMcp: vi.fn(),
+      },
+    })
+
+    render(<ProductMcpLinkPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Link' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Gateway is not ready. Start Gateway and try again.')
+    expect(recordFeatureValueActivation).not.toHaveBeenCalled()
   })
 
   it('requires wiki root before linking wiki', async () => {
@@ -151,5 +196,20 @@ describe('ProductMcpLinkPanel', () => {
     })
     expect(wikiLink).toBeTruthy()
     expect(wikiLink).toBeDisabled()
+  })
+
+  it('shows a recoverable detection error without unresolved interpolation', async () => {
+    installRendererTestCoworkApi({
+      custom: {
+        productMcpProbe: vi.fn(async () => { throw new Error('probe unavailable') }),
+        productMcpLink: vi.fn(),
+        removeMcp: vi.fn(),
+      },
+    })
+
+    render(<ProductMcpLinkPanel />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('probe unavailable')
+    expect(screen.queryByText(/\{[a-z]+\}/i)).not.toBeInTheDocument()
   })
 })

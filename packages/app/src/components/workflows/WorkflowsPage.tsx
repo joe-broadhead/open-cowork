@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSummary, WorkflowTrigger, WorkflowWebhookSecretReveal } from '@open-cowork/shared'
+import { redactSecretText, type EffectiveAppSettings, type WorkflowListPayload, type WorkflowRun, type WorkflowSummary, type WorkflowTrigger, type WorkflowWebhookSecretReveal } from '@open-cowork/shared'
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
+import { recordFeatureValueActivation, recordFeatureValueDiscovery } from '../../helpers/feature-value-telemetry'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { Badge, Button, Card, EmptyState, ErrorState, Icon, Skeleton, StudioPageHeader, entityChroma, type BadgeTone } from '@open-cowork/ui'
@@ -15,11 +16,18 @@ export type WorkflowNavigationTarget = {
 
 type Props = {
   onOpenThread: (sessionId: string) => void
+  featureValueDiscoveryEnabled?: boolean
   initialTarget?: WorkflowNavigationTarget | null
   onInitialTargetHandled?: () => void
 }
 
 const EMPTY_PAYLOAD: WorkflowListPayload = { workflows: [], runs: [] }
+const MAX_PUBLIC_WORKFLOW_MESSAGE_LENGTH = 1_000
+
+function publicWorkflowMessage(value: unknown) {
+  const message = value instanceof Error ? value.message : String(value)
+  return redactSecretText(message, MAX_PUBLIC_WORKFLOW_MESSAGE_LENGTH)
+}
 
 function formatWorkflowDate(value?: string | null) {
   if (!value) return t('workflows.notScheduled', 'Not scheduled')
@@ -100,7 +108,12 @@ function webhookCurlCommand(
   ].join(' \\\n')
 }
 
-export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTargetHandled }: Props) {
+export function WorkflowsPage({
+  onOpenThread,
+  featureValueDiscoveryEnabled = true,
+  initialTarget = null,
+  onInitialTargetHandled,
+}: Props) {
   const [payload, setPayload] = useState<WorkflowListPayload>(EMPTY_PAYLOAD)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -181,13 +194,14 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
       if (isCurrentRefresh()) {
         setPayload(nextPayload)
         setLoadError(null)
+        if (featureValueDiscoveryEnabled) recordFeatureValueDiscovery('playbooks')
       }
     } catch (error) {
-      if (isCurrentRefresh()) setLoadError(error instanceof Error ? error.message : String(error))
+      if (isCurrentRefresh()) setLoadError(publicWorkflowMessage(error))
     } finally {
       if (isCurrentRefresh()) setLoading(false)
     }
-  }, [activeWorkspaceIsLocal, workflowListBlocked, workspaceOptions])
+  }, [activeWorkspaceIsLocal, featureValueDiscoveryEnabled, workflowListBlocked, workspaceOptions])
 
   useEffect(() => {
     const generation = refreshGenerationRef.current + 1
@@ -242,7 +256,15 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
   const workflowActionBlocked = !workspaceSupport.flags.canRunWorkflow
   const workflowActionReason = workflowActionBlocked ? workspaceSupport.flags.reasons.runWorkflow : null
 
-  const runAction = async (workflowId: string, action: () => Promise<unknown>, message: string) => {
+  const runAction = async (
+    workflowId: string,
+    action: () => Promise<unknown>,
+    message: string,
+    options: {
+      recordsFeatureValue?: boolean
+      requireResult?: boolean
+    } = {},
+  ) => {
     setBusyId(workflowId)
     try {
       if (workflowActionBlocked) {
@@ -250,6 +272,10 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
         return
       }
       const result = await action()
+      if (options.requireResult && result === null) {
+        throw new Error(t('workflows.changeUnconfirmed', 'The playbook change could not be confirmed. Reload and try again.'))
+      }
+      if (options.recordsFeatureValue) recordFeatureValueActivation('playbooks')
       toast({ tone: 'success', message })
       if (result && typeof result === 'object' && 'sessionId' in result) {
         const sessionId = (result as { sessionId?: unknown }).sessionId
@@ -257,7 +283,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
       }
       await refresh()
     } catch (error) {
-      toast({ tone: 'error', message: error instanceof Error ? error.message : String(error) })
+      toast({ tone: 'error', message: publicWorkflowMessage(error) })
     } finally {
       setBusyId(null)
     }
@@ -275,10 +301,11 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
     setBusyId('new')
     try {
       const session = await window.coworkApi.workflows.startDraft()
+      recordFeatureValueActivation('playbooks')
       onOpenThread(session.id)
       await refresh()
     } catch (error) {
-      toast({ tone: 'error', message: error instanceof Error ? error.message : String(error) })
+      toast({ tone: 'error', message: publicWorkflowMessage(error) })
     } finally {
       setBusyId(null)
     }
@@ -288,7 +315,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
     activeWorkspaceIsLocal
       ? window.coworkApi.workflows.archive(workflow.id)
       : window.coworkApi.workflows.archive(workflow.id, workspaceOptions)
-  ), t('workflows.archived', 'Playbook archived.'))
+  ), t('workflows.archived', 'Playbook archived.'), { requireResult: true })
 
   const confirmArchive = async () => {
     const target = archiveTarget
@@ -326,16 +353,29 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
         return
       }
       if (target.status === 'archived') {
-        if (activeWorkspaceIsLocal) {
-          await window.coworkApi.workflows.resume(target.id)
-        } else {
-          await window.coworkApi.workflows.resume(target.id, workspaceOptions)
+        try {
+          const restored = activeWorkspaceIsLocal
+            ? await window.coworkApi.workflows.resume(target.id)
+            : await window.coworkApi.workflows.resume(target.id, workspaceOptions)
+          if (!restored) throw new Error('Playbook restore was not confirmed.')
+        } catch {
+          toast({
+            tone: 'error',
+            message: t('workflows.webhookSecretCopiedRestoreUnconfirmed', 'The new webhook credential was copied, but the playbook restore could not be confirmed. Check the playbook status before trying to restore again.'),
+          })
+          await refresh()
+          return
         }
         toast({ tone: 'success', message: t('workflows.restored', 'Playbook restored.') })
       }
       await refresh()
-    } catch (error) {
-      toast({ tone: 'error', message: error instanceof Error ? error.message : String(error) })
+    } catch {
+      // Reveal-path failures are deliberately generic: transport exceptions are
+      // untrusted and may embed a one-time secret or generated command.
+      toast({
+        tone: 'error',
+        message: t('workflows.webhookRegenerateFailedRedacted', 'Could not create and copy a new webhook credential. No credential was shown or retained; try again to receive a new one.'),
+      })
     } finally {
       setBusyId(null)
     }
@@ -353,10 +393,13 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-base text-text">
+    <div
+      className="flex h-full min-h-0 flex-col bg-base text-text"
+      data-testid="playbooks-surface"
+      data-load-state={loading && payload.workflows.length === 0 ? 'loading' : loadError && payload.workflows.length === 0 ? 'error' : loadError ? 'partial' : 'ready'}
+    >
       <div className="border-b border-border-subtle px-6 py-5">
         <StudioPageHeader
-          eyebrow={t('workflows.eyebrow', 'Playbooks')}
           title={t('workflows.title', 'Playbooks')}
           description={t('workflows.description', 'Save repeatable work from a Workflow Designer setup chat, then run it manually, on a schedule, or from a webhook.')}
           meta={(
@@ -379,7 +422,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
-        {!loading || payload.workflows.length > 0 ? (
+        {payload.workflows.length > 0 ? (
           <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label={t('workflows.viewToggleLabel', 'Playbook views')}>
             <Button
               size="sm"
@@ -432,16 +475,14 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                     ? t('workflows.emptySetupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.')
                     : t('workflows.emptyCloudManaged', 'Cloud playbook creation is managed by the cloud workspace. Existing playbooks will appear here when available.')
                   : t('workflows.emptyStartChat', 'Start a setup chat with Workflow Designer. It will clarify the task, tools, skills, coworker, schedule, and webhook trigger before saving a playbook.')}
-            action={(
+            action={showArchived ? (
               <Button
                 variant="primary"
-                onClick={showArchived ? () => setShowArchived(false) : () => void startDraft()}
-                disabled={!showArchived && workflowDraftBlocked}
-                disabledReason={showArchived ? null : !activeWorkspaceIsLocal ? t('workflows.cloudCreationManagedShort', 'Cloud playbook creation is managed by this cloud workspace.') : workflowDraftBlocked ? t('workflows.setupRequiresInApp', 'Playbook setup requires the in-app OpenCode config source.') : null}
+                onClick={() => setShowArchived(false)}
               >
-                {showArchived ? t('workflows.viewActiveButton', 'View active playbooks') : t('workflows.addButton', 'Add playbook')}
+                {t('workflows.viewActiveButton', 'View active playbooks')}
               </Button>
-            )}
+            ) : undefined}
           />
         ) : (
           <div className="grid gap-4">
@@ -480,7 +521,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                     </div>
                     <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="min-w-0 font-display text-role-card-title font-bold text-text">{workflow.title}</h2>
+                      <h2 className="min-w-0 font-display text-role-card-title font-bold text-text">{publicWorkflowMessage(workflow.title)}</h2>
                       <Badge tone={statusTone(workflow.status)} className="capitalize">
                         {workflow.status}
                       </Badge>
@@ -492,9 +533,9 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                           : t('workflows.openedTargetWorkflow', 'Opened playbook')}
                       </div>
                     ) : null}
-                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-text-secondary">{workflow.instructions}</p>
+                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-text-secondary">{publicWorkflowMessage(workflow.instructions)}</p>
                     <div className="mt-3 text-xs font-medium text-text-muted">
-                      {t('workflows.runsAs', 'Runs as')} {workflow.agentName || 'build'} <span aria-hidden="true">·</span> {t('workflows.lastRun', 'last run')} {workflowLastRunLabel(workflow)}
+                      {t('workflows.runsAs', 'Runs as')} {publicWorkflowMessage(workflow.agentName || 'build')} <span aria-hidden="true">·</span> {t('workflows.lastRun', 'last run')} {workflowLastRunLabel(workflow)}
                     </div>
                     </div>
                   </div>
@@ -525,7 +566,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                           activeWorkspaceIsLocal
                             ? window.coworkApi.workflows.resume(workflow.id)
                             : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
-                        ), t('workflows.restored', 'Playbook restored.'))}
+                        ), t('workflows.restored', 'Playbook restored.'), { requireResult: true })}
                       >
                         {t('workflows.restoreButton', 'Restore')}
                       </Button>
@@ -544,7 +585,10 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                             activeWorkspaceIsLocal
                               ? window.coworkApi.workflows.runNow(workflow.id)
                               : window.coworkApi.workflows.runNow(workflow.id, workspaceOptions)
-                          ), t('workflows.runStarted', 'Playbook run started.'))}
+                          ), t('workflows.runStarted', 'Playbook run started.'), {
+                            recordsFeatureValue: true,
+                            requireResult: true,
+                          })}
                         >
                           {t('workflows.runButton', 'Run')}
                         </Button>
@@ -553,7 +597,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                             activeWorkspaceIsLocal
                               ? window.coworkApi.workflows.resume(workflow.id)
                               : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
-                          ), t('workflows.resumed', 'Playbook resumed.'))}>
+                          ), t('workflows.resumed', 'Playbook resumed.'), { requireResult: true })}>
                             {t('workflows.resumeButton', 'Resume')}
                           </Button>
                         ) : (
@@ -561,7 +605,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                             activeWorkspaceIsLocal
                               ? window.coworkApi.workflows.pause(workflow.id)
                               : window.coworkApi.workflows.pause(workflow.id, workspaceOptions)
-                          ), t('workflows.paused', 'Playbook paused.'))}>
+                          ), t('workflows.paused', 'Playbook paused.'), { requireResult: true })}>
                             {t('workflows.pauseButton', 'Pause')}
                           </Button>
                         )}
@@ -573,15 +617,15 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                   </div>
                 </div>
 
-                <ol className="mt-4 grid gap-2 md:grid-cols-3" aria-label={t('workflows.stepsAriaLabel', '{{title}} steps', { title: workflow.title })}>
+                <ol className="mt-4 grid gap-2 md:grid-cols-3" aria-label={t('workflows.stepsAriaLabel', '{{title}} steps', { title: publicWorkflowMessage(workflow.title) })}>
                   {workflow.steps.map((step, index) => (
                     <li key={step.id || index} className="flex min-w-0 gap-3 rounded-md border border-border-subtle bg-elevated p-3">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-border-subtle bg-surface-active text-xs font-bold text-text-secondary">
                         {index + 1}
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-text">{step.title}</span>
-                        {step.detail ? <span className="mt-1 block line-clamp-2 text-xs leading-5 text-text-muted">{step.detail}</span> : null}
+                        <span className="block text-sm font-semibold text-text">{publicWorkflowMessage(step.title)}</span>
+                        {step.detail ? <span className="mt-1 block line-clamp-2 text-xs leading-5 text-text-muted">{publicWorkflowMessage(step.detail)}</span> : null}
                       </span>
                     </li>
                   ))}
@@ -590,9 +634,9 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-md border border-border-subtle bg-elevated p-3">
                     <div className="text-2xs font-semibold uppercase tracking-wide text-text-muted">{t('workflows.leadCoworker', 'Lead coworker')}</div>
-                    <div className="mt-1 text-sm text-text">{workflow.agentName || 'build'}</div>
+                    <div className="mt-1 text-sm text-text">{publicWorkflowMessage(workflow.agentName || 'build')}</div>
                     <div className="mt-1 text-xs text-text-muted">
-                      {[...workflow.skillNames, ...workflow.toolIds].slice(0, 4).join(', ') || t('workflows.usesSelectedTools', 'Uses selected tools and skills from the setup chat')}
+                      {publicWorkflowMessage([...workflow.skillNames, ...workflow.toolIds].slice(0, 4).join(', ')) || t('workflows.usesSelectedTools', 'Uses selected tools and skills from the setup chat')}
                     </div>
                   </div>
                   <div className="rounded-md border border-border-subtle bg-elevated p-3">
@@ -616,7 +660,9 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                       </div>
                       <div className="mt-1 line-clamp-2 text-xs text-text-muted">
                         {exactRun
-                          ? exactRun.summary || exactRun.error || t('workflows.runDate', 'Run created: {{date}}', { date: formatWorkflowDate(exactRun.createdAt) })
+                          ? (exactRun.summary || exactRun.error)
+                            ? publicWorkflowMessage(exactRun.summary || exactRun.error)
+                            : t('workflows.runDate', 'Run created: {{date}}', { date: formatWorkflowDate(exactRun.createdAt) })
                           : t('workflows.exactRunUnavailable', 'Run {{runId}} is not available in the current playbook data.', { runId: highlightedTarget?.runId || '' })}
                       </div>
                     </div>
@@ -628,7 +674,11 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                           {workflow.latestRunStatus || t('workflows.noRunsYet', 'No runs yet')}
                         </Badge>
                       </div>
-                      <div className="mt-1 line-clamp-2 text-xs text-text-muted">{workflow.latestRunSummary || t('workflows.lastRunDate', 'Last run: {{date}}', { date: formatWorkflowDate(workflow.lastRunAt) })}</div>
+                      <div className="mt-1 line-clamp-2 text-xs text-text-muted">
+                        {workflow.latestRunSummary
+                          ? publicWorkflowMessage(workflow.latestRunSummary)
+                          : t('workflows.lastRunDate', 'Last run: {{date}}', { date: formatWorkflowDate(workflow.lastRunAt) })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -637,7 +687,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
                   <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-border-subtle bg-elevated p-3">
                     {workflow.webhookUrl ? (
                       <>
-                        <code className="min-w-0 flex-1 truncate text-xs text-text-secondary">{workflow.webhookUrl}</code>
+                        <code className="min-w-0 flex-1 truncate text-xs text-text-secondary">{publicWorkflowMessage(workflow.webhookUrl)}</code>
                         <Button size="sm" variant="secondary" onClick={() => void copyWebhook(workflow)}>
                           {t('workflows.copyWebhookUrl', 'Copy URL')}
                         </Button>
@@ -668,7 +718,7 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
         open={Boolean(archiveTarget)}
         title={t('workflows.archiveConfirmTitle', 'Archive this playbook?')}
         body={archiveTarget
-          ? t('workflows.archiveConfirmBody', 'Archiving “{{title}}” stops its schedules and webhook triggers and hides it from the active list. You can recover it later from the archive.', { title: archiveTarget.title })
+          ? t('workflows.archiveConfirmBody', 'Archiving “{{title}}” stops its schedules and webhook triggers and hides it from the active list. You can recover it later from the archive.', { title: publicWorkflowMessage(archiveTarget.title) })
           : undefined}
         confirmLabel={t('workflows.archiveButton', 'Archive')}
         cancelLabel={t('workflows.archiveConfirmCancel', 'Cancel')}
@@ -683,8 +733,8 @@ export function WorkflowsPage({ onOpenThread, initialTarget = null, onInitialTar
           : t('workflows.webhookRegenerateConfirmTitle', 'Regenerate this webhook secret?')}
         body={webhookRegenerationTarget
           ? webhookRegenerationTarget.status === 'archived'
-            ? t('workflows.webhookReplacementConfirmBody', 'Restoring “{{title}}” requires a new webhook secret. Create it, copy the one-time curl command, and restore the playbook.', { title: webhookRegenerationTarget.title })
-            : t('workflows.webhookRegenerateConfirmBody', 'Regenerating the webhook secret for “{{title}}” immediately invalidates the current secret. Existing callers will stop working until they use the new secret.', { title: webhookRegenerationTarget.title })
+            ? t('workflows.webhookReplacementConfirmBody', 'Restoring “{{title}}” requires a new webhook secret. Create it, copy the one-time curl command, and restore the playbook.', { title: publicWorkflowMessage(webhookRegenerationTarget.title) })
+            : t('workflows.webhookRegenerateConfirmBody', 'Regenerating the webhook secret for “{{title}}” immediately invalidates the current secret. Existing callers will stop working until they use the new secret.', { title: publicWorkflowMessage(webhookRegenerationTarget.title) })
           : undefined}
         confirmLabel={webhookRegenerationTarget?.status === 'archived'
           ? t('workflows.webhookReplacementConfirmAction', 'Create, copy, and restore')

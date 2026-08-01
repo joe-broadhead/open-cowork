@@ -75,6 +75,16 @@ export function safeText(value: string | null | undefined) {
   return typeof value === 'string' ? value : ''
 }
 
+export function conciseCapabilitySummary(value: string | null | undefined, limit = 140) {
+  const normalized = safeText(value).replace(/\s+/g, ' ').trim()
+  if (!normalized) return 'No description'
+  const firstSentence = normalized.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || normalized
+  if (firstSentence.length <= limit) return firstSentence
+  const clipped = firstSentence.slice(0, limit + 1)
+  const wordBoundary = clipped.lastIndexOf(' ')
+  return `${clipped.slice(0, wordBoundary > limit / 2 ? wordBoundary : limit).trimEnd()}…`
+}
+
 export function normalizeQuery(query: string) {
   return query.trim().toLowerCase()
 }
