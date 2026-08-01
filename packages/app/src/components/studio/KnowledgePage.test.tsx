@@ -478,11 +478,12 @@ describe('KnowledgePage clarity redesign', () => {
 
   it('clears matching remounted recovery when the background owner completes', async () => {
     const user = userEvent.setup()
-    const { starter, createdSpace, proposal, createdPage, nextSnapshot } = newSpaceScenario()
+    const { starter, createdSpace, proposal, createdPage, createdOnlySnapshot, nextSnapshot } = newSpaceScenario()
     const finalSnapshot = deferred<KnowledgeSnapshotPayload>()
     const snapshotApi = vi.fn()
       .mockResolvedValueOnce(starter)
       .mockReturnValueOnce(finalSnapshot.promise)
+      .mockResolvedValueOnce(createdOnlySnapshot)
       .mockResolvedValue(nextSnapshot)
     const acceptProposal = vi.fn(async () => ({ proposal, page: createdPage }))
     installRendererTestCoworkApi({
@@ -511,12 +512,15 @@ describe('KnowledgePage clarity redesign', () => {
     firstRender.unmount()
     render(<KnowledgePage />)
     await screen.findByRole('button', { name: 'Finish Space' })
+    expect(screen.queryByRole('heading', { level: 1, name: 'Overview' })).not.toBeInTheDocument()
 
     await act(async () => { finalSnapshot.resolve(nextSnapshot) })
     await waitFor(() => {
       expect(readNewSpaceCreationProgress(LOCAL_WORKSPACE_ID)).toBeNull()
       expect(screen.getByRole('button', { name: 'New Space' })).toBeInTheDocument()
     })
+    await screen.findByRole('button', { name: 'Overview' })
+    expect(snapshotApi).toHaveBeenCalledTimes(4)
   })
 
   it('reconciles an ambiguous Space beyond the full-snapshot limit by exact creation id', async () => {

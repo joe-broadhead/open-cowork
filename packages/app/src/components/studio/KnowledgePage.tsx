@@ -454,12 +454,6 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
     setNewSpaceError(null)
   }, [activeWorkspaceId])
 
-  useEffect(() => subscribeNewSpaceCreationCompletion((workspaceId, creationId) => {
-    if (workspaceId !== activeWorkspaceId || newSpaceCreationRef.current?.creationId !== creationId) return
-    newSpaceCreationRef.current = null
-    setNewSpaceCreation(null)
-  }), [activeWorkspaceId])
-
   // The review-queue panel only renders in the pages view, so the rail shortcut
   // switches back to pages (if needed) and arms a reveal. Coming from graph view
   // the panel is unmounted, so scrolling from within the click handler would race
@@ -522,6 +516,13 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
       setLoading(false)
     }
   }, [activeWorkspaceId, activeWorkspaceIsLocal, featureValueDiscoveryEnabled])
+
+  useEffect(() => subscribeNewSpaceCreationCompletion((workspaceId, creationId) => {
+    if (workspaceId !== activeWorkspaceId || newSpaceCreationRef.current?.creationId !== creationId) return
+    newSpaceCreationRef.current = null
+    setNewSpaceCreation(null)
+    void loadSnapshot()
+  }), [activeWorkspaceId, loadSnapshot])
 
   useEffect(() => {
     void loadSnapshot()
