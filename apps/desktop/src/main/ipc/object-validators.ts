@@ -26,6 +26,7 @@ import {
   isArtifactStatus,
   RUNTIME_TOOLING_BRIDGE_CATEGORIES,
   RUNTIME_TOOLING_BRIDGE_CONSENT_VERSION,
+  validateVoicePttShortcut,
 } from '@open-cowork/shared'
 import { validateCustomAgentContentLimits } from '@open-cowork/runtime-host/custom-content-limits'
 const MAX_IPC_STRING_BYTES = 64 * 1024
@@ -41,6 +42,7 @@ const MCP_PERMISSION_MODES = new Set(['ask', 'allow'])
 const AGENT_COLORS = new Set(['primary', 'warning', 'accent', 'success', 'info', 'secondary'])
 const RUNTIME_PERMISSION_POLICIES = new Set(['allow', 'ask', 'deny'])
 const RUNTIME_CONFIG_SOURCES = new Set(['app', 'machine'])
+const APPEARANCE_COLOR_SCHEMES = new Set(['system', 'dark', 'light'])
 const DESTRUCTIVE_ACTIONS = new Set([
   'session.delete',
   'agent.remove',
@@ -73,6 +75,8 @@ const SETTINGS_UPDATE_KEYS = new Set([
   'runtimeConfigSource',
   'runtimeToolingBridge',
   'windowZoomFactor',
+  'appearanceColorScheme',
+  'appearanceThemeId',
   'workflowLaunchAtLogin',
   'workflowRunInBackground',
   'workflowDesktopNotifications',
@@ -458,12 +462,35 @@ export function validateSettingsUpdate(record: Record<string, unknown>): Partial
   }
   update.runtimeToolingBridge = optionalRuntimeToolingBridgeConsent(record)
   update.windowZoomFactor = optionalNumber(record, 'windowZoomFactor', 'Window zoom factor') ?? undefined
+  if (record.appearanceColorScheme !== undefined) {
+    if (typeof record.appearanceColorScheme !== 'string' || !APPEARANCE_COLOR_SCHEMES.has(record.appearanceColorScheme)) {
+      throw new Error('Appearance color scheme must be system, dark, or light.')
+    }
+    update.appearanceColorScheme = record.appearanceColorScheme as NonNullable<CoworkSettings['appearanceColorScheme']>
+  }
+  const appearanceThemeId = optionalString(record, 'appearanceThemeId', 'Appearance theme id', MAX_IPC_ID_BYTES)
+  if (appearanceThemeId !== undefined) {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(appearanceThemeId)) {
+      throw new Error('Appearance theme id must use lowercase letters, numbers, and hyphens.')
+    }
+    update.appearanceThemeId = appearanceThemeId
+  }
   update.workflowLaunchAtLogin = optionalBoolean(record, 'workflowLaunchAtLogin', 'Workflow launch at login')
   update.workflowRunInBackground = optionalBoolean(record, 'workflowRunInBackground', 'Workflow run in background')
   update.workflowDesktopNotifications = optionalBoolean(record, 'workflowDesktopNotifications', 'Workflow desktop notifications')
   update.workflowQuietHoursStart = optionalNullableString(record, 'workflowQuietHoursStart', 'Workflow quiet hours start', MAX_IPC_ID_BYTES) as string | null | undefined
   update.workflowQuietHoursEnd = optionalNullableString(record, 'workflowQuietHoursEnd', 'Workflow quiet hours end', MAX_IPC_ID_BYTES) as string | null | undefined
-  update.voicePttShortcut = optionalNullableString(record, 'voicePttShortcut', 'Voice PTT shortcut', 64) as string | null | undefined
+  const voicePttShortcut = optionalNullableString(record, 'voicePttShortcut', 'Voice PTT shortcut', 64)
+  if (voicePttShortcut !== undefined) {
+    const validation = validateVoicePttShortcut(voicePttShortcut)
+    if (!validation.ok) {
+      if (validation.reason === 'conflict') {
+        throw new Error(`Voice PTT shortcut conflicts with ${validation.conflict}. Choose a different combination.`)
+      }
+      throw new Error('Voice PTT shortcut must include a modifier and a supported key.')
+    }
+    update.voicePttShortcut = validation.value
+  }
 
   return Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined)) as Partial<CoworkSettings>
 }

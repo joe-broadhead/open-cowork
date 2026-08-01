@@ -84,10 +84,16 @@ export function combineNativeProviderCatalog(
   })
 }
 
-export async function listNativeProviders(client: OpencodeClient): Promise<ProviderLike[]> {
+export async function listNativeProviders(
+  client: OpencodeClient,
+  options: { signal?: AbortSignal } = {},
+): Promise<ProviderLike[]> {
+  const requestOptions = options.signal
+    ? { throwOnError: true as const, signal: options.signal }
+    : { throwOnError: true as const }
   const [providerResponse, modelResponse] = await Promise.all([
-    client.v2.provider.list(undefined, { throwOnError: true }),
-    client.v2.model.list(undefined, { throwOnError: true }),
+    client.v2.provider.list(undefined, requestOptions),
+    client.v2.model.list(undefined, requestOptions),
   ])
   return combineNativeProviderCatalog(providerResponse.data.data, modelResponse.data.data)
 }

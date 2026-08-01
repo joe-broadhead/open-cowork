@@ -18,6 +18,7 @@ import { Badge, Button, Input } from '@open-cowork/ui'
 import { BrandMark } from './BrandMark'
 import { ConfirmDialog } from './ConfirmDialog'
 import { RuntimeToolingBridgeConsentPanel } from './RuntimeToolingBridgeConsent'
+import { SetupModelCatalog } from './SetupModelCatalog'
 
 const ProviderAuthControls = lazy(() => import('./provider/ProviderAuthControls').then((module) => ({
   default: module.ProviderAuthControls,
@@ -56,6 +57,14 @@ function describeSetupLoadError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function setupActionErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error) || !error.message.trim()) return fallback
+  return error.message.replace(
+    /^Error invoking remote method '[^']+': (?:[A-Za-z][A-Za-z0-9]*Error: )?/,
+    '',
+  )
+}
+
 function reportSetupLoadError(error: unknown, scope: string) {
   try {
     window.coworkApi?.diagnostics?.reportRendererError?.({
@@ -87,6 +96,7 @@ function buildConnectionSignature(input: {
   providerId: string | null
   modelId: string
   credentials: Record<string, string>
+  runtimeToolingBridge: ReturnType<typeof normalizeRuntimeToolingBridgeConsent>
 }) {
   const credentials = Object.fromEntries(
     Object.entries(input.credentials).sort(([left], [right]) => left.localeCompare(right)),
@@ -95,6 +105,7 @@ function buildConnectionSignature(input: {
     providerId: input.providerId,
     modelId: input.modelId.trim(),
     credentials,
+    runtimeToolingBridge: normalizeRuntimeToolingBridgeConsent(input.runtimeToolingBridge),
   })
 }
 
@@ -115,7 +126,7 @@ function runtimeProgressLabel(status: RuntimeLoadingStatus | null, fallback: str
   if (status?.phase === 'mcp') return t('setup.progressTools', 'Preparing coworker tools...')
   if (status?.phase === 'ready') return t('setup.progressReady', 'Model service is ready.')
   if (status?.phase === 'error') return t('setup.progressError', 'The model service could not start.')
-  return fallback || t('setup.connectionIdle', 'Ready to test the connection.')
+  return fallback || t('setup.connectionIdle', 'Waiting for a connection test.')
 }
 
 function runtimeStatusToLoadingStatus(
@@ -145,6 +156,7 @@ export function SetupScreen({
   const [runtimeToolingBridge, setRuntimeToolingBridge] = useState(
     createDisabledRuntimeToolingBridgeConsent,
   )
+  const [nativeProviderConnected, setNativeProviderConnected] = useState<Record<string, boolean>>({})
   const [selectedIntentId, setSelectedIntentId] = useState<SetupIntentId>('desktop-local')
   const [loadedCredentialProviders, setLoadedCredentialProviders] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
@@ -227,6 +239,10 @@ export function SetupScreen({
     () => providers.find((provider) => provider.id === providerId) || null,
     [providers, providerId],
   )
+  const nativeProviderConnectedOverride = providerId ? nativeProviderConnected[providerId] : undefined
+  const selectedProviderConnected = nativeProviderConnectedOverride !== undefined
+    ? nativeProviderConnectedOverride
+    : selectedProvider?.connected === true
   const selectedIntent = useMemo(
     () => SETUP_INTENTS.find((intent) => intent.id === selectedIntentId) ?? localIntent,
     [selectedIntentId],
@@ -268,25 +284,71 @@ export function SetupScreen({
   )
   const requiredCredentials = selectedProvider?.credentials.filter((credential) => credential.required !== false) || []
   const hasRequiredCredentials = requiredCredentials.every((credential) => (selectedCredentials[credential.key] || '').trim())
-  const canContinue = Boolean(providerId && modelId.trim() && hasRequiredCredentials)
+  const configuredCredential = selectedProvider?.credentials.find((credential) => {
+    const value = (selectedCredentials[credential.key] || '').trim()
+    return value && (!isCredentialMask(value) || credential.secret !== false)
+  })
   const currentConnectionSignature = useMemo(() => buildConnectionSignature({
     providerId,
     modelId,
     credentials: selectedCredentials,
-  }), [modelId, providerId, selectedCredentials])
+    runtimeToolingBridge,
+  }), [modelId, providerId, runtimeToolingBridge, selectedCredentials])
   const connectionIsCurrent = connectionTest.status === 'success'
     && connectionTest.signature === currentConnectionSignature
   const connectionNeedsRetest = connectionTest.status === 'success' && !connectionIsCurrent
-  // Minimal path progress: provider → model → ready for chat (connection test optional).
-  const setupProgress = canContinue ? 3 : modelId.trim() ? 2 : providerId ? 1 : 0
+  const providerAccessReady = Boolean(
+    providerId
+    && selectedProvider
+    && (selectedProviderConnected
+      || (hasRequiredCredentials && Boolean(configuredCredential))),
+  )
+  const modelSelectionReady = providerAccessReady && Boolean(modelId.trim())
+  const hasCompleteSelection = modelSelectionReady
+  const catalogLoading = providers.length === 0
+  const missingCredential = requiredCredentials.find(
+    (credential) => !(selectedCredentials[credential.key] || '').trim(),
+  )
+  const providerAccessMethodMissing = Boolean(
+    selectedProvider
+    && !selectedProviderConnected
+    && !configuredCredential,
+  )
+  const validationDisabledReason = catalogLoading
+    ? t('setup.catalogLoadingDisabled', 'Wait for the model catalog to load.')
+    : !providerId
+      ? t('setup.providerMissing', 'Choose a provider before testing the connection.')
+      : missingCredential
+        ? t('setup.credentialMissing', 'Enter {{credential}} before testing the connection.', {
+            credential: missingCredential.label,
+          })
+        : providerAccessMethodMissing
+          ? selectedProvider?.credentials[0]
+            ? t('setup.providerSignInOrCredentialMissing', 'Sign in to {{provider}} or enter {{credential}} before testing the connection.', {
+                provider: selectedProvider.name,
+                credential: selectedProvider.credentials[0].label,
+              })
+            : t('setup.providerSignInMissing', 'Sign in to {{provider}} before testing the connection.', {
+                provider: selectedProvider?.name || providerId,
+              })
+        : !modelId.trim()
+          ? t('setup.modelMissing', 'Choose a model before testing the connection.')
+          : null
+  const continueDisabledReason = validationDisabledReason
+    || (!connectionIsCurrent ? t('setup.validationMissing', 'Test the connection before continuing.') : null)
+  const canContinue = hasCompleteSelection && connectionIsCurrent
+  const setupProgress = connectionIsCurrent ? 3 : modelSelectionReady ? 2 : providerAccessReady ? 1 : 0
   const progressPercent = connectionTest.status === 'testing'
     ? phaseProgress[runtimeProgress?.phase || 'starting']
-    : canContinue
+    : connectionIsCurrent
       ? 100
       : Math.max(12, setupProgress * 28)
   const visibleRuntimeProgress = connectionTest.status === 'testing' || connectionIsCurrent
     ? runtimeProgress
     : null
+  const visibleConnectionMessage = connectionNeedsRetest
+    ? t('setup.connectionRetestProgress', 'Connection settings changed. Test again to verify them.')
+    : connectionTest.message
 
   const updateCredential = (key: string, value: string) => {
     if (!providerId) return
@@ -324,11 +386,17 @@ export function SetupScreen({
     applyProviderSwitch(id)
   }
 
-  const saveSetupSelection = async (modelOverride?: string, options: { allowMissingModel?: boolean } = {}) => {
-    if (!providerId) return false
+  const saveSetupSelection = async (
+    modelOverride?: string,
+    options: { allowMissingModel?: boolean; allowMissingCredentials?: boolean } = {},
+  ) => {
+    if (!providerId) return null
     const nextModelId = (modelOverride || modelId).trim()
-    if ((!nextModelId && !options.allowMissingModel) || !hasRequiredCredentials) return false
-    await window.coworkApi.settings.set({
+    if (
+      (!nextModelId && !options.allowMissingModel)
+      || (!hasRequiredCredentials && !options.allowMissingCredentials)
+    ) return null
+    return window.coworkApi.settings.set({
       selectedProviderId: providerId,
       selectedModelId: nextModelId,
       runtimeToolingBridge,
@@ -336,23 +404,35 @@ export function SetupScreen({
         [providerId]: selectedCredentials,
       },
     })
-    return true
+  }
+
+  const applySavedRuntimeSelection = async (setupComplete: boolean) => {
+    // A complete proof means settings:set has already applied any
+    // runtime-sensitive change before returning. An incomplete proof needs
+    // one explicit restart so the subsequent live connection check targets
+    // the newly saved selection.
+    return setupComplete
+      ? window.coworkApi.runtime.status()
+      : window.coworkApi.runtime.restart({ purpose: 'setup_connection_validation' })
   }
 
   const prepareProviderAuthorization = async () => {
     setSaving(true)
     setError(null)
     try {
-      const saved = await saveSetupSelection(undefined, { allowMissingModel: true })
+      const saved = await saveSetupSelection(undefined, {
+        allowMissingModel: true,
+        allowMissingCredentials: true,
+      })
       if (!saved) return false
-      const status = await window.coworkApi.runtime.restart()
+      const status = await applySavedRuntimeSelection(saved.setupComplete)
       if (!status.ready) {
         setError(status.error || t('setup.runtimeFailed', 'The model service could not start with these settings. Double-check your key and try again.'))
         return false
       }
       return true
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('setup.saveFailed', 'Failed to save settings'))
+      setError(setupActionErrorMessage(err, t('setup.saveFailed', 'Failed to save settings')))
       return false
     } finally {
       setSaving(false)
@@ -360,7 +440,7 @@ export function SetupScreen({
   }
 
   const handleTestConnection = async () => {
-    if (!canContinue) {
+    if (!hasCompleteSelection) {
       setError(t('setup.connectionMissingFields', 'Choose a provider, enter the required key, and choose a model before testing.'))
       return
     }
@@ -380,14 +460,14 @@ export function SetupScreen({
       message: t('setup.connectionTesting', 'Testing the model connection...'),
     })
     try {
-      await saveSetupSelection()
-      const status = await window.coworkApi.runtime.restart()
+      const saved = await saveSetupSelection()
+      if (!saved) return
+      const status = await applySavedRuntimeSelection(saved.setupComplete)
       if (!status.ready) {
         const message = status.error || t('setup.runtimeFailed', 'The model service could not start with these settings. Double-check your key and try again.')
         setRuntimeProgress(runtimeStatusToLoadingStatus(status, message))
         setError(message)
         setConnectionTest({ status: 'error', signature: null, message })
-        addGlobalError(message)
         return
       }
       setRuntimeProgress(runtimeStatusToLoadingStatus(
@@ -402,20 +482,17 @@ export function SetupScreen({
         message,
       })
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('setup.saveFailed', 'Failed to save settings')
+      const message = setupActionErrorMessage(err, t('setup.saveFailed', 'Failed to save settings'))
       setError(message)
       setConnectionTest({ status: 'error', signature: null, message })
-      addGlobalError(message)
     } finally {
       setSaving(false)
     }
   }
 
   const handleContinue = async () => {
-    // Minimal path: provider → model (+ required credentials) → chat.
-    // Connection test remains available but does not block first success.
     if (!canContinue) {
-      setError(t('setup.connectionMissingFields', 'Choose a provider, enter the required key, and choose a model before continuing.'))
+      setError(continueDisabledReason || t('setup.connectionMissingFields', 'Complete setup before continuing.'))
       return
     }
     setSaving(true)
@@ -423,15 +500,21 @@ export function SetupScreen({
     try {
       const saved = await saveSetupSelection()
       if (!saved) return
-      // Best-effort runtime start so the first chat can open quickly.
-      try {
-        await window.coworkApi.runtime.restart()
-      } catch {
-        // Soft-fail: settings are saved; runtime can recover on first prompt.
+      if (!saved.setupComplete) {
+        const message = t(
+          'setup.connectionValidationExpired',
+          'Connection validation is no longer current. Test the connection again.',
+        )
+        setError(message)
+        setConnectionTest({ status: 'error', signature: null, message })
+        return
       }
+      // The successful connection test verified this exact provider, model,
+      // credential, and runtime-consent signature. This final save is
+      // idempotent and therefore cannot trigger a redundant runtime restart.
       onComplete()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('setup.saveFailed', 'Failed to save settings'))
+      setError(setupActionErrorMessage(err, t('setup.saveFailed', 'Failed to save settings')))
     } finally {
       setSaving(false)
     }
@@ -455,11 +538,20 @@ export function SetupScreen({
         <section aria-label={t('setup.progress', 'Setup progress')} className="rounded-2xl border border-border-subtle bg-elevated p-4">
           <div className="grid gap-3 sm:grid-cols-3">
             {[
-              { label: t('setup.stepConnect', 'Connect a provider'), done: setupProgress >= 1 },
-              { label: t('setup.stepChoose', 'Choose model'), done: setupProgress >= 2 },
-              { label: t('setup.stepDone', 'Start chatting'), done: setupProgress >= 3 },
+              { label: t('setup.stepConnect', 'Connect a provider'), done: providerAccessReady || connectionIsCurrent },
+              { label: t('setup.stepChoose', 'Choose model'), done: modelSelectionReady || connectionIsCurrent },
+              { label: t('setup.stepDone', 'Start chatting'), done: connectionIsCurrent },
             ].map((step, index) => (
-              <div key={step.label} className="flex items-center gap-2 text-sm text-text-secondary">
+              <div
+                key={step.label}
+                aria-label={t('setup.stepStatus', '{{step}}: {{status}}', {
+                  step: step.label,
+                  status: step.done
+                    ? t('setup.stepComplete', 'Complete')
+                    : t('setup.stepNotComplete', 'Not complete'),
+                })}
+                className="flex items-center gap-2 text-sm text-text-secondary"
+              >
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold ${step.done ? 'border-accent bg-accent text-accent-foreground' : 'border-border-subtle text-text-muted'}`}>
                   {index + 1}
                 </span>
@@ -474,7 +566,7 @@ export function SetupScreen({
             />
           </div>
           <p className="mt-2 text-xs text-text-muted">
-            {runtimeProgressLabel(visibleRuntimeProgress, connectionTest.message)}
+            {runtimeProgressLabel(visibleRuntimeProgress, visibleConnectionMessage)}
           </p>
         </section>
 
@@ -483,7 +575,11 @@ export function SetupScreen({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-semibold text-text">{t('setup.localTitle', 'Running on this Mac')}</h2>
-                <Badge tone="success">{t('setup.localReady', 'Ready')}</Badge>
+                <Badge tone={connectionIsCurrent ? 'success' : 'muted'}>
+                  {connectionIsCurrent
+                    ? t('setup.localReady', 'Ready')
+                    : t('setup.localNotReady', 'Not ready')}
+                </Badge>
               </div>
               <p className="mt-1 text-sm text-text-muted">
                 {t('setup.localDescription', 'Your projects and model credentials stay on this computer unless you choose a team or server option.')}
@@ -507,22 +603,33 @@ export function SetupScreen({
               {t('setup.providerDescription', 'Choose the account that will power your coworkers.')}
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {providers.map((provider) => {
-              const active = providerId === provider.id
-              return (
-                <button
-                  key={provider.id}
-                  type="button"
-                  onClick={() => requestProviderSwitch(provider.id)}
-                  className={`rounded-2xl border px-4 py-3 text-start transition-colors ${active ? 'border-accent bg-accent/10' : 'border-border-subtle bg-elevated hover:bg-surface-hover'}`}
-                >
-                  <div className={`text-sm font-semibold ${active ? 'text-accent' : 'text-text'}`}>{provider.name}</div>
-                  <div className="mt-1 text-xs text-text-muted">{t('setup.providerCardHint', 'Use this provider for new chats.')}</div>
-                </button>
-              )
-            })}
-          </div>
+          {catalogLoading ? (
+            <div
+              role="status"
+              aria-label={t('setup.catalogLoadingLabel', 'Loading model catalog')}
+              aria-live="polite"
+              className="rounded-xl border border-border-subtle bg-surface px-3 py-3 text-sm text-text-muted"
+            >
+              {t('setup.catalogLoading', 'Loading model catalog...')}
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {providers.map((provider) => {
+                const active = providerId === provider.id
+                return (
+                  <button
+                    key={provider.id}
+                    type="button"
+                    onClick={() => requestProviderSwitch(provider.id)}
+                    className={`rounded-2xl border px-4 py-3 text-start transition-colors ${active ? 'border-accent bg-accent/10' : 'border-border-subtle bg-elevated hover:bg-surface-hover'}`}
+                  >
+                    <div className={`text-sm font-semibold ${active ? 'text-accent' : 'text-text'}`}>{provider.name}</div>
+                    <div className="mt-1 text-xs text-text-muted">{t('setup.providerCardHint', 'Use this provider for new chats.')}</div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </section>
 
         {selectedProvider ? (
@@ -543,11 +650,25 @@ export function SetupScreen({
               <ProviderAuthControls
                 providerId={providerId}
                 providerName={selectedProvider.name}
-                connected={selectedProvider.connected}
+                connected={selectedProviderConnected}
                 disabled={!providerId || saving}
                 copyMode="setup"
                 onBeforeAuthorize={prepareProviderAuthorization}
-                onAuthUpdated={async () => {
+                onAuthUpdated={async (connected) => {
+                  setNativeProviderConnected((current) => ({
+                    ...current,
+                    [selectedProvider.id]: connected,
+                  }))
+                  setRuntimeProgress(null)
+                  setConnectionTest({
+                    status: 'idle',
+                    signature: null,
+                    message: connected
+                      ? t('setup.providerAuthChanged', 'Provider sign-in changed. Test the connection again.')
+                      : t('setup.providerAuthRemoved', 'Provider sign-in was removed. Sign in and test the connection again.'),
+                  })
+                  setError(null)
+                  if (!connected) return
                   const authModelId = selectedProvider.defaultModel
                     || await resolveRuntimeProviderDefaultModel(providerId)
                     || modelId
@@ -597,26 +718,11 @@ export function SetupScreen({
               <p className="text-sm text-text-muted">{t('setup.modelDescription', 'Pick the model coworkers will use by default.')}</p>
             </div>
             {selectedProvider.models.length > 0 ? (
-              <div className="grid gap-2">
-                {selectedProvider.models.map((model) => {
-                  const active = modelId === model.id
-                  return (
-                    <button
-                      key={model.id}
-                      type="button"
-                      onClick={() => setModelId(model.id)}
-                      className={`rounded-xl border px-3.5 py-3 text-start transition-colors ${active ? 'border-accent bg-accent/10' : 'border-border-subtle hover:bg-surface-hover'}`}
-                    >
-                      <span className={`block text-sm font-medium ${active ? 'text-accent' : 'text-text-secondary'}`}>{model.name}</span>
-                      {model.description ? (
-                        <span className="mt-1 block line-clamp-2 text-xs leading-relaxed text-text-muted">
-                          {model.description}
-                        </span>
-                      ) : null}
-                    </button>
-                  )
-                })}
-              </div>
+              <SetupModelCatalog
+                provider={selectedProvider}
+                selectedModelId={modelId}
+                onSelect={setModelId}
+              />
             ) : (
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-text-secondary">{t('setup.modelIdLabel', 'Model ID')}</span>
@@ -703,7 +809,7 @@ export function SetupScreen({
 
         {connectionNeedsRetest ? (
           <div role="status" className="rounded-xl border border-amber/30 bg-amber/10 px-3 py-2 text-sm text-amber">
-            {t('setup.connectionStale', 'The provider or model changed. Optionally re-test the connection, or continue to chat.')}
+            {t('setup.connectionStale', 'The provider, credentials, model, or connection permissions changed. Test the connection again before continuing.')}
           </div>
         ) : null}
         {error ? (
@@ -721,8 +827,8 @@ export function SetupScreen({
             fullWidth
             onClick={() => void handleTestConnection()}
             loading={connectionTest.status === 'testing'}
-            disabled={!canContinue || saving}
-            disabledReason={!canContinue ? t('setup.testDisabled', 'Choose a provider, enter required credentials, and choose a model first.') : null}
+            disabled={!hasCompleteSelection || saving}
+            disabledReason={!hasCompleteSelection ? validationDisabledReason : null}
           >
             {connectionTest.status === 'testing'
               ? t('setup.testingConnection', 'Testing connection...')
@@ -734,7 +840,7 @@ export function SetupScreen({
             onClick={() => void handleContinue()}
             loading={saving && connectionTest.status !== 'testing'}
             disabled={!canContinue || saving}
-            disabledReason={!canContinue ? t('setup.continueDisabled', 'Choose a provider, enter required credentials, and choose a model first.') : null}
+            disabledReason={!canContinue ? continueDisabledReason : null}
           >
             {t('setup.continue', 'Get Started')}
           </Button>

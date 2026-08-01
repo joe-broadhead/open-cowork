@@ -217,6 +217,10 @@ export interface RuntimeStatus {
   components?: RuntimeComponentVerificationReport | null
 }
 
+export interface RuntimeRestartOptions {
+  purpose?: 'setup_connection_validation'
+}
+
 export type RuntimeLoadingPhase =
   | 'idle'
   | 'starting'

@@ -3,6 +3,7 @@ import { workflowFromRow, workflowRunFromRow } from '../postgres-domains/workflo
 import type { QueryResult, QueryRow } from '../postgres-domains/shared.ts'
 import { assertPostgresWorkflowRunQuota, type PostgresQuotaDomainDeps } from './quotas.ts'
 import type { WorkflowRunStatus, WorkflowStatus } from '@open-cowork/shared'
+import { redactSecretText } from '@open-cowork/shared'
 import type {
   AttachWorkflowRunSessionInput,
   ClaimDueWorkflowRunInput,
@@ -523,13 +524,14 @@ export class PostgresWorkflowsRepository {
   }
 
   async failWorkflowRun(input: FailWorkflowRunInput, executor?: PgExecutor) {
+    const safeError = redactSecretText(input.error, 1_000)
     return this.finishWorkflowRun({
       tenantId: input.tenantId,
       workflowId: input.workflowId,
       runId: input.runId,
       status: 'failed',
-      summary: input.error,
-      error: input.error,
+      summary: safeError,
+      error: safeError,
       nextStatus: input.nextStatus,
       nextRunAt: input.nextRunAt,
       leaseToken: input.leaseToken,

@@ -55,6 +55,7 @@ export function createIpcHandlerHarness(
       observeRuntimeEvent: () => {},
     } as never,
     getMainWindow: () => null,
+    suspendRuntimeForSetup: async () => {},
     normalizeDirectory: () => '/tmp',
     ensureSessionRecord: () => null,
     resolvePrivateArtifactPath: () => ({ root: '/tmp', source: '/tmp/file.txt' }),

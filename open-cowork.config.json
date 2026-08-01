@@ -130,9 +130,9 @@
     },
     {
       "id": "agents",
-      "name": "Agents",
+      "name": "Team",
       "icon": "agent",
-      "description": "Preview, create, inspect, update, and delete custom OpenCode agents stored in Open Cowork.",
+      "description": "Preview, create, inspect, update, and delete custom coworkers stored in Open Cowork.",
       "kind": "built-in",
       "namespace": "agents",
       "writeAccess": true,
@@ -142,9 +142,9 @@
     },
     {
       "id": "workflows",
-      "name": "Workflows",
+      "name": "Playbooks",
       "icon": "workflow",
-      "description": "Preview and save repeatable Open Cowork workflows from a Workflow Designer setup thread.",
+      "description": "Preview and save repeatable Open Cowork playbooks from a Workflow Designer setup chat.",
       "kind": "built-in",
       "namespace": "workflows",
       "writeAccess": true,
@@ -156,7 +156,7 @@
       "id": "knowledge",
       "name": "Knowledge",
       "icon": "book-open",
-      "description": "Propose edits to the Open Cowork knowledge wiki; proposals stay pending until a human Maintainer reviews them.",
+      "description": "Propose edits to Open Cowork Knowledge; proposals stay pending until a human Maintainer reviews them.",
       "kind": "built-in",
       "namespace": "knowledge",
       "writeAccess": true,
@@ -245,21 +245,21 @@
     {
       "name": "agents",
       "type": "local",
-      "description": "Preview and manage custom OpenCode agents stored in Open Cowork.",
+      "description": "Preview and manage custom coworkers stored in Open Cowork.",
       "authMode": "none",
       "packageName": "agents"
     },
     {
       "name": "workflows",
       "type": "local",
-      "description": "Preview and save Open Cowork workflows from Workflow Designer setup threads.",
+      "description": "Preview and save Open Cowork playbooks from Workflow Designer setup chats.",
       "authMode": "none",
       "packageName": "workflows"
     },
     {
       "name": "knowledge",
       "type": "local",
-      "description": "Propose knowledge wiki edits for human review.",
+      "description": "Propose edits to Open Cowork Knowledge for human review.",
       "authMode": "none",
       "packageName": "knowledge"
     },
@@ -286,7 +286,7 @@
     {
       "name": "skill-builder",
       "label": "Skill Builder",
-      "description": "Author and update reusable OpenCode skill bundles for Open Cowork.",
+      "description": "Author and update reusable skills for Open Cowork.",
       "instructions": "Work like a skill architect. Clarify the job the skill should do, design the smallest reusable bundle that solves it, and keep the bundle aligned with the OpenCode skill standard. Use the skill-creator skill when planning the bundle and the skills MCP tools when reading, saving, or deleting skill bundles. Prefer one focused skill over a broad catch-all. Add extra files only when they genuinely improve the bundle.",
       "skillNames": ["skill-creator"],
       "toolIds": ["skills"],
@@ -298,7 +298,7 @@
     {
       "name": "agent-builder",
       "label": "Agent Builder",
-      "description": "Author and update reusable custom OpenCode agents for Open Cowork.",
+      "description": "Author and update reusable custom coworkers for Open Cowork.",
       "instructions": "Work like an agent architect. Load the agent-creator skill first, then use it as the source of truth for setup.\n\nClarify the agent's job, routing description, required skills, required tools, and permission boundaries. Prefer one focused custom agent over a broad catch-all. Use agents_preview_agent before saving and show the proposal clearly. Only call agents_save_agent after the user explicitly confirms the preview. Built-in agents are read-only; create or update only custom agents.",
       "skillNames": ["agent-creator"],
       "toolIds": ["agents"],

@@ -23,6 +23,7 @@ import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coord
 import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { registerKnowledgeHandlers } from '../apps/desktop/src/main/ipc/knowledge-handlers.ts'
 import { registerVoiceHandlers } from '../apps/desktop/src/main/ipc/voice-handlers.ts'
+import { registerAdoptionHandlers } from '../apps/desktop/src/main/ipc/adoption-handlers.ts'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { createIpcHandlerHarness } from './support/ipc-handler-harness.ts'
 
@@ -58,6 +59,7 @@ test('IPC handler modules register their core channels', () => {
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
   registerKnowledgeHandlers(context)
+  registerAdoptionHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
@@ -70,6 +72,7 @@ test('IPC handler modules register their core channels', () => {
   // be registered. Guards against regressions like the renderer panic
   // reporter going missing.
   assert.equal(listeners.has('diagnostics:renderer-error'), true)
+  assert.equal(handlers.has('adoption:feature-value'), true)
 
   assert.equal(handlers.has('workspace:list'), true)
   assert.equal(handlers.has('workspace:activate'), true)
@@ -131,6 +134,17 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('threads:suggestions:accept'), true)
 })
 
+test('feature-value IPC rejects schema-invalid payloads without acknowledgement', async () => {
+  const { context, invoke } = createIpcHandlerHarness()
+  registerAdoptionHandlers(context)
+
+  assert.equal(await invoke('adoption:feature-value', {
+    feature: 'projects',
+    stage: 'activated',
+    prompt: 'must not pass',
+  }), false)
+})
+
 test('preload invoke/send channels match registered main-process IPC channels', () => {
   const { context, handlers, listeners } = createIpcHandlerHarness()
 
@@ -143,6 +157,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerCoordinationHandlers(context)
   registerChannelHandlers(context)
   registerKnowledgeHandlers(context)
+  registerAdoptionHandlers(context)
   registerVoiceHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)

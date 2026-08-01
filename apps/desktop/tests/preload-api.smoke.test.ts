@@ -12,6 +12,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       return {
         groups: Object.keys(api).sort(),
         selectedLeaves: {
+          adoptionFeatureValue: typeof api.adoption?.featureValue,
           sessionCreate: typeof api.session?.create,
           sessionPrompt: typeof api.session?.prompt,
           settingsSet: typeof api.settings?.set,
@@ -35,6 +36,7 @@ test('preload exposes the expected coworkApi surface', async () => {
     })
 
     assert.deepEqual(surface.selectedLeaves, {
+      adoptionFeatureValue: 'function',
       sessionCreate: 'function',
       sessionPrompt: 'function',
       settingsSet: 'function',
@@ -56,6 +58,7 @@ test('preload exposes the expected coworkApi surface', async () => {
     })
     assert.deepEqual(surface.groups, [
       'admin',
+      'adoption',
       'agents',
       'app',
       'artifact',

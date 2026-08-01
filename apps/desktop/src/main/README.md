@@ -9,6 +9,8 @@ domain that owns the behavior.
 - `desktop-pairing/` — outbound Desktop pairing credentials, transport,
   redaction, and local execution support.
 - `ipc/` — renderer-to-main handlers and argument schemas.
+- `setup/` — authoritative provider/model connection proof and setup-only
+  validation seams.
 - `update/` — release-source validation, update checks, and installer
   capability state.
 - `workflow/` — durable workflow definitions, run orchestration, webhook

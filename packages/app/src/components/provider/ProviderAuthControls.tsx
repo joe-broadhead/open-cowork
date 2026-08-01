@@ -40,7 +40,7 @@ interface Props {
   disabled?: boolean
   copyMode?: CopyMode
   onBeforeAuthorize?: () => Promise<boolean>
-  onAuthUpdated?: () => void | Promise<void>
+  onAuthUpdated?: (connected: boolean) => boolean | void | Promise<boolean | void>
 }
 
 type PendingAuth =
@@ -229,6 +229,16 @@ export function ProviderAuthControls({
         ? t('providerAuth.connected', 'Provider login completed.')
         : t('providerAuth.callbackFailed', 'Provider login did not complete. Try the login flow again.'))
       if (ok) {
+        let authUpdateNotified = false
+        if (copyMode === 'settings') {
+          authUpdateNotified = true
+          const shouldContinue = await onAuthUpdated?.(true)
+          if (shouldContinue === false) {
+            setPendingAuth(null)
+            setCode('')
+            return
+          }
+        }
         if (!await verifyProviderConnected()) {
           setStatus(copyMode === 'setup'
             ? t('providerAuth.notVerifiedSetup', 'This provider is not signed in yet. Finish the browser login, then try confirming again.')
@@ -237,7 +247,7 @@ export function ProviderAuthControls({
         }
         setPendingAuth(null)
         setCode('')
-        await onAuthUpdated?.()
+        if (!authUpdateNotified) await onAuthUpdated?.(true)
       }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -268,7 +278,9 @@ export function ProviderAuthControls({
     setStatus(copyMode === 'setup'
       ? t('providerAuth.reloadingRuntimeSetup', 'Refreshing the model service to pick up the provider login...')
       : t('providerAuth.reloadingRuntime', 'Reloading OpenCode to pick up the provider login...'))
-    const runtimeStatus = await window.coworkApi.runtime.restart()
+    const runtimeStatus = await window.coworkApi.runtime.restart(
+      copyMode === 'setup' ? { purpose: 'setup_connection_validation' } : undefined,
+    )
     if (!runtimeStatus.ready) return false
     return checkCurrentRuntime(5)
   }
@@ -279,21 +291,29 @@ export function ProviderAuthControls({
     setAuthorizing(-1)
     setStatus(null)
     try {
-      try {
-        await window.coworkApi.provider.callback(providerId, pending.method)
-      } catch {
-        // Some providers consume the callback before the user returns to
-        // Open Cowork. Provider verification below is the authoritative
-        // success check for those already-completed browser flows.
+      const callbackCompleted = await window.coworkApi.provider.callback(providerId, pending.method)
+      if (!callbackCompleted) {
+        setStatus(t('providerAuth.loginPending', 'Provider login is still pending. Finish the browser flow, then confirm again.'))
+        return
       }
 
+      let authUpdateNotified = false
+      if (callbackCompleted && copyMode === 'settings') {
+        authUpdateNotified = true
+        const shouldContinue = await onAuthUpdated?.(true)
+        if (shouldContinue === false) {
+          setPendingAuth(null)
+          setStatus(t('providerAuth.connected', 'Provider login completed.'))
+          return
+        }
+      }
       if (!await verifyProviderConnected()) {
         setStatus(copyMode === 'setup'
           ? t('providerAuth.notVerifiedSetup', 'This provider is not signed in yet. Finish the browser login, then try confirming again.')
           : t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
         return
       }
-      await onAuthUpdated?.()
+      if (!authUpdateNotified) await onAuthUpdated?.(true)
       setPendingAuth(null)
       setStatus(t('providerAuth.connected', 'Provider login completed.'))
     } catch (err) {
@@ -312,7 +332,7 @@ export function ProviderAuthControls({
       setPendingAuth(null)
       setCode('')
       setStatus(t('providerAuth.removed', 'Provider login removed. Sign in again to refresh the token.'))
-      await onAuthUpdated?.()
+      await onAuthUpdated?.(false)
       void loadMethods()
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -370,8 +390,22 @@ export function ProviderAuthControls({
           </div>
         ) : null}
         {!loading && entries.length === 0 ? (
-          <div className="rounded-xl border border-border-subtle px-3 py-2 text-2xs leading-relaxed" style={{ background: 'var(--color-surface)' }}>
-            {noBrowserMethodMessage(providerId, providerName, copyMode)}
+          <div className="rounded-xl border border-border-subtle px-3 py-2 text-2xs leading-relaxed flex flex-col gap-2" style={{ background: 'var(--color-surface)' }}>
+            <span>
+              {copyMode === 'setup'
+                ? t('providerAuth.checkBrowserOptionsDescription', 'Start the setup model service to check this provider for browser sign-in options.')
+                : noBrowserMethodMessage(providerId, providerName, copyMode)}
+            </span>
+            {copyMode === 'setup' ? (
+              <button
+                type="button"
+                onClick={() => void startAuthorize()}
+                disabled={disabled || authorizing !== null}
+                className="self-start px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer border border-border-subtle text-text hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+              >
+                {t('providerAuth.checkBrowserOptions', 'Check browser sign-in options')}
+              </button>
+            ) : null}
           </div>
         ) : null}
         {entries.map(({ method, index }) => {

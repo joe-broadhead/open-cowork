@@ -1,9 +1,12 @@
 import { getAppPathHost, getDesktopShellHost, getSafeStorageHost, writeFileAtomic } from '@open-cowork/shared/node'
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  credentialFieldIsVisible,
   createDisabledRuntimeToolingBridgeConsent,
   normalizeRuntimeToolingBridgeConsent,
+  normalizeVoicePttShortcut,
   SMALL_MODEL_USE_MAIN,
   VOICE_PTT_SHORTCUT,
   type AgentColor,
@@ -26,6 +29,7 @@ import {
   resolveSecretStorageMode,
   type SecretStorageMode,
 } from './secure-storage-policy.js'
+import { getNativeRuntimeEnvPaths } from './runtime-paths.js'
 
 
 type SecretStorageAdapter = {
@@ -34,10 +38,20 @@ type SecretStorageAdapter = {
   decryptString: (encrypted: Buffer) => string
 }
 
+type SetupValidationProof = {
+  version: 1
+  fingerprint: string
+  validatedAt: string
+}
+
+type StoredAppSettings = AppSettings & {
+  _setupValidation: SetupValidationProof | null
+}
+
 export type CoworkSettings = AppSettings
 export type { AgentColor }
 
-let settingsCache: AppSettings | null = null
+let settingsCache: StoredAppSettings | null = null
 let settingsSecretStorageForTests: SecretStorageAdapter | null = null
 
 export const SETTINGS_SCHEMA_VERSION = 1
@@ -50,6 +64,8 @@ const MAX_SETTINGS_KEY_BYTES = 256
 const MAX_SETTINGS_VALUE_BYTES = 64 * 1024
 const QUIET_HOURS_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 const RUNTIME_CONFIG_SOURCES = new Set(['app', 'machine'])
+const APPEARANCE_COLOR_SCHEMES = new Set(['system', 'dark', 'light'])
+const APPEARANCE_THEME_ID_RE = /^[a-z0-9][a-z0-9-]*$/
 const PERMISSION_POLICY_RANK: Record<RuntimePermissionPolicy, number> = {
   deny: 0,
   ask: 1,
@@ -112,7 +128,7 @@ function resolveProviderModelSelection(
   return providerModels.find((model) => model.id === trimmed || model.id === normalized)?.id || null
 }
 
-function createDefaults(): AppSettings {
+function createDefaults(): StoredAppSettings {
   const config = getPublicAppConfig()
   const appConfig = getAppConfig()
   const defaultProvider = config.providers.defaultProvider
@@ -123,6 +139,7 @@ function createDefaults(): AppSettings {
   const taskPermission = appConfig.permissions.task
   return {
     _schemaVersion: SETTINGS_SCHEMA_VERSION,
+    _setupValidation: null,
     selectedProviderId: defaultProvider,
     selectedModelId: defaultProviderDescriptor?.defaultModel || config.providers.defaultModel,
     selectedSmallModelId: null,
@@ -146,6 +163,8 @@ function createDefaults(): AppSettings {
     runtimeConfigSource: 'app',
     runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
     windowZoomFactor: DEFAULT_WINDOW_ZOOM_FACTOR,
+    appearanceColorScheme: 'dark',
+    appearanceThemeId: appConfig.branding.defaultTheme || 'mercury',
     workflowLaunchAtLogin: false,
     workflowRunInBackground: false,
     workflowDesktopNotifications: true,
@@ -153,20 +172,6 @@ function createDefaults(): AppSettings {
     workflowQuietHoursEnd: '07:00',
     voicePttShortcut: VOICE_PTT_SHORTCUT,
   }
-}
-
-function normalizeVoicePttShortcut(value: unknown): string | undefined {
-  if (value === null) return VOICE_PTT_SHORTCUT
-  if (typeof value !== 'string') return undefined
-  const trimmed = value.trim()
-  if (!trimmed) return VOICE_PTT_SHORTCUT
-  if (Buffer.byteLength(trimmed, 'utf8') > 64) return undefined
-  // Electron accelerator subset: Modifier(+Modifier)*+Key
-  if (!/^(?:(?:CmdOrCtrl|CommandOrControl|Command|Cmd|Control|Ctrl|Alt|Option|Shift|Super|Meta)\+)+[A-Za-z0-9]+$/.test(trimmed)
-    && !/^(?:(?:CmdOrCtrl|CommandOrControl|Command|Cmd|Control|Ctrl|Alt|Option|Shift|Super|Meta)\+)+Space$/.test(trimmed)) {
-    return undefined
-  }
-  return trimmed
 }
 
 function readSettingsSchemaVersion(raw: unknown) {
@@ -231,6 +236,19 @@ function normalizeNestedStringMap(value: unknown) {
   return next
 }
 
+function normalizeSetupValidationProof(value: unknown): SetupValidationProof | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  if (record.version !== 1) return null
+  if (typeof record.fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(record.fingerprint)) return null
+  if (typeof record.validatedAt !== 'string' || !Number.isFinite(Date.parse(record.validatedAt))) return null
+  return {
+    version: 1,
+    fingerprint: record.fingerprint,
+    validatedAt: record.validatedAt,
+  }
+}
+
 function normalizeQuietHours(value: unknown) {
   if (value === null) return null
   if (typeof value !== 'string') return undefined
@@ -240,6 +258,20 @@ function normalizeQuietHours(value: unknown) {
 
 function normalizeRuntimeConfigSource(value: unknown) {
   return RUNTIME_CONFIG_SOURCES.has(value as string) ? value as AppSettings['runtimeConfigSource'] : undefined
+}
+
+function normalizeAppearanceColorScheme(value: unknown) {
+  return APPEARANCE_COLOR_SCHEMES.has(value as string)
+    ? value as NonNullable<AppSettings['appearanceColorScheme']>
+    : undefined
+}
+
+function normalizeAppearanceThemeId(value: unknown) {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return APPEARANCE_THEME_ID_RE.test(trimmed) && Buffer.byteLength(trimmed, 'utf8') <= MAX_SETTINGS_KEY_BYTES
+    ? trimmed
+    : undefined
 }
 
 function roundWindowZoomFactor(value: number) {
@@ -295,6 +327,10 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   }
   const windowZoomFactor = normalizeWindowZoomFactor(settings.windowZoomFactor)
   if (windowZoomFactor !== undefined) update.windowZoomFactor = windowZoomFactor
+  const appearanceColorScheme = normalizeAppearanceColorScheme(settings.appearanceColorScheme)
+  if (appearanceColorScheme) update.appearanceColorScheme = appearanceColorScheme
+  const appearanceThemeId = normalizeAppearanceThemeId(settings.appearanceThemeId)
+  if (appearanceThemeId) update.appearanceThemeId = appearanceThemeId
   const runtimeConfigSource = normalizeRuntimeConfigSource(settings.runtimeConfigSource)
   if (runtimeConfigSource) update.runtimeConfigSource = runtimeConfigSource
   if (typeof settings.workflowLaunchAtLogin === 'boolean') update.workflowLaunchAtLogin = settings.workflowLaunchAtLogin
@@ -309,7 +345,7 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   return update
 }
 
-function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
+function normalizeSettingsFromDisk(rawInput: unknown): StoredAppSettings {
   assertCurrentSettingsSchemaVersion(rawInput)
   const raw = asSettingsRecord(rawInput)
   const defaults = createDefaults()
@@ -355,6 +391,8 @@ function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
     // informed consent for newly separated credential categories.
     runtimeToolingBridge: normalizeRuntimeToolingBridgeConsent(raw?.runtimeToolingBridge),
     windowZoomFactor: normalizeWindowZoomFactor(raw?.windowZoomFactor) ?? defaults.windowZoomFactor,
+    appearanceColorScheme: normalizeAppearanceColorScheme(raw?.appearanceColorScheme),
+    appearanceThemeId: normalizeAppearanceThemeId(raw?.appearanceThemeId),
     workflowLaunchAtLogin: raw?.workflowLaunchAtLogin === true,
     workflowRunInBackground: raw?.workflowRunInBackground === true,
     workflowDesktopNotifications: raw?.workflowDesktopNotifications !== false,
@@ -367,7 +405,10 @@ function normalizeSettingsFromDisk(rawInput: unknown): AppSettings {
     voicePttShortcut: normalizeVoicePttShortcut(raw?.voicePttShortcut) ?? defaults.voicePttShortcut,
   }
 
-  return next
+  return {
+    ...next,
+    _setupValidation: normalizeSetupValidationProof(raw?._setupValidation),
+  }
 }
 
 function getSettingsPath() {
@@ -485,7 +526,7 @@ function mergeNestedStringMaps(
   return next
 }
 
-export function loadSettings(): AppSettings {
+export function loadSettings(): StoredAppSettings {
   if (settingsCache) return settingsCache
 
   const encryptedPath = getSettingsPath()
@@ -539,21 +580,8 @@ export function clearSettingsCache() {
   settingsCache = null
 }
 
-export function saveSettings(settings: Partial<AppSettings>) {
-  const current = settingsCache || loadSettings()
-  const updates = normalizeSettingsUpdate(settings)
-  // Strip mask sentinels so a caller that round-tripped masked credential
-  // state can't accidentally overwrite real keys with the mask string.
-  const merged: AppSettings = {
-    ...current,
-    ...updates,
-    _schemaVersion: SETTINGS_SCHEMA_VERSION,
-    providerCredentials: mergeNestedStringMaps(current.providerCredentials, stripMaskedValues(updates.providerCredentials)),
-    integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, stripMaskedValues(updates.integrationCredentials)),
-    integrationEnabled: { ...current.integrationEnabled, ...(updates.integrationEnabled || {}) },
-  }
-
-  const json = JSON.stringify(merged)
+function persistSettings(settings: StoredAppSettings) {
+  const json = JSON.stringify(settings)
   const storageMode = getSecretStorageMode()
 
   if (storageMode === 'encrypted') {
@@ -569,8 +597,30 @@ export function saveSettings(settings: Partial<AppSettings>) {
     throw new Error(message)
   }
 
-  settingsCache = merged
-  applyWorkflowLaunchAtLogin(merged)
+  settingsCache = settings
+  applyWorkflowLaunchAtLogin(settings)
+}
+
+export function saveSettings(settings: Partial<AppSettings>) {
+  const current = settingsCache || loadSettings()
+  const updates = normalizeSettingsUpdate(settings)
+  // Strip mask sentinels so a caller that round-tripped masked credential
+  // state can't accidentally overwrite real keys with the mask string.
+  const merged: StoredAppSettings = {
+    ...current,
+    ...updates,
+    _schemaVersion: SETTINGS_SCHEMA_VERSION,
+    providerCredentials: mergeNestedStringMaps(current.providerCredentials, stripMaskedValues(updates.providerCredentials)),
+    integrationCredentials: mergeNestedStringMaps(current.integrationCredentials, stripMaskedValues(updates.integrationCredentials)),
+    integrationEnabled: { ...current.integrationEnabled, ...(updates.integrationEnabled || {}) },
+  }
+
+  const nextFingerprint = setupValidationFingerprint(merged, resolveEffectiveSettings(merged))
+  if (!nextFingerprint || merged._setupValidation?.fingerprint !== nextFingerprint) {
+    merged._setupValidation = null
+  }
+
+  persistSettings(merged)
   return getEffectiveSettings(merged)
 }
 
@@ -596,23 +646,9 @@ export function getIntegrationCredentials(integrationId: string) {
   return maskCredentialBag(credentials, configuredMcp?.credentials)
 }
 
-export function isSetupComplete(settings = loadSettings()) {
-  const effective = getEffectiveSettings(settings)
-  if (!effective.effectiveProviderId || !effective.effectiveModel) return false
+type EffectiveSettingsCore = Omit<EffectiveAppSettings, 'setupComplete'>
 
-  const provider = getProviderDescriptor(effective.effectiveProviderId)
-  if (!provider) return false
-
-  for (const credential of provider.credentials) {
-    if (credential.required === false) continue
-    const value = getProviderCredentialValue(settings, effective.effectiveProviderId, credential.key)
-    if (!value) return false
-  }
-
-  return true
-}
-
-export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSettings {
+function resolveEffectiveSettings(settings: AppSettings): EffectiveSettingsCore {
   const config = getPublicAppConfig()
   const appPermissions = getAppConfig().permissions
   const configuredDefaultProvider = config.providers.defaultProvider
@@ -645,9 +681,11 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
   // Clamping to 'ask' would incorrectly prevent users from opting into allow.
   const externalDirectoryPermission = clampRuntimePermissionPolicy(settings.externalDirectoryPermission, 'allow')
   const mcpPermission = clampRuntimePermissionPolicy(settings.mcpPermission, 'allow')
+  const { _setupValidation: _internalSetupValidation, ...publicSettings } = settings as StoredAppSettings
+  void _internalSetupValidation
 
   return {
-    ...settings,
+    ...publicSettings,
     bashPermission,
     fileWritePermission,
     webPermission,
@@ -658,5 +696,131 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
     effectiveProviderId: providerId,
     effectiveModel: selectedModelId,
     effectiveSmallModel,
+  }
+}
+
+function digestSetupConfigurationValue(value: string) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function readSetupConfigurationFile(path: string) {
+  try {
+    return digestSetupConfigurationValue(readFileSync(path, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function setupRuntimeConfigurationEvidence(source: AppSettings['runtimeConfigSource']) {
+  const applicationProviders = getAppConfig().providers
+  if (source !== 'machine') return { applicationProviders }
+
+  const nativePaths = getNativeRuntimeEnvPaths()
+  const candidateFiles = [
+    join(nativePaths.configHome, 'opencode', 'opencode.json'),
+    join(nativePaths.configHome, 'opencode', 'opencode.jsonc'),
+    join(nativePaths.home, '.opencode', 'opencode.json'),
+    join(nativePaths.home, '.opencode', 'opencode.jsonc'),
+    join(nativePaths.home, 'opencode.json'),
+    join(nativePaths.home, 'opencode.jsonc'),
+  ]
+  const configuredFile = process.env.OPENCODE_CONFIG?.trim()
+  if (configuredFile) candidateFiles.push(configuredFile)
+  const configuredDirectory = process.env.OPENCODE_CONFIG_DIR?.trim()
+  if (configuredDirectory) {
+    candidateFiles.push(
+      join(configuredDirectory, 'opencode.json'),
+      join(configuredDirectory, 'opencode.jsonc'),
+    )
+  }
+
+  return {
+    applicationProviders,
+    // Store only fixed-position content digests. Neither machine paths nor
+    // machine config contents enter the settings file or any telemetry.
+    machineConfigurationFiles: candidateFiles.map(readSetupConfigurationFile),
+    machineConfigurationContent: process.env.OPENCODE_CONFIG_CONTENT
+      ? digestSetupConfigurationValue(process.env.OPENCODE_CONFIG_CONTENT)
+      : null,
+  }
+}
+
+function setupValidationFingerprint(
+  settings: AppSettings,
+  effective: Pick<EffectiveAppSettings, 'effectiveProviderId' | 'effectiveModel'>,
+) {
+  const providerId = effective.effectiveProviderId
+  const modelId = effective.effectiveModel?.trim()
+  const runtimeConfigSource = settings.runtimeConfigSource
+  if (!providerId || !modelId) return null
+
+  const provider = getProviderDescriptor(providerId)
+  if (!provider) return null
+  const values = settings.providerCredentials?.[providerId] || {}
+  const credentials: Array<[string, string]> = []
+  for (const credential of [...provider.credentials].sort((left, right) => left.key.localeCompare(right.key))) {
+    if (!credentialFieldIsVisible(credential, values)) continue
+    const value = getProviderCredentialValue(settings, providerId, credential.key) || ''
+    if (credential.required !== false && !value) return null
+    credentials.push([credential.key, value])
+  }
+
+  const configuration = setupRuntimeConfigurationEvidence(runtimeConfigSource)
+
+  return createHash('sha256')
+    .update('open-cowork/setup-validation/v1\0')
+    .update(JSON.stringify({ providerId, modelId, runtimeConfigSource, credentials, configuration }))
+    .digest('hex')
+}
+
+export function getSetupValidationFingerprint(settings: AppSettings = loadSettings()) {
+  return setupValidationFingerprint(settings, resolveEffectiveSettings(settings))
+}
+
+export function recordSuccessfulSetupValidation(expectedFingerprint: string) {
+  const current = settingsCache || loadSettings()
+  const effective = resolveEffectiveSettings(current)
+  const currentFingerprint = setupValidationFingerprint(current, effective)
+  if (!currentFingerprint || currentFingerprint !== expectedFingerprint) {
+    throw new Error('Setup settings changed during connection validation. Test the connection again.')
+  }
+
+  const validated: StoredAppSettings = {
+    ...current,
+    _setupValidation: {
+      version: 1,
+      fingerprint: currentFingerprint,
+      validatedAt: new Date().toISOString(),
+    },
+  }
+  persistSettings(validated)
+  return getEffectiveSettings(validated)
+}
+
+export function invalidateSetupValidationProof() {
+  const current = settingsCache || loadSettings()
+  if (!current._setupValidation) return getEffectiveSettings(current)
+  const invalidated: StoredAppSettings = {
+    ...current,
+    _setupValidation: null,
+  }
+  persistSettings(invalidated)
+  return getEffectiveSettings(invalidated)
+}
+
+export function isSetupComplete(settings: AppSettings | EffectiveAppSettings = loadSettings()) {
+  if ('setupComplete' in settings && typeof settings.setupComplete === 'boolean') {
+    return settings.setupComplete
+  }
+  return getEffectiveSettings(settings).setupComplete
+}
+
+export function getEffectiveSettings(settings: AppSettings = loadSettings()): EffectiveAppSettings {
+  const effective = resolveEffectiveSettings(settings)
+  const proof = (settings as StoredAppSettings)._setupValidation
+  const fingerprint = setupValidationFingerprint(settings, effective)
+  return {
+    ...effective,
+    setupComplete: Boolean(fingerprint && proof?.version === 1 && proof.fingerprint === fingerprint),
   }
 }

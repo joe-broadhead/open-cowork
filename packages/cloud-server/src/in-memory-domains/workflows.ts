@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { normalizeWorkflowSteps } from '@open-cowork/shared'
+import { normalizeWorkflowSteps, redactSecretText } from '@open-cowork/shared'
 import type { WorkflowRunStatus, WorkflowStatus, WorkflowTrigger } from '@open-cowork/shared'
 import { clone, key, nowIso } from './store-helpers.ts'
 import type {
@@ -622,13 +622,14 @@ export class InMemoryWorkflowsDomain {
   }
 
   failWorkflowRun(input: FailWorkflowRunInput): CloudWorkflowRunRecord | null {
+    const safeError = redactSecretText(input.error, 1_000)
     return this.finishWorkflowRun({
       tenantId: input.tenantId,
       workflowId: input.workflowId,
       runId: input.runId,
       status: 'failed',
-      summary: input.error,
-      error: input.error,
+      summary: safeError,
+      error: safeError,
       nextStatus: input.nextStatus,
       nextRunAt: input.nextRunAt,
       leaseToken: input.leaseToken,

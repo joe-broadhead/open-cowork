@@ -145,10 +145,14 @@ export async function connectNativeProviderApiKey(
   client: OpencodeClient,
   providerID: string,
   key: string,
+  options: { signal?: AbortSignal } = {},
 ) {
+  const requestOptions = options.signal
+    ? { throwOnError: true as const, signal: options.signal }
+    : { throwOnError: true as const }
   const providerResponse = await client.v2.provider.get(
     { providerID },
-    { throwOnError: true },
+    requestOptions,
   )
   const provider = providerResponse.data.data
   const integrationID = provider.integrationID
@@ -158,7 +162,7 @@ export async function connectNativeProviderApiKey(
 
   const integrationResponse = await client.v2.integration.get(
     { integrationID },
-    { throwOnError: true },
+    requestOptions,
   )
   const supportsKey = integrationResponse.data.data.methods.some((method) => method.type === 'key')
   if (!supportsKey) {
@@ -169,7 +173,7 @@ export async function connectNativeProviderApiKey(
     integrationID,
     key,
     label: 'Open Cowork',
-  }, { throwOnError: true })
+  }, requestOptions)
 }
 
 function nativeModelRef(model: NativePromptModel): ModelRef {

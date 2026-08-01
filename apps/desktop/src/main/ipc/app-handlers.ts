@@ -51,10 +51,12 @@ import type {
   ChartSaveArtifactRequest,
   DestructiveConfirmationRequest,
   EffectiveAppSettings,
+  RuntimeRestartOptions,
   WorkspaceOptions,
 } from '@open-cowork/shared'
 import { createDisabledRuntimeToolingBridgeConsent } from '@open-cowork/shared'
 import { LOCAL_WORKSPACE_ID, readWorkspaceIdOption } from '../workspace-gateway.ts'
+import { isDeepStrictEqual } from 'node:util'
 
 export {
   ensureRuntimeAfterAuthLogin,
@@ -71,14 +73,6 @@ const CLOUD_PORTABLE_SETTING_KEYS = new Set<keyof CoworkSettings>([
   'selectedProviderId',
   'selectedModelId',
   'selectedSmallModelId',
-  'workflowDesktopNotifications',
-  'workflowQuietHoursStart',
-  'workflowQuietHoursEnd',
-  'notificationVoiceReplies',
-  'notificationSmartSuggestions',
-  'notificationDailyDigest',
-  'notificationSounds',
-  'privacyShareAnonymizedUsage',
 ])
 const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'providerCredentials',
@@ -98,9 +92,17 @@ const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'workflowLaunchAtLogin',
   'workflowRunInBackground',
   'voicePttShortcut',
+  'privacyShareAnonymizedUsage',
+  'workflowDesktopNotifications',
+  'workflowQuietHoursStart',
+  'workflowQuietHoursEnd',
+  'notificationVoiceReplies',
+  'notificationSmartSuggestions',
+  'notificationDailyDigest',
+  'notificationSounds',
 ])
 
-function pickPortableCloudSettings(updates: Partial<CoworkSettings>) {
+function pickPortableCloudSettings(updates: Partial<CoworkSettings> | Record<string, unknown>) {
   const value: Record<string, unknown> = {}
   for (const key of CLOUD_PORTABLE_SETTING_KEYS) {
     if (Object.prototype.hasOwnProperty.call(updates, key)) value[key] = updates[key]
@@ -136,30 +138,6 @@ function buildCloudEffectiveSettings(base: EffectiveAppSettings, value: Record<s
     integrationEnabled: {},
     runtimeConfigSource: 'app',
     runtimeToolingBridge: createDisabledRuntimeToolingBridgeConsent(),
-    workflowDesktopNotifications: typeof value.workflowDesktopNotifications === 'boolean'
-      ? value.workflowDesktopNotifications
-      : base.workflowDesktopNotifications,
-    workflowQuietHoursStart: typeof value.workflowQuietHoursStart === 'string' || value.workflowQuietHoursStart === null
-      ? value.workflowQuietHoursStart
-      : base.workflowQuietHoursStart,
-    workflowQuietHoursEnd: typeof value.workflowQuietHoursEnd === 'string' || value.workflowQuietHoursEnd === null
-      ? value.workflowQuietHoursEnd
-      : base.workflowQuietHoursEnd,
-    notificationVoiceReplies: typeof value.notificationVoiceReplies === 'boolean'
-      ? value.notificationVoiceReplies
-      : base.notificationVoiceReplies,
-    notificationSmartSuggestions: typeof value.notificationSmartSuggestions === 'boolean'
-      ? value.notificationSmartSuggestions
-      : base.notificationSmartSuggestions,
-    notificationDailyDigest: typeof value.notificationDailyDigest === 'boolean'
-      ? value.notificationDailyDigest
-      : base.notificationDailyDigest,
-    notificationSounds: typeof value.notificationSounds === 'boolean'
-      ? value.notificationSounds
-      : base.notificationSounds,
-    privacyShareAnonymizedUsage: typeof value.privacyShareAnonymizedUsage === 'boolean'
-      ? value.privacyShareAnonymizedUsage
-      : base.privacyShareAnonymizedUsage,
     effectiveProviderId: selectedProviderId,
     effectiveModel: selectedModelId,
     effectiveSmallModel: selectedSmallModelId,
@@ -205,6 +183,53 @@ export function hasRuntimeSensitiveSettingsUpdate(updates: Partial<CoworkSetting
     || updates.runtimeConfigSource !== undefined
     || updates.runtimeToolingBridge !== undefined
   )
+}
+
+function runtimeSensitiveSettingsSnapshot(settings: Partial<CoworkSettings>) {
+  return {
+    selectedProviderId: settings.selectedProviderId,
+    selectedModelId: settings.selectedModelId,
+    selectedSmallModelId: settings.selectedSmallModelId,
+    providerCredentials: settings.providerCredentials,
+    integrationCredentials: settings.integrationCredentials,
+    integrationEnabled: settings.integrationEnabled,
+    bashPermission: settings.bashPermission,
+    fileWritePermission: settings.fileWritePermission,
+    webPermission: settings.webPermission,
+    webSearchEnabled: settings.webSearchEnabled,
+    taskPermission: settings.taskPermission,
+    externalDirectoryPermission: settings.externalDirectoryPermission,
+    mcpPermission: settings.mcpPermission,
+    runtimeConfigSource: settings.runtimeConfigSource,
+    runtimeToolingBridge: settings.runtimeToolingBridge,
+  }
+}
+
+export function runtimeSensitiveSettingsChanged(
+  before: Partial<CoworkSettings>,
+  after: Partial<CoworkSettings>,
+) {
+  return !isDeepStrictEqual(
+    runtimeSensitiveSettingsSnapshot(before),
+    runtimeSensitiveSettingsSnapshot(after),
+  )
+}
+
+function normalizeRuntimeRestartOptions(value: unknown): RuntimeRestartOptions {
+  if (value === undefined) return {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Runtime restart options must be an object.')
+  }
+  const keys = Object.keys(value)
+  if (keys.some((key) => key !== 'purpose')) {
+    throw new Error('Unknown runtime restart option.')
+  }
+  const purpose = (value as { purpose?: unknown }).purpose
+  if (purpose === undefined) return {}
+  if (purpose !== 'setup_connection_validation') {
+    throw new Error('Invalid runtime restart purpose.')
+  }
+  return { purpose }
 }
 
 async function createProjectBoundSession(directory: string) {
@@ -363,22 +388,38 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       const base = maskEffectiveSettingsCredentials(getEffectiveSettings())
       const existing = await context.workspaceGateway.getCloudSetting(_event, CLOUD_PORTABLE_SETTINGS_KEY, workspaceId)
       const nextValue = {
-        ...(existing?.value || {}),
+        // Rewrite the portable record through the current allowlist so an
+        // older client cannot keep dead, locally-owned settings alive.
+        ...pickPortableCloudSettings(existing?.value || {}),
         ...pickPortableCloudSettings(updates),
       }
       await context.workspaceGateway.setCloudSetting(_event, CLOUD_PORTABLE_SETTINGS_KEY, nextValue, workspaceId)
       return buildCloudEffectiveSettings(base, nextValue)
     }
+    const previousSettings = getEffectiveSettings()
     const result = saveSettings(updates)
+    if (updates.voicePttShortcut !== undefined && result.voicePttShortcut) {
+      context.refreshApplicationMenu?.(result.voicePttShortcut)
+    }
     invalidateRuntimeCatalogSnapshotCache()
     const runtimeSensitiveUpdate = hasRuntimeSensitiveSettingsUpdate(updates)
+      && runtimeSensitiveSettingsChanged(previousSettings, result)
 
-    if (isSetupComplete(result)) {
-      const activeClient = getClient()
-      if (activeClient && runtimeSensitiveUpdate) {
+    const activeClient = getClient()
+    if (runtimeSensitiveUpdate) {
+      if (!isSetupComplete(result)) {
+        // Always advance the suspension epoch. A boot may be in flight before
+        // it publishes a client, and checking getClient() would let that stale
+        // transition escape after this settings write returns.
+        const suspendRuntimeForSetup = context.suspendRuntimeForSetup || (async () => {
+          const runtime = await import('../index.ts')
+          await runtime.suspendRuntimeForSetup()
+        })
+        await suspendRuntimeForSetup()
+      } else if (activeClient) {
         const { rebootRuntime } = await import('../index.ts')
         await rebootRuntime()
-      } else if (!activeClient) {
+      } else {
         const { bootRuntime } = await import('../index.ts')
         await bootRuntime()
       }
@@ -403,14 +444,25 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return awaitRuntimeInitialization()
   })
 
-  // User-initiated runtime restart, reachable from the offline
-  // banner's "Try again" button. rebootRuntime is already a singleton,
-  // so concurrent clicks coalesce. Returns the post-reboot status so
-  // the renderer can hide the banner without a second round-trip.
-  context.ipcMain.handle('runtime:restart', async () => {
-    const { rebootRuntime } = await import('../index.ts')
+  // Generic retries are valid only for an already-proven setup. Before that,
+  // Setup must name its narrow connection-validation purpose so no other
+  // renderer surface can revive an unvalidated runtime.
+  context.ipcMain.handle('runtime:restart', async (_event, optionsInput?: unknown) => {
+    const options = normalizeRuntimeRestartOptions(optionsInput)
+    if (!isSetupComplete() && options.purpose !== 'setup_connection_validation') {
+      throw new Error('Connection validation is the only runtime restart allowed until setup is complete.')
+    }
+    const restartRuntime = !isSetupComplete()
+      ? context.restartRuntimeForSetupValidation || (async () => {
+          const { rebootRuntimeForSetupValidation } = await import('../index.ts')
+          await rebootRuntimeForSetupValidation()
+        })
+      : context.restartRuntime || (async () => {
+          const { rebootRuntime } = await import('../index.ts')
+          await rebootRuntime()
+        })
     try {
-      await rebootRuntime()
+      await restartRuntime()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       log('error', `runtime:restart failed: ${message}`)

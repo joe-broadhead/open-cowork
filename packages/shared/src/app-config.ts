@@ -519,6 +519,10 @@ export interface AppSettings {
   runtimeConfigSource?: 'app' | 'machine'
   runtimeToolingBridge: RuntimeToolingBridgeConsent
   windowZoomFactor: number
+  /** Main-process mirror of the renderer appearance used before React mounts. */
+  appearanceColorScheme?: 'system' | 'dark' | 'light'
+  /** Main-process mirror of the renderer theme id used before React mounts. */
+  appearanceThemeId?: string
   workflowLaunchAtLogin: boolean
   workflowRunInBackground: boolean
   workflowDesktopNotifications: boolean
@@ -535,6 +539,12 @@ export interface EffectiveAppSettings extends AppSettings {
   effectiveProviderId: string | null
   effectiveModel: string | null
   effectiveSmallModel?: string | null
+  /**
+   * Main/runtime-owned proof that the effective provider, model, and relevant
+   * credentials completed an authoritative connection check. Renderer code
+   * must use this instead of inferring readiness from populated fields.
+   */
+  setupComplete: boolean
 }
 
 export interface AuthState {

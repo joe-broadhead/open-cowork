@@ -484,6 +484,9 @@
         },
         "artifacts": {
           "type": "boolean"
+        },
+        "voice": {
+          "type": "boolean"
         }
       }
     }

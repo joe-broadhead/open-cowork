@@ -173,6 +173,8 @@ test('default public config initializes native permission toggles enabled', asyn
     assert.equal(settings.notificationDailyDigest, false)
     assert.equal(settings.privacyShareAnonymizedUsage, false)
     assert.equal(settings.runtimeConfigSource, 'app')
+    assert.equal(settings.appearanceColorScheme, 'dark')
+    assert.equal(settings.appearanceThemeId, 'mercury')
     assert.deepEqual(
       Object.values(settings.runtimeToolingBridge.categories),
       Object.values(settings.runtimeToolingBridge.categories).map(() => false),
@@ -302,6 +304,9 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
       notificationDailyDigest: true,
       privacyShareAnonymizedUsage: true,
       runtimeConfigSource: 'machine',
+      appearanceColorScheme: 'light',
+      appearanceThemeId: 'northstar',
+      voicePttShortcut: 'CmdOrCtrl+Alt+V',
       unexpectedTopLevel: 'should not persist',
     } as any)
 
@@ -320,7 +325,19 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     assert.equal(after.notificationDailyDigest, true)
     assert.equal(after.privacyShareAnonymizedUsage, true)
     assert.equal(after.runtimeConfigSource, 'machine')
+    assert.equal(after.appearanceColorScheme, 'light')
+    assert.equal(after.appearanceThemeId, 'northstar')
+    assert.equal(after.voicePttShortcut, 'CmdOrCtrl+Alt+V')
     assert.equal(after.unexpectedTopLevel, undefined)
+
+    saveSettings({ notificationSounds: false })
+    assert.equal(loadSettings().voicePttShortcut, 'CmdOrCtrl+Alt+V')
+
+    saveSettings({ voicePttShortcut: 'CmdOrCtrl+Shift+P' })
+    assert.equal(loadSettings().voicePttShortcut, 'CmdOrCtrl+Alt+V')
+    saveSettings({ appearanceColorScheme: 'sepia', appearanceThemeId: '../unsafe' } as any)
+    assert.equal(loadSettings().appearanceColorScheme, 'light')
+    assert.equal(loadSettings().appearanceThemeId, 'northstar')
     const persisted = readFileSync(join(userDataDir, 'settings.json'), 'utf-8')
     assert.doesNotMatch(persisted, /requireApprovalBeforeSending|privacyKeepConversationHistory/)
   } finally {
@@ -649,6 +666,118 @@ test('credential reads return descriptor-aware masks while default effective set
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('setup completion requires durable validation and invalidates on provider or runtime inputs', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-setup-validation-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeCredentialDescriptorConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const settingsModule = await importFreshSettingsModule('setup-validation')
+    const candidate = settingsModule.saveSettings({
+      selectedProviderId: 'acme',
+      selectedModelId: 'acme/model',
+      providerCredentials: {
+        acme: { apiKey: 'candidate-secret', projectId: 'project-a' },
+      },
+    })
+    assert.equal(candidate.setupComplete, false)
+    assert.equal(settingsModule.isSetupComplete(), false)
+
+    const fingerprint = settingsModule.getSetupValidationFingerprint()
+    assert.match(fingerprint || '', /^[a-f0-9]{64}$/)
+    const validated = settingsModule.recordSuccessfulSetupValidation(fingerprint!)
+    assert.equal(validated.setupComplete, true)
+    assert.equal(settingsModule.isSetupComplete(), true)
+
+    const unrelated = settingsModule.saveSettings({ notificationSounds: false })
+    assert.equal(unrelated.setupComplete, true, 'unrelated preferences must retain setup proof')
+
+    const changedRuntimeSource = settingsModule.saveSettings({ runtimeConfigSource: 'machine' })
+    assert.equal(changedRuntimeSource.setupComplete, false, 'a different runtime configuration needs its own validation')
+    const restoredRuntimeSource = settingsModule.saveSettings({ runtimeConfigSource: 'app' })
+    assert.equal(restoredRuntimeSource.setupComplete, false, 'changing back must not resurrect the stale proof')
+
+    const revalidationFingerprint = settingsModule.getSetupValidationFingerprint()
+    assert.match(revalidationFingerprint || '', /^[a-f0-9]{64}$/)
+    assert.equal(settingsModule.recordSuccessfulSetupValidation(revalidationFingerprint!).setupComplete, true)
+
+    const changedCredential = settingsModule.saveSettings({
+      providerCredentials: { acme: { apiKey: 'changed-secret' } },
+    })
+    assert.equal(changedCredential.setupComplete, false)
+    await assert.rejects(
+      async () => settingsModule.recordSuccessfulSetupValidation(revalidationFingerprint!),
+      /changed during connection validation/,
+    )
+
+    settingsModule.clearSettingsCache()
+    assert.equal(settingsModule.getEffectiveSettings().setupComplete, false, 'invalidated proof must survive relaunch')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('machine runtime setup proof invalidates when native OpenCode configuration changes', async () => {
+  const tempRoot = testTempDir('open-cowork-settings-machine-validation-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const nativeConfigHome = join(tempRoot, 'native-config')
+  const nativeOpencodeDir = join(nativeConfigHome, 'opencode')
+  const nativeConfigPath = join(nativeOpencodeDir, 'opencode.json')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const previousXdgConfigHome = process.env.XDG_CONFIG_HOME
+
+  writeCredentialDescriptorConfig(configDir)
+  mkdirSync(nativeOpencodeDir, { recursive: true })
+  writeFileSync(nativeConfigPath, JSON.stringify({ provider: { acme: { baseURL: 'https://one.example.test' } } }))
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  process.env.XDG_CONFIG_HOME = nativeConfigHome
+  clearConfigCaches()
+
+  try {
+    const settingsModule = await importFreshSettingsModule('machine-setup-validation')
+    settingsModule.saveSettings({
+      selectedProviderId: 'acme',
+      selectedModelId: 'acme/model',
+      runtimeConfigSource: 'machine',
+      providerCredentials: {
+        acme: { apiKey: 'candidate-secret', projectId: 'project-a' },
+      },
+    })
+    const fingerprint = settingsModule.getSetupValidationFingerprint()
+    assert.match(fingerprint || '', /^[a-f0-9]{64}$/)
+    assert.equal(settingsModule.recordSuccessfulSetupValidation(fingerprint!).setupComplete, true)
+
+    writeFileSync(nativeConfigPath, JSON.stringify({ provider: { acme: { baseURL: 'https://two.example.test' } } }))
+    assert.equal(settingsModule.getEffectiveSettings().setupComplete, false)
+    settingsModule.clearSettingsCache()
+    assert.equal(settingsModule.getEffectiveSettings().setupComplete, false, 'native config drift must remain invalid after relaunch')
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    if (previousXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME
+    else process.env.XDG_CONFIG_HOME = previousXdgConfigHome
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }

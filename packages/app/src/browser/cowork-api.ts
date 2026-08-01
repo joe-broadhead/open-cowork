@@ -649,6 +649,12 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
       },
     },
 
+    // Browser adoption forwarding is intentionally inert until the Cloud
+    // control plane exposes the same opt-in, content-free collector contract.
+    adoption: {
+      featureValue: async () => false,
+    },
+
     // -- app ---------------------------------------------------------------
     app: {
       metadata: async (): Promise<AppMetadata> => ({ version: '0.0.0', preview: false, surface: 'browser' }),

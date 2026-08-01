@@ -14,6 +14,7 @@ import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { NativeConfirmationOptions } from '../native-confirmation.ts'
 import type { WorkspaceGateway } from '../workspace-gateway.ts'
 import type { DesktopPairingService } from '../desktop-pairing/service.ts'
+import type { SetupConnectionValidator } from '../setup/connection-validation.ts'
 
 type SessionClientContext = {
   client: OpencodeClient
@@ -31,6 +32,12 @@ export type IpcHandlerContext = {
   workspaceGateway: WorkspaceGateway
   desktopPairingService: DesktopPairingService
   getMainWindow: () => BrowserWindow | null
+  refreshApplicationMenu?: (voicePttShortcut: string) => void
+  restartRuntime?: () => Promise<void>
+  restartRuntimeForSetupValidation?: () => Promise<void>
+  suspendRuntimeForSetup?: () => Promise<void>
+  validateSetupConnection?: SetupConnectionValidator
+  oauthAttemptTimeoutMs?: number
   normalizeDirectory: (directory?: string | null) => string
   ensureSessionRecord: (sessionId: string) => SessionRecord | null
   resolvePrivateArtifactPath: (request: SessionArtifactRequest) => { root: string; source: string }

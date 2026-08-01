@@ -3,6 +3,7 @@ import { cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import {
   createDisabledRuntimeToolingBridgeConsent,
+  VOICE_PTT_SHORTCUT,
   type CoworkAPI,
   type EffectiveAppSettings,
 } from '@open-cowork/shared'
@@ -37,9 +38,10 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
     workflowDesktopNotifications: true,
     workflowQuietHoursStart: null,
     workflowQuietHoursEnd: null,
-    voicePttShortcut: 'CmdOrCtrl+Shift+Space',
+    voicePttShortcut: VOICE_PTT_SHORTCUT,
     effectiveProviderId: null,
     effectiveModel: null,
+    setupComplete: false,
     ...overrides,
   }
 }
@@ -506,6 +508,9 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         generatedAt: new Date().toISOString(),
       })),
       reportRendererError: vi.fn(),
+    },
+    adoption: {
+      featureValue: vi.fn(async () => false),
     },
     settings: {
       get: vi.fn(async () => createDefaultSettings()),

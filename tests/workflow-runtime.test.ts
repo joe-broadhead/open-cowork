@@ -104,7 +104,7 @@ test('workflow service startup recovers interrupted runs before scheduling new w
     assert.equal(getWorkflow(workflow.id)?.status, 'running')
 
     clearWorkflowStoreCache()
-    configureWorkflowService({ getMainWindow: () => null })
+    configureWorkflowService({ getMainWindow: () => null, isSetupValidated: () => true })
     startWorkflowService()
     await runWorkflowSchedulerTick()
     await ensureWorkflowWebhookServer()
@@ -161,7 +161,7 @@ test('a delegated child-session error does not prematurely fail its workflow run
 
 test('workflow scheduler coalesces overlapping ticks', async () => {
   await withWorkflowRuntimeStore('scheduler-overlap', async () => {
-    configureWorkflowService({ getMainWindow: () => null })
+    configureWorkflowService({ getMainWindow: () => null, isSetupValidated: () => true })
     const workflow = createWorkflow(dueScheduledWorkflowDraft, null, { now: new Date('2026-05-14T12:00:00.000Z') })
     setRuntimeReady(true)
 
@@ -178,7 +178,7 @@ test('workflow scheduler coalesces overlapping ticks', async () => {
 
 test('workflow scheduler leaves due work unclaimed until the runtime is ready', async () => {
   await withWorkflowRuntimeStore('scheduler-runtime-gate', async () => {
-    configureWorkflowService({ getMainWindow: () => null })
+    configureWorkflowService({ getMainWindow: () => null, isSetupValidated: () => true })
     const workflow = createWorkflow(dueScheduledWorkflowDraft, null, { now: new Date('2026-05-14T12:00:00.000Z') })
 
     await runWorkflowSchedulerTick(new Date('2026-05-15T12:00:00.000Z'))
@@ -191,6 +191,19 @@ test('workflow scheduler leaves due work unclaimed until the runtime is ready', 
   })
 })
 
+test('workflow scheduler leaves due work unclaimed while setup is unvalidated', async () => {
+  await withWorkflowRuntimeStore('scheduler-setup-gate', async () => {
+    configureWorkflowService({ getMainWindow: () => null, isSetupValidated: () => false })
+    const workflow = createWorkflow(dueScheduledWorkflowDraft, null, { now: new Date('2026-05-14T12:00:00.000Z') })
+    setRuntimeReady(true)
+
+    await runWorkflowSchedulerTick(new Date('2026-05-15T12:00:00.000Z'))
+
+    assert.equal(getWorkflow(workflow.id)?.runs.length, 0)
+    assert.equal(getWorkflow(workflow.id)?.status, 'active')
+  })
+})
+
 test('workflow notifications honor quiet hours and cover background run attention and failure', async () => {
   assert.equal(isWorkflowNotificationQuietTime('22:00', '07:00', new Date(2026, 0, 1, 23, 0)), true)
   assert.equal(isWorkflowNotificationQuietTime('22:00', '07:00', new Date(2026, 0, 1, 12, 0)), false)
@@ -200,6 +213,7 @@ test('workflow notifications honor quiet hours and cover background run attentio
     const notifications: Array<{ title: string; body: string }> = []
     configureWorkflowService({
       getMainWindow: () => null,
+      isSetupValidated: () => true,
       showDesktopNotification: (notification) => notifications.push(notification),
       notificationNow: () => new Date(2026, 0, 1, 12, 0),
     })
@@ -234,6 +248,7 @@ test('workflow notifications honor quiet hours and cover background run attentio
 
     configureWorkflowService({
       getMainWindow: () => null,
+      isSetupValidated: () => true,
       showDesktopNotification: () => {
         throw new Error('Notifications unavailable')
       },
@@ -310,7 +325,7 @@ test('workflow run completion reconciles through session status when idle event 
       },
     } as never)
     setRuntimeReady(true)
-    configureWorkflowService({ getMainWindow: () => null })
+    configureWorkflowService({ getMainWindow: () => null, isSetupValidated: () => true })
 
     await runWorkflowSchedulerTick(new Date('2026-05-15T12:00:00.000Z'))
 

@@ -39,11 +39,13 @@ import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
 import { registerAdminHandlers } from './ipc/admin-handlers.ts'
+import { registerAdoptionHandlers } from './ipc/adoption-handlers.ts'
 import { registerE2EEvalHandlers } from './ipc/e2e-eval-handlers.ts'
 import { registerWorkspaceHandlers } from './ipc/workspace-handlers.ts'
 import { registerDesktopPairingHandlers } from './ipc/desktop-pairing-handlers.ts'
 import { registerVoiceHandlers } from './ipc/voice-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
+import type { SetupConnectionValidator } from './setup/connection-validation.ts'
 import { objectArg, registerIpcInvoke } from './ipc/schema.ts'
 import { validateDestructiveConfirmationRequest } from './ipc/object-validators.ts'
 import { ProjectDirectoryGrantRegistry } from './directory-grants.ts'
@@ -108,7 +110,14 @@ function assertTrustedIpcSender(event: IpcSenderEvent, channel: string, devServe
 export function setupIpcHandlers(
   ipcMain: IpcMain,
   getMainWindow: () => BrowserWindow | null,
-  handlerOptions: { devServerUrl?: string | null } = {},
+  handlerOptions: {
+    devServerUrl?: string | null
+    refreshApplicationMenu?: (voicePttShortcut: string) => void
+    restartRuntime?: () => Promise<void>
+    restartRuntimeForSetupValidation?: () => Promise<void>
+    suspendRuntimeForSetup?: () => Promise<void>
+    validateSetupConnection?: SetupConnectionValidator
+  } = {},
 ) {
   setSessionHistoryChildLineageSeedHandler(({ rootSessionId, children }) => {
     seedReplayedChildSessionLineage(rootSessionId, children)
@@ -365,6 +374,11 @@ export function setupIpcHandlers(
     workspaceGateway,
     desktopPairingService,
     getMainWindow,
+    refreshApplicationMenu: handlerOptions.refreshApplicationMenu,
+    restartRuntime: handlerOptions.restartRuntime,
+    restartRuntimeForSetupValidation: handlerOptions.restartRuntimeForSetupValidation,
+    suspendRuntimeForSetup: handlerOptions.suspendRuntimeForSetup,
+    validateSetupConnection: handlerOptions.validateSetupConnection,
     normalizeDirectory,
     ensureSessionRecord,
     resolvePrivateArtifactPath: (request) => resolvePrivateSessionArtifactPath(request, { ensureSessionRecord }),
@@ -412,6 +426,7 @@ export function setupIpcHandlers(
   getThreadIndexService().reconcileThreadIndexFromRegistry()
 
   registerWorkspaceHandlers(context)
+  registerAdoptionHandlers(context)
   registerDesktopPairingHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)

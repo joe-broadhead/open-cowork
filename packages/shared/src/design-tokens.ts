@@ -740,9 +740,13 @@ export const DESIGN_TOKENS = {
   elevation: {
     popover: 'var(--shadow-3)',
   },
+  effectInk: {
+    shadow: '#000',
+    highlight: '#fff',
+  },
   specular: {
-    default: 'inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent)',
-    strong: 'inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent)',
+    default: 'inset 0 1px 0 color-mix(in srgb, var(--color-highlight-ink) 3%, transparent)',
+    strong: 'inset 0 1px 0 color-mix(in srgb, var(--color-highlight-ink) 5%, transparent)',
   },
   glass: {
     bg: 'color-mix(in srgb, var(--color-elevated) 86%, transparent)',
@@ -903,6 +907,8 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
     ['--accent-line', tokens.color.accentLine || accentLineToken()],
     ['--accent-gradient', 'linear-gradient(150deg,var(--accent-2),var(--accent))'],
     ['--elevation-popover', tokens.elevation.popover],
+    ['--color-shadow-ink', tokens.effectInk.shadow],
+    ['--color-highlight-ink', tokens.effectInk.highlight],
     ['--specular', tokens.specular.default],
     ['--specular-strong', tokens.specular.strong],
     ['--glass-bg', tokens.glass.bg],
