@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { CDPSession, Page } from 'playwright-core'
+import { DOCUMENTATION_SCREENSHOT_JOURNEYS } from './documentation-screenshot-journeys.mjs'
 import {
   cleanupSmokePaths,
   createSmokePaths,
@@ -11,38 +12,39 @@ import {
   waitForAppShell,
 } from './smoke-helpers.ts'
 
-// Drives the same Electron harness the smoke tests use, but instead of
-// asserting layout it walks the entire app surface and writes PNGs into
-// docs/assets/auto/. Every shot is dark-mode at 1600x1000 (DSF=1) to
-// match the manual-capture guidelines in docs/assets/README.md and to
-// stay deterministic across machines.
+// Minimal public documentation set: one distinct state for every core journey.
+// The isolated profile retains real Open Cowork branding, public feature
+// defaults, and no customer credentials or project data.
 
 const VIEWPORT = { width: 1600, height: 1000 }
-const SETTLE_MS = 450
+const DOCUMENTATION_CAPTURE_TIME = '2026-08-01T13:00:00.000Z'
+const DOCUMENTATION_CHAT_TITLE = 'Launch brief planning'
+const JOURNEYS_BY_ID = new Map(DOCUMENTATION_SCREENSHOT_JOURNEYS.map((journey) => [journey.id, journey]))
+const SETTLED_SURFACE_BY_JOURNEY = new Map([
+  ['team', 'team-surface'],
+  ['playbooks', 'playbooks-surface'],
+  ['tools-skills', 'tools-skills-surface'],
+])
 
 let cdp: CDPSession | null = null
 
 async function ensureCdp(page: Page) {
-  if (!cdp) {
-    cdp = await page.context().newCDPSession(page)
-  }
+  if (!cdp) cdp = await page.context().newCDPSession(page)
   return cdp
 }
 
 async function pinViewport(page: Page) {
   const session = await ensureCdp(page)
+  await session.send('Emulation.setTimezoneOverride', { timezoneId: 'UTC' })
   await session.send('Emulation.setDeviceMetricsOverride', {
-    width: VIEWPORT.width,
-    height: VIEWPORT.height,
+    ...VIEWPORT,
     deviceScaleFactor: 1,
     mobile: false,
   })
 }
 
 async function applyDarkMode(page: Page) {
-  await page.evaluate(() => {
-    localStorage.setItem('open-cowork-color-scheme', 'dark')
-  })
+  await page.evaluate(() => localStorage.setItem('open-cowork-color-scheme', 'dark'))
   await page.reload()
   await waitForAppShell(page, 30_000)
   await page.waitForFunction(
@@ -50,7 +52,7 @@ async function applyDarkMode(page: Page) {
     null,
     { timeout: 5_000 },
   )
-  cdp = null // CDP session is invalidated on reload
+  cdp = null
   await pinViewport(page)
 }
 
@@ -58,274 +60,191 @@ function resolveScreenshotExecutable() {
   const executable = process.env.OPEN_COWORK_SCREENSHOT_EXECUTABLE?.trim()
   if (!executable) return undefined
   const resolved = resolve(repoRoot, executable)
-  if (resolved.endsWith('.app')) {
-    return join(resolved, 'Contents/MacOS/Open Cowork')
+  return resolved.endsWith('.app') ? join(resolved, 'Contents/MacOS/Open Cowork') : resolved
+}
+
+async function waitForSettledJourney(page: Page, id: string) {
+  const surfaceTestId = SETTLED_SURFACE_BY_JOURNEY.get(id)
+  if (surfaceTestId) {
+    await page.waitForFunction(
+      (testId) => {
+        const surface = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`)
+        return Boolean(surface && surface.dataset.loadState !== 'loading')
+      },
+      surfaceTestId,
+      { timeout: 30_000 },
+    )
+    await page.locator('.ui-skeleton').waitFor({ state: 'detached', timeout: 30_000 })
   }
-  return resolved
+  await page.evaluate(async () => {
+    await document.fonts.ready
+    await new Promise<void>((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame())))
+  })
 }
 
-async function shoot(page: Page, outputDir: string, name: string) {
-  await page.waitForTimeout(SETTLE_MS)
-  const path = join(outputDir, `${name}.png`)
-  await page.screenshot({ path, fullPage: false })
-  process.stdout.write(`[screenshots]   ${name}\n`)
+async function shoot(page: Page, outputDir: string, id: string) {
+  const journey = JOURNEYS_BY_ID.get(id)
+  if (!journey) throw new Error(`Undeclared documentation screenshot: ${id}`)
+  await waitForSettledJourney(page, id)
+  await page.screenshot({ path: join(outputDir, `${id}.png`), fullPage: false })
+  process.stdout.write(`[screenshots] ${id} (${journey.owner})\n`)
 }
 
-async function gotoHome(page: Page) {
-  await page.getByRole('button', { name: 'Home', exact: true }).first().click()
-  // Home greeting is "Good {morning|afternoon|evening}." — match the stable lead word.
-  await page.waitForSelector('h1:has-text("Good")', { timeout: 30_000 })
+async function navigate(page: Page, view: string, heading: string | RegExp) {
+  await page.locator(`[data-nav-view="${view}"]`).first().click()
+  await page.getByRole('heading', { name: heading, exact: typeof heading === 'string' }).first().waitFor({ timeout: 30_000 })
 }
 
-async function gotoAgents(page: Page) {
-  await page.getByRole('button', { name: 'Team', exact: true }).first().click()
-  // Studio copy: the Team page header is "Coworkers" and built-ins render
-  // under the "Built-in coworkers" section label.
-  await page.waitForSelector('h1:has-text("Coworkers")', { timeout: 30_000 })
-  await page.getByText('Built-in coworkers', { exact: true }).waitFor({ timeout: 10_000 })
-}
-
-async function gotoCapabilities(page: Page) {
-  await page.getByRole('button', { name: 'Tools & Skills', exact: true }).first().click()
-  await page.waitForSelector('h1:has-text("Tools & Skills")', { timeout: 30_000 })
-}
-
-async function gotoWorkflows(page: Page) {
-  await page.getByRole('button', { name: 'Playbooks', exact: true }).first().click()
-  await page.getByRole('heading', { name: 'Playbooks', exact: true }).waitFor({ timeout: 30_000 })
-}
-
-async function captureSettingsTabs(page: Page, outputDir: string) {
-  // Open Settings as a modal Dialog from the sidebar.
-  await page.getByRole('button', { name: 'Settings', exact: true }).last().click()
-  const dialog = page.locator('[role="dialog"]').first()
-  await dialog.waitFor({ state: 'visible', timeout: 10_000 })
-  await dialog.getByRole('button', { name: /^Appearance\b/ }).first().waitFor({ timeout: 10_000 })
-
-  // Each settings tab button renders the label + a description on the
-  // next line, so the accessible name is "Appearance Theme, color
-  // scheme, and fonts". Match the leading label rather than exact-name.
-  // Studio copy renamed "Models" → "Model" and "Workflows" → "Playbooks";
-  // the historical asset IDs stay stable so docs references don't break.
-  // Scope to the dialog so "Playbooks" does not match the sidebar nav item.
-  const tabs: Array<{ pattern: RegExp; id: string }> = [
-    { pattern: /^Appearance\b/, id: 'settings-appearance' },
-    { pattern: /^Model\b/, id: 'settings-models' },
-    { pattern: /^Permissions\b/, id: 'settings-permissions' },
-    { pattern: /^Playbooks\b/, id: 'settings-workflows' },
-    { pattern: /^Storage\b/, id: 'settings-storage' },
-  ]
-
-  for (const tab of tabs) {
-    await dialog.getByRole('button', { name: tab.pattern }).first().click()
-    await page.waitForTimeout(200)
-    await shoot(page, outputDir, tab.id)
-  }
-
-  // Close via the Dialog's "Close dialog" icon button (Escape as a fallback)
-  // so the modal does not intercept pointer events for every capture that follows.
-  await dialog.getByRole('button', { name: 'Close dialog', exact: true }).first().click().catch(() => undefined)
-  await page.keyboard.press('Escape').catch(() => undefined)
-  await dialog.waitFor({ state: 'detached', timeout: 5_000 }).catch(() => undefined)
-  await page.waitForTimeout(200)
-}
-
-async function captureCapabilitiesViews(page: Page, outputDir: string) {
-  await gotoCapabilities(page)
-  await shoot(page, outputDir, 'capabilities-tools')
-
-  // Switch to the Abilities (skills) view. The tab strip is a SegmentedControl
-  // (role=radiogroup with role=radio options) in the page header; Studio copy
-  // renamed the tabs to "Tools & Skills" / "Connections" / "Abilities".
-  const mainArea = page.locator('main')
-  await mainArea.getByRole('radio', { name: 'Abilities', exact: true }).first().click()
-  await page.waitForTimeout(200)
-  await shoot(page, outputDir, 'capabilities-skills')
-
-  // Open the Add ability form
-  await mainArea.getByRole('button', { name: 'Add ability', exact: true }).click()
-  await page.waitForTimeout(400)
-  await shoot(page, outputDir, 'capabilities-add-skill')
-
-  // Cancel back to the Abilities view
-  await mainArea.getByRole('button', { name: /Cancel/i }).first().click()
-  await page.waitForTimeout(200)
-
-  // Switch to Connections (tools) and open Add connection
-  await mainArea.getByRole('radio', { name: 'Connections', exact: true }).first().click()
-  await page.waitForTimeout(150)
-  await mainArea.getByRole('button', { name: 'Add connection', exact: true }).click()
-  await page.waitForTimeout(400)
-  await shoot(page, outputDir, 'capabilities-add-tool')
-
-  await mainArea.getByRole('button', { name: /Cancel/i }).first().click()
-  await page.waitForTimeout(200)
-
-  // Open the first tool detail card. CapabilitySelectionCard renders
-  // each card as `<button class="w-full text-start p-4 ...">`, so the
-  // class combo is a stable selector that won't match the action row.
-  const cards = await mainArea.locator('button.text-start.p-4').all()
-  if (cards.length > 0) {
-    await cards[0]!.click()
-    await page.waitForTimeout(400)
-    await shoot(page, outputDir, 'capabilities-tool-detail')
-    // The detail page has a back button labeled "Tools & Skills" with a
-    // chevron icon — clicking it returns to the grid.
-    await mainArea.getByRole('button', { name: /^Tools & Skills$/ }).first().click().catch(() => undefined)
-    await page.waitForTimeout(200)
-  } else {
-    console.warn('[screenshots]   (no capability cards found, skipping detail view)')
-  }
-}
-
-async function captureAgentsViews(page: Page, outputDir: string) {
-  await gotoAgents(page)
-  await shoot(page, outputDir, 'agents')
-
-  // Open the template picker via "New coworker"
-  await page.getByRole('button', { name: /New coworker/ }).click()
-  // The picker header is unique copy that won't appear elsewhere on the page.
-  await page.getByRole('heading', { name: 'Start a new coworker', exact: true }).waitFor({ timeout: 10_000 })
-  await shoot(page, outputDir, 'agents-template-picker')
-
-  // Pick "Start from blank" — that's the last template in the picker
-  // and unconditionally routes into the AgentBuilderPage with a blank
-  // seed. No heuristics, no card-text matching.
-  await page.getByRole('button', { name: /Start from blank/i }).click()
-  // The builder's save affordance for a not-yet-created coworker is the
-  // unique "Hire coworker" button that doesn't appear on the grid.
-  await page.getByRole('button', { name: 'Hire coworker', exact: true }).waitFor({ timeout: 10_000 })
-  await shoot(page, outputDir, 'agents-builder')
-
-  // Exit the builder via the chevron-left "Team" back button (scoped to
-  // main so it can't hit the sidebar's Team nav item). A blank draft counts
-  // as dirty (template seeding replaces the draft reference), so confirm
-  // the "Discard unsaved changes?" dialog when it appears.
-  await page.locator('main').getByRole('button', { name: 'Team', exact: true }).first().click()
-  await page.getByRole('button', { name: 'Discard changes', exact: true }).click({ timeout: 3_000 }).catch(() => undefined)
-  await page.waitForSelector('h1:has-text("Coworkers")', { timeout: 10_000 })
-
-  // Click a real built-in agent card to capture the workbench in
-  // read-only mode (with capabilities and instructions populated).
-  // Card click target = `<button class="w-full text-start p-4 ...">`.
-  const cards = page.locator('main button.text-start.p-4')
-  if (await cards.count()) {
-    await cards.first().click()
-    // Built-in coworkers render WorkbenchTabs as a SegmentedControl
-    // (role=radio options), not buttons. "Model & behavior" never appears
-    // on the Coworkers grid.
-    await page.locator('main').getByRole('radio', { name: 'Model & behavior', exact: true }).waitFor({ timeout: 10_000 })
-    await shoot(page, outputDir, 'agents-builder-detail')
-    // Exit via the chevron-left "Team" back link
-    await page.locator('main').getByRole('button', { name: 'Team', exact: true }).first().click().catch(() => undefined)
-    await page.waitForSelector('h1:has-text("Coworkers")', { timeout: 10_000 })
-  }
-}
-
-async function captureWorkflowsViews(page: Page, outputDir: string) {
-  await gotoWorkflows(page)
-  await shoot(page, outputDir, 'workflows-overview')
-  // Workflows are now created through a setup thread instead of a
-  // separate template/detail modal. Keep the historical screenshot IDs
-  // as current Workflows surface captures so downstream docs that
-  // reference the full generated asset set do not lose files.
-  await shoot(page, outputDir, 'workflows-template')
-  await shoot(page, outputDir, 'workflows-detail')
-}
-
-async function captureChatViews(page: Page, outputDir: string) {
-  await gotoHome(page)
-  // Use the sidebar new-thread path so the Chat surface is real, but
-  // avoid firing a provider request. Screenshot runs should not depend
-  // on API keys or capture a missing-credential error banner.
+async function captureChat(page: Page, outputDir: string) {
+  await navigate(page, 'home', /^Good\b/)
+  const homeView = page.locator('[data-testid="home-view"]')
   await page.getByRole('button', { name: 'New Chat', exact: true }).click()
   await page.getByRole('button', { name: /^Blank chat\b/ }).click()
-  await page.waitForSelector('h1:has-text("Good")', {
-    state: 'detached',
-    timeout: 15_000,
-  })
-  // Wait for the chat composer to mount — that's our signal the chat
-  // view has fully painted.
-  const chatComposer = page.locator('textarea').first()
-  await chatComposer.waitFor({ timeout: 15_000 })
-  await page.waitForTimeout(500)
-  await shoot(page, outputDir, 'chat-thread')
-
-  // Mention picker
-  await chatComposer.fill('')
-  await chatComposer.type('@')
-  await page.waitForSelector('text=/research|explore|build|plan|charts/i', { timeout: 5_000 })
-  await page.waitForTimeout(200)
-  await shoot(page, outputDir, 'chat-mention-picker')
-
-  // Clear so future captures don't carry residue
-  await chatComposer.fill('')
+  await homeView.waitFor({ state: 'detached', timeout: 15_000 })
+  await page.locator('[data-testid="chat-transcript-announcer"]').waitFor({ state: 'attached', timeout: 15_000 })
+  const sessionId = await page.evaluate(async (title) => {
+    const sessions = await window.coworkApi.session.list()
+    if (sessions.length !== 1) throw new Error(`Documentation chat fixture expected one session, found ${sessions.length}.`)
+    const renamed = await window.coworkApi.session.rename(sessions[0]!.id, title)
+    if (!renamed) throw new Error('Documentation chat fixture could not set its stable title.')
+    return sessions[0]!.id
+  }, DOCUMENTATION_CHAT_TITLE)
+  if (!sessionId) throw new Error('Documentation chat fixture did not create a session.')
+  await page.locator('[data-testid="chat-thread-title"]', { hasText: DOCUMENTATION_CHAT_TITLE }).waitFor({ state: 'visible', timeout: 15_000 })
+  const composer = page.getByRole('group', { name: /Message composer/ }).locator('textarea')
+  await composer.waitFor({ timeout: 15_000 })
+  await composer.fill('Turn the launch brief into a concise owner-by-owner action plan.')
+  await shoot(page, outputDir, 'chat')
 }
 
-async function captureSidebarSearch(page: Page, outputDir: string) {
-  await gotoHome(page)
-  // The sidebar search toggle lives next to the New thread button —
-  // it's the second button in the top sidebar row.
-  const searchToggle = page.locator('aside button[title*="Search"]').first()
-  if (await searchToggle.count()) {
-    await searchToggle.click()
-    await page.waitForTimeout(250)
-    await shoot(page, outputDir, 'sidebar-search')
-    // Close it back
-    await page.keyboard.press('Escape').catch(() => undefined)
-    await page.waitForTimeout(150)
-  } else {
-    console.warn('[screenshots]   (sidebar search toggle not found)')
+async function seedProjects(page: Page) {
+  await page.evaluate(async () => {
+    const project = await window.coworkApi.coordination.createProject({
+      title: 'Private beta readiness',
+      objective: 'Close the final product, security, and onboarding evidence for launch.',
+      description: 'A deterministic documentation fixture in an isolated test profile.',
+      status: 'active',
+      team: ['chief-of-staff', 'build', 'research'],
+    })
+    await Promise.all([
+      window.coworkApi.coordination.createTask({
+        projectId: project.id,
+        title: 'Verify release evidence',
+        spec: 'Review the release gates and record any remaining owner actions.',
+        column: 'doing',
+        status: 'running',
+        priority: 'high',
+        assigneeAgent: 'chief-of-staff',
+      }),
+      window.coworkApi.coordination.createTask({
+        projectId: project.id,
+        title: 'Publish onboarding guide',
+        spec: 'Confirm the setup journey and publish the reviewed guide.',
+        column: 'review',
+        status: 'open',
+        priority: 'med',
+        assigneeAgent: 'build',
+      }),
+    ])
+  })
+}
+
+async function captureSetup(page: Page, outputDir: string) {
+  const requiredCredentialCount = await page.evaluate(async () => {
+    const [config, settings] = await Promise.all([
+      window.coworkApi.app.config(),
+      window.coworkApi.settings.get(),
+    ])
+    const providerId = settings.effectiveProviderId || config.providers.defaultProvider
+    const provider = config.providers.available.find((entry) => entry.id === providerId)
+    const requiredCredentials = provider?.credentials.filter((credential) => credential.required !== false) || []
+    if (!provider || requiredCredentials.length === 0) return 0
+
+    await window.coworkApi.settings.set({
+      selectedProviderId: null,
+      selectedModelId: null,
+      providerCredentials: {
+        [provider.id]: Object.fromEntries(requiredCredentials.map((credential) => [credential.key, ''])),
+      },
+    })
+    localStorage.setItem('open-cowork-color-scheme', 'dark')
+    return requiredCredentials.length
+  })
+  if (requiredCredentialCount === 0) {
+    throw new Error('Setup screenshot profile must retain at least one required provider credential')
   }
+
+  await page.reload()
+  cdp = null
+  await page.getByRole('heading', { name: /Welcome/, exact: false }).first().waitFor({ timeout: 30_000 })
+  await page.waitForFunction(
+    () => document.documentElement.getAttribute('data-color-scheme') === 'dark',
+    null,
+    { timeout: 5_000 },
+  )
+  await pinViewport(page)
+  await shoot(page, outputDir, 'setup')
 }
 
 async function main() {
   const outputDir = resolve(repoRoot, 'docs/assets/auto')
   const captureDir = mkdtempSync(join(tmpdir(), 'open-cowork-screenshots-'))
-  process.stdout.write(`[screenshots] output dir: ${outputDir}\n`)
-
-  const paths = createSmokePaths()
+  const shellPaths = createSmokePaths({ productBranding: true, enableApprovals: false })
+  const setupPaths = createSmokePaths({
+    productBranding: true,
+    enableApprovals: false,
+    preserveProviderCredentialRequirements: true,
+  })
   let session: SmokeSession | null = null
-  try {
-    session = await launchSmokeSession(paths, { executablePath: resolveScreenshotExecutable() })
-    const page = session.page
 
+  process.stdout.write(`[screenshots] output: ${outputDir}\n`)
+  try {
+    const executablePath = resolveScreenshotExecutable()
+    session = await launchSmokeSession(shellPaths, { executablePath })
+    const page = session.page
+    // Keep time-of-day greetings and any renderer-formatted dates stable across
+    // developer machines. Timers still advance normally with setFixedTime().
+    await page.clock.setFixedTime(DOCUMENTATION_CAPTURE_TIME)
     await pinViewport(page)
     await applyDarkMode(page)
 
-    // Section: top-level pages (clean state)
-    await gotoHome(page); await shoot(page, captureDir, 'home')
+    await navigate(page, 'home', /^Good\b/)
+    await shoot(page, captureDir, 'home')
 
-    // Section: capabilities (multi-view)
-    await captureCapabilitiesViews(page, captureDir)
+    await seedProjects(page)
+    await navigate(page, 'projects', 'Projects')
+    await page.getByText('Private beta readiness', { exact: true }).first().waitFor({ timeout: 15_000 })
+    await shoot(page, captureDir, 'projects')
 
-    // Section: agents (list + template picker + builder)
-    await captureAgentsViews(page, captureDir)
+    await navigate(page, 'team', 'Coworkers')
+    await shoot(page, captureDir, 'team')
 
-    // Section: workflows
-    await captureWorkflowsViews(page, captureDir)
+    await navigate(page, 'playbooks', 'Playbooks')
+    await shoot(page, captureDir, 'playbooks')
 
-    // Section: settings panel tabs
-    await gotoHome(page)
-    await captureSettingsTabs(page, captureDir)
+    await navigate(page, 'tools', 'Tools & Skills')
+    await shoot(page, captureDir, 'tools-skills')
 
-    // Section: sidebar search
-    await captureSidebarSearch(page, captureDir)
+    await captureChat(page, captureDir)
 
-    // Section: chat thread + mention picker (mutates state, run last)
-    await captureChatViews(page, captureDir)
+    await session.close()
+    session = null
+    cdp = null
+    session = await launchSmokeSession(setupPaths, { executablePath })
+    await captureSetup(session.page, captureDir)
 
     rmSync(outputDir, { recursive: true, force: true })
     mkdirSync(resolve(outputDir, '..'), { recursive: true })
     renameSync(captureDir, outputDir)
   } finally {
     await session?.close()
-    cleanupSmokePaths(paths)
+    cleanupSmokePaths(shellPaths)
+    cleanupSmokePaths(setupPaths)
     rmSync(captureDir, { recursive: true, force: true })
   }
 }
 
 main().catch((error) => {
   console.error('[screenshots] failed:', error)
-  process.exit(1)
+  process.exitCode = 1
 })

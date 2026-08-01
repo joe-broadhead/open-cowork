@@ -1,7 +1,11 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { Page } from 'playwright-core'
 import { repoRoot, waitForAppShell } from './smoke-helpers.ts'
+import {
+  readCommittedVisualBaseline,
+  shouldUpdateVisualBaselines,
+} from './visual-baseline-policy.ts'
 
 // Shared utilities for the monthly "eval flow" suite. These are higher-level,
 // user-journey checks that build on the same real-Electron harness as the
@@ -20,8 +24,8 @@ const EVAL_ARTIFACT_DIR = resolve(
 )
 
 // Baselines live in-tree so a large visual change shows up as a reviewable
-// diff. On first run (or when explicitly updating) missing baselines are
-// seeded here and must be accepted/committed by a maintainer.
+// diff. Ordinary evals only read this directory. Writing requires the
+// explicit update mode so missing coverage cannot silently pass CI.
 const VISUAL_BASELINE_DIR = resolve(repoRoot, 'apps/desktop/tests/visual-baselines')
 
 // Fraction of sampled pixels allowed to differ before a surface is flagged.
@@ -30,11 +34,6 @@ const VISUAL_BASELINE_DIR = resolve(repoRoot, 'apps/desktop/tests/visual-baselin
 const DEFAULT_DIFF_THRESHOLD = 0.04
 const DEFAULT_PER_PIXEL_TOLERANCE = 24 // 0-255 per channel
 const COMPARE_WIDTH = 320 // downscale both images to this width before diffing
-
-function shouldUpdateBaselines(): boolean {
-  const raw = process.env.OPEN_COWORK_EVAL_UPDATE_BASELINES?.trim()
-  return raw === '1' || raw === 'true'
-}
 
 function ensureDir(dir: string) {
   mkdirSync(dir, { recursive: true })
@@ -55,8 +54,12 @@ export async function captureEvidence(page: Page, flow: string, name: string): P
 }
 
 export async function setColorScheme(page: Page, scheme: 'light' | 'dark') {
-  await page.evaluate((value) => {
+  await page.evaluate(async (value) => {
     localStorage.setItem('open-cowork-color-scheme', value)
+    await window.coworkApi.settings.set({
+      appearanceColorScheme: value,
+      workspaceId: 'local',
+    })
   }, scheme)
   await page.reload()
   await waitForAppShell(page, 30_000)
@@ -66,7 +69,6 @@ export async function setColorScheme(page: Page, scheme: 'light' | 'dark') {
       scheme,
       { timeout: 5_000 },
     )
-    .catch(() => undefined)
 }
 
 export interface VisualComparison {
@@ -82,10 +84,9 @@ export interface VisualComparison {
 // The pixel diff runs *inside the renderer* via canvas: Chromium decodes both
 // PNGs (baseline + freshly captured) natively, so we need no Node-side PNG
 // decoder and therefore no new dependency. Images loaded from data: URLs do
-// not taint the canvas, so getImageData works. If no baseline exists (or when
-// OPEN_COWORK_EVAL_UPDATE_BASELINES=1) the current capture is written as the
-// new baseline and the comparison passes with `seeded: true` — a maintainer
-// then reviews and commits it.
+// not taint the canvas, so getImageData works. Missing baselines fail closed.
+// OPEN_COWORK_EVAL_UPDATE_BASELINES=1 is the only path that writes baselines;
+// a maintainer must then review and commit the resulting PNGs.
 export async function compareToBaseline(
   page: Page,
   name: string,
@@ -97,6 +98,8 @@ export async function compareToBaseline(
   const baselinePath = join(VISUAL_BASELINE_DIR, `${name}.png`)
 
   const currentBuffer = await page.screenshot({ fullPage: false })
+  const evidencePath = join(evalFlowDir('visual-regression'), `${name}.png`)
+  writeFileSync(evidencePath, currentBuffer)
 
   const seedBaseline = (): VisualComparison => {
     writeFileSync(baselinePath, currentBuffer)
@@ -104,17 +107,11 @@ export async function compareToBaseline(
     return { name, seeded: true, diffRatio: 0, threshold, passed: true }
   }
 
-  if (shouldUpdateBaselines()) return seedBaseline()
+  if (shouldUpdateVisualBaselines()) return seedBaseline()
 
-  // Read the baseline directly rather than existsSync-then-read (a check-then-use
-  // race); a missing baseline is the seed path.
-  let baselineBuffer: Buffer
-  try {
-    baselineBuffer = readFileSync(baselinePath)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return seedBaseline()
-    throw error
-  }
+  // Read directly rather than existsSync-then-read (a check-then-use race).
+  // A missing baseline throws with the explicit review/update command.
+  const baselineBuffer = readCommittedVisualBaseline(baselinePath)
 
   const baselineBase64 = baselineBuffer.toString('base64')
   const currentBase64 = currentBuffer.toString('base64')
@@ -161,10 +158,6 @@ export async function compareToBaseline(
     },
     { baseline: baselineBase64, current: currentBase64, width: COMPARE_WIDTH, tolerance: perPixelTolerance },
   )
-
-  // Persist the current capture as evidence alongside the diff outcome.
-  const evidencePath = join(evalFlowDir('visual-regression'), `${name}.png`)
-  writeFileSync(evidencePath, currentBuffer)
 
   const passed = diffRatio <= threshold
   process.stdout.write(
@@ -314,23 +307,4 @@ export async function emitSyntheticApproval(
       ?? null
     return evalApi.emitPermissionRequest({ ...payload, workspaceId })
   }, request)
-}
-
-// Seed a provider selection + placeholder credential so the app boots past
-// the first-run SetupScreen into the main shell. Mirrors bootstrapSmokeSettings
-// but is exposed here so onboarding-focused eval flows can assert the
-// before/after transition explicitly. The placeholder key never reaches a
-// real provider — eval flows are deterministic and offline.
-export async function completeProviderSetup(page: Page) {
-  await page.evaluate(async () => {
-    await window.coworkApi.settings.set({
-      selectedProviderId: 'openrouter',
-      selectedModelId: 'anthropic/claude-sonnet-4',
-      providerCredentials: {
-        openrouter: { apiKey: 'placeholder-key' },
-      },
-    })
-  })
-  await page.reload()
-  await waitForAppShell(page, 30_000)
 }

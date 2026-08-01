@@ -292,11 +292,14 @@ test('workflow store tracks run lifecycle and next scheduled run', () => withWor
   assert.ok(afterComplete?.nextRunAt)
 
   const failedRun = createWorkflowRun(workflow.id, 'manual', null)
-  markWorkflowRunFailed(failedRun!.id, 'Mailbox unavailable.')
+  const persistedSecret = 'workflow-store-secret-must-not-persist'
+  markWorkflowRunFailed(failedRun!.id, `Mailbox unavailable. Authorization: Bearer ${persistedSecret}`)
   const afterFailure = getWorkflow(workflow.id)
   assert.equal(afterFailure?.status, 'active')
   assert.equal(afterFailure?.latestRunStatus, 'failed')
-  assert.equal(afterFailure?.latestRunSummary, 'Mailbox unavailable.')
+  assert.match(afterFailure?.latestRunSummary || '', /Mailbox unavailable.*REDACTED_TOKEN/)
+  assert.equal(afterFailure?.latestRunSummary?.includes(persistedSecret), false)
+  assert.equal(getWorkflowRun(failedRun!.id)?.error?.includes(persistedSecret), false)
 }))
 
 test('workflow run completion preserves paused workflow status', () => withWorkflowStore('complete-paused', () => {

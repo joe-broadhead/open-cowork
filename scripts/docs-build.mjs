@@ -111,6 +111,14 @@ function checkDocsVendorBundles() {
   run(process.execPath, ['scripts/build-docs-mermaid-vendor.mjs', '--check'])
 }
 
+function checkProductCapabilityClaims() {
+  run(process.execPath, ['--experimental-strip-types', 'scripts/check-product-capability-claims.mjs'])
+}
+
+function checkDocumentationScreenshots() {
+  run(process.execPath, ['scripts/check-doc-screenshots.mjs'])
+}
+
 function runMkdocs() {
   const mkdocs = venvMkdocsPath()
   if (command === 'build') {
@@ -124,7 +132,9 @@ function runMkdocs() {
   throw new Error(`Unsupported docs command "${command}". Use "build" or "serve".`)
 }
 
+checkProductCapabilityClaims()
 ensureVenv()
 ensureRequirements()
 checkDocsVendorBundles()
+checkDocumentationScreenshots()
 runMkdocs()

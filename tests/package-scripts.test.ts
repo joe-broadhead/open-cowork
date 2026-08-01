@@ -43,6 +43,7 @@ type KnipJson = {
 }
 
 const repoRoot = new URL('../', import.meta.url)
+const REAL_BUILD_GRAPH_TIMEOUT_MS = 60_000
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as PackageJson
 const desktopPackageJson = JSON.parse(readFileSync(new URL('../apps/desktop/package.json', import.meta.url), 'utf8')) as PackageJson
 const appPackageJson = JSON.parse(readFileSync(new URL('../packages/app/package.json', import.meta.url), 'utf8')) as PackageJson
@@ -436,7 +437,7 @@ test('root build selection follows the real workspace DAG exactly once in a seri
         OPEN_COWORK_BUILD_INVOCATIONS: invocationLog,
         OPEN_COWORK_FAIL_BUILD: failPackage,
       }),
-      timeout: 20_000,
+      timeout: REAL_BUILD_GRAPH_TIMEOUT_MS,
     },
   )
   const readInvocations = () => {
@@ -459,7 +460,11 @@ test('root build selection follows the real workspace DAG exactly once in a seri
 
     writeFileSync(invocationLog, '')
     const clean = runInstrumentedBuild()
-    assert.equal(clean.status, 0, `${clean.stderr}\n${clean.stdout}`)
+    assert.equal(
+      clean.status,
+      0,
+      [clean.error?.message, clean.stderr, clean.stdout].filter(Boolean).join('\n'),
+    )
     const cleanInvocations = readInvocations()
     assert.equal(new Set(cleanInvocations).size, cleanInvocations.length, 'each real build workspace must execute once')
     assert.deepEqual([...cleanInvocations].sort(), [...expectedNames].sort())
@@ -544,7 +549,9 @@ test('root lint script runs all release gate checks', () => {
     'eslint . --max-warnings 0',
     'pnpm design-tokens:check',
     'node scripts/lint.mjs',
+    'node --experimental-strip-types scripts/check-product-capability-claims.mjs',
     'node scripts/check-design-token-usage.mjs',
+    'node scripts/check-doc-screenshots.mjs',
     'node scripts/check-import-cycles.mjs',
     'node scripts/build-docs-mermaid-vendor.mjs --check',
     'node scripts/check-preload-channels.mjs',
@@ -1073,7 +1080,8 @@ test('channel protocol inventory and private-beta campaign path scripts are wire
   assert.equal(requireScript('channels:protocol:inventory'), 'node scripts/check-channel-protocol-inventory.mjs')
   assert.match(requireScript('boundaries:check'), /check-channel-protocol-inventory\.mjs/)
   assert.equal(requireScript('deploy:private-beta:validate'), 'node scripts/validate-private-beta-package.mjs')
-  assert.ok(existsSync(new URL('../docs/product-channel-protocol-unification.md', import.meta.url)))
+  assert.ok(existsSync(new URL('../docs/product-channel-ownership.md', import.meta.url)))
+  assert.ok(existsSync(new URL('../docs/adr/channel-stack-policy.md', import.meta.url)))
   assert.ok(existsSync(new URL('../deploy/private-beta/private-campaign-evidence-checklist.md', import.meta.url)))
 })
 

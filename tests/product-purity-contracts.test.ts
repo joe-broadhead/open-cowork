@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   DESKTOP_PRIMARY_FEATURE_KEYS,
@@ -9,8 +9,74 @@ import {
   desktopFeatureEnablementWarnings,
   isDesktopFeatureEnabled,
 } from '../packages/shared/src/app-config.ts'
+import {
+  PRODUCT_CAPABILITY_MANIFEST,
+  productFeatureForRoute,
+} from '../packages/shared/src/product-capability-manifest.ts'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
+
+function repositorySourceFiles() {
+  const files: string[] = []
+  const visit = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory() && (['node_modules', 'release', 'coverage', '.venv'].includes(entry.name) || entry.name.startsWith('dist'))) continue
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) visit(path)
+      else if (/\.(?:ts|tsx|js|mjs|cjs)$/.test(entry.name)) files.push(path)
+    }
+  }
+  for (const scope of ['apps', 'mcps', 'packages', 'products', 'scripts', 'tests']) visit(join(root, scope))
+  return files
+}
+
+function markdownDocs(relativeDirectory = 'docs'): string[] {
+  return readdirSync(join(root, relativeDirectory), { withFileTypes: true }).flatMap((entry) => {
+    const relativePath = join(relativeDirectory, entry.name).replaceAll('\\', '/')
+    if (entry.isDirectory()) return markdownDocs(relativePath)
+    return entry.isFile() && entry.name.endsWith('.md') ? [relativePath] : []
+  })
+}
+
+function publicDocResidueReason(relativePath: string, source: string): string | null {
+  const filename = relativePath.split('/').at(-1)?.replace(/\.md$/i, '') || ''
+  const transientFilenamePatterns: Array<[RegExp, string]> = [
+    [/(?:^|-)epic-close-?out(?:-|$)/i, 'epic closeout filename'],
+    [/(?:^|-)(?:full-|surface-|pr-)?audit-(?:dump|findings?|register|report)(?:-|$)/i, 'audit artifact filename'],
+    [/(?:^|-)residuals?-(?:register|risks?)(?:-|$)/i, 'residual register filename'],
+    [/(?:^|-)product-purity-(?:register|checklist|final-wave)(?:-|$)/i, 'product-purity checklist filename'],
+    [/(?:^|-)final-wave(?:-|$)/i, 'final-wave filename'],
+    [/(?:^|-)evidence-(?:joe-\d+|\d{4}-\d{2}-\d{2})(?:-|$)/i, 'dated or issue-bound evidence filename'],
+  ]
+  for (const [pattern, reason] of transientFilenamePatterns) {
+    if (pattern.test(filename)) return reason
+  }
+
+  const firstHeading = source.match(/^#\s+(.+)$/m)?.[1] || ''
+  if (/\b(?:full|surface|pr) audit\b|\baudit (?:dump|findings?|register)\b/i.test(firstHeading)) {
+    return 'audit artifact title'
+  }
+
+  const status = source.match(/^\*\*Status:\*\*\s*(.+)$/im)?.[1] || ''
+  if (/\bepic\b/i.test(status) && /\b(?:closed|completed)\b/i.test(status)) {
+    return 'closed epic status'
+  }
+  if (/^##\s+Exit criteria for [^\n]*\bepic\b/im.test(source)) {
+    return 'epic exit-criteria checklist'
+  }
+  if (/^##\s+Residual register\s*\([^\n)]*\bpost[- ]epic\b/im.test(source)) {
+    return 'post-epic residual register'
+  }
+  return null
+}
+
+function mkdocsNavEntries(source: string): Map<string, string> {
+  const nav = source.match(/^nav:\s*$([\s\S]*?)^(?:extra|not_in_nav):/m)?.[1] || ''
+  return new Map(
+    [...nav.matchAll(/^\s*-\s+(?:"([^"]+)"|([^:\n]+)):\s+([^\s#]+\.md)\s*$/gm)]
+      .map((match) => [`docs/${match[3]}`, (match[1] || match[2]).trim()]),
+  )
+}
 
 test('product purity: primary features default on; secondary default off', () => {
   for (const key of DESKTOP_PRIMARY_FEATURE_KEYS) {
@@ -19,6 +85,79 @@ test('product purity: primary features default on; secondary default off', () =>
   for (const key of DESKTOP_SECONDARY_FEATURE_KEYS) {
     assert.equal(isDesktopFeatureEnabled(undefined, key), false)
   }
+})
+
+test('product purity: versioned manifest owns hero routes and configured catalog counts', () => {
+  assert.equal(PRODUCT_CAPABILITY_MANIFEST.version, 1)
+  assert.deepEqual(PRODUCT_CAPABILITY_MANIFEST.heroPath, [
+    'home',
+    'chat',
+    'projects',
+    'team',
+    'playbooks',
+    'tools',
+    'settings',
+  ])
+  assert.equal(productFeatureForRoute('home'), null)
+  assert.equal(productFeatureForRoute('chat'), null)
+  assert.equal(productFeatureForRoute('projects'), 'projects')
+  assert.equal(productFeatureForRoute('knowledge'), 'knowledge')
+  assert.equal(productFeatureForRoute('health'), null)
+
+  const config = JSON.parse(readFileSync(join(root, 'open-cowork.config.json'), 'utf8')) as {
+    tools?: unknown[]
+    skills?: unknown[]
+    mcps?: unknown[]
+  }
+  assert.deepEqual(PRODUCT_CAPABILITY_MANIFEST.configuredCatalog, {
+    tools: config.tools?.length || 0,
+    skills: config.skills?.length || 0,
+    mcpServers: config.mcps?.length || 0,
+  })
+  assert.deepEqual(PRODUCT_CAPABILITY_MANIFEST.projects.provides, [
+    'objectives',
+    'Kanban tasks',
+    'linked work chats',
+  ])
+})
+
+test('product purity: every manifest route renders and every hero surface has an entry point', () => {
+  const appRoutes = readFileSync(
+    join(root, 'packages/app/src/components/layout/AppRoutes.tsx'),
+    'utf8',
+  )
+  const sidebar = readFileSync(
+    join(root, 'packages/app/src/components/layout/Sidebar.tsx'),
+    'utf8',
+  )
+  const renderedRoutes = new Set(
+    [...appRoutes.matchAll(/\bview\s*===\s*['"]([^'"]+)['"]/g)].map((match) => match[1]),
+  )
+  const sidebarRoutes = new Set(
+    [...sidebar.matchAll(/(?:\bview\s*:\s*|\bonViewChange\(\s*)['"]([^'"]+)['"]/g)]
+      .map((match) => match[1]),
+  )
+
+  for (const surface of PRODUCT_CAPABILITY_MANIFEST.surfaces) {
+    if (surface.route) {
+      assert.ok(renderedRoutes.has(surface.route), `${surface.id} must render route ${surface.route}`)
+    }
+  }
+  for (const id of PRODUCT_CAPABILITY_MANIFEST.heroPath) {
+    const surface = PRODUCT_CAPABILITY_MANIFEST.surfaces.find((entry) => entry.id === id)
+    assert.ok(surface, `${id} must resolve to a manifest surface`)
+    if (surface.route) {
+      assert.ok(sidebarRoutes.has(surface.route), `${id} must have a sidebar or work-entry action`)
+    } else {
+      assert.match(sidebar, new RegExp(`sidebar\\.${surface.id}['"]\\s*,\\s*['"]${surface.label}`))
+    }
+  }
+})
+
+test('product claims: docs build fails fast through the manifest claim gate', () => {
+  const docsBuild = readFileSync(join(root, 'scripts/docs-build.mjs'), 'utf8')
+  assert.match(docsBuild, /--experimental-strip-types['"],\s*['"]scripts\/check-product-capability-claims\.mjs/)
+  assert.match(docsBuild, /checkProductCapabilityClaims\(\)\s*\nensureVenv\(\)/)
 })
 
 test('product purity: Settings notifications has no Coming soon teaser controls', () => {
@@ -65,17 +204,109 @@ test('product purity: public default config does not enable secondary Studio fla
   assert.ok(!mcpNames.some((name) => name === 'gateway' || name === 'cowork-gateway'), 'default config must not register durable Gateway MCP')
 })
 
-test('product purity: register and progressive disclosure docs exist', () => {
+test('product purity: public tool presentation uses the product glossary while stable IDs remain compatible', () => {
+  const config = JSON.parse(readFileSync(join(root, 'open-cowork.config.json'), 'utf8')) as {
+    tools?: Array<{ id?: string; name?: string; description?: string; namespace?: string }>
+    mcps?: Array<{ name?: string; description?: string }>
+  }
+  const byId = new Map((config.tools || []).map((tool) => [tool.id, tool]))
+
+  assert.equal(byId.get('agents')?.namespace, 'agents')
+  assert.equal(byId.get('agents')?.name, 'Team')
+  assert.match(byId.get('agents')?.description || '', /coworkers/i)
+  assert.doesNotMatch(byId.get('agents')?.description || '', /\bagents?\b/i)
+  assert.equal(byId.get('workflows')?.namespace, 'workflows')
+  assert.equal(byId.get('workflows')?.name, 'Playbooks')
+  assert.match(byId.get('workflows')?.description || '', /playbooks/i)
+  assert.doesNotMatch(byId.get('workflows')?.description || '', /Open Cowork workflows/i)
+  assert.doesNotMatch(byId.get('knowledge')?.description || '', /\bwiki\b/i)
+  assert.doesNotMatch(
+    (config.mcps || []).map((mcp) => mcp.description || '').join('\n'),
+    /\bwiki\b/i,
+    'MCP catalog descriptions must distinguish product Knowledge from the separate Wiki product',
+  )
+})
+
+test('product purity: removed Settings fields and the Voice accelerator stay single-sourced', () => {
+  const sources = repositorySourceFiles()
+  const references = (pattern: RegExp) => Array.from(new Set(sources
+    .filter((path) => pattern.test(readFileSync(path, 'utf8')))
+    .map((path) => relative(root, path))))
+    .sort()
+
+  assert.deepEqual(
+    references(/requireApprovalBeforeSending|privacyKeepConversationHistory/),
+    ['tests/product-purity-contracts.test.ts', 'tests/settings.test.ts'],
+    'retired Settings keys may exist only in the explicit migration regression',
+  )
+  assert.deepEqual(
+    references(/CmdOrCtrl\+Shift\+Space/),
+    ['packages/shared/src/shortcuts.ts'],
+    'the default Voice accelerator must be imported from the shared shortcut contract',
+  )
+})
+
+test('product claims: durable guidance exists', () => {
   for (const rel of [
-    'docs/product-purity-register.md',
+    'docs/product-contract.md',
     'docs/progressive-disclosure.md',
-    'docs/product-purity-checklist.md',
     'docs/pairing-connector-scope.md',
-    'docs/runbooks/product-purity-dogfood.md',
+    'docs/release-checklist.md',
   ]) {
     const text = readFileSync(join(root, rel), 'utf8')
     assert.ok(text.length > 100, `${rel} should be non-empty`)
   }
+})
+
+test('product claims: closeout-residue classifier preserves durable release and runbook docs', () => {
+  assert.equal(
+    publicDocResidueReason(
+      'docs/future-protocol.md',
+      '# Future protocol\n\n**Status:** Capacity epic **closed** — all phases shipped.',
+    ),
+    'closed epic status',
+  )
+  assert.equal(
+    publicDocResidueReason('docs/platform-audit-findings.md', '# Platform audit findings'),
+    'audit artifact filename',
+  )
+  assert.equal(
+    publicDocResidueReason('docs/provider-residual-register.md', '# Provider follow-ups'),
+    'residual register filename',
+  )
+
+  for (const rel of [
+    'docs/release-checklist.md',
+    'docs/packaging-and-releases.md',
+    'docs/runbooks/launch-readiness-report.md',
+    'docs/runbooks/restore-drill-report.md',
+    'docs/adr/private-realtime-voice.md',
+  ]) {
+    assert.equal(
+      publicDocResidueReason(rel, readFileSync(join(root, rel), 'utf8')),
+      null,
+      `${rel} is durable release, runbook, or decision guidance`,
+    )
+  }
+})
+
+test('product claims: public and nav-listed docs contain no closeout residue', () => {
+  const navEntries = mkdocsNavEntries(readFileSync(join(root, 'mkdocs.yml'), 'utf8'))
+  const findings = markdownDocs().flatMap((rel) => {
+    const reason = publicDocResidueReason(rel, readFileSync(join(root, rel), 'utf8'))
+    return reason ? [`${rel}${navEntries.has(rel) ? ' (nav-listed)' : ''}: ${reason}`] : []
+  })
+  for (const [rel, label] of navEntries) {
+    if (/\b(?:epic close-?out|audit (?:dump|findings?|register)|residual (?:risks?|register)|final wave)\b/i.test(label)) {
+      findings.push(`${rel} (nav label): ${label}`)
+    }
+  }
+
+  assert.deepEqual(
+    findings,
+    [],
+    'migrate durable guidance to an ADR, ownership document, release guide, or runbook; do not publish epic closeout artifacts',
+  )
 })
 
 test('product purity: sidebar labels Health Center not Diagnostics', () => {
@@ -88,10 +319,12 @@ test('product purity: sidebar labels Health Center not Diagnostics', () => {
   assert.doesNotMatch(source, /'Diagnostics'/)
 })
 
-test('product purity: release checklist includes purity claim gate', () => {
+test('product claims: release checklist uses durable claim sources', () => {
   const source = readFileSync(join(root, 'docs/release-checklist.md'), 'utf8')
-  assert.match(source, /Product purity claim gate/)
-  assert.match(source, /product-purity-register/)
+  assert.match(source, /Product claim gate/)
+  assert.match(source, /product contract/)
+  assert.match(source, /capability manifest/)
+  assert.doesNotMatch(source, /product-purity-register|pure-release-notes-claim-freeze/)
 })
 
 test('product purity: enterprise matrix and maintainer map exist', () => {
@@ -107,84 +340,27 @@ test('product purity: enterprise matrix and maintainer map exist', () => {
 
 test('product purity: Home hides empty launchpad motion section', () => {
   const source = readFileSync(join(root, 'packages/app/src/components/HomePage.tsx'), 'utf8')
-  assert.match(source, /never reserve Home space for an empty motion grid/)
-  assert.match(source, /if \(!smartSuggestions\)/)
+  assert.match(source, /const MAX_RECENT_SESSIONS = 4/)
+  assert.match(source, /<HomeComposer/)
+  assert.match(source, /<HomeRecentWork/)
+  assert.doesNotMatch(source, /LaunchpadMotionGrid|HomeReviewSnapshot/)
 })
 
-test('product purity: final-wave docs and residual register exist', () => {
-  for (const rel of [
-    'docs/product-purity-final-wave.md',
-    'docs/product-purity-residual-risks.md',
-    'docs/adr/standalone-desktop-session-api.md',
-  ]) {
-    const text = readFileSync(join(root, rel), 'utf8')
-    assert.ok(text.length > 100, `${rel} should be non-empty`)
-  }
-  const residual = readFileSync(join(root, 'docs/product-purity-residual-risks.md'), 'utf8')
-  assert.match(residual, /P0 residuals:\*\* none/)
-  assert.match(residual, /R-1042/)
-  assert.match(residual, /R-1094/)
-})
-
-test('product purity: post-purity wave JOE-1089 evidence artifacts exist', () => {
-  for (const rel of [
-    'docs/runbooks/product-purity-dogfood-evidence-joe-1092.md',
-    'docs/samples/pure-release-notes-claim-freeze.md',
-    'docs/runbooks/cloud-sync-dogfood-residual-joe-1094.md',
-    'docs/runbooks/standalone-session-api-residual-joe-1091.md',
-  ]) {
-    const text = readFileSync(join(root, rel), 'utf8')
-    assert.ok(text.length > 200, `${rel} should be non-empty evidence`)
-  }
-
-  const dogfood = readFileSync(
-    join(root, 'docs/runbooks/product-purity-dogfood-evidence-joe-1092.md'),
-    'utf8',
-  )
-  assert.match(dogfood, /JOE-1092/)
-  assert.match(dogfood, /pass/i)
-  assert.match(dogfood, /blocked/i)
-
-  const claimFreeze = readFileSync(
-    join(root, 'docs/samples/pure-release-notes-claim-freeze.md'),
-    'utf8',
-  )
-  assert.match(claimFreeze, /Forbidden claims/i)
-  assert.match(claimFreeze, /enterprise-ready/i)
-  assert.match(claimFreeze, /Knowledge ≠ Wiki|Knowledge = Wiki/i)
-  assert.match(claimFreeze, /Standalone/)
-  assert.match(claimFreeze, /local-self-host-beta/)
-  assert.doesNotMatch(claimFreeze, /We are enterprise-ready/i)
-
+test('product claims: readiness and deferred boundaries stay in durable docs', () => {
   const matrix = readFileSync(join(root, 'docs/enterprise-readiness-matrix.md'), 'utf8')
   assert.match(matrix, /Owner/)
   assert.match(matrix, /Next evidence artifact/)
   assert.match(matrix, /Fail-closed claim wording/)
-  assert.match(matrix, /JOE-1093/)
-  // Required rows that are not fully proven must not be marked bare `proven` without qualifier caveats in the table body.
   assert.match(matrix, /partial/)
-  assert.match(matrix, /R-1094|cloud-sync-dogfood-residual/)
+  assert.match(matrix, /Cloud continuity smoke/)
 
-  const cloudResidual = readFileSync(
-    join(root, 'docs/runbooks/cloud-sync-dogfood-residual-joe-1094.md'),
-    'utf8',
-  )
-  assert.match(cloudResidual, /not proven/i)
-  assert.match(cloudResidual, /R-1094/)
-  assert.doesNotMatch(cloudResidual, /sync promise is proven/i)
-
-  const standaloneResidual = readFileSync(
-    join(root, 'docs/runbooks/standalone-session-api-residual-joe-1091.md'),
-    'utf8',
-  )
-  assert.match(standaloneResidual, /deferred/i)
-  assert.match(standaloneResidual, /R-1042/)
-  assert.match(standaloneResidual, /connection/i)
-  assert.doesNotMatch(standaloneResidual, /API shipped\?\s*\*\*Yes\*\*/i)
+  const standalone = readFileSync(join(root, 'docs/adr/standalone-desktop-session-api.md'), 'utf8')
+  assert.match(standalone, /deferred/i)
+  assert.match(standalone, /connection/i)
 
   const releaseChecklist = readFileSync(join(root, 'docs/release-checklist.md'), 'utf8')
-  assert.match(releaseChecklist, /pure-release-notes-claim-freeze/)
   assert.match(releaseChecklist, /enterprise-readiness-matrix/)
+  assert.match(releaseChecklist, /cloud-sync-dogfood/)
 })
 
 test('product purity: Knowledge UI exports Knowledge* aliases (JOE-1034)', () => {

@@ -18,15 +18,7 @@ const frontendDoc = readFileSync(join(root, 'docs/frontend-architecture.md'), 'u
 // backlogs and MUST carry an explicit, documented budget below so they cannot
 // silently keep growing. Lower a budget (never raise it) whenever a file shrinks.
 const GENERAL_LINE_BUDGET = 900
-const documentedLargeFileBudgets = new Map([
-  // components/HomePage.tsx — the launchpad shell. Backlog: extract feed,
-  // quick-actions, and hero sections into feature components.
-  // #920 extracted the shared composer menu/dismiss hooks; the inline HomeComposer has now
-  // been extracted to components/home/HomeComposer.tsx (with shared primary-agent-mode helpers
-  // in components/home/primary-agent-mode.ts), lowering this budget. See docs/frontend-architecture.md.
-  // JOE-884: Sidebar + cowork-api fell under the general 900-line budget after splits.
-  ['packages/app/src/components/HomePage.tsx', 630],
-])
+const documentedLargeFileBudgets = new Map<string, number>()
 
 function productionSourceFiles(directory: string): string[] {
   const files: string[] = []

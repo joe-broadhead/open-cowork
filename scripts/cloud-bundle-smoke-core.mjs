@@ -118,7 +118,7 @@ export async function invokeStdioMcpTool(input) {
   const child = spawn(
     input.nodeExecutable || process.execPath,
     [
-      '--experimental-permission',
+      '--permission',
       `--allow-fs-read=${runtimeRoot}`,
       script,
     ],

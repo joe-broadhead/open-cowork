@@ -24,15 +24,17 @@ test('sanitizeLogMessage redacts the provider token fixture matrix', () => {
 
 test('sanitizeLogMessage stays linear on adversarial input (ReDoS regression)', () => {
   // The prior EMAIL/KEYED patterns backtracked quadratically: ~11s on a 160 KB dotted
-  // domain. The bounded patterns complete in tens of ms; assert a generous budget so a
-  // regression to quadratic (which would blow past 1s) fails loudly without flakiness.
+  // domain. The bounded patterns complete in tens of ms; bound CPU time so concurrent
+  // test scheduling cannot turn a descheduled process into a false ReDoS failure.
   const dottedDomain = `a@${'a.'.repeat(120_000)}`
   const keywordRun = 'token'.repeat(40_000)
   const longLocal = 'a'.repeat(240_000)
   for (const input of [dottedDomain, keywordRun, longLocal]) {
-    const startedAt = Date.now()
+    const startedUsage = process.cpuUsage()
     sanitizeLogMessage(input)
-    assert.ok(Date.now() - startedAt < 1_000, `sanitizeLogMessage took too long on a ${input.length}-char input`)
+    const usage = process.cpuUsage(startedUsage)
+    const cpuMs = (usage.user + usage.system) / 1_000
+    assert.ok(cpuMs < 1_000, `sanitizeLogMessage used ${cpuMs.toFixed(0)}ms CPU on a ${input.length}-char input`)
   }
 })
 
