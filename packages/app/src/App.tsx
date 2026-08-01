@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
-import type { AppMetadata, CustomAgentConfig, DesktopFeatureKey, EffectiveAppSettings, PublicAppConfig, SessionComposerPreferences, SessionInfo, SessionPromptOptions, WorkflowRun } from '@open-cowork/shared'
-import { isDesktopFeatureEnabled } from '@open-cowork/shared'
+import type { AppMetadata, CustomAgentConfig, PublicAppConfig, SessionInfo, SessionPromptOptions, WorkflowRun } from '@open-cowork/shared'
+import { isDesktopFeatureEnabled, productFeatureForRoute } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
@@ -40,7 +40,7 @@ import { switchToSession } from './helpers/switchToSession'
 import { setBrandName, setDocsBaseUrl } from './helpers/brand'
 import { configureI18n, subscribeLocale, t } from './helpers/i18n'
 import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
-import { applyAppearancePreferences } from './helpers/theme'
+import { applyAppearancePreferences, saveAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from './stores/workspace-support'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from './stores/session-workspace-keys'
@@ -52,6 +52,7 @@ import {
 import {
   composerPreferencesFromHomeOptions,
   homePromptOptionsForRuntime,
+  previousHomeComposerPreferences,
   type HomePromptOptions,
 } from './components/home/home-prompt-options'
 
@@ -60,29 +61,6 @@ type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 type ResourceNavigationNotice = {
   status: ResourceNavigationAction['status'] | 'invalid'
   message: string
-}
-
-function hasComposerPreference(preferences: SessionComposerPreferences, key: keyof SessionComposerPreferences) {
-  return Object.prototype.hasOwnProperty.call(preferences, key)
-}
-
-function previousHomeComposerPreferences(session: SessionInfo | undefined, preferences: SessionComposerPreferences): SessionComposerPreferences {
-  const previous: SessionComposerPreferences = {}
-  if (hasComposerPreference(preferences, 'modelId')) previous.modelId = session?.composerModelId ?? null
-  if (hasComposerPreference(preferences, 'reasoningVariant')) previous.reasoningVariant = session?.composerReasoningVariant ?? null
-  return previous
-}
-
-function isSetupComplete(settings: EffectiveAppSettings, config: PublicAppConfig) {
-  if (!settings.effectiveProviderId || !settings.effectiveModel) return false
-  const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId)
-  if (!provider) return false
-  for (const credential of provider.credentials) {
-    if (credential.required === false) continue
-    const value = settings.providerCredentials?.[provider.id]?.[credential.key]
-    if (typeof value !== 'string' || !value.trim()) return false
-  }
-  return true
 }
 
 export function App() {
@@ -95,6 +73,8 @@ export function App() {
   const setActiveWorkspace = useSessionStore((s) => s.setActiveWorkspace)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const setSessions = useSessionStore((s) => s.setSessions)
+  const setSessionListLoading = useSessionStore((s) => s.setSessionListLoading)
+  const setSessionListError = useSessionStore((s) => s.setSessionListError)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
   const [metadata, setMetadata] = useState<AppMetadata | null>(null)
   const [previewNoticeDismissed, setPreviewNoticeDismissed] = useState(false)
@@ -139,9 +119,10 @@ export function App() {
     const nextView = normalizeAppView(target)
     if (!nextView || nextView === 'settings') return
     // Block navigating to a product area this deployment has disabled (defence in depth
-    // behind the sidebar already hiding it). Non-gated views are never in `features`, so
-    // isDesktopFeatureEnabled returns true for them.
-    if (!isDesktopFeatureEnabled(config?.features, nextView as DesktopFeatureKey)) return
+    // behind the sidebar already hiding it). The product manifest owns the route-to-feature
+    // mapping; utility routes that are not product capabilities stay ungated.
+    const feature = productFeatureForRoute(nextView)
+    if (feature && !isDesktopFeatureEnabled(config?.features, feature)) return
     runViewTransition(() => {
       flushSync(() => setView(nextView))
     })
@@ -193,25 +174,25 @@ export function App() {
 
   const loadSessions = useCallback(async () => {
     const workspaceId = normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId)
+    setSessionListLoading(workspaceId)
     try {
       if (workspaceId !== LOCAL_WORKSPACE_ID) {
         const support = await useWorkspaceSupportStore.getState().loadWorkspaceSupport(workspaceId)
         const listSupport = supportEntry(support, 'sessions.list')
         if (!listSupport || !supportAllows(listSupport)) {
-          if (normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId) === workspaceId) setSessions([])
+          setSessions([], workspaceId)
           return
         }
       }
       const sessions = workspaceId === LOCAL_WORKSPACE_ID
         ? await window.coworkApi.session.list()
         : await window.coworkApi.session.list({ workspaceId })
-      if (normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId) === workspaceId) {
-        setSessions(sessions || [])
-      }
+      setSessions(sessions || [], workspaceId)
     } catch (err) {
-      reportAppError('Could not load your projects. Try refreshing the app.', err, 'sessions')
+      setSessionListError(describeError(err), workspaceId)
+      reportAppError('Could not load your conversations. Try refreshing the app.', err, 'sessions')
     }
-  }, [reportAppError, setSessions])
+  }, [reportAppError, setSessionListError, setSessionListLoading, setSessions])
 
   const {
     runtimeReady,
@@ -497,6 +478,7 @@ export function App() {
 
   useAppGlobalEvents({
     runtimeReady,
+    voiceEnabled: Boolean(config && isDesktopFeatureEnabled(config.features, 'voice')),
     view,
     currentSessionId,
     toggleSidebar,
@@ -573,7 +555,8 @@ export function App() {
     bootHashAppliedRef.current = true
     const parsed = parseAppHash(initialBrowserHashRef.current || window.location.hash, { devMode: UI_PRIMITIVES_ENABLED })
     const bootView = parsed.view || view
-    if (!isDesktopFeatureEnabled(config.features, bootView as DesktopFeatureKey)) {
+    const bootFeature = productFeatureForRoute(bootView)
+    if (bootFeature && !isDesktopFeatureEnabled(config.features, bootFeature)) {
       setBootChatDeepLinkPending(false)
       navigateView('home')
       return
@@ -640,15 +623,44 @@ export function App() {
         registerExtraThemes(appConfig?.branding?.themes)
         setDefaultThemeId(appConfig?.branding?.defaultTheme)
         registerExtraStarterTemplates(appConfig?.agentStarterTemplates)
-        // Re-apply preferences so a downstream-provided default theme takes
-        // effect immediately if the user hasn't picked one locally yet.
-        applyAppearancePreferences()
+        // The main-process mirror paints the startup surfaces before React
+        // mounts, so it hydrates the renderer when both fields exist. The
+        // renderer still owns validation and must write migrated values back;
+        // otherwise a retired mirror would repaint the wrong theme next launch.
+        const hasPersistedStartupAppearance = Boolean(
+          settings
+          && isDesktopRuntime()
+          && settings.appearanceColorScheme
+          && settings.appearanceThemeId,
+        )
+        const appearance = hasPersistedStartupAppearance
+          ? saveAppearancePreferences({
+              colorScheme: settings!.appearanceColorScheme,
+              uiTheme: settings!.appearanceThemeId,
+            })
+          : applyAppearancePreferences()
+        if (settings && isDesktopRuntime() && (
+          settings.appearanceColorScheme !== appearance.colorScheme
+          || settings.appearanceThemeId !== appearance.uiTheme
+        )) {
+          void window.coworkApi.settings.set({
+            appearanceColorScheme: appearance.colorScheme,
+            appearanceThemeId: appearance.uiTheme,
+            workspaceId: LOCAL_WORKSPACE_ID,
+          }).catch((error: unknown) => {
+            window.coworkApi.diagnostics.reportRendererError({
+              message: `Failed to reconcile startup appearance: ${describeError(error)}`,
+              stack: errorStack(error),
+              view: 'bootstrap',
+            })
+          })
+        }
         setAuthenticated(authState.authenticated)
         setUserEmail(authState.email || '')
         setSettingsChecked(Boolean(settings))
         // The desktop connect-a-model setup is desktop-only; the cloud manages
         // providers/models server-side, so the browser build never gates on it.
-        setNeedsSetup(Boolean(settings && isDesktopRuntime() && !isSetupComplete(settings, appConfig)))
+        setNeedsSetup(Boolean(settings && isDesktopRuntime() && !settings.setupComplete))
         if (!signedOut) {
           // Session records do not depend on the OpenCode runtime being ready,
           // so populate the thread list as soon as auth/config/settings resolve.
@@ -719,7 +731,7 @@ export function App() {
               const settings = await window.coworkApi.settings.get()
               setAuthenticated(true)
               setUserEmail(email)
-              setNeedsSetup(isDesktopRuntime() && !isSetupComplete(settings, config))
+              setNeedsSetup(isDesktopRuntime() && !settings.setupComplete)
               setSettingsChecked(true)
               void loadSessions()
             } catch (err) {
@@ -804,6 +816,7 @@ export function App() {
           showAdmin={adminAccessible}
           collapsed={sidebarCollapsed}
           onExpandSidebar={ensureSidebarVisible}
+          onSetupRequired={() => setNeedsSetup(true)}
         />
         <main
           ref={mainContentRef}
@@ -815,12 +828,18 @@ export function App() {
             <AppRoutes
               view={view}
               config={config}
+              featureValueDiscoveryEnabled={authChecked
+                && settingsChecked
+                && !needsSetup
+                && runtimeReady
+                && (!config.auth.enabled || authenticated)}
               adminAccess={adminAccess}
               agentBuilderSeed={agentBuilderSeed}
               workflowNavigationTarget={workflowNavigationTarget}
               capabilityNavigationTarget={capabilityNavigationTarget}
               onStartThread={startThreadFromHome}
               onOpenThread={openExistingThread}
+              onReloadSessions={loadSessions}
               onNavigate={navigateView}
               onOpenSettings={openSidebarSettings}
               onClearAgentBuilderSeed={() => setAgentBuilderSeed(null)}

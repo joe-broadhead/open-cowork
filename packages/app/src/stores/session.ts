@@ -47,6 +47,7 @@ export type { SessionViewState } from '@open-cowork/shared'
 
 export type Session = SessionInfo
 export type PrimaryAgentMode = 'build' | 'plan' | 'chief-of-staff'
+export type SessionListStatus = 'loading' | 'ready' | 'error'
 
 type SessionMetadataPatch = {
   id: string
@@ -84,6 +85,8 @@ export interface McpConnection {
 export interface SessionStore {
   activeWorkspaceId: string
   sessionsByWorkspace: Record<string, Session[]>
+  sessionListStatusByWorkspace: Record<string, SessionListStatus>
+  sessionListErrorByWorkspace: Record<string, string | null>
   sessions: Session[]
   currentSessionId: string | null
   currentView: SessionView
@@ -93,7 +96,9 @@ export interface SessionStore {
   // even after each individual request has been resolved.
   recentApprovals: RunawaySample[]
   setActiveWorkspace: (workspaceId: string) => void
-  setSessions: (sessions: Session[]) => void
+  setSessions: (sessions: Session[], workspaceId?: string | null) => void
+  setSessionListLoading: (workspaceId?: string | null) => void
+  setSessionListError: (message: string, workspaceId?: string | null) => void
   setCurrentSession: (id: string | null) => void
   addSession: (session: Session) => void
   renameSession: (id: string, title: string) => void
@@ -167,6 +172,8 @@ function applyToWorkspace(
 export const useSessionStore = create<SessionStore>((set) => ({
   activeWorkspaceId: LOCAL_WORKSPACE_ID,
   sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: [] },
+  sessionListStatusByWorkspace: { [LOCAL_WORKSPACE_ID]: 'loading' },
+  sessionListErrorByWorkspace: { [LOCAL_WORKSPACE_ID]: null },
   sessions: [],
   currentSessionId: null,
   currentView: deriveVisibleSessionPatch(createEmptySessionViewState({}, sessionViewTiming()), null, new Set<string>(), new Set<string>(), sessionViewTiming()),
@@ -203,7 +210,46 @@ export const useSessionStore = create<SessionStore>((set) => ({
       ),
     }
   }),
-  setSessions: (sessions) => set((state) => applyToWorkspace(state, state.activeWorkspaceId, () => sessions)),
+  setSessions: (sessions, workspaceId) => set((state) => {
+    const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? state.activeWorkspaceId)
+    return {
+      ...applyToWorkspace(state, targetWorkspaceId, () => sessions),
+      sessionListStatusByWorkspace: {
+        ...state.sessionListStatusByWorkspace,
+        [targetWorkspaceId]: 'ready',
+      },
+      sessionListErrorByWorkspace: {
+        ...state.sessionListErrorByWorkspace,
+        [targetWorkspaceId]: null,
+      },
+    }
+  }),
+  setSessionListLoading: (workspaceId) => set((state) => {
+    const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? state.activeWorkspaceId)
+    return {
+      sessionListStatusByWorkspace: {
+        ...state.sessionListStatusByWorkspace,
+        [targetWorkspaceId]: 'loading',
+      },
+      sessionListErrorByWorkspace: {
+        ...state.sessionListErrorByWorkspace,
+        [targetWorkspaceId]: null,
+      },
+    }
+  }),
+  setSessionListError: (message, workspaceId) => set((state) => {
+    const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? state.activeWorkspaceId)
+    return {
+      sessionListStatusByWorkspace: {
+        ...state.sessionListStatusByWorkspace,
+        [targetWorkspaceId]: 'error',
+      },
+      sessionListErrorByWorkspace: {
+        ...state.sessionListErrorByWorkspace,
+        [targetWorkspaceId]: message,
+      },
+    }
+  }),
   setCurrentSession: (id) => set((state) => {
     let sessionStateById = { ...state.sessionStateById }
     if (!id) {

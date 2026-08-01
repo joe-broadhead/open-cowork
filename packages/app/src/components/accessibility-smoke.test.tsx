@@ -65,7 +65,6 @@ describe('focused accessibility smoke', () => {
         brandName="Open Cowork"
         onStartThread={vi.fn(async () => undefined)}
         onOpenThread={vi.fn()}
-        onNavigate={vi.fn()}
       />,
     )
 

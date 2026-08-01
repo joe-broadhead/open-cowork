@@ -185,6 +185,12 @@ describe('Sidebar', () => {
     expect(screen.getByText('Tools & Skills')).toBeTruthy()
     expect(screen.getByText('Artifacts')).toBeTruthy()
     expect(screen.getByText('Health Center')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Recent chats' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Recent chats' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Projects' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
+    expect(screen.queryByText('Tool Status')).toBeNull()
+    expect(screen.queryByText('You')).toBeNull()
     expect(screen.queryByText('Acme AI')).toBeNull()
   })
 

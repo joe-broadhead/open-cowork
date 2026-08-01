@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentProps } from 'react'
-import type { CustomAgentConfig, PublicAppConfig } from '@open-cowork/shared'
+import { isDesktopFeatureEnabled, type CustomAgentConfig, type PublicAppConfig } from '@open-cowork/shared'
 import type { AppNavigationTarget, AppView } from '../../app-types'
 import type { AdminAccessState } from '../../hooks/useAdminAccessible'
 import { t } from '../../helpers/i18n'
@@ -7,6 +7,7 @@ import { HomePage } from '../HomePage'
 import type { WorkflowNavigationTarget } from '../workflows/WorkflowsPage'
 import type { CapabilityNavigationTarget } from '../capabilities/CapabilitiesPage'
 import { RouteFallback } from './RouteFallback'
+import { useSessionStore } from '../../stores/session'
 
 const ChatView = lazy(() => import('../chat/ChatView').then((module) => ({ default: module.ChatView })))
 const ProjectsBoardPage = lazy(() => import('../projects/ProjectsBoardPage').then((module) => ({ default: module.ProjectsBoardPage })))
@@ -24,12 +25,14 @@ const PrimitiveGallery = lazy(() => import('../ui/PrimitiveGallery').then((modul
 type AppRoutesProps = {
   view: AppView
   config: PublicAppConfig
+  featureValueDiscoveryEnabled: boolean
   adminAccess: AdminAccessState
   agentBuilderSeed: Partial<CustomAgentConfig> | null
   workflowNavigationTarget: WorkflowNavigationTarget | null
   capabilityNavigationTarget: CapabilityNavigationTarget | null
   onStartThread: ComponentProps<typeof HomePage>['onStartThread']
   onOpenThread: (sessionId: string) => void | Promise<void>
+  onReloadSessions: () => void | Promise<void>
   onNavigate: (target: AppNavigationTarget) => void
   onOpenSettings: () => void
   onClearAgentBuilderSeed: () => void
@@ -43,12 +46,14 @@ type AppRoutesProps = {
 export function AppRoutes({
   view,
   config,
+  featureValueDiscoveryEnabled,
   adminAccess,
   agentBuilderSeed,
   workflowNavigationTarget,
   capabilityNavigationTarget,
   onStartThread,
   onOpenThread,
+  onReloadSessions,
   onNavigate,
   onOpenSettings,
   onClearAgentBuilderSeed,
@@ -58,6 +63,8 @@ export function AppRoutes({
   onWorkflowNavigationHandled,
   onCapabilityNavigationHandled,
 }: AppRoutesProps) {
+  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
+
   return (
     <>
       {view === 'home' && (
@@ -66,22 +73,28 @@ export function AppRoutes({
           homeBranding={config.branding.home}
           onStartThread={onStartThread}
           onOpenThread={onOpenThread}
-          onNavigate={onNavigate}
+          onReloadSessions={onReloadSessions}
         />
       )}
       {view === 'chat' && (
         <Suspense fallback={<RouteFallback />}>
-          <ChatView onNavigate={onNavigate} />
+          <ChatView
+            onNavigate={onNavigate}
+            knowledgeEnabled={isDesktopFeatureEnabled(config.features, 'knowledge')}
+          />
         </Suspense>
       )}
       {view === 'projects' && (
         <Suspense fallback={<RouteFallback />}>
-          <ProjectsBoardPage onOpenThread={onOpenThread} />
+          <ProjectsBoardPage
+            onOpenThread={onOpenThread}
+            featureValueDiscoveryEnabled={featureValueDiscoveryEnabled}
+          />
         </Suspense>
       )}
       {view === 'knowledge' && (
         <Suspense fallback={<RouteFallback />}>
-          <KnowledgePage />
+          <KnowledgePage featureValueDiscoveryEnabled={featureValueDiscoveryEnabled} />
         </Suspense>
       )}
       {view === 'approvals' && (
@@ -93,6 +106,7 @@ export function AppRoutes({
         <Suspense fallback={<RouteFallback />}>
           <WorkflowsPage
             onOpenThread={onOpenThread}
+            featureValueDiscoveryEnabled={featureValueDiscoveryEnabled}
             initialTarget={workflowNavigationTarget}
             onInitialTargetHandled={onWorkflowNavigationHandled}
           />
@@ -101,6 +115,7 @@ export function AppRoutes({
       {view === 'team' && (
         <Suspense fallback={<RouteFallback />}>
           <AgentsPage
+            key={activeWorkspaceId}
             initialDraft={agentBuilderSeed}
             onClearDraft={onClearAgentBuilderSeed}
             onClose={() => onNavigate('chat')}
@@ -112,12 +127,16 @@ export function AppRoutes({
       )}
       {view === 'channels' && (
         <Suspense fallback={<RouteFallback />}>
-          <StudioChannelsPage onOpenSettings={onOpenSettings} />
+          <StudioChannelsPage
+            onOpenSettings={onOpenSettings}
+            featureValueDiscoveryEnabled={featureValueDiscoveryEnabled}
+          />
         </Suspense>
       )}
       {view === 'tools' && (
         <Suspense fallback={<RouteFallback />}>
           <CapabilitiesPage
+            key={activeWorkspaceId}
             onClose={() => onNavigate('chat')}
             initialTarget={capabilityNavigationTarget}
             onInitialTargetHandled={onCapabilityNavigationHandled}
@@ -127,7 +146,10 @@ export function AppRoutes({
       )}
       {view === 'artifacts' && (
         <Suspense fallback={<RouteFallback />}>
-          <StudioArtifactsPage onOpenChat={() => onNavigate('chat')} />
+          <StudioArtifactsPage
+            onOpenChat={() => onNavigate('chat')}
+            featureValueDiscoveryEnabled={featureValueDiscoveryEnabled}
+          />
         </Suspense>
       )}
       {view === 'health' && (

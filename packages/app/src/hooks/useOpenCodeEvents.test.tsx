@@ -204,6 +204,7 @@ describe('useOpenCodeEvents', () => {
       workflowQuietHoursEnd: null,
       effectiveProviderId: null,
       effectiveModel: null,
+      setupComplete: false,
     }
   }
 
@@ -350,10 +351,15 @@ describe('useOpenCodeEvents', () => {
     vi.useRealTimers()
   })
 
-  it('applies workspace session-list updates only for the active workspace', () => {
+  it('caches inactive workspace session-list updates without changing visible active sessions', () => {
     render(<Harness />)
     useSessionStore.getState().setActiveWorkspace('cloud:active')
-    useSessionStore.getState().setSessions([])
+    useSessionStore.getState().setSessions([{
+      id: 'active-existing',
+      title: 'Active existing',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }])
 
     act(() => {
       workspaceSessionsUpdated?.({
@@ -367,7 +373,8 @@ describe('useOpenCodeEvents', () => {
         syncedAt: '2026-05-27T10:00:00.000Z',
       })
     })
-    expect(useSessionStore.getState().sessions).toEqual([])
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['active-existing'])
+    expect(useSessionStore.getState().sessionsByWorkspace['cloud:other']?.map((session) => session.id)).toEqual(['other-session'])
 
     act(() => {
       workspaceSessionsUpdated?.({

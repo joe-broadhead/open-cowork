@@ -1,18 +1,16 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  BrandingSidebarConfig, DesktopFeatureFlags, DesktopFeatureKey } from '@open-cowork/shared'
-import { isDesktopFeatureEnabled } from '@open-cowork/shared'
+  BrandingSidebarConfig, DesktopFeatureFlags } from '@open-cowork/shared'
+import { isDesktopFeatureEnabled, productFeatureForRoute, productSurfaceForRoute } from '@open-cowork/shared'
 import { ThreadList } from '../sidebar/ThreadList'
-import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
 import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
-import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { Icon, type IconName } from '@open-cowork/ui'
 import { countDesktopApprovalQueueItems } from '../studio/approval-queue-model'
 import { SidebarBrandTop, SidebarLowerBranding } from './SidebarBranding'
-import { WorkspaceSwitcher, LOCAL_WORKSPACE_FALLBACK } from './WorkspaceSwitcher'
+import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
 interface Props {
   currentView: AppView
@@ -22,6 +20,7 @@ interface Props {
   branding?: BrandingSidebarConfig
   collapsed?: boolean
   onExpandSidebar?: () => void
+  onSetupRequired?: () => void
   features?: DesktopFeatureFlags
   // RBAC-gated Admin entry (cloud-only); resolved from admin permissions in App.
   showAdmin?: boolean
@@ -36,29 +35,30 @@ type SidebarNavItem = {
   icon: IconName
   labelKey: string
   fallback: string
-  // When set, the item is hidden if the deployment disables this feature flag.
-  feature?: DesktopFeatureKey
 }
 
 const PRIMARY_NAV_ITEMS: SidebarNavItem[] = [
   { view: 'home', icon: 'home', labelKey: 'sidebar.home', fallback: 'Home' },
-  { view: 'projects', icon: 'folder', labelKey: 'sidebar.projects', fallback: 'Projects', feature: 'projects' },
-  { view: 'knowledge', icon: 'book-open', labelKey: 'sidebar.knowledge', fallback: 'Knowledge', feature: 'knowledge' },
-  { view: 'approvals', icon: 'circle-help', labelKey: 'sidebar.approvals', fallback: 'Approvals', feature: 'approvals' },
+  { view: 'projects', icon: 'folder', labelKey: 'sidebar.projects', fallback: 'Projects' },
+  { view: 'knowledge', icon: 'book-open', labelKey: 'sidebar.knowledge', fallback: 'Knowledge' },
+  { view: 'approvals', icon: 'circle-help', labelKey: 'sidebar.approvals', fallback: 'Approvals' },
 ]
 
 const MANAGE_NAV_ITEMS: SidebarNavItem[] = [
-  { view: 'team', icon: 'users', labelKey: 'sidebar.team', fallback: 'Team', feature: 'team' },
-  { view: 'playbooks', icon: 'workflow', labelKey: 'sidebar.playbooks', fallback: 'Playbooks', feature: 'playbooks' },
-  { view: 'channels', icon: 'activity', labelKey: 'sidebar.channels', fallback: 'Channels', feature: 'channels' },
-  { view: 'tools', icon: 'blocks', labelKey: 'sidebar.toolsSkills', fallback: 'Tools & Skills', feature: 'tools' },
-  { view: 'artifacts', icon: 'file', labelKey: 'sidebar.artifacts', fallback: 'Artifacts', feature: 'artifacts' },
+  { view: 'team', icon: 'users', labelKey: 'sidebar.team', fallback: 'Team' },
+  { view: 'playbooks', icon: 'workflow', labelKey: 'sidebar.playbooks', fallback: 'Playbooks' },
+  { view: 'channels', icon: 'activity', labelKey: 'sidebar.channels', fallback: 'Channels' },
+  { view: 'tools', icon: 'blocks', labelKey: 'sidebar.toolsSkills', fallback: 'Tools & Skills' },
+  { view: 'artifacts', icon: 'file', labelKey: 'sidebar.artifacts', fallback: 'Artifacts' },
 ]
 
 const ADMIN_NAV_ITEM: SidebarNavItem = { view: 'admin', icon: 'shield-check', labelKey: 'sidebar.admin', fallback: 'Admin' }
 
 function visibleNavItems(items: SidebarNavItem[], features: DesktopFeatureFlags | undefined): SidebarNavItem[] {
-  return items.filter((item) => !item.feature || isDesktopFeatureEnabled(features, item.feature))
+  return items.filter((item) => {
+    const feature = productFeatureForRoute(item.view)
+    return !feature || isDesktopFeatureEnabled(features, feature)
+  })
 }
 
 function SidebarNavButton({
@@ -74,7 +74,7 @@ function SidebarNavButton({
   onViewChange: (view: AppNavigationTarget) => void
   badge?: number
 }) {
-  const label = t(item.labelKey, item.fallback)
+  const label = t(item.labelKey, productSurfaceForRoute(item.view)?.label || item.fallback)
   const active = currentView === item.view
 
   return (
@@ -98,7 +98,7 @@ function SidebarNavButton({
   )
 }
 
-function SidebarPresenceFooter({
+function SidebarSettingsFooter({
   collapsed,
   onSettings,
   showSettings,
@@ -107,62 +107,19 @@ function SidebarPresenceFooter({
   onSettings: () => void
   showSettings: boolean
 }) {
-  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
-  const workspaceSupport = useActiveWorkspaceSupport()
-  const authority = workspaceSupport.flags.authority
-  const workspaceLabel = activeWorkspaceId === LOCAL_WORKSPACE_FALLBACK.id || authority === 'desktop_local'
-    ? t('workspace.localShort', 'Local')
-    : authority === 'gateway_standalone'
-      ? t('workspace.gatewayShort', 'Standalone')
-      : authority === 'desktop_paired'
-        ? t('workspace.pairedShort', 'Paired')
-        : t('workspace.cloudShort', 'Cloud')
-
-  // JOE-1038: never hardcode Online. Prefer workspace status from support
-  // context when present; fall back to runtime-ish authority labels only.
-  const pairingState = workspaceSupport.flags.pairingState
-  const statusLabel = (() => {
-    if (pairingState === 'pairing_required') return t('workspace.status.authRequired', 'Auth required')
-    if (pairingState === 'paired_offline') return t('workspace.status.offline', 'Offline cached')
-    if (!workspaceSupport.flags.canCreateSession && !workspaceSupport.flags.canPrompt && authority === 'gateway_standalone') {
-      return t('workspace.status.connectionOnly', 'Connection only')
-    }
-    if (!workspaceSupport.loaded && activeWorkspaceId !== LOCAL_WORKSPACE_FALLBACK.id) {
-      return t('workspace.status.checking', 'Checking…')
-    }
-    if (workspaceSupport.error) return t('workspace.status.error', 'Error')
-    if (workspaceSupport.flags.canPrompt || workspaceSupport.flags.canCreateSession || authority === 'desktop_local') {
-      return t('workspace.status.online', 'Online')
-    }
-    return t('workspace.status.limited', 'Limited')
-  })()
-
   return (
-    <div className={`shrink-0 border-t border-border-subtle ${collapsed ? 'px-2 py-2' : 'px-3 py-2.5'}`}>
-      <div className={`flex ${collapsed ? 'flex-col items-center justify-center gap-1.5' : 'items-center gap-2.5'}`}>
-        <span
-          aria-hidden="true"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border-subtle bg-surface-active font-display text-2xs font-bold text-text"
-        >
-          OC
-        </span>
-        {!collapsed ? (
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium text-text">{t('sidebar.presenceName', 'You')}</div>
-            <div className="truncate text-2xs text-text-muted">{workspaceLabel} · {statusLabel}</div>
-          </div>
-        ) : null}
-        <button
-          type="button"
-          onClick={onSettings}
-          aria-label={t('sidebar.settings', 'Settings')}
-          aria-expanded={showSettings}
-          title={t('sidebar.settings', 'Settings')}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
-        >
-          <Icon name="settings-2" size={16} />
-        </button>
-      </div>
+    <div className={`flex shrink-0 flex-col border-t border-border-subtle ${collapsed ? 'px-2 py-2' : 'px-3 py-2.5'}`}>
+      <button
+        type="button"
+        onClick={onSettings}
+        aria-label={t('sidebar.settings', 'Settings')}
+        aria-expanded={showSettings}
+        title={t('sidebar.settings', 'Settings')}
+        className={`flex h-8 items-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary ${collapsed ? 'justify-center' : 'gap-2 px-2'}`}
+      >
+        <Icon name="settings-2" size={16} />
+        {!collapsed ? <span className="text-xs">{t('sidebar.settings', 'Settings')}</span> : null}
+      </button>
     </div>
   )
 }
@@ -175,6 +132,7 @@ export function Sidebar({
   branding,
   collapsed = false,
   onExpandSidebar,
+  onSetupRequired,
   features,
   showAdmin = false,
 }: Props) {
@@ -322,18 +280,13 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Recent project chats — ThreadList owns its own scroll container so it
+          {/* Recent conversations — ThreadList owns its own scroll container so it
               can virtualize rows without fighting the parent over the
               scroll element reference. */}
           {!collapsed ? <div className="flex min-h-[120px] flex-1 flex-col overflow-hidden px-2 py-2">
-            <button
-              type="button"
-              onClick={() => onViewChange('projects')}
-              aria-current={currentView === 'projects' ? 'page' : undefined}
-              className={`sidebar-nav-item mb-1 rounded-md px-2 py-1 text-start text-2xs font-semibold uppercase tracking-widest transition-colors ${currentView === 'projects' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
-            >
+            <h2 className="mb-1 px-2 py-1 text-2xs font-semibold uppercase tracking-widest text-text-muted">
               {t('sidebar.recentWork', 'Recent chats')}
-            </button>
+            </h2>
             {!collapsed ? (
               <p className="px-2 pb-1 text-2xs leading-snug text-text-muted">
                 {t('sidebar.recentWorkHint', 'Quick switch. Objectives and Kanban live under Projects.')}
@@ -342,7 +295,7 @@ export function Sidebar({
             <ThreadList onSelect={() => onViewChange('chat')} searchQuery={searchQuery} />
           </div> : <div className="flex-1" />}
 
-          {/* Tool status */}
+          {/* Secondary diagnostics entry. Runtime and MCP state live once in the status bar. */}
           {!collapsed ? <div className="max-h-[28vh] shrink-0 overflow-y-auto border-t border-border-subtle px-2 py-2">
             <SidebarLowerBranding lower={branding?.lower} />
             <button onClick={() => onViewChange('health')}
@@ -352,8 +305,6 @@ export function Sidebar({
               <Icon name="heart-pulse" size={16} />
               {t('sidebar.healthCenter', 'Health Center')}
             </button>
-            <div className="px-2 pb-1 text-2xs font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.toolStatus', 'Tool Status')}</div>
-            <McpStatus />
           </div> : (
             <div className="shrink-0 border-t border-border-subtle px-2 py-2">
               <button onClick={() => onViewChange('health')}
@@ -366,12 +317,13 @@ export function Sidebar({
             </div>
           )}
 
-          <SidebarPresenceFooter collapsed={collapsed} showSettings={showSettings} onSettings={() => setShowSettings(true)} />
+          <SidebarSettingsFooter collapsed={collapsed} showSettings={showSettings} onSettings={() => setShowSettings(true)} />
       </aside>
       {showSettings ? (
         <Suspense fallback={<div className="fixed inset-0 z-[60] grid place-items-center text-xs text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>
           <SettingsPanel
             onClose={() => setShowSettings(false)}
+            onSetupRequired={onSetupRequired}
           />
         </Suspense>
       ) : null}

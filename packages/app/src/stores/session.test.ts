@@ -69,6 +69,39 @@ describe('useSessionStore', () => {
     ])
   })
 
+  it('tracks session-list loading and errors independently per workspace', () => {
+    const store = useSessionStore.getState()
+
+    expect(store.sessionListStatusByWorkspace.local).toBe('loading')
+    store.setSessionListError('Local session service is unavailable.')
+
+    useSessionStore.getState().setActiveWorkspace('cloud:acme')
+    useSessionStore.getState().setSessionListLoading()
+    useSessionStore.getState().setSessions([session('cloud-session')])
+
+    const state = useSessionStore.getState()
+    expect(state.sessionListStatusByWorkspace['cloud:acme']).toBe('ready')
+    expect(state.sessionListErrorByWorkspace['cloud:acme']).toBeNull()
+    expect(state.sessionListStatusByWorkspace.local).toBe('error')
+    expect(state.sessionListErrorByWorkspace.local).toBe('Local session service is unavailable.')
+  })
+
+  it('routes an explicit inactive-workspace snapshot without changing visible active sessions', () => {
+    const store = useSessionStore.getState()
+    store.setSessions([session('local-session', 'Local')])
+    store.setSessionListError('Previous cloud failure', 'cloud:other')
+
+    useSessionStore.getState().setSessions([session('cloud-session', 'Cloud')], 'cloud:other')
+
+    const state = useSessionStore.getState()
+    expect(state.activeWorkspaceId).toBe('local')
+    expect(state.sessions.map((entry) => entry.id)).toEqual(['local-session'])
+    expect(state.sessionsByWorkspace.local?.map((entry) => entry.id)).toEqual(['local-session'])
+    expect(state.sessionsByWorkspace['cloud:other']?.map((entry) => entry.id)).toEqual(['cloud-session'])
+    expect(state.sessionListStatusByWorkspace['cloud:other']).toBe('ready')
+    expect(state.sessionListErrorByWorkspace['cloud:other']).toBeNull()
+  })
+
   it('projects full session views into busy and awaiting indexes', () => {
     const store = useSessionStore.getState()
 

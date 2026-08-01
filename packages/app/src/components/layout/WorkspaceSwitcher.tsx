@@ -8,7 +8,7 @@ import { useEscape } from '../../hooks/useEscape'
 import { confirmGatewayCredentialReset } from '../../helpers/destructive-actions'
 import { ModalBackdrop } from './ModalBackdrop'
 
-export const LOCAL_WORKSPACE_FALLBACK: WorkspaceInfo = {
+const LOCAL_WORKSPACE_FALLBACK: WorkspaceInfo = {
   id: 'local',
   kind: 'local',
   authority: 'desktop_local',
@@ -174,7 +174,7 @@ export function WorkspaceSwitcher() {
         setActiveWorkspace(active.id)
         const activeSupport = supportEntries?.find((entry) => entry.workspace.id === active.id)?.support
         const sessions = await loadSessionsForWorkspace(active, activeSupport)
-        if (!cancelled) setSessions(sessions)
+        if (!cancelled) setSessions(sessions, active.id)
       })
       .catch(() => {
         if (!cancelled) setWorkspaces([LOCAL_WORKSPACE_FALLBACK])
@@ -214,7 +214,7 @@ export function WorkspaceSwitcher() {
         setCurrentSession(null)
       }
       const sessions = await loadSessionsForWorkspace(activated, activeSupport)
-      if (isCurrentActivation()) setSessions(sessions)
+      if (isCurrentActivation()) setSessions(sessions, activated.id)
     } catch (error) {
       if (!isCurrentActivation()) return
       const message = error instanceof Error ? error.message : String(error)
@@ -229,7 +229,7 @@ export function WorkspaceSwitcher() {
         const restoredSupport = supportEntries?.find((entry) => entry.workspace.id === restored.id)?.support
         setActiveWorkspace(restored.id)
         const sessions = await loadSessionsForWorkspace(restored, restoredSupport)
-        if (isCurrentActivation()) setSessions(sessions)
+        if (isCurrentActivation()) setSessions(sessions, restored.id)
       } catch {
         // Leave the visible workspace unchanged if rollback also fails; the
         // original login error is still the actionable user-facing failure.
