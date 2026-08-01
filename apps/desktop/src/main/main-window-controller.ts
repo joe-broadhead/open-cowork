@@ -3,8 +3,16 @@ import {
   saveSettings,
 } from '@open-cowork/runtime-host/settings'
 import { writeE2EWindowReadyProbe } from '@open-cowork/runtime-host'
+import {
+  resolveStartupAppearance,
+  startupSurfaceQuery,
+  type BrandingConfig,
+  type ResolvedColorScheme,
+  type StartupColorSchemePreference,
+  type StartupSurfaceState,
+} from '@open-cowork/shared'
 import type { App } from 'electron'
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'path'
 
 import { attachWebContentsSecurityGuards } from './main-window-security.ts'
@@ -15,7 +23,7 @@ import {
   rendererUrlLooksWrong,
   shouldRecoverMainWindowFromDidFailLoad,
 } from './main-window-lifecycle.ts'
-import { resolveStartupSplashTemplatePath, writeStartupSplashFile } from './startup-splash.ts'
+import { prepareStartupSplashFile, resolveStartupSplashTemplatePath } from './startup-splash.ts'
 import { createWindowState } from './window-state.ts'
 import {
   clampWindowZoomFactor,
@@ -26,7 +34,7 @@ import {
 export function createMainWindowController(options: {
   app: App
   appDirname: string
-  brandName: string
+  branding: BrandingConfig
   appIconPath?: string | null
   getAppIsQuitting: () => boolean
   canOpenMainWindowFromLoading?: () => boolean
@@ -69,18 +77,56 @@ export function createMainWindowController(options: {
     return effectiveRendererDevServerUrl(process.env.VITE_DEV_SERVER_URL, options.app.isPackaged)
   }
 
-  function startupSplashPath() {
+  function startupSplashPath(state: StartupSurfaceState) {
     const templatePath = resolveStartupSplashTemplatePath(options.appDirname)
-    try {
-      return writeStartupSplashFile({
-        templatePath,
-        outputDir: join(options.app.getPath('userData'), 'startup'),
-        brandName: options.brandName,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+    const result = prepareStartupSplashFile({
+      templatePath,
+      outputDir: join(options.app.getPath('userData'), 'startup'),
+      state,
+    })
+    if (result.error) {
+      const message = result.error instanceof Error ? result.error.message : String(result.error)
       options.log('main', `Falling back to packaged startup splash: ${message}`)
-      return templatePath
+    }
+    return result.path
+  }
+
+  function systemColorScheme(): ResolvedColorScheme {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  }
+
+  function startupColorSchemePreference(): StartupColorSchemePreference {
+    const e2eOverride = process.env.OPEN_COWORK_E2E === '1'
+      ? process.env.OPEN_COWORK_E2E_STARTUP_COLOR_SCHEME
+      : undefined
+    if (e2eOverride === 'light' || e2eOverride === 'dark' || e2eOverride === 'system') {
+      return e2eOverride
+    }
+    try {
+      return loadSettings().appearanceColorScheme || 'dark'
+    } catch (error) {
+      options.log('main', `Using default startup color scheme: ${error instanceof Error ? error.message : String(error)}`)
+      return 'dark'
+    }
+  }
+
+  function startupSurfaceState(): StartupSurfaceState {
+    let themeId: string | null | undefined
+    try {
+      themeId = loadSettings().appearanceThemeId
+    } catch {
+      themeId = null
+    }
+    return {
+      brandName: options.branding.name,
+      ...resolveStartupAppearance({
+        branding: options.branding,
+        preferences: {
+          colorScheme: startupColorSchemePreference(),
+          themeId,
+        },
+        systemColorScheme: systemColorScheme(),
+      }),
     }
   }
 
@@ -193,11 +239,15 @@ export function createMainWindowController(options: {
     revealMainWindow(window, reason)
   }
 
-  function loadingRendererUrl() {
+  function loadingRendererUrl(state: StartupSurfaceState) {
     const devServerUrl = rendererDevServerUrl()
     if (!devServerUrl) return null
     const base = devServerUrl.endsWith('/') ? devServerUrl : `${devServerUrl}/`
-    return new URL('loading.html', base).toString()
+    const url = new URL('loading.html', base)
+    for (const [key, value] of Object.entries(startupSurfaceQuery(state))) {
+      url.searchParams.set(key, value)
+    }
+    return url.toString()
   }
 
   function closeLoadingWindow() {
@@ -210,20 +260,21 @@ export function createMainWindowController(options: {
 
   function createLoadingWindow() {
     if (loadingWindow && !loadingWindow.isDestroyed()) return loadingWindow
+    const state = startupSurfaceState()
     const window = new BrowserWindow({
       width: 520,
       height: 360,
       minWidth: 460,
       minHeight: 320,
-      show: true,
+      show: false,
       resizable: false,
       fullscreenable: false,
       maximizable: false,
       icon: options.appIconPath || getPackagedResourcePath('icon.png'),
-      title: `${options.brandName} is starting`,
+      title: `${options.branding.name} is starting`,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 14, y: 12 },
-      backgroundColor: '#111827',
+      backgroundColor: state.tokens.base,
       webPreferences: {
         preload: join(options.appDirname, '../preload/index.js'),
         contextIsolation: true,
@@ -238,16 +289,20 @@ export function createMainWindowController(options: {
     window.on('closed', () => {
       if (loadingWindow === window) loadingWindow = null
     })
+    window.once('ready-to-show', () => {
+      if (loadingWindow === window && !window.isDestroyed()) window.show()
+    })
     attachWebContentsSecurityGuards(window.webContents, expectedLoadingRendererPath(), rendererDevServerUrl())
-    const url = loadingRendererUrl()
+    const url = loadingRendererUrl(state)
     if (url) void window.loadURL(url)
-    else void window.loadFile(expectedLoadingRendererPath())
+    else void window.loadFile(expectedLoadingRendererPath(), { query: startupSurfaceQuery(state) })
     return window
   }
 
   function createWindow(reason = 'startup') {
     clearMainWindowRecoveryTimer()
     const mainWindowState = createWindowState(1200, 800)
+    const state = startupSurfaceState()
 
     const window = new BrowserWindow({
       x: mainWindowState.bounds.x,
@@ -260,7 +315,7 @@ export function createMainWindowController(options: {
       icon: options.appIconPath || getPackagedResourcePath('icon.png'),
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 14, y: 12 },
-      backgroundColor: '#00000000',
+      backgroundColor: state.tokens.base,
       transparent: false,
       vibrancy: 'under-window',
       visualEffectState: 'active',
@@ -333,7 +388,7 @@ export function createMainWindowController(options: {
       scheduleMainWindowRecovery('render-process-gone', 100)
     })
 
-    void window.loadFile(startupSplashPath())
+    void window.loadFile(startupSplashPath(state))
     if (rendererDevServerUrl()) {
       options.log('main', 'Opening DevTools because VITE_DEV_SERVER_URL is set for a development renderer.')
       window.webContents.openDevTools({ mode: 'detach' })

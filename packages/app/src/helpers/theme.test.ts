@@ -1,17 +1,50 @@
 import { describe, expect, it } from 'vitest'
-import { applyAppearancePreferences, getAppearancePreferences, saveAppearancePreferences, UI_FONT_OPTIONS } from './theme'
-import { isUserFacingTheme } from './theme-presets'
+import { UI_THEME_PRESETS } from '@open-cowork/shared'
+import {
+  applyAppearancePreferences,
+  getAppearancePreferences,
+  isNonDefaultAppearanceVariantChange,
+  saveAppearancePreferences,
+  UI_FONT_OPTIONS,
+} from './theme'
+import {
+  getUserFacingThemes,
+  isUserFacingTheme,
+  registerExtraThemes,
+  setDefaultThemeId,
+} from './theme-presets'
 
 describe('appearance theme presets', () => {
-  it('exposes a curated set of elegant themes; unknown/hidden ids stay false', () => {
-    for (const themeId of ['mercury', 'nord', 'rosepine', 'dracula', 'kanagawa', 'everforest']) {
-      expect(isUserFacingTheme(themeId)).toBe(true)
+  it('exposes only the maintained Mercury product theme', () => {
+    expect(isUserFacingTheme('mercury')).toBe(true)
+    for (const themeId of ['nord', 'rosepine', 'dracula', 'kanagawa', 'everforest']) {
+      expect(isUserFacingTheme(themeId)).toBe(false)
     }
-    // Novelty presets stay as registry data but are not surfaced in the picker.
     expect(isUserFacingTheme('matrix')).toBe(false)
     expect(isUserFacingTheme('not-a-real-theme')).toBe(false)
     expect(isUserFacingTheme(null)).toBe(false)
     expect(isUserFacingTheme(undefined)).toBe(false)
+  })
+
+  it('keeps a downstream configured default available alongside Mercury', () => {
+    registerExtraThemes([{
+      id: 'acme-default',
+      label: 'Acme Default',
+      description: 'Downstream product default',
+      swatches: ['#112233', '#445566'],
+      dark: UI_THEME_PRESETS.mercury.dark,
+      light: UI_THEME_PRESETS.mercury.light,
+    }])
+    setDefaultThemeId('acme-default')
+    try {
+      expect(isUserFacingTheme('acme-default')).toBe(true)
+      expect(getUserFacingThemes().map(({ id, label }) => ({ id, label }))).toEqual([
+        { id: 'mercury', label: 'Mercury' },
+        { id: 'acme-default', label: 'Acme Default' },
+      ])
+    } finally {
+      setDefaultThemeId('mercury')
+    }
   })
 })
 
@@ -31,6 +64,15 @@ describe('appearance theme defaults', () => {
     expect(document.documentElement.style.getPropertyValue('--accent-action-foreground')).toBe('#000000')
     expect(document.documentElement.style.getPropertyValue('--accent-gradient')).toBe('linear-gradient(150deg,var(--accent-2),var(--accent))')
     expect(document.documentElement.style.getPropertyValue('--accent-action-fill')).toBe('linear-gradient(rgba(255,255,255,0),rgba(255,255,255,0)), var(--accent-gradient)')
+  })
+
+  it('migrates retired picker choices to maintained defaults', () => {
+    window.localStorage.setItem('open-cowork-ui-theme', 'nord')
+    window.localStorage.setItem('open-cowork-ui-accent', 'azure')
+
+    expect(getAppearancePreferences()).toMatchObject({ uiTheme: 'mercury', accent: 'theme' })
+    expect(window.localStorage.getItem('open-cowork-ui-theme')).toBe('mercury')
+    expect(window.localStorage.getItem('open-cowork-ui-accent')).toBe('theme')
   })
 })
 
@@ -57,6 +99,15 @@ describe('appearance typography defaults', () => {
 })
 
 describe('appearance density', () => {
+  it('only classifies non-default retained theme and density choices as value variants', () => {
+    expect(isNonDefaultAppearanceVariantChange({ uiTheme: 'nord' })).toBe(false)
+    expect(isNonDefaultAppearanceVariantChange({ density: 'compact' })).toBe(true)
+    expect(isNonDefaultAppearanceVariantChange({ density: 'comfy' })).toBe(true)
+    expect(isNonDefaultAppearanceVariantChange({ uiTheme: 'mercury' })).toBe(false)
+    expect(isNonDefaultAppearanceVariantChange({ density: 'regular' })).toBe(false)
+    expect(isNonDefaultAppearanceVariantChange({ colorScheme: 'light' })).toBe(false)
+  })
+
   it('defaults to regular density and persists compact/comfy choices', () => {
     expect(getAppearancePreferences().density).toBe('regular')
 

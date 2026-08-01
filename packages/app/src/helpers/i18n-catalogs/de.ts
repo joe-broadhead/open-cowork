@@ -205,14 +205,9 @@ const strings: Record<string, string> = {
   'settings.reset.resetting': 'Setzt zurück…',
   'settings.reset.requiresConfirm': 'Erfordert explizite Bestätigung. Die App wird geschlossen und neu gestartet.',
   'settings.language.label': 'Sprache',
-  'settings.language.description': 'Wähle die Oberflächensprache. Die Auswahl wird auf diesem Gerät gespeichert. Teilweise übersetzte Sprachen fallen bei fehlenden Strings auf Englisch zurück.',
-  'settings.language.systemDefault': 'Automatisch erkennen (System)',
-  'settings.language.partialOption': '{{label}} — zu {{percent}} % übersetzt',
 
   'agents.create': 'Agent erstellen',
 
-  'capabilities.tab.tools': 'Verbindungen',
-  'capabilities.tab.skills': 'Fähigkeiten',
 
   'workflows.regenerate': 'Neu erzeugen',
   'workflows.copyWebhookUrl': 'URL kopieren',
@@ -328,10 +323,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': 'Importieren',
   'studioTeamPage.eyebrow': 'Team',
   'studioTeamPage.title': 'Kollegen',
-  'studioTeamPage.subtitle': 'Stelle OpenCode-Agenten als Kollegenliste mit klaren Rollen, Skills, Tools und Chat-Zuweisungen zusammen.',
+  'studioTeamPage.subtitle': 'Stelle eine Kollegenliste mit klaren Rollen, Skills, Tools und Chat-Zuweisungen zusammen.',
   'studioTeamPage.customCount': 'benutzerdefiniert',
   'studioTeamPage.builtInCount': 'integriert',
-  'studioTeamPage.runtimeCount': 'Runtime',
   'studioTeamPage.search': 'Kollegen, Skills, Tools oder Anweisungen suchen…',
   'studioTeamPage.filterLabel': 'Kollegenfilter',
   'studioTeamPage.importTitle': 'Benutzerdefinierten Kollegen aus einer .cowork-agent.json-Datei importieren',
@@ -370,9 +364,6 @@ const strings: Record<string, string> = {
   'capabilities.title': 'Tools & Skills',
   'capabilities.subtitle': 'Inspiziere die im aktuellen OpenCode-Kontext verfügbaren Tools und Fähigkeitspakete, einschließlich integrierter, maschinen-, projekt- und benutzerdefinierter Ergänzungen.',
   'capabilities.addTool': 'Verbindung hinzufügen',
-  'capabilities.addSkillButton': 'Fähigkeit hinzufügen',
-  'capabilities.searchTools': 'Verbindungen, Beschreibungen oder Kollegen suchen…',
-  'capabilities.searchSkills': 'Fähigkeiten, Beschreibungen oder Kollegen suchen…',
   'capabilities.details': 'Details',
   'capabilities.connection': 'Verbindung',
   'capabilities.linkedCoworkers': 'Verknüpfte Kollegen',
@@ -564,9 +555,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': 'Was soll dein Team heute angehen?',
   'studioHome.subtitle': '{{brand}} · Wähle einen führenden Coworker, @erwähne Spezialisten und prüfe die Arbeit an einem Ort',
   'studioHome.composer.placeholder': 'Frag etwas oder @erwähne einen Coworker',
-  'studioHome.coachmark': 'Schreibe einen Prompt, füge Kontext an oder @erwähne einen Coworker — ⌘K für Befehle.',
-  'home.statusStrip.ready': 'Bereit',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} MCPs',
 
 }
 

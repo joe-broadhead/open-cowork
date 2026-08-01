@@ -19,5 +19,6 @@
 @import "./domains/base.css";
 @import "./domains/studio.css";
 @import "./domains/chat.css";
+@import "./domains/code-syntax-palette.css";
 @import "./domains/shell.css";
 @import "./domains/settings.css";

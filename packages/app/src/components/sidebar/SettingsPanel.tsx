@@ -9,10 +9,16 @@ import {
 } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import {
-  getAppearancePreferences, saveAppearancePreferences, type AppearancePreferences, } from '../../helpers/theme'
+  getAppearancePreferences,
+  isNonDefaultAppearanceVariantChange,
+  saveAppearancePreferences,
+  type AppearancePreferences,
+} from '../../helpers/theme'
+import { recordFeatureValueActivation } from '../../helpers/feature-value-telemetry'
 import { useSessionStore } from '../../stores/session'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
+import { isDesktopRuntime } from '../../runtime-env'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { Badge, Button, Dialog, Input, Skeleton, Switch } from '@open-cowork/ui'
@@ -23,7 +29,7 @@ import { ModelsPanel } from './SettingsModelsPanel'
 import { PermissionsPanel, RuntimeConfigPanel } from './SettingsPermissionsPanel'
 import { StoragePanel } from './SettingsStoragePanel'
 import { SettingsPairingPanel } from './SettingsPairingPanel'
-import { VoiceAssetsPanel } from './SettingsVoiceAssetsPanel'
+import { describeVoiceShortcutError, SettingsVoiceShortcut } from './SettingsVoiceShortcut'
 import { RuntimeToolingBridgeConsentPanel } from '../RuntimeToolingBridgeConsent'
 type SettingsTab = 'appearance' | 'model' | 'advanced' | 'permissions' | 'notifications' | 'privacy' | 'workflows' | 'storage' | 'pairing'
 type SettingsSearchEntry = {
@@ -97,14 +103,6 @@ function buildSaveGatedSettings(settings: EffectiveAppSettings, isLocal: boolean
         selectedProviderId: settings.selectedProviderId,
         selectedModelId: settings.selectedModelId,
         selectedSmallModelId: settings.selectedSmallModelId ?? null,
-        workflowDesktopNotifications: settings.workflowDesktopNotifications,
-        workflowQuietHoursStart: settings.workflowQuietHoursStart,
-        workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
-        notificationVoiceReplies: settings.notificationVoiceReplies,
-        notificationSmartSuggestions: settings.notificationSmartSuggestions,
-        notificationDailyDigest: settings.notificationDailyDigest,
-        notificationSounds: settings.notificationSounds,
-        privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
       }
 }
 
@@ -204,8 +202,8 @@ function SettingsNotificationsPanel({
     <div className="flex flex-col gap-5">
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-4">
         <SettingsToggleRow
-          title={t('settings.notifications.smartSuggestions', 'Smart suggestions')}
-          description={t('settings.notifications.smartSuggestionsDescription', 'Show task ideas and launchpad suggestions based on recent workspace activity.')}
+          title={t('settings.notifications.smartSuggestions', 'Home starter')}
+          description={t('settings.notifications.smartSuggestionsDescription', 'Show one optional starter when Home has no recent conversations.')}
           checked={settings.notificationSmartSuggestions}
           onToggle={() => update({ notificationSmartSuggestions: !settings.notificationSmartSuggestions })}
         />
@@ -227,58 +225,47 @@ function SettingsPrivacyPanel({
   settings,
   config,
   update,
+  localWorkspace,
 }: {
   settings: EffectiveAppSettings
   config: PublicAppConfig
   update: (patch: Partial<EffectiveAppSettings>) => void
+  localWorkspace: boolean
 }) {
   const links = [
     { label: t('settings.privacy.privacyPolicy', 'Privacy policy'), href: config.branding.privacyUrl },
     { label: t('settings.privacy.security', 'Security'), href: config.branding.securityUrl },
     { label: t('settings.privacy.legal', 'Legal'), href: config.branding.legalUrl },
   ].filter((entry) => entry.href)
-  const voiceFeatureOn = isDesktopFeatureEnabled(config.features, 'voice')
-  const voiceShortcut = (settings.voicePttShortcut || '').trim() || VOICE_PTT_SHORTCUT
+  const voiceFeatureOn = localWorkspace && isDesktopFeatureEnabled(config.features, 'voice')
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-4">
-        <SettingsToggleRow
-          title={t('settings.privacy.shareUsage', 'Help improve the product')}
-          description={t(
-            'settings.privacy.shareUsageDescription',
-            'When on, coarse anonymized adoption events may be sent only if an HTTPS telemetry endpoint is configured. Prompt text, artifacts, credentials, and local paths are never included. Off by default.',
-          )}
-          checked={settings.privacyShareAnonymizedUsage}
-          onToggle={() => update({ privacyShareAnonymizedUsage: !settings.privacyShareAnonymizedUsage })}
-        />
-      </div>
-      {voiceFeatureOn ? (
-        <div id="settings-privacy-voice" className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-3 scroll-mt-4">
-          <div className="text-xs font-semibold text-text">{t('settings.privacy.voiceTitle', 'Private voice (Desktop)')}</div>
-          <div className="text-xs leading-relaxed text-text-muted">
-            {t(
-              'settings.privacy.voiceDescription',
-              'Push-to-talk toggle works while Open Cowork is focused. It does not inject text into other apps (that is a separate system Accessibility product). Avoid the command-palette shortcut (Cmd/Ctrl+Shift+P).',
+      {localWorkspace ? (
+        <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-4">
+          <SettingsToggleRow
+            title={t('settings.privacy.shareUsage', 'Help improve the product')}
+            description={t(
+              'settings.privacy.shareUsageDescription',
+              'Controls content-free adoption events for this desktop installation, including Cloud and Paired activity shown here. Events may be sent only if an HTTPS telemetry endpoint is configured. Prompt text, artifacts, credentials, and local paths are never included. Off by default.',
             )}
-          </div>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-text">{t('settings.privacy.voicePttShortcut', 'Push-to-talk shortcut')}</span>
-            <Input
-              value={voiceShortcut}
-              onChange={(event) => update({ voicePttShortcut: event.target.value })}
-              placeholder={VOICE_PTT_SHORTCUT}
-              aria-label={t('settings.privacy.voicePttShortcut', 'Push-to-talk shortcut')}
-            />
-            <span className="text-2xs leading-relaxed text-text-muted">
-              {t(
-                'settings.privacy.voicePttShortcutHint',
-                'Electron accelerator form, e.g. CmdOrCtrl+Shift+Space. Saved for Desktop settings and docs; the Edit menu and in-app matcher use the default CmdOrCtrl+Shift+Space in this release.',
-              )}
-            </span>
-          </label>
-          <VoiceAssetsPanel />
+            checked={settings.privacyShareAnonymizedUsage}
+            onToggle={() => update({ privacyShareAnonymizedUsage: !settings.privacyShareAnonymizedUsage })}
+          />
         </div>
+      ) : (
+        <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4 text-xs leading-relaxed text-text-muted">
+          {t(
+            'settings.privacy.shareUsageLocalOnly',
+            'Product-improvement sharing is controlled for this desktop installation from Local workspace Privacy settings. Switch to Local to review or change it.',
+          )}
+        </div>
+      )}
+      {voiceFeatureOn ? (
+        <SettingsVoiceShortcut
+          value={settings.voicePttShortcut}
+          onChange={(voicePttShortcut) => update({ voicePttShortcut })}
+        />
       ) : null}
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-3">
         <div className="text-xs font-semibold text-text">{t('settings.privacy.dataControls', 'Data controls')}</div>
@@ -299,8 +286,10 @@ function SettingsPrivacyPanel({
 
 export function SettingsPanel({
   onClose,
+  onSetupRequired = () => undefined,
 }: {
   onClose: () => void
+  onSetupRequired?: () => void
 }) {
   const [settings, setSettings] = useState<EffectiveAppSettings | null>(null)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
@@ -419,10 +408,10 @@ export function SettingsPanel({
         { id: 'appearance' as const, label: t('settings.tab.appearance', 'Appearance'), description: t('settings.tab.appearanceDescription', 'Theme, color scheme, and fonts') },
         { id: 'model' as const, label: t('settings.tab.model', 'Model'), description: t('settings.tab.modelDescription', 'Provider, primary model, and credentials') },
         ...(activeWorkspaceIsLocal ? [{ id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') }] : []),
-        { id: 'notifications' as const, label: t('settings.tab.notifications', 'Notifications'), description: t('settings.tab.notificationsDescription', 'Suggestions, digests, and sounds') },
-        { id: 'privacy' as const, label: t('settings.tab.privacy', 'Privacy'), description: t('settings.tab.privacyDescription', 'History, data use, and policy links') },
+        ...(activeWorkspaceIsLocal ? [{ id: 'notifications' as const, label: t('settings.tab.notifications', 'Notifications'), description: t('settings.tab.notificationsDescription', 'Suggestions and sounds') }] : []),
+        { id: 'privacy' as const, label: t('settings.tab.privacy', 'Privacy'), description: t('settings.tab.privacyDescription', 'Data use and policy links') },
         { id: 'advanced' as const, label: t('settings.tab.advanced', 'Advanced'), description: t('settings.tab.advancedDescription', 'Small model, OAuth detail, and runtime source') },
-        { id: 'workflows' as const, label: t('settings.tab.workflows', 'Playbooks'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
+        ...(activeWorkspaceIsLocal ? [{ id: 'workflows' as const, label: t('settings.tab.workflows', 'Playbooks'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') }] : []),
         ...(activeWorkspaceIsLocal ? [{ id: 'pairing' as const, label: t('settings.tab.pairing', 'Pairing'), description: t('settings.tab.pairingDescription', 'Gateway and mobile access') }] : []),
         ...(activeWorkspaceIsLocal ? [{ id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') }] : []),
       ],
@@ -444,9 +433,14 @@ export function SettingsPanel({
         { id: 'settings-permissions-web', tab: 'permissions' as const, label: t('settings.permissions.webTitle', 'Open web pages'), keywords: 'web fetch code search webfetch codesearch permission approve deny allow' },
         { id: 'settings-permissions-task', tab: 'permissions' as const, label: t('settings.permissions.taskTitle', 'Delegate to coworkers'), keywords: 'task delegation coworkers subagent permission approve deny allow' },
       ] : []),
-      { id: 'settings-notifications', tab: 'notifications', label: t('settings.tab.notifications', 'Notifications'), keywords: 'notifications voice suggestions digest sounds chime' },
-      { id: 'settings-privacy', tab: 'privacy', label: t('settings.tab.privacy', 'Privacy'), keywords: 'privacy history usage anonymized policy security legal data' },
-      { id: 'settings-workflows', tab: 'workflows', label: t('settings.search.playbooks', 'Playbook notifications'), keywords: 'playbook workflow run background launch login notifications quiet hours' },
+      ...(activeWorkspaceIsLocal ? [{ id: 'settings-notifications', tab: 'notifications' as const, label: t('settings.tab.notifications', 'Notifications'), keywords: 'notifications suggestions sounds chime' }] : []),
+      {
+        id: 'settings-privacy',
+        tab: 'privacy',
+        label: t('settings.tab.privacy', 'Privacy'),
+        keywords: `privacy usage anonymized policy security legal data${activeWorkspaceIsLocal ? ' voice shortcut push to talk' : ''}`,
+      },
+      ...(activeWorkspaceIsLocal ? [{ id: 'settings-workflows', tab: 'workflows' as const, label: t('settings.search.playbooks', 'Playbook notifications'), keywords: 'playbook workflow run background launch login notifications quiet hours' }] : []),
       ...(activeWorkspaceIsLocal ? [
         { id: 'settings-pairing', tab: 'pairing' as const, label: t('settings.search.pairing', 'Pairing'), keywords: 'gateway mobile pairing qr code desktop' },
         { id: 'settings-storage', tab: 'storage' as const, label: t('settings.search.storage', 'Storage cleanup'), keywords: 'storage sandbox artifacts cleanup disk' },
@@ -508,6 +502,15 @@ export function SettingsPanel({
   const persistSettings = async (options: { showSaved?: boolean } = {}) => {
     if (!settings) return false
     const { showSaved = true } = options
+    const voiceShortcutError = activeWorkspaceIsLocal
+      && config
+      && isDesktopFeatureEnabled(config.features, 'voice')
+      ? describeVoiceShortcutError(settings.voicePttShortcut)
+      : null
+    if (voiceShortcutError) {
+      setSaveError(voiceShortcutError)
+      return false
+    }
     setSaveError(null)
     setSaving(true)
     try {
@@ -515,6 +518,28 @@ export function SettingsPanel({
         buildSaveGatedSettings(settings, activeWorkspaceIsLocal, workspaceSupport.workspaceId),
       )
       dirtyProviderCredentialKeys.current = {}
+      const setupValidationInvalidated = activeWorkspaceIsLocal
+        && settings.setupComplete
+        && !savedSettings.setupComplete
+      if (activeWorkspaceIsLocal) {
+        window.dispatchEvent(new CustomEvent('open-cowork:voice-shortcut-changed', {
+          detail: { shortcut: savedSettings.voicePttShortcut ?? VOICE_PTT_SHORTCUT },
+        }))
+      }
+      if (setupValidationInvalidated) {
+        // Do not keep an already-mounted shell pointed at a stale runtime.
+        // Setup owns the explicit restart and authoritative live connection
+        // check for the newly persisted provider/model/credential selection.
+        setSettings(savedSettings)
+        savedBaselineRef.current = fingerprintSaveGatedSettings(
+          savedSettings,
+          activeWorkspaceIsLocal,
+          workspaceSupport.workspaceId,
+        )
+        onClose()
+        onSetupRequired()
+        return false
+      }
       let next = savedSettings
       if (activeWorkspaceIsLocal && savedSettings.effectiveProviderId) {
         try {
@@ -565,6 +590,18 @@ export function SettingsPanel({
   const updateAppearance = (patch: Partial<AppearancePreferences>) => {
     const next = saveAppearancePreferences(patch)
     setAppearance(next)
+    if (isDesktopRuntime() && (patch.colorScheme !== undefined || patch.uiTheme !== undefined)) {
+      void window.coworkApi.settings.set({
+        appearanceColorScheme: next.colorScheme,
+        appearanceThemeId: next.uiTheme,
+        workspaceId: LOCAL_WORKSPACE_ID,
+      }).catch((error: unknown) => {
+        reportSettingsPanelError(error, 'Failed to persist startup appearance')
+      })
+    }
+    if (isNonDefaultAppearanceVariantChange(patch)) {
+      recordFeatureValueActivation('appearance')
+    }
   }
 
   const runCleanup = async (mode: SandboxCleanupResult['mode']) => {
@@ -604,6 +641,12 @@ export function SettingsPanel({
     && savedBaselineRef.current !== null
     && fingerprintSaveGatedSettings(settings, activeWorkspaceIsLocal, workspaceSupport.workspaceId) !== savedBaselineRef.current,
   )
+  const voiceShortcutError = activeWorkspaceIsLocal
+    && settings
+    && config
+    && isDesktopFeatureEnabled(config.features, 'voice')
+    ? describeVoiceShortcutError(settings.voicePttShortcut)
+    : null
   // Mirror `dirty` into a ref so the close handler can stay referentially
   // stable (below). Without this, passing a fresh closure to Dialog.onClose
   // every render re-subscribes its focus trap, which steals focus from inputs
@@ -654,7 +697,8 @@ export function SettingsPanel({
         onClick={() => void handleSave()}
         leftIcon={saved ? 'check' : undefined}
         loading={saving}
-        disabledReason={!dirty && !saved && !saving ? t('settings.noUnsavedChanges', 'No unsaved changes') : undefined}
+        disabledReason={voiceShortcutError
+          || (!dirty && !saved && !saving ? t('settings.noUnsavedChanges', 'No unsaved changes') : undefined)}
       >
         {saved ? t('settings.saved', 'Saved') : t('settings.saveChanges', 'Save Changes')}
       </Button>
@@ -795,7 +839,12 @@ export function SettingsPanel({
               )}
               {tab === 'privacy' && (
                 <div id="settings-privacy" className="scroll-mt-4">
-                  <SettingsPrivacyPanel settings={settings} config={config} update={update} />
+                  <SettingsPrivacyPanel
+                    settings={settings}
+                    config={config}
+                    update={update}
+                    localWorkspace={activeWorkspaceIsLocal}
+                  />
                 </div>
               )}
               {tab === 'workflows' && (

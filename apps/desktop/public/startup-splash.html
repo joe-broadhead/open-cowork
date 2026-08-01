@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-color-scheme="system" data-ui-theme="system">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -10,8 +10,16 @@
     <title>Open Cowork</title>
     <style>
       :root {
-        color-scheme: dark;
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+        /* STARTUP_THEME_BEGIN */
+        color-scheme: light dark;
+        --color-base: Canvas;
+        --color-surface: Canvas;
+        --color-text: CanvasText;
+        --color-text-secondary: GrayText;
+        --color-accent-2: AccentColor;
+        --shadow-card: none;
+        /* STARTUP_THEME_END */
       }
 
       body {
@@ -20,8 +28,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: radial-gradient(circle at top, rgba(47, 107, 240, 0.14), transparent 36%), #0c0d0f;
-        color: #eceef1;
+        background: radial-gradient(circle at top, color-mix(in srgb, var(--color-accent-2, AccentColor) 14%, transparent), transparent 36%), var(--color-base, Canvas);
+        color: var(--color-text, CanvasText);
       }
 
       .shell {
@@ -37,12 +45,12 @@
         border-radius: 22px;
         display: grid;
         place-items: center;
-        background: #141619;
-        border: 1px solid rgba(90, 140, 245, 0.32);
-        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+        background: var(--color-surface, Canvas);
+        border: 1px solid color-mix(in srgb, var(--color-accent-2, AccentColor) 32%, transparent);
+        box-shadow: var(--shadow-card, none);
         font-size: 34px;
         font-weight: 700;
-        color: #5a8cf5;
+        color: var(--color-accent-2, AccentColor);
       }
 
       .title {
@@ -52,11 +60,11 @@
 
       .subtitle {
         font-size: 14px;
-        color: rgba(240, 233, 225, 0.72);
+        color: var(--color-text-secondary, GrayText);
       }
     </style>
   </head>
-  <body>
+  <body data-startup-surface="splash">
     <div class="shell" aria-label="Open Cowork is starting">
       <div class="badge">O</div>
       <div class="title">Open Cowork</div>

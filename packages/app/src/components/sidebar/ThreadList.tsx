@@ -328,7 +328,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       const activated = await window.coworkApi.workspace.activate(result.workspaceId)
       setActiveWorkspace(activated.id)
       const cloudSessions = await window.coworkApi.session.list({ workspaceId: activated.id })
-      setSessions(cloudSessions)
+      setSessions(cloudSessions, activated.id)
       setCurrentSession(result.sessionId)
       setCopyDialog(null)
       onSelect?.()

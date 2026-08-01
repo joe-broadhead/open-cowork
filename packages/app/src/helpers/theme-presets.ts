@@ -1,21 +1,15 @@
 import {
-  UI_ACCENT_PRESETS,
   refineThemeTokens,
   UI_THEME_PRESETS,
   accentActionFillToken,
   applyThemeAccent,
-  isUiAccentPresetId,
   type BrandThemeDefinition,
   type ResolvedColorScheme,
   type UiAccentPresetId,
   type ThemeTokens,
 } from '@open-cowork/shared'
 
-export {
-  UI_ACCENT_PRESETS,
-  accentActionFillToken,
-  isUiAccentPresetId,
-}
+export { accentActionFillToken }
 export type { ResolvedColorScheme, ThemeTokens, UiAccentPresetId }
 
 // UiTheme is a registered theme id. It includes both the built-in presets
@@ -76,43 +70,26 @@ export function isUiTheme(value: string | null | undefined): value is UiTheme {
   return Boolean(value && themeRegistry.has(value))
 }
 
-// Open Cowork ships a single branded identity — Mercury — surfaced as the
-// The curated, ordered set of elegant themes shown in the appearance picker.
-// Mercury (the graphite default) leads; the rest are flat operator-console
-// palettes that share the same sharp structure and differ only in colour mood.
-// Order is intentional (calm/neutral first, bolder moods later).
-const USER_FACING_THEME_ORDER: string[] = [
-  'mercury',
-  'studio',
-  'nord',
-  'kanagawa',
-  'rosepine',
-  'frappe',
-  'everforest',
-  'ayu',
-  'poimandres',
-  'moonfly',
-  'oxocarbon',
-  'tokyostorm',
-  'dracula',
-  'gruvbox',
-  'horizon',
-  'cyberdream',
-  'synthwave',
-]
+// Open Cowork maintains one product identity. Older palettes remain registry
+// compatibility data for downstream configs, not public selector options.
+const USER_FACING_THEME_ORDER: string[] = ['mercury']
 const USER_FACING_THEME_IDS = new Set<string>(USER_FACING_THEME_ORDER)
 
 export function isUserFacingTheme(value: string | null | undefined): value is UiTheme {
-  return Boolean(value && USER_FACING_THEME_IDS.has(value) && themeRegistry.has(value))
+  return Boolean(
+    value
+    && (USER_FACING_THEME_IDS.has(value) || value === defaultThemeId)
+    && themeRegistry.has(value),
+  )
 }
 
 // The user-facing themes in display order, with their label + swatches for the picker.
 export function getUserFacingThemes(): Array<{ id: string; label: string; swatches: string[] }> {
-  return USER_FACING_THEME_ORDER
+  return Array.from(new Set([...USER_FACING_THEME_ORDER, defaultThemeId]))
     .filter((id) => themeRegistry.has(id))
     .map((id) => {
-      const preset = UI_THEME_PRESETS[id as keyof typeof UI_THEME_PRESETS]
-      return { id, label: preset?.label || id, swatches: preset?.swatches || [] }
+      const theme = themeRegistry.get(id)!
+      return { id, label: theme.label, swatches: theme.swatches }
     })
 }
 

@@ -1,6 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getBuiltInLocales, getLocale, setLocale, t } from '../../helpers/i18n'
+import {
+  recordFeatureValueActivation,
+  recordFeatureValueDiscovery,
+} from '../../helpers/feature-value-telemetry'
 import { BUILT_IN_TRANSLATION_COVERAGE } from '../../helpers/i18n-catalogs/coverage-status'
+import { localeSupportStatus } from '../../helpers/product-support-matrix'
 import { Card, Select } from '@open-cowork/ui'
 import { fieldLabelCls } from './settings-panel-styles'
 
@@ -13,14 +18,33 @@ const TRANSLATED_PERCENT = Math.round(
 )
 const COVERAGE_IS_PARTIAL = TRANSLATED_PERCENT < 100
 
-export function LanguagePicker() {
-  const [current, setCurrent] = useState<string>(() => getLocale() || '')
-  const options = getBuiltInLocales()
+function localeOptionValue(
+  locale: string | undefined,
+  options: ReturnType<typeof getBuiltInLocales>,
+) {
+  if (!locale) return ''
+  const normalized = locale.toLowerCase()
+  return options.find((option) => (
+    normalized === option.locale.toLowerCase()
+    || normalized.startsWith(`${option.locale.toLowerCase()}-`)
+  ))?.locale || ''
+}
 
-  const handleChange = (value: string) => {
+export function LanguagePicker() {
+  const options = getBuiltInLocales()
+  const [current, setCurrent] = useState<string>(() => localeOptionValue(getLocale(), options))
+
+  useEffect(() => {
+    recordFeatureValueDiscovery('locales')
+  }, [])
+
+  const handleChange = async (value: string) => {
     const nextValue = value || null
-    void setLocale(nextValue)
-    setCurrent(nextValue || getLocale() || '')
+    const applied = await setLocale(nextValue)
+    setCurrent(localeOptionValue(applied && nextValue ? nextValue : getLocale(), options))
+    if (nextValue && applied && localeSupportStatus(nextValue) === 'experimental') {
+      recordFeatureValueActivation('locales')
+    }
   }
 
   return (
@@ -29,14 +53,14 @@ export function LanguagePicker() {
         <span className={fieldLabelCls}>{t('settings.language.label', 'Language')}</span>
         <Select
           value={current}
-          onChange={handleChange}
+          onChange={(value) => void handleChange(value)}
           label={t('settings.language.label', 'Language')}
           options={[
-            { value: '', label: t('settings.language.systemDefault', 'Auto-detect (system)') },
+            { value: '', label: t('settings.language.systemDefault', 'Auto-detect (supported languages)') },
             ...options.map((option) => ({
               value: option.locale,
-              label: option.locale !== 'en' && COVERAGE_IS_PARTIAL
-                ? t('settings.language.partialOption', '{{label}} — {{percent}}% translated', {
+              label: option.support === 'experimental' && COVERAGE_IS_PARTIAL
+                ? t('settings.language.partialOption', '{{label}} — experimental, {{percent}}% translated', {
                     label: option.nativeLabel,
                     percent: String(TRANSLATED_PERCENT),
                   })
@@ -47,7 +71,7 @@ export function LanguagePicker() {
         <span className="text-2xs text-text-muted leading-relaxed mt-1">
           {t(
             'settings.language.description',
-            'Choose the interface language. The selection is remembered on this device. Non-English locales are experimental/partial and fall back to English for unlisted strings.',
+            'English is supported. Non-English languages are explicit experiments and fall back to English for untranslated copy; automatic detection uses supported languages only.',
           )}
         </span>
       </div>

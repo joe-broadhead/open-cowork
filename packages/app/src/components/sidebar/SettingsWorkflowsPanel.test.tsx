@@ -31,6 +31,7 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     workflowQuietHoursEnd: null,
     effectiveProviderId: null,
     effectiveModel: null,
+    setupComplete: false,
     ...overrides,
   }
 }

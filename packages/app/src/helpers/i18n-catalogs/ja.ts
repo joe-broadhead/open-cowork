@@ -205,14 +205,9 @@ const strings: Record<string, string> = {
   'settings.reset.resetting': 'リセット中…',
   'settings.reset.requiresConfirm': '明示的な確認が必要です。アプリは終了して再起動します。',
   'settings.language.label': '言語',
-  'settings.language.description': 'インターフェース言語を選択します。この端末で選択が記憶されます。部分的にしか翻訳されていない言語では、欠けている文字列は英語で表示されます。',
-  'settings.language.systemDefault': '自動検出 (システム)',
-  'settings.language.partialOption': '{{label}} — 翻訳率 {{percent}}%',
 
   'agents.create': 'エージェントを作成',
 
-  'capabilities.tab.tools': '接続',
-  'capabilities.tab.skills': '能力',
 
   'workflows.regenerate': '再生成',
   'workflows.copyWebhookUrl': 'URLをコピー',
@@ -328,10 +323,9 @@ const strings: Record<string, string> = {
   'agentsPage.import': 'インポート',
   'studioTeamPage.eyebrow': 'チーム',
   'studioTeamPage.title': '同僚',
-  'studioTeamPage.subtitle': 'OpenCodeエージェントを、明確な役割、スキル、ツール、チャット割り当てを持つ同僚一覧として構成します。',
+  'studioTeamPage.subtitle': '明確な役割、スキル、ツール、チャット割り当てを持つ同僚一覧を構成します。',
   'studioTeamPage.customCount': 'カスタム',
   'studioTeamPage.builtInCount': '組み込み',
-  'studioTeamPage.runtimeCount': 'ランタイム',
   'studioTeamPage.search': '同僚、スキル、ツール、指示を検索…',
   'studioTeamPage.filterLabel': '同僚フィルター',
   'studioTeamPage.importTitle': '.cowork-agent.json ファイルからカスタム同僚をインポート',
@@ -370,9 +364,6 @@ const strings: Record<string, string> = {
   'capabilities.title': 'ツールとスキル',
   'capabilities.subtitle': '現在のOpenCodeコンテキストで利用可能なツールとスキルバンドルを確認します。組み込み、マシン、プロジェクト、カスタムの追加を含みます。',
   'capabilities.addTool': '接続を追加',
-  'capabilities.addSkillButton': '能力を追加',
-  'capabilities.searchTools': '接続、説明、同僚を検索…',
-  'capabilities.searchSkills': '能力、説明、同僚を検索…',
   'capabilities.details': '詳細',
   'capabilities.connection': '接続',
   'capabilities.linkedCoworkers': 'リンクされた同僚',
@@ -564,9 +555,6 @@ const strings: Record<string, string> = {
   'studioHome.greeting': '今日はチームで何に取り組みますか？',
   'studioHome.subtitle': '{{brand}} · リードする同僚を選び、専門家を @メンションし、作業を一か所で確認',
   'studioHome.composer.placeholder': '何でも質問、または同僚を @メンション',
-  'studioHome.coachmark': 'プロンプトを書き、コンテキストを添付し、同僚を @メンション — コマンドは ⌘K。',
-  'home.statusStrip.ready': '準備完了',
-  'home.statusStrip.mcps': '{{connected}}/{{total}} MCP',
 
 }
 

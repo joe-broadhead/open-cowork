@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createDisabledRuntimeToolingBridgeConsent,
   SMALL_MODEL_USE_MAIN,
+  VOICE_PTT_SHORTCUT,
   type EffectiveAppSettings,
   type PublicAppConfig,
 } from '@open-cowork/shared'
@@ -11,6 +12,13 @@ import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
 import { WORKSPACE_SUPPORT_APIS, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { SettingsPanel } from './SettingsPanel'
+
+const featureValueTelemetry = vi.hoisted(() => ({
+  recordFeatureValueDiscovery: vi.fn(),
+  recordFeatureValueActivation: vi.fn(),
+}))
+
+vi.mock('../../helpers/feature-value-telemetry', () => featureValueTelemetry)
 
 function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSettings {
   return {
@@ -40,6 +48,7 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     workflowQuietHoursEnd: null,
     effectiveProviderId: 'openrouter',
     effectiveModel: 'anthropic/claude-sonnet-4',
+    setupComplete: true,
     ...overrides,
   }
 }
@@ -127,6 +136,46 @@ beforeEach(() => {
 })
 
 describe('SettingsPanel', () => {
+  it('tracks visible preference controls and only retained non-default appearance choices', async () => {
+    const user = userEvent.setup()
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await waitFor(() => {
+      expect(featureValueTelemetry.recordFeatureValueDiscovery).toHaveBeenCalledWith('appearance')
+      expect(featureValueTelemetry.recordFeatureValueDiscovery).toHaveBeenCalledWith('locales')
+    })
+
+    expect(screen.queryByRole('button', { name: 'Nord' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Compact' }))
+    expect(window.localStorage.getItem('open-cowork-density')).toBe('compact')
+    expect(featureValueTelemetry.recordFeatureValueActivation).toHaveBeenCalledWith('appearance')
+
+    featureValueTelemetry.recordFeatureValueActivation.mockClear()
+    await user.click(screen.getByRole('radio', { name: 'Regular' }))
+    expect(window.localStorage.getItem('open-cowork-density')).toBe('regular')
+    expect(featureValueTelemetry.recordFeatureValueActivation).not.toHaveBeenCalledWith('appearance')
+  })
+
+  it('mirrors startup-relevant appearance changes to local desktop settings immediately', async () => {
+    const settingsSet = vi.mocked(window.coworkApi.settings.set)
+    const user = userEvent.setup()
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('radio', { name: 'Day' }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledWith({
+      appearanceColorScheme: 'light',
+      appearanceThemeId: 'mercury',
+      workspaceId: 'local',
+    }))
+    expect(window.localStorage.getItem('open-cowork-color-scheme')).toBe('light')
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
+  })
+
   it('surfaces initial settings load failures through the chat error channel and diagnostics', async () => {
     const reportRendererError = vi.fn()
     installRendererTestCoworkApi({
@@ -218,6 +267,84 @@ describe('SettingsPanel', () => {
     }))
   })
 
+  it('returns a previously validated local install to setup when a save invalidates its proof', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onSetupRequired = vi.fn()
+    const settingsSet = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings({
+      ...updates,
+      setupComplete: false,
+    }))
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      settings: {
+        get: vi.fn(async () => settings({ setupComplete: true })),
+        getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-existing' })),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={onClose} onSetupRequired={onSetupRequired} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Model/ }))
+    expect(await screen.findByText(/returns you to setup/i)).toBeInTheDocument()
+    const apiKeyInput = await screen.findByLabelText('API key')
+    await user.clear(apiKeyInput)
+    await user.type(apiKeyInput, 'sk-or-replacement')
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onSetupRequired).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Saved' })).not.toBeInTheDocument()
+  })
+
+  it('returns an in-session native OAuth credential change to setup before product use resumes', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    const onSetupRequired = vi.fn()
+    const settingsSet = vi.fn()
+      .mockResolvedValueOnce(settings({ setupComplete: true }))
+      .mockResolvedValueOnce(settings({ setupComplete: false }))
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      provider: {
+        authMethods: vi.fn(async () => ({
+          openrouter: [{ type: 'oauth', label: 'OpenRouter' }],
+        })),
+        authorize: vi.fn(async () => ({
+          url: 'https://auth.example.test',
+          method: 'auto',
+          instructions: '',
+        })),
+        callback: vi.fn(async () => true),
+        list: vi.fn(async () => [{ id: 'openrouter', name: 'OpenRouter', connected: true }]),
+      },
+      settings: {
+        get: vi.fn(async () => settings({ setupComplete: true })),
+        getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-existing' })),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={onClose} onSetupRequired={onSetupRequired} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Model/ }))
+    await user.click(await screen.findByRole('button', { name: 'Sign in with OpenRouter' }))
+    await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(2))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onSetupRequired).toHaveBeenCalledTimes(1)
+    expect(window.coworkApi.runtime.restart).not.toHaveBeenCalled()
+  })
+
   it('persists explicit Studio permission modes', async () => {
     const settingsSet = vi.mocked(window.coworkApi.settings.set)
     const user = userEvent.setup()
@@ -226,6 +353,9 @@ describe('SettingsPanel', () => {
 
     await screen.findByText('Settings')
     await user.click(screen.getByRole('button', { name: /Permissions/ }))
+
+    expect(screen.queryByText('Review gates')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Knowledge\/Wiki/i)).not.toBeInTheDocument()
 
     await user.click(within(screen.getByRole('radiogroup', { name: 'Shell commands' })).getByRole('radio', { name: 'Allow' }))
     await user.click(within(screen.getByRole('radiogroup', { name: 'File editing' })).getByRole('radio', { name: 'Allow' }))
@@ -269,7 +399,7 @@ describe('SettingsPanel', () => {
 
     await screen.findByText('Settings')
     await user.click(screen.getByRole('button', { name: /Notifications/ }))
-    await user.click(screen.getByRole('switch', { name: 'Smart suggestions' }))
+    await user.click(screen.getByRole('switch', { name: 'Home starter' }))
     await user.click(screen.getByRole('switch', { name: 'Sounds' }))
     await user.click(screen.getByRole('button', { name: /Privacy/ }))
     await user.click(screen.getByRole('switch', { name: 'Help improve the product' }))
@@ -446,7 +576,7 @@ describe('SettingsPanel', () => {
     })
     installRendererTestCoworkApi({
       app: {
-        config: vi.fn(async () => config),
+        config: vi.fn(async () => ({ ...config, features: { voice: true } })),
       },
       settings: {
         get: vi.fn(async () => settings()),
@@ -467,30 +597,29 @@ describe('SettingsPanel', () => {
 
     expect(screen.getByText('Cloud profile runtime')).toBeInTheDocument()
     expect(screen.queryByText('Permissions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Notifications')).not.toBeInTheDocument()
+    expect(screen.queryByText('Playbooks')).not.toBeInTheDocument()
     expect(screen.queryByText('Storage')).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('sk-or-...')).not.toBeInTheDocument()
     expect(getProviderCredentials).not.toHaveBeenCalled()
 
-    // Save only persists when there are unsaved edits, so toggle a portable
-    // preference first; the assertion below confirms only that change rides along.
-    await user.click(screen.getByRole('button', { name: /Notifications/ }))
-    await user.click(screen.getByRole('switch', { name: 'Sounds' }))
-    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
-    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
-    expect(settingsSet.mock.calls[0]?.[0]).toEqual({
-      workspaceId: 'cloud:test',
-      selectedProviderId: 'openrouter',
-      selectedModelId: 'anthropic/claude-sonnet-4',
-      selectedSmallModelId: null,
-      workflowDesktopNotifications: true,
-      workflowQuietHoursStart: null,
-      workflowQuietHoursEnd: null,
-      notificationVoiceReplies: true,
-      notificationSmartSuggestions: true,
-      notificationDailyDigest: false,
-      notificationSounds: false,
-      privacyShareAnonymizedUsage: false,
-    })
+    await user.click(screen.getByRole('button', { name: /Privacy/ }))
+    expect(screen.queryByRole('switch', { name: 'Help improve the product' })).not.toBeInTheDocument()
+    expect(screen.getByText(/controlled for this desktop installation from Local workspace Privacy settings/i)).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Push-to-talk shortcut' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Restore default shortcut' })).not.toBeInTheDocument()
+    const settingsSearch = screen.getByRole('textbox', { name: 'Search settings' })
+    await user.type(settingsSearch, 'push to talk')
+    expect(screen.getByText('No settings match that search.')).toBeInTheDocument()
+    await user.clear(settingsSearch)
+
+    await user.type(settingsSearch, 'sounds')
+    expect(screen.getByText('No settings match that search.')).toBeInTheDocument()
+    await user.clear(settingsSearch)
+    await user.type(settingsSearch, 'launch at login')
+    expect(screen.getByText('No settings match that search.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
+    expect(settingsSet).not.toHaveBeenCalled()
   })
 
   it('does not overwrite credential edits when scoped provider credentials resolve late', async () => {
@@ -644,5 +773,73 @@ describe('SettingsPanel', () => {
         apiKey: 'sk-or-replacement',
       },
     })
+  })
+
+  it('validates Voice shortcuts, blocks conflicts, and applies a custom value', async () => {
+    const user = userEvent.setup()
+    const settingsSet = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings(updates))
+    const shortcutChanged = vi.fn()
+    window.addEventListener('open-cowork:voice-shortcut-changed', shortcutChanged, { once: true })
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => ({ ...config, features: { voice: true } })),
+      },
+      settings: {
+        get: vi.fn(async () => settings({ voicePttShortcut: VOICE_PTT_SHORTCUT })),
+        getProviderCredentials: vi.fn(async () => ({})),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Privacy/ }))
+
+    const shortcut = await screen.findByRole('textbox', { name: 'Push-to-talk shortcut' })
+    await user.clear(shortcut)
+    await user.type(shortcut, 'V')
+    expect(screen.getAllByText(/Include a modifier and a supported key/)).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
+
+    await user.clear(shortcut)
+    await user.type(shortcut, 'CmdOrCtrl+Shift+P')
+    expect(screen.getAllByText(/conflicts with Command Palette/)).toHaveLength(2)
+
+    await user.clear(shortcut)
+    await user.type(shortcut, 'CmdOrCtrl+Alt+V')
+    expect(screen.queryByText(/Include a modifier|conflicts with/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledWith(expect.objectContaining({
+      voicePttShortcut: 'CmdOrCtrl+Alt+V',
+    })))
+    expect(shortcutChanged).toHaveBeenCalled()
+  })
+
+  it('restores and persists the documented default Voice shortcut', async () => {
+    const user = userEvent.setup()
+    const settingsSet = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings(updates))
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => ({ ...config, features: { voice: true } })),
+      },
+      settings: {
+        get: vi.fn(async () => settings({ voicePttShortcut: 'CmdOrCtrl+Alt+V' })),
+        getProviderCredentials: vi.fn(async () => ({})),
+        set: settingsSet,
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Privacy/ }))
+
+    const shortcut = await screen.findByRole('textbox', { name: 'Push-to-talk shortcut' })
+    await user.click(screen.getByRole('button', { name: 'Restore default shortcut' }))
+    expect(shortcut).toHaveValue(VOICE_PTT_SHORTCUT)
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledWith(expect.objectContaining({
+      voicePttShortcut: VOICE_PTT_SHORTCUT,
+    })))
+
   })
 })

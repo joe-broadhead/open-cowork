@@ -1,0 +1,25 @@
+/*
+ * Highlight.js token colors are a categorical code-artwork palette, not app
+ * chrome. This exact file is the sole raw-color allowlist for that palette.
+ */
+.hljs { color: #c9d1d9; }
+.hljs-keyword { color: #ff7b72; }
+.hljs-string { color: #a5d6ff; }
+.hljs-number { color: #79c0ff; }
+.hljs-comment { color: #8b949e; font-style: italic; }
+.hljs-built_in { color: #d2a8ff; }
+.hljs-function { color: #d2a8ff; }
+.hljs-title { color: #d2a8ff; }
+.hljs-params { color: #c9d1d9; }
+.hljs-type { color: #ff7b72; }
+.hljs-attr { color: #79c0ff; }
+.hljs-property { color: #79c0ff; }
+.hljs-literal { color: #79c0ff; }
+.hljs-variable { color: #ffa657; }
+.hljs-operator { color: #ff7b72; }
+.hljs-punctuation { color: #8b949e; }
+.hljs-meta { color: #8b949e; }
+.hljs-selector-tag { color: #7ee787; }
+.hljs-selector-class { color: #d2a8ff; }
+.hljs-tag { color: #7ee787; }
+.hljs-name { color: #7ee787; }
