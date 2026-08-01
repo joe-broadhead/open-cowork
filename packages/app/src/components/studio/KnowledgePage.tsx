@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   KnowledgePage as KnowledgePageRecord, KnowledgePageBlock as KnowledgePageBlockRecord, KnowledgePageLink, KnowledgePageVersion, KnowledgeProposal, KnowledgeSnapshotPayload, KnowledgeSpace, } from '@open-cowork/shared'
-import type { KnowledgeSpaceVisibility } from '@open-cowork/shared'
-import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeSpaceIdFromCreationId, knowledgeVisibilityLabel } from '@open-cowork/shared'
+import { knowledgeRoleCanPropose, knowledgeRoleCanReview, knowledgeVisibilityLabel } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
@@ -29,14 +28,7 @@ import {
   StudioPageHeader,
 } from '@open-cowork/ui'
 import { KnowledgeNewSpaceDialog } from './KnowledgeNewSpaceDialog'
-import {
-  clearNewSpaceCreationProgress,
-  persistNewSpaceCreationProgress,
-  readNewSpaceCreationProgress,
-  runNewSpaceCreationSingleFlight,
-  subscribeNewSpaceCreationCompletion,
-  type NewSpaceCreationProgress,
-} from './knowledge-space-creation-recovery'
+import { useKnowledgeSpaceCreation } from './useKnowledgeSpaceCreation'
 import { useKnowledgeLayoutMode } from './useKnowledgeLayoutMode'
 
 const EMPTY_SNAPSHOT: KnowledgeSnapshotPayload = {
@@ -57,35 +49,6 @@ const LOCAL_STARTER_KNOWLEDGE = {
   revision: 'ffed82865231a17c4aee4da9dba33e731491806b1afcc0a513772e53000f7ec6',
   updatedAt: '2026-01-01T00:00:00.000Z',
 } as const
-
-const NEW_SPACE_OVERVIEW_TITLE = 'Overview'
-
-function reconcileNewSpaceCreation(
-  progress: NewSpaceCreationProgress,
-  next: KnowledgeSnapshotPayload,
-) {
-  progress.spaceId = undefined
-  progress.proposalId = undefined
-  progress.pageId = undefined
-  const expectedSpaceId = knowledgeSpaceIdFromCreationId(progress.creationId)
-  if (next.spaces.some((space) => space.id === expectedSpaceId)) progress.spaceId = expectedSpaceId
-  if (!progress.spaceId) return
-
-  const page = next.pages.find((candidate) => (
-    candidate.spaceId === progress.spaceId
-    && candidate.title === NEW_SPACE_OVERVIEW_TITLE
-  ))
-  if (page) {
-    progress.pageId = page.id
-    return
-  }
-
-  progress.proposalId = next.proposals.find((proposal) => (
-    proposal.spaceId === progress.spaceId
-    && proposal.pageTitle === NEW_SPACE_OVERVIEW_TITLE
-    && proposal.status === 'pending'
-  ))?.id
-}
 
 function isKnowledgeFirstRun(snapshot: KnowledgeSnapshotPayload) {
   if (snapshot.spaces.length === 0) return true
@@ -418,11 +381,6 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
   const [proposeOpen, setProposeOpen] = useState(false)
   const [proposeBusy, setProposeBusy] = useState(false)
   const [proposeError, setProposeError] = useState<string | null>(null)
-  const [newSpaceOpen, setNewSpaceOpen] = useState(false)
-  const [newSpaceBusy, setNewSpaceBusy] = useState(false)
-  const [newSpaceError, setNewSpaceError] = useState<string | null>(null)
-  const [newSpaceCreation, setNewSpaceCreation] = useState<NewSpaceCreationProgress | null>(() => readNewSpaceCreationProgress(activeWorkspaceId))
-  const newSpaceCreationRef = useRef<NewSpaceCreationProgress | null>(newSpaceCreation)
   const [view, setView] = useState<'pages' | 'graph'>('pages')
   const [pageQuery, setPageQuery] = useState('')
   const reviewQueueRef = useRef<HTMLDivElement | null>(null)
@@ -432,27 +390,6 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
   const spacesDrawerTriggerRef = useRef<HTMLButtonElement | null>(null)
   const detailsDrawerTriggerRef = useRef<HTMLButtonElement | null>(null)
   const mainContentRef = useRef<HTMLElement | null>(null)
-
-  const persistNewSpaceProgress = useCallback((progress: NewSpaceCreationProgress | null) => {
-    newSpaceCreationRef.current = progress
-    setNewSpaceCreation(progress)
-    persistNewSpaceCreationProgress(progress, activeWorkspaceId)
-  }, [activeWorkspaceId])
-
-  const clearNewSpaceProgress = useCallback((creationId: string) => {
-    if (newSpaceCreationRef.current?.creationId === creationId) {
-      newSpaceCreationRef.current = null
-      setNewSpaceCreation(null)
-    }
-    clearNewSpaceCreationProgress(creationId, activeWorkspaceId)
-  }, [activeWorkspaceId])
-
-  useEffect(() => {
-    newSpaceCreationRef.current = readNewSpaceCreationProgress(activeWorkspaceId)
-    setNewSpaceCreation(newSpaceCreationRef.current)
-    setNewSpaceOpen(false)
-    setNewSpaceError(null)
-  }, [activeWorkspaceId])
 
   // The review-queue panel only renders in the pages view, so the rail shortcut
   // switches back to pages (if needed) and arms a reveal. Coming from graph view
@@ -517,12 +454,27 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
     }
   }, [activeWorkspaceId, activeWorkspaceIsLocal, featureValueDiscoveryEnabled])
 
-  useEffect(() => subscribeNewSpaceCreationCompletion((workspaceId, creationId) => {
-    if (workspaceId !== activeWorkspaceId || newSpaceCreationRef.current?.creationId !== creationId) return
-    newSpaceCreationRef.current = null
-    setNewSpaceCreation(null)
-    void loadSnapshot()
-  }), [activeWorkspaceId, loadSnapshot])
+  const handleNewSpaceComplete = useCallback((result: {
+    pageId: string
+    snapshot?: KnowledgeSnapshotPayload
+  }) => {
+    setSelectedPageId(result.pageId)
+    if (result.snapshot) {
+      setSnapshot(result.snapshot)
+      setError(null)
+      return
+    }
+    setError(t(
+      'knowledge.newSpace.refreshFailed',
+      'The Space and Overview page were created, but Knowledge could not refresh. Select Reload to show the new page.',
+    ))
+  }, [])
+
+  const newSpace = useKnowledgeSpaceCreation({
+    workspaceId: activeWorkspaceId,
+    onComplete: handleNewSpaceComplete,
+    onPassiveComplete: loadSnapshot,
+  })
 
   useEffect(() => {
     void loadSnapshot()
@@ -637,149 +589,8 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
     }
   }, [activeWorkspaceId, loadSnapshot, selectedPage, selectedSpace])
 
-  const createSpace = useCallback(async ({ name, visibility }: { name: string; visibility: KnowledgeSpaceVisibility }) => {
-    setNewSpaceBusy(true)
-    setNewSpaceError(null)
-    const existingProgress = newSpaceCreationRef.current
-    let progress: NewSpaceCreationProgress
-    if (!existingProgress || existingProgress.workspaceId !== activeWorkspaceId) {
-      progress = {
-        workspaceId: activeWorkspaceId,
-        creationId: crypto.randomUUID(),
-        name,
-        visibility,
-      }
-      persistNewSpaceProgress(progress)
-    } else {
-      progress = existingProgress
-    }
-    const reconcile = async () => {
-      const next = await window.coworkApi.knowledge.snapshot({
-        workspaceId: activeWorkspaceId,
-        spaceId: knowledgeSpaceIdFromCreationId(progress.creationId),
-      })
-      reconcileNewSpaceCreation(progress, next)
-      persistNewSpaceProgress(progress)
-      return next
-    }
-    const commitStage = async <T,>(
-      stage: NonNullable<NewSpaceCreationProgress['uncertainStage']>,
-      write: () => Promise<T>,
-      apply: (result: T) => void,
-      committed: () => boolean,
-    ) => {
-      progress.uncertainStage = stage
-      persistNewSpaceProgress(progress)
-      try {
-        apply(await write())
-        progress.uncertainStage = undefined
-        persistNewSpaceProgress(progress)
-      } catch (writeError) {
-        try {
-          await reconcile()
-        } catch {
-          throw writeError
-        }
-        if (!committed()) {
-          progress.uncertainStage = undefined
-          if (stage === 'space') clearNewSpaceProgress(progress.creationId)
-          else persistNewSpaceProgress(progress)
-          throw writeError
-        }
-        progress.uncertainStage = undefined
-        persistNewSpaceProgress(progress)
-      }
-    }
-    const creationRun = runNewSpaceCreationSingleFlight(progress.creationId, async () => {
-      if (progress.needsReconciliation || progress.uncertainStage) {
-        await reconcile()
-        progress.needsReconciliation = undefined
-        progress.uncertainStage = undefined
-        persistNewSpaceProgress(progress)
-      }
-      if (!progress.spaceId) {
-        await commitStage(
-          'space',
-          () => window.coworkApi.knowledge.createSpace({
-            workspaceId: activeWorkspaceId,
-            creationId: progress.creationId,
-            name: progress.name,
-            visibility: progress.visibility,
-          }),
-          (space) => { progress.spaceId = space.id },
-          () => Boolean(progress.spaceId),
-        )
-      }
-      if (!progress.proposalId && !progress.pageId) {
-        await commitStage(
-          'proposal',
-          () => window.coworkApi.knowledge.propose({
-            workspaceId: activeWorkspaceId,
-            spaceId: progress.spaceId!,
-            pageTitle: NEW_SPACE_OVERVIEW_TITLE,
-            summary: `Create the first page for ${progress.name}.`,
-            links: [],
-            body: [{
-              id: 'overview-intro',
-              type: 'p',
-              text: `Use this page to capture reviewed context for ${progress.name}.`,
-            }],
-          }),
-          (proposal) => { progress.proposalId = proposal.id },
-          () => Boolean(progress.proposalId || progress.pageId),
-        )
-      }
-      if (!progress.pageId && progress.proposalId) {
-        await commitStage(
-          'accept',
-          () => window.coworkApi.knowledge.acceptProposal(progress.proposalId!, {
-            workspaceId: activeWorkspaceId,
-          }),
-          (published) => { progress.pageId = published.page.id },
-          () => Boolean(progress.pageId),
-        )
-      }
-      if (!progress.pageId) throw new Error('The Overview page could not be created.')
-
-      recordFeatureValueActivation('knowledge')
-      try {
-        return {
-          pageId: progress.pageId,
-          snapshot: await window.coworkApi.knowledge.snapshot({ workspaceId: activeWorkspaceId }),
-        }
-      } catch {
-        return { pageId: progress.pageId }
-      }
-    })
-    try {
-      const result = await creationRun.promise
-      clearNewSpaceProgress(progress.creationId)
-      setSelectedPageId(result.pageId)
-      setNewSpaceOpen(false)
-      if (result.snapshot) {
-        setSnapshot(result.snapshot)
-        setError(null)
-      } else {
-        setError(t(
-          'knowledge.newSpace.refreshFailed',
-          'The Space and Overview page were created, but Knowledge could not refresh. Select Reload to show the new page.',
-        ))
-      }
-    } catch (createError) {
-      if (creationRun.joined) {
-        const recovered = readNewSpaceCreationProgress(activeWorkspaceId)
-        newSpaceCreationRef.current = recovered
-        setNewSpaceCreation(recovered)
-      }
-      setNewSpaceError(createError instanceof Error ? createError.message : String(createError))
-    } finally {
-      setNewSpaceBusy(false)
-    }
-  }, [activeWorkspaceId, clearNewSpaceProgress, persistNewSpaceProgress])
-
   const canPropose = selectedSpace ? knowledgeRoleCanPropose(selectedSpace.role) : false
   const canReview = selectedSpace ? knowledgeRoleCanReview(selectedSpace.role) : false
-  const newSpaceRecoveryAvailable = Boolean(newSpaceCreation)
 
   if (!activeWorkspaceIsLocal) {
     return (
@@ -806,9 +617,9 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
         size="sm"
         leftIcon="plus"
         fullWidth
-        onClick={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
+        onClick={newSpace.openDialog}
       >
-        {newSpaceRecoveryAvailable
+        {newSpace.recoveryAvailable
           ? t('knowledge.newSpace.resumeAction', 'Finish Space')
           : t('knowledge.newSpace.action', 'New Space')}
       </Button>
@@ -921,8 +732,8 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
           </div>
         ) : !error && isKnowledgeFirstRun(snapshot) ? (
           <KnowledgeFirstRun
-            recoveryAvailable={newSpaceRecoveryAvailable}
-            onNewSpace={() => { setNewSpaceError(null); setNewSpaceOpen(true) }}
+            recoveryAvailable={newSpace.recoveryAvailable}
+            onNewSpace={newSpace.openDialog}
           />
         ) : (
           <div
@@ -1046,15 +857,15 @@ export function KnowledgePage({ featureValueDiscoveryEnabled = true }: { feature
           onClose={() => setProposeOpen(false)}
         />
       ) : null}
-      {newSpaceOpen ? (
+      {newSpace.open ? (
         <KnowledgeNewSpaceDialog
-          busy={newSpaceBusy}
-          error={newSpaceError}
-          initialName={newSpaceCreationRef.current?.name}
-          initialVisibility={newSpaceCreationRef.current?.visibility}
-          resuming={Boolean(newSpaceCreationRef.current)}
-          onSubmit={(input) => void createSpace(input)}
-          onClose={() => setNewSpaceOpen(false)}
+          busy={newSpace.busy}
+          error={newSpace.error}
+          initialName={newSpace.creation?.name}
+          initialVisibility={newSpace.creation?.visibility}
+          resuming={newSpace.recoveryAvailable}
+          onSubmit={(input) => void newSpace.submit(input)}
+          onClose={newSpace.closeDialog}
         />
       ) : null}
     </div>
