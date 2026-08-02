@@ -263,11 +263,11 @@ export async function handleSessionsApiRoute(
       tools.writeError(res, 400, 'Question reply requires requestId and answers.', options.corsOrigin)
       return true
     }
-    const beforeProjectionSequence = await tools.currentSessionProjectionSequence(options, context.principal, sessionId)
     const command = await options.service.enqueueQuestionReply(context.principal, sessionId, {
       requestId,
       answers: body.answers,
     })
+    const beforeProjectionSequence = await tools.currentSessionProjectionSequence(options, context.principal, sessionId)
     const processed = await tools.processCommandIfConfigured(options, context.principal, sessionId)
     await tools.writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
     return true
@@ -280,10 +280,10 @@ export async function handleSessionsApiRoute(
       tools.writeError(res, 400, 'Question rejection requires requestId.', options.corsOrigin)
       return true
     }
-    const beforeProjectionSequence = await tools.currentSessionProjectionSequence(options, context.principal, sessionId)
     const command = await options.service.enqueueQuestionReject(context.principal, sessionId, {
       requestId,
     })
+    const beforeProjectionSequence = await tools.currentSessionProjectionSequence(options, context.principal, sessionId)
     const processed = await tools.processCommandIfConfigured(options, context.principal, sessionId)
     await tools.writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
     return true
@@ -296,11 +296,11 @@ export async function handleSessionsApiRoute(
       tools.writeError(res, 400, 'Permission response requires permissionId.', options.corsOrigin)
       return true
     }
-    const beforeProjectionSequence = await tools.currentSessionProjectionSequence(options, context.principal, sessionId)
     const command = await options.service.enqueuePermissionResponse(context.principal, sessionId, {
       permissionId,
       response: body.response ?? null,
     })
+    const beforeProjectionSequence = await tools.currentSessionProjectionSequence(options, context.principal, sessionId)
     const processed = await tools.processCommandIfConfigured(options, context.principal, sessionId)
     await tools.writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
     return true

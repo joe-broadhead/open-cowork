@@ -119,11 +119,9 @@ OPENWIKI_QUEUE_BACKEND=postgres
 OPENWIKI_MCP_TOOL_OUTPUT_MAX_BYTES=1048576
 ```
 
-For Kubernetes, use a private service behind authenticated ingress and
-Kubernetes secrets or workload identity for tokens. For Cloud Run, use IAP or
-private ingress and keep writable Git on a POSIX filesystem rather than Cloud
-Storage FUSE. For Docker or Compose, keep the service on a trusted private
-network or behind an authenticating reverse proxy.
+Keep the service behind authenticated ingress or a private gateway, load tokens
+from an operator secret system or workload identity, and keep writable Git on a
+persistent filesystem with normal Git semantics.
 
 ## Security Rules
 

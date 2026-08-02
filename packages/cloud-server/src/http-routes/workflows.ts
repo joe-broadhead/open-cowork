@@ -37,11 +37,6 @@ export async function handleWorkflowsApiRoute(
   } = input
   if (resource !== 'workflows') return false
 
-  if (!options.policy.features.workflows) {
-    tools.writePolicyError(res, 403, 'Workflows are disabled for this cloud profile.', 'workflows.disabled', options.corsOrigin)
-    return true
-  }
-
   const workflowId = sessionId
   const workflowAction = action
 

@@ -195,7 +195,7 @@ export function createGatewaySessionStreamManager(
     state.generation += 1
     const generation = state.generation
     state.subscription = cloud.subscribeSessionEvents({
-      sessionId: state.binding.sessionId,
+      sessionBindingId: state.binding.bindingId,
       afterSequence: state.lastEventSequence,
       onEvent: (event) => {
         // Already detached for backpressure: drop further events (no enqueue).
@@ -338,7 +338,7 @@ export function createGatewaySessionStreamManager(
   }
 
   async function hydrateSnapshot(state: StreamState, event: CloudTransportSessionEvent) {
-    const snapshot = await cloud.getSession(state.binding.sessionId)
+    const snapshot = await cloud.getSession(state.binding.bindingId)
     const latestSequence = Math.max(
       state.lastEventSequence,
       numberField(event.payload, 'latestSequence'),

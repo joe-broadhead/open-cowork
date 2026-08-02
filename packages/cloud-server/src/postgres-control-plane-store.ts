@@ -18,11 +18,6 @@ import {
   retryAfterMs,
   windowStart,
 } from './postgres-store-normalizers.ts'
-import {
-  generateChannelInteractionToken,
-  hashChannelInteractionToken,
-  verifyChannelInteractionTokenHash,
-} from './control-plane-store.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
 import { normalizeAuditQueryLimit, paginateAuditEvents } from './audit-query.ts'
 import type {
@@ -194,6 +189,11 @@ import { PostgresChannelDeliveriesRepository } from './postgres-store-domains/ch
 import { PostgresCoordinationWatchesRepository } from './postgres-store-domains/coordination-watches.ts'
 import { PostgresArtifactUploadReservationsRepository } from './postgres-store-domains/artifact-upload-reservations.ts'
 import { PostgresWorkspaceEventsRepository } from './postgres-store-domains/workspace-events.ts'
+import {
+  createPostgresChannelInteraction,
+  findPendingPostgresChannelInteractionByExternal,
+  findPendingPostgresChannelInteractionByToken,
+} from './postgres-store-domains/channel-interactions.ts'
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
@@ -994,83 +994,63 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async createChannelInteraction(input: CreateChannelInteractionInput): Promise<IssuedChannelInteractionRecord> {
-    const plaintextToken = generateChannelInteractionToken({ interactionId: input.interactionId, secret: input.tokenSecret })
-    const relationship = await this.maybeOne(
-      `SELECT a.agent_id
-       FROM headless_agents a
-       JOIN cloud_orgs o
-         ON o.org_id = $1
-       JOIN cloud_sessions s
-         ON s.tenant_id = o.tenant_id
-        AND s.session_id = $3
-       LEFT JOIN cloud_channel_identities i
-         ON i.identity_id = $4
-       WHERE a.org_id = $1
-         AND a.agent_id = $2
-         AND ($4::text IS NULL OR i.org_id = $1)`,
-      [input.orgId, input.agentId, input.sessionId, input.createdByIdentityId || null],
-    )
-    if (!relationship) throw new Error('Channel interaction references must belong to the same org, agent, session, and identity.')
-    const result = await this.pool.query(
-      `INSERT INTO cloud_channel_interactions (
-        interaction_id, org_id, agent_id, session_id, provider, external_interaction_id,
-        token_hash, kind, target_id, status, created_by_identity_id,
-        expires_at, used_at, created_at, updated_at
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, NULL, $12, $12)
-       ON CONFLICT (interaction_id) DO NOTHING
-       RETURNING *`,
-      [
-        input.interactionId,
-        input.orgId,
-        input.agentId,
-        input.sessionId,
-        normalizeProvider(input.provider),
-        normalizeNullableText(input.externalInteractionId, CHANNEL_TEXT_MAX_LENGTH, 'External interaction id'),
-        await hashChannelInteractionToken(plaintextToken),
-        input.kind,
-        normalizeText(input.targetId, CHANNEL_TEXT_MAX_LENGTH, 'Interaction target id'),
-        input.createdByIdentityId || null,
-        input.expiresAt.toISOString(),
-        nowIso(input.createdAt),
-      ],
-    )
-    if (!result.rows[0]) throw new Error(`Channel interaction ${input.interactionId} already exists.`)
-    return { interaction: channelInteractionFromRow(result.rows[0]), plaintextToken }
+    return createPostgresChannelInteraction(this.pool, input)
   }
 
   // Resolve a pending interaction by the token's embedded interaction id, then verify the
   // per-interaction salted hash in app code (the SQL prefix match only narrows the id, it
   // does not check the secret). A forged id cannot pass the hash verification.
-  private async findPendingChannelInteractionRowByToken(orgId: string, token: string, now: string, client?: PgExecutor) {
-    const executor = client ?? this.pool
-    const candidates = await executor.query(
-      `SELECT * FROM cloud_channel_interactions
-       WHERE org_id = $1
-         AND status = 'pending'
-         AND expires_at > $3
-         AND left($2, length('occi_' || interaction_id || '_')) = ('occi_' || interaction_id || '_')${client ? '\n       FOR UPDATE' : ''}`,
-      [orgId, token, now],
-    )
-    for (const row of candidates.rows) {
-      if (await verifyChannelInteractionTokenHash(token, String(row.token_hash))) return row
-    }
-    return null
+  private async findPendingChannelInteractionRowByToken(
+    orgId: string,
+    token: string,
+    now: string,
+    channelBindingIds?: readonly string[] | null,
+    client?: PgExecutor,
+  ) {
+    return findPendingPostgresChannelInteractionByToken(client ?? this.pool, {
+      orgId,
+      token,
+      now,
+      channelBindingIds,
+      lock: Boolean(client),
+    })
+  }
+
+  private async findPendingChannelInteractionRowByExternal(
+    input: {
+      orgId: string
+      provider: ChannelProviderId
+      externalInteractionId: string
+      channelBindingIds?: readonly string[] | null
+    },
+    now: string,
+    client?: PgExecutor,
+  ) {
+    return findPendingPostgresChannelInteractionByExternal(client ?? this.pool, {
+      ...input,
+      now,
+      lock: Boolean(client),
+    })
   }
 
   async findChannelInteraction(input: FindChannelInteractionInput) {
     const now = nowIso(input.now)
     if (input.token) {
-      const row = await this.findPendingChannelInteractionRowByToken(input.orgId, input.token, now)
+      const row = await this.findPendingChannelInteractionRowByToken(
+        input.orgId,
+        input.token,
+        now,
+        input.channelBindingIds,
+      )
       return row ? channelInteractionFromRow(row) : null
     }
     if (input.provider && input.externalInteractionId) {
-      const row = await this.maybeOne(
-        `SELECT * FROM cloud_channel_interactions
-         WHERE org_id = $1 AND status = 'pending' AND expires_at > $4
-           AND provider = $2 AND external_interaction_id = $3`,
-        [input.orgId, input.provider, input.externalInteractionId, now],
-      )
+      const row = await this.findPendingChannelInteractionRowByExternal({
+        orgId: input.orgId,
+        provider: input.provider,
+        externalInteractionId: input.externalInteractionId,
+        channelBindingIds: input.channelBindingIds,
+      }, now)
       return row ? channelInteractionFromRow(row) : null
     }
     return null
@@ -1078,30 +1058,31 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async resolveChannelInteraction(input: ResolveChannelInteractionInput) {
     const now = nowIso(input.usedAt)
-    let updatedRow: QueryRow | null = null
-    if (input.token) {
-      const candidate = await this.findPendingChannelInteractionRowByToken(input.orgId, input.token, now)
-      if (candidate) {
-        const result = await this.pool.query(
+    const candidate = input.token
+      ? await this.findPendingChannelInteractionRowByToken(
+          input.orgId,
+          input.token,
+          now,
+          input.channelBindingIds,
+        )
+      : input.provider && input.externalInteractionId
+        ? await this.findPendingChannelInteractionRowByExternal({
+            orgId: input.orgId,
+            provider: input.provider,
+            externalInteractionId: input.externalInteractionId,
+            channelBindingIds: input.channelBindingIds,
+          }, now)
+        : null
+    const updated = candidate
+      ? await this.pool.query(
           `UPDATE cloud_channel_interactions
            SET status = 'used', used_at = $3, updated_at = $3
            WHERE org_id = $1 AND interaction_id = $2 AND status = 'pending' AND expires_at > $3
            RETURNING *`,
           [input.orgId, String(candidate.interaction_id), now],
         )
-        updatedRow = result.rows[0] ?? null
-      }
-    } else if (input.provider && input.externalInteractionId) {
-      const result = await this.pool.query(
-        `UPDATE cloud_channel_interactions
-         SET status = 'used', used_at = $4, updated_at = $4
-         WHERE org_id = $1 AND status = 'pending' AND expires_at > $4
-           AND provider = $2 AND external_interaction_id = $3
-         RETURNING *`,
-        [input.orgId, input.provider, input.externalInteractionId, now],
-      )
-      updatedRow = result.rows[0] ?? null
-    }
+      : null
+    const updatedRow: QueryRow | null = updated?.rows[0] ?? null
     const interaction = updatedRow ? channelInteractionFromRow(updatedRow) : null
     if (interaction) {
       await this.recordAuditEvent({
@@ -1122,16 +1103,20 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.withTransaction(async (client) => {
       const usedAt = nowIso(input.usedAt)
       const selected = input.token
-        ? await this.findPendingChannelInteractionRowByToken(input.orgId, input.token, usedAt, client)
-        : input.provider && input.externalInteractionId
-          ? await this.maybeOne(
-            `SELECT * FROM cloud_channel_interactions
-             WHERE org_id = $1 AND status = 'pending' AND expires_at > $4
-               AND provider = $2 AND external_interaction_id = $3
-             FOR UPDATE`,
-            [input.orgId, input.provider, input.externalInteractionId, usedAt],
+        ? await this.findPendingChannelInteractionRowByToken(
+            input.orgId,
+            input.token,
+            usedAt,
+            input.channelBindingIds,
             client,
           )
+        : input.provider && input.externalInteractionId
+          ? await this.findPendingChannelInteractionRowByExternal({
+              orgId: input.orgId,
+              provider: input.provider,
+              externalInteractionId: input.externalInteractionId,
+              channelBindingIds: input.channelBindingIds,
+            }, usedAt, client)
           : null
       if (!selected) return null
       const interaction = channelInteractionFromRow(selected)

@@ -174,9 +174,7 @@ export interface CliOptions {
   teamGroup?: string;
   spaceTitle?: string;
   replaceGrants: boolean;
-  deployProfile?: string;
   publicOrigin?: string;
-  image?: string;
   schemaPack?: string;
   dreamPhases: string[];
   createProposals: boolean;
@@ -419,9 +417,7 @@ const VALUE_FLAGS: Record<string, (options: CliOptions, raw: string) => void> = 
   "--admin-principal": (o, v) => { o.adminPrincipal = v; },
   "--team-group": (o, v) => { o.teamGroup = v; },
   "--space-title": (o, v) => { o.spaceTitle = v; },
-  "--deploy-profile": (o, v) => { o.deployProfile = v; },
   "--public-origin": (o, v) => { o.publicOrigin = v; },
-  "--image": (o, v) => { o.image = v; },
   "--schema-pack": (o, v) => { o.schemaPack = v; },
   "--phase": (o, v) => { o.dreamPhases.push(v); },
   "--trusted-header-secret": (o, v) => { o.trustedHeaderSecret = v; },
@@ -438,9 +434,10 @@ function numberFlag(flag: string, raw: string): number {
 }
 
 /** Parse raw `openwiki` argv values into a command, positional args, and typed options. */
-export function parseArgs(argv: string[]): { command: string | undefined; args: string[]; options: CliOptions } {
+export function parseArgs(argv: string[]): { command: string | undefined; args: string[]; options: CliOptions; optionFlags: string[] } {
   const args: string[] = [];
   const pathArgs: string[] = [];
+  const optionFlags: string[] = [];
   const options = defaultOptions();
   if (argv.includes("--token")) {
     throw new Error("--token is disabled because command-line secrets are visible to other local processes; use --token-env, --token-file, or OPENWIKI_TOKEN");
@@ -453,16 +450,19 @@ export function parseArgs(argv: string[]): { command: string | undefined; args: 
     }
     const booleanFlag = BOOLEAN_FLAGS[value];
     if (booleanFlag !== undefined) {
+      optionFlags.push(value);
       booleanFlag(options);
       continue;
     }
     if (value === "--path") {
+      optionFlags.push(value);
       pathArgs.push(requireValue(argv, index, "--path"));
       index += 1;
       continue;
     }
     const valueFlag = VALUE_FLAGS[value];
     if (valueFlag !== undefined) {
+      optionFlags.push(value);
       valueFlag(options, requireValue(argv, index, value));
       index += 1;
       continue;
@@ -487,7 +487,7 @@ export function parseArgs(argv: string[]): { command: string | undefined; args: 
       throw new Error("--path is only supported by `commit`, `policy propose-section`, and `backup configure`.");
     }
   }
-  return { command, args: rest, options };
+  return { command, args: rest, options, optionFlags };
 }
 
 function applyCommandScopedMode(command: string | undefined, options: CliOptions): void {

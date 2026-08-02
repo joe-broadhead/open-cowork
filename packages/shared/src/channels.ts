@@ -149,7 +149,6 @@ export type ChannelPersonResolveInput = {
   externalUserId: string
   channelBindingId?: string | null
   externalWorkspaceId?: string | null
-  identityId?: string | null
   accountId?: string | null
   role?: ChannelIdentityRole
   status?: ChannelIdentityStatus
@@ -163,7 +162,11 @@ export type ChannelDeliveryListOptions = WorkspaceOptions & {
   limit?: number | null
 }
 
-export type ChannelDeliveryDeadLetterInput = {
+export type ChannelDeliveryMutationInput = {
+  channelBindingId?: string | null
+}
+
+export type ChannelDeliveryDeadLetterInput = ChannelDeliveryMutationInput & {
   lastError?: string | null
 }
 
@@ -186,7 +189,7 @@ export type ChannelApiSurface = {
   people: (options?: ChannelPeopleListOptions) => Promise<ChannelIdentityPublicRecord[]>
   resolvePerson: (input: ChannelPersonResolveInput) => Promise<ChannelIdentityPublicRecord>
   deliveries: (options?: ChannelDeliveryListOptions) => Promise<ChannelDeliveryPublicRecord[]>
-  retryDelivery: (deliveryId: string) => Promise<ChannelDeliveryPublicRecord | null>
+  retryDelivery: (deliveryId: string, input?: ChannelDeliveryMutationInput) => Promise<ChannelDeliveryPublicRecord | null>
   deadLetterDelivery: (deliveryId: string, input?: ChannelDeliveryDeadLetterInput) => Promise<ChannelDeliveryPublicRecord | null>
   watches: (options?: ChannelWatchListOptions) => Promise<CoordinationWatch[]>
   createWatch: (input: CoordinationWatchInput) => Promise<CoordinationWatch>

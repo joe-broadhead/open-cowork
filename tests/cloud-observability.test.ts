@@ -15,6 +15,7 @@ import {
   sanitizeCloudMetricAttributes,
   type CloudObservabilityAdapter,
 } from '@open-cowork/cloud-server/observability'
+import { WORKSPACE_POLICY_DENIAL_CODES } from '@open-cowork/shared'
 
 test('cloud observability sanitizes secret-bearing attributes', () => {
   assert.deepEqual(sanitizeCloudObservabilityAttributes({
@@ -84,6 +85,21 @@ test('cloud metric attributes reject identifiers, content, paths, and credential
     cloud___role: 'web',
   }), {
     cloud_role: 'web',
+  })
+})
+
+test('cloud metric attributes preserve every closed workspace policy denial code', () => {
+  for (const denialCode of WORKSPACE_POLICY_DENIAL_CODES) {
+    assert.deepEqual(sanitizeCloudMetricAttributes({
+      workspace_policy_reason: denialCode,
+    }), {
+      workspace_policy_reason: denialCode,
+    })
+  }
+  assert.deepEqual(sanitizeCloudMetricAttributes({
+    workspace_policy_reason: 'tenant-controlled-reason',
+  }), {
+    workspace_policy_reason: 'other',
   })
 })
 

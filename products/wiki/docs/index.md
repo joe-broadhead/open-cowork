@@ -21,24 +21,21 @@ records.
 2. [Create your first wiki](getting-started/quickstart.md).
 3. [Run the first-user path](getting-started/first-user-path.md).
 4. [Learn the core concepts](getting-started/concepts.md).
-5. [Choose a deployment tier](deployment/overview.md).
+5. [Choose a runtime or publishing path](deployment/overview.md).
 
 ## Release Status
 
-OpenWiki `v0.0.0` is a public preview: source checkout from
-`products/wiki` in open-cowork, the generated `@openwiki/cli` / `cowork-wiki`
-package, container images published under open-cowork release tags
-(`wiki@v*`), and static export distribution. Expect rapid iteration on the
-road to `v0.1.0`. Static export and read-only hosted deployments are the
-safest public paths.
-Write-capable hosted deployments require an explicit authentication boundary and
-same-origin browser write protection.
+OpenWiki `v0.0.0` is pre-release. The active distribution paths are the
+open-cowork source checkout, the generated CLI tarball attached to `wiki@v*`
+GitHub releases, and static export. npm-registry packages and container images
+are not published. A source-operated write-capable network runtime requires an
+explicit authentication boundary and same-origin browser write protection.
 
 ## Community And Operations
 
-- [Deployment profiles](deployment/profiles.md) and the
-  [operations matrix](deployment/operations/matrix.md) define supported local,
-  private, hosted, and static paths.
+- [Runtime profiles](deployment/profiles.md) and the
+  [operations matrix](deployment/operations/matrix.md) define local,
+  source-operated hosted, and static paths.
 - [Support](https://github.com/joe-broadhead/open-cowork/blob/master/products/wiki/SUPPORT.md),
   [security reporting](https://github.com/joe-broadhead/open-cowork/blob/master/products/wiki/SECURITY.md),
   [Code of Conduct](https://github.com/joe-broadhead/open-cowork/blob/master/products/wiki/CODE_OF_CONDUCT.md),

@@ -3,11 +3,6 @@ name: Release Wiki
 
 on:
   workflow_dispatch:
-    inputs:
-      skip_tests:
-        description: 'Skip unit tests (emergency only)'
-        type: boolean
-        default: false
   push:
     tags:
       - 'wiki@v*'
@@ -38,40 +33,55 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: products/wiki/docs/requirements.txt
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Wiki docs dependencies
+        run: python -m pip install -r products/wiki/docs/requirements.txt
 
       - name: Product boundaries
         run: pnpm boundaries:check
 
-      - name: Typecheck
-        run: pnpm --filter cowork-wiki-workspace typecheck
+      - name: Lint Wiki workspace
+        run: pnpm --filter cowork-wiki-workspace lint
+
+      - name: Check generated reference docs
+        run: pnpm --filter cowork-wiki-workspace docs:reference -- --check
+
+      - name: Build Wiki docs (strict)
+        run: pnpm --filter cowork-wiki-workspace docs:build
 
       - name: Test
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_tests != true }}
         run: pnpm --filter cowork-wiki-workspace test
-
-      # JOE-975 / wiki audit P2-3: PR CI keeps only the dry-run unit contract
-      # (hosted-readiness-evidence.test.ts). Release re-runs the dry-run script
-      # as an explicit hosted multi-replica contract gate. Full --enforce needs
-      # live Postgres and stays operator/nightly (not every monorepo PR).
-      - name: Hosted readiness evidence (dry-run contract)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_tests != true }}
-        working-directory: products/wiki
-        run: pnpm evidence:hosted-readiness -- --dry-run --json
 
       - name: Pack CLI
         run: pnpm --filter cowork-wiki-workspace pack:cli
 
+      - name: Verify release ref and packed CLI
+        id: wiki-pack
+        shell: bash
+        run: |
+          release_ref="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            release_ref="manual"
+          fi
+          node products/wiki/scripts/verify-release-artifact.mjs "$release_ref" products/wiki/artifacts/npm >> "$GITHUB_OUTPUT"
+
       - name: Standalone smoke
-        run: node products/wiki/scripts/standalone-smoke.mjs "$(ls products/wiki/artifacts/npm/*.tgz | head -1)"
+        run: node products/wiki/scripts/standalone-smoke.mjs "${{ steps.wiki-pack.outputs.tarball }}"
 
       - name: Stage artifacts
         run: |
           mkdir -p artifacts/wiki
-          cp products/wiki/artifacts/npm/*.tgz artifacts/wiki/
+          cp -- "${{ steps.wiki-pack.outputs.tarball }}" artifacts/wiki/
           cd artifacts/wiki
-          shasum -a 256 *.tgz | tee SHA256SUMS
+          shasum -a 256 ./*.tgz | tee SHA256SUMS
 
       - name: Upload pack artifact
         uses: actions/upload-artifact@v7
@@ -84,11 +94,21 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
+          WIKI_PRERELEASE: ${{ steps.wiki-pack.outputs.prerelease }}
         run: |
           tag="${GITHUB_REF_NAME}"
+          prerelease_args=()
+          case "$WIKI_PRERELEASE" in
+            true) prerelease_args=(--prerelease) ;;
+            false) ;;
+            *)
+              echo "::error::Unexpected Wiki prerelease classification: $WIKI_PRERELEASE"
+              exit 1
+              ;;
+          esac
           gh release create "$tag" \
             --title "Wiki ${tag}" \
             --notes "Standalone Wiki CLI pack from monorepo products/wiki. Does not include Desktop." \
             --verify-tag \
-            artifacts/wiki/* || \
-          gh release upload "$tag" artifacts/wiki/* --clobber
+            "${prerelease_args[@]}" \
+            artifacts/wiki/*

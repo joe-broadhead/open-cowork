@@ -5,7 +5,7 @@ import { printCommandHelp, printHelp } from "./output.ts";
 import { cliErrorMessage, installCliProcessHandlers } from "./process-lifecycle.ts";
 
 async function main(argv: string[]): Promise<void> {
-  const { command, args, options } = parseArgs(argv);
+  const { command, args, options, optionFlags } = parseArgs(argv);
   if (command === "help") {
     printCommandHelp(args[0]);
     return;
@@ -22,19 +22,25 @@ async function main(argv: string[]): Promise<void> {
       printHelp();
       return;
     case "version":
+      rejectUnexpectedCommandInput("version", args, optionFlags, ["--short"], ["--json"]);
       await (await import("./commands/version.ts")).versionCommand(args, options);
       return;
     case "--version":
     case "-v":
-      await (await import("./commands/version.ts")).versionCommand(["--short", ...args], options);
-      return;
-    case "upgrade":
-      await (await import("./commands/version.ts")).versionCommand(["--check"], options);
+      rejectUnexpectedCommandInput(command, args, optionFlags, [], ["--json"]);
+      await (await import("./commands/version.ts")).versionCommand(["--short"], options);
       return;
     case "self-check":
       await (await import("./commands/self-check.ts")).selfCheckCommand(options);
       return;
     case "doctor":
+      rejectUnexpectedCommandInput(
+        "doctor",
+        args,
+        optionFlags,
+        [],
+        ["--root", "--profile", "--json", "--public-origin", "--trust-headers", "--trusted-header-secret"],
+      );
       await (await import("./commands/doctor.ts")).doctorCommand(options);
       return;
     case "completion":
@@ -45,9 +51,6 @@ async function main(argv: string[]): Promise<void> {
       return;
     case "agent":
       await (await import("./commands/agent.ts")).agentCommand(args, options);
-      return;
-    case "deploy":
-      await (await import("./commands/agent.ts")).deployCommand(args, options);
       return;
     case "init":
       await (await import("./commands/basic.ts")).initCommand(args, options);
@@ -202,6 +205,24 @@ async function main(argv: string[]): Promise<void> {
       return;
     default:
       throw new Error(`Unknown command '${command}'. Run openwiki --help.`);
+  }
+}
+
+function rejectUnexpectedCommandInput(
+  command: string,
+  args: string[],
+  optionFlags: string[],
+  allowedArgs: string[],
+  allowedOptionFlags: string[],
+): void {
+  const allowedArgSet = new Set(allowedArgs);
+  const allowedOptionFlagSet = new Set(allowedOptionFlags);
+  const unexpected = [
+    ...args.filter((arg) => !allowedArgSet.has(arg)),
+    ...optionFlags.filter((flag) => !allowedOptionFlagSet.has(flag)),
+  ];
+  if (unexpected.length > 0) {
+    throw new Error(`${command} does not accept: ${[...new Set(unexpected)].join(", ")}`);
   }
 }
 

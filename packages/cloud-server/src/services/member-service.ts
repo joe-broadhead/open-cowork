@@ -42,6 +42,7 @@ export type CloudMemberServiceOptions = {
   emailSender: CloudEmailSender | null
   ensurePrincipal: (principal: CloudPrincipal) => Promise<unknown> | unknown
   assertOrgAdmin: (principal: CloudPrincipal) => void
+  assertPermission: (principal: CloudPrincipal, permission: 'members:read') => void
   principalOrgId: (principal: CloudPrincipal) => string
 }
 
@@ -52,6 +53,7 @@ export class CloudMemberService {
   private readonly emailSender: CloudEmailSender | null
   private readonly ensurePrincipal: CloudMemberServiceOptions['ensurePrincipal']
   private readonly assertOrgAdmin: CloudMemberServiceOptions['assertOrgAdmin']
+  private readonly assertPermission: CloudMemberServiceOptions['assertPermission']
   private readonly principalOrgId: CloudMemberServiceOptions['principalOrgId']
 
   constructor(options: CloudMemberServiceOptions) {
@@ -61,6 +63,7 @@ export class CloudMemberService {
     this.emailSender = options.emailSender
     this.ensurePrincipal = options.ensurePrincipal
     this.assertOrgAdmin = options.assertOrgAdmin
+    this.assertPermission = options.assertPermission
     this.principalOrgId = options.principalOrgId
   }
 
@@ -69,7 +72,7 @@ export class CloudMemberService {
     input: { query?: string | null, limit?: number | null } = {},
   ): Promise<PublicOrgMemberRecord[]> {
     await this.ensurePrincipal(principal)
-    this.assertOrgAdmin(principal)
+    this.assertPermission(principal, 'members:read')
     return this.store.listOrgMembers(this.principalOrgId(principal), {
       query: input.query || null,
       limit: input.limit || 100,

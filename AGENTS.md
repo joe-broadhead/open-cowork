@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Open Cowork is an Electron + TypeScript monorepo: desktop product layer on **OpenCode** (execution engine), plus Durable Gateway, Cloud, and Wiki. Package manager: **pnpm@10.32.1**. Node: see `.nvmrc` (**≥22.13**). Default branch: `master`.
+Open Cowork is an Electron + TypeScript monorepo: desktop product layer on **OpenCode** (execution engine), plus Durable Gateway, Cloud, and Wiki. Package manager: **pnpm@10.32.1**. Node: see `.nvmrc` (**≥22.22.3**). Default branch: `master`.
 
 **OpenCode owns execution** (sessions, MCP, approvals, tools, streaming). **Open Cowork owns composition** (desktop UI, packaging, config, workflows, branding). Do not invent a second agent runtime.
 

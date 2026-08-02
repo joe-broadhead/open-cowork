@@ -33,14 +33,14 @@
   "exceptions": [
     {
       "path": "packages/cloud-server/src/in-memory-control-plane-store.ts",
-      "maxLines": 1620,
+      "maxLines": 1600,
       "ratchetTargetLines": 1499,
       "owner": "cloud-server",
       "reason": "In-memory control-plane compatibility store retained for deterministic local and contract execution."
     },
     {
       "path": "packages/cloud-server/src/postgres-control-plane-store.ts",
-      "maxLines": 1970,
+      "maxLines": 1960,
       "ratchetTargetLines": 1499,
       "owner": "cloud-server",
       "reason": "Postgres control-plane facade delegates to domain repositories but remains the transaction composition boundary."
@@ -77,14 +77,14 @@
     },
     {
       "path": "packages/cloud-server/src/http-server.ts",
-      "maxLines": 1297,
-      "ratchetTargetLines": 1250,
+      "maxLines": 1230,
+      "ratchetTargetLines": 1200,
       "owner": "cloud-server",
       "reason": "Cloud HTTP composition facade is below the soft target after JOE-1200 route and stream extraction and must not regrow."
     },
     {
       "path": "packages/cloud-server/src/session-service.ts",
-      "maxLines": 1145,
+      "maxLines": 1144,
       "ratchetTargetLines": 1100,
       "owner": "cloud-server",
       "reason": "Cloud session facade stays bounded after BYOK policy and orchestration behavior moved to domain services."

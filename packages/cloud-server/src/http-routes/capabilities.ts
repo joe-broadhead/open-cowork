@@ -3,11 +3,6 @@ import type { CloudApiRouteInput } from './types.ts'
 export async function handleCapabilitiesApiRoute(input: CloudApiRouteInput): Promise<boolean> {
   const { req, res, options, context, itemId: collection, action: itemId, artifactId: itemAction, tools } = input
 
-  if (!options.policy.features.agents && !options.policy.features.customSkills && !options.policy.features.customMcps) {
-    tools.writePolicyError(res, 403, 'Capabilities are disabled for this cloud profile.', 'capabilities.disabled', options.corsOrigin)
-    return true
-  }
-
   if (!collection && req.method === 'GET') {
     tools.writeJson(res, 200, await options.service.domains.capabilities.listCapabilityCatalog(context.principal), options.corsOrigin)
     return true

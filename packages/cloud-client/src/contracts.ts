@@ -195,6 +195,8 @@ export type ChannelInteractionRecord = {
   interactionId: string
   orgId: string
   agentId: string
+  channelBindingId: string | null
+  sessionBindingId: string | null
   sessionId: string
   provider: CloudChannelProviderId
   externalInteractionId: string | null
@@ -238,6 +240,7 @@ export type ChannelDeliveryRecord = {
 export type ChannelProviderEventRecord = {
   eventId: string
   orgId: string
+  channelBindingId: string | null
   provider: CloudChannelProviderId
   providerInstanceId: string
   externalWorkspaceId: string | null
@@ -814,11 +817,24 @@ export type CloudTransportAdapter = {
     externalChatId: string
     externalThreadId: string
   }): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView } | null>
+  getChannelSessionSnapshot?(sessionBindingId: string): Promise<CloudSessionView>
+  readChannelArtifactAttachment?(
+    sessionBindingId: string,
+    artifactId: string,
+  ): Promise<SessionArtifactAttachment>
+  subscribeChannelSessionEvents?(
+    sessionBindingId: string,
+    input: {
+      afterSequence?: number
+      onEvent: (event: CloudTransportSessionEvent) => void
+      onError?: (error: unknown) => void
+    },
+  ): CloudTransportSubscription
   promptChannelSession?(input: ChannelActorInput & {
     bindingId: string
     text: string
     agent?: string | null
-    commandId?: string | null
+    idempotencyKey?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
   claimChannelProviderEvent?(input: {
     provider: CloudChannelProviderId
@@ -846,12 +862,12 @@ export type CloudTransportAdapter = {
   }): Promise<ChannelCursorUpdateResult>
   createChannelInteraction?(input: {
     agentId: string
+    sessionBindingId: string
     sessionId: string
     provider: CloudChannelProviderId
     kind: 'permission' | 'question'
     targetId: string
     externalInteractionId?: string | null
-    createdByIdentityId?: string | null
     expiresAt?: string | null
     interactionId?: string | null
   }): Promise<IssuedChannelInteractionRecord>
@@ -874,6 +890,7 @@ export type CloudTransportAdapter = {
     nextAttemptAt?: string | null
   }): Promise<ChannelDeliveryRecord>
   ackChannelDelivery?(deliveryId: string, input: {
+    channelBindingId?: string | null
     claimedBy?: string | null
     status: Extract<CloudChannelDeliveryStatus, 'sent' | 'failed' | 'dead'>
     lastError?: string | null
@@ -885,8 +902,8 @@ export type CloudTransportAdapter = {
     channelBindingId?: string | null
     limit?: number | null
   }): Promise<ChannelDeliveryRecord[]>
-  retryChannelDelivery?(deliveryId: string): Promise<ChannelDeliveryRecord | null>
-  deadLetterChannelDelivery?(deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
+  retryChannelDelivery?(deliveryId: string, input?: { channelBindingId?: string | null }): Promise<ChannelDeliveryRecord | null>
+  deadLetterChannelDelivery?(deliveryId: string, input?: { channelBindingId?: string | null, lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
   channelDeliveriesUrl?(input?: { claimedBy?: string, ttlMs?: number, channelBindingIds?: readonly string[] }): string
   subscribeChannelDeliveries?(input: {
     claimedBy?: string

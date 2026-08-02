@@ -4,6 +4,8 @@ import assert from 'node:assert/strict'
 import { runPostgresControlPlaneMigrations } from '../packages/cloud-server/src/postgres-migrations.ts'
 import {
   CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
+  CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_MIGRATION_ID,
+  CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID,
   CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES,
   CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
   CLOUD_CONTROL_PLANE_MIGRATIONS,
@@ -217,6 +219,22 @@ test('cloud schema integrity rejects ledger-only readiness', async () => {
   assert.equal(db.executed.length, 0)
 })
 
+test('cloud schema integrity rejects ledger-only drift before pending additive migrations', async () => {
+  const db = createFakePostgres()
+  db.tables.add('cloud_schema_migrations')
+  db.ledger.add(CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID)
+  db.ledger.add(CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID)
+  db.ledger.add(CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID)
+
+  await assert.rejects(
+    () => runPostgresControlPlaneMigrations(db.pool as never, db.withTransaction as never),
+    /required production tables are missing/,
+  )
+  assert.deepEqual(db.executed, [], 'drift guard must run before pending ALTER/UPDATE statements')
+  assert.equal(db.ledger.has(CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_MIGRATION_ID), false)
+  assert.equal(db.ledger.has(CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID), false)
+})
+
 test('cloud current baseline repairs an interrupted invalid concurrent index phase', async () => {
   const db = createFakePostgres()
   await runPostgresControlPlaneMigrations(db.pool as never, db.withTransaction as never)
@@ -238,6 +256,25 @@ test('cloud current baseline repairs an interrupted invalid concurrent index pha
   assert.equal(db.executed.some((sql) => sql.includes('cloud_tenants')), false)
 })
 
+test('cloud older baseline applies a pending migration that creates its missing required table', async () => {
+  const db = createFakePostgres()
+  db.tables.add('cloud_schema_migrations')
+  for (const tableName of CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES) {
+    if (tableName !== 'cloud_workflow_webhook_secrets') db.tables.add(tableName)
+  }
+  for (const migration of CLOUD_CONTROL_PLANE_MIGRATIONS) {
+    if (migration.id !== CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID) db.ledger.add(migration.id)
+  }
+  for (const indexName of CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES) db.validIndexes.add(indexName)
+
+  await runPostgresControlPlaneMigrations(db.pool as never, db.withTransaction as never)
+
+  assert.equal(db.tables.has('cloud_workflow_webhook_secrets'), true)
+  assert.equal(db.ledger.has(CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID), true)
+  assert.equal(db.executed.length, 1)
+  assert.match(db.executed[0]!, /^CREATE TABLE IF NOT EXISTS cloud_workflow_webhook_secrets/)
+})
+
 test('cloud schema keeps its clean baseline and explicit additive upgrade migrations', () => {
   assert.equal(CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.tableNames.includes('cloud_schema_migrations'), true)
   assert.deepEqual(
@@ -245,24 +282,41 @@ test('cloud schema keeps its clean baseline and explicit additive upgrade migrat
     [
       CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
       CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID,
+      CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_MIGRATION_ID,
+      CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID,
       CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
     ],
   )
 
   const baseline = CLOUD_CONTROL_PLANE_MIGRATIONS[0]!
   const workflowSecrets = CLOUD_CONTROL_PLANE_MIGRATIONS[1]!
-  const concurrent = CLOUD_CONTROL_PLANE_MIGRATIONS[2]!
+  const interactionScope = CLOUD_CONTROL_PLANE_MIGRATIONS[2]!
+  const idempotencyScope = CLOUD_CONTROL_PLANE_MIGRATIONS[3]!
+  const concurrent = CLOUD_CONTROL_PLANE_MIGRATIONS[4]!
   const baselineSql = baseline.statements.join('\n')
 
   assert.equal(baseline.transactional, undefined)
   assert.equal(workflowSecrets.transactional, undefined)
+  assert.equal(interactionScope.transactional, undefined)
+  assert.equal(idempotencyScope.transactional, undefined)
   assert.equal(concurrent.transactional, false)
+  assert.match(baselineSql, /CREATE TABLE IF NOT EXISTS cloud_workflow_webhook_secrets/)
+  assert.equal(CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES.includes('cloud_workflow_webhook_secrets'), true)
+  assert.equal(CLOUD_CONTROL_PLANE_SCHEMA_MANIFEST.tableNames.includes('cloud_workflow_webhook_secrets'), true)
   assert.match(workflowSecrets.statements.join('\n'), /CREATE TABLE IF NOT EXISTS cloud_workflow_webhook_secrets/)
+  assert.match(interactionScope.statements.join('\n'), /ADD COLUMN IF NOT EXISTS session_binding_id/)
   assert.doesNotMatch(baselineSql, /\bALTER TABLE\b/)
   assert.doesNotMatch(baselineSql, /\bDELETE FROM\b/)
   assert.doesNotMatch(baselineSql, /INSERT INTO cloud_(?:orgs|accounts|memberships)\b/)
   assert.doesNotMatch(baselineSql, /GREATEST\(0, cloud_concurrency_counters\.value/)
-  assert.doesNotMatch(CLOUD_CONTROL_PLANE_MIGRATIONS.flatMap((migration) => migration.statements).join('\n'), /\bDROP INDEX\b/)
+  assert.match(idempotencyScope.statements.join('\n'), /DROP INDEX IF EXISTS cloud_channel_provider_events_dedupe_idx/)
+  assert.doesNotMatch(
+    CLOUD_CONTROL_PLANE_MIGRATIONS
+      .filter((migration) => migration.id !== CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID)
+      .flatMap((migration) => migration.statements)
+      .join('\n'),
+    /\bDROP INDEX\b/,
+  )
   for (const statement of concurrent.statements) {
     assert.match(statement, /^CREATE (?:UNIQUE )?INDEX CONCURRENTLY IF NOT EXISTS /)
   }

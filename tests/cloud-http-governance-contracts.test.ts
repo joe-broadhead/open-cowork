@@ -473,7 +473,10 @@ test('cloud HTTP BYOK APIs enforce effective policy permissions and explicit tok
     }
     const strippedAdminRead = await fetch(`${baseUrl}/api/byok`)
     assert.equal(strippedAdminRead.status, 403)
-    assert.match(JSON.stringify(await readJson(strippedAdminRead)), /policy:manage/)
+    assert.equal(
+      asRecord(asRecord(await readJson(strippedAdminRead)).verdict).policyCode,
+      'authorization.principal_denied',
+    )
 
     currentPrincipal = {
       tenantId: 'tenant-1',
@@ -489,7 +492,7 @@ test('cloud HTTP BYOK APIs enforce effective policy permissions and explicit tok
     }
     const desktopTokenRead = await fetch(`${baseUrl}/api/byok`)
     assert.equal(desktopTokenRead.status, 403)
-    assert.match(JSON.stringify(await readJson(desktopTokenRead)), /admin token scope/)
+    assert.match(JSON.stringify(await readJson(desktopTokenRead)), /authorization\.scope_required/)
 
     currentPrincipal = {
       tenantId: 'tenant-1',
@@ -627,20 +630,29 @@ test('cloud HTTP BYOK override activates an unvalidated provider with audited re
 
 test('cloud HTTP billing routes use stub adapter and gate canceled subscriptions with 402', async () => {
   const billing = testBillingConfig()
+  const ownerPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    orgId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner@example.test',
+    role: 'owner',
+    authSource: 'user',
+  }
+  let gatewayTokenId = 'gateway-token-pending'
   const fixture = createFixture({
     billing,
     billingAdapter: createStubBillingAdapter(billing),
     autoProcessCommands: false,
-    auth: () => ({
-      tenantId: 'tenant-1',
-      orgId: 'tenant-1',
-      tenantName: 'Tenant 1',
-      userId: 'owner-1',
-      accountId: 'owner-1',
-      email: 'owner@example.test',
-      role: 'owner',
-      authSource: 'user',
-    }),
+    auth: (req) => req.headers['x-test-auth'] === 'gateway'
+      ? {
+          ...ownerPrincipal,
+          authSource: 'api_token',
+          tokenId: gatewayTokenId,
+          tokenScopes: ['gateway'],
+        }
+      : { ...ownerPrincipal },
   })
   const baseUrl = await fixture.server.listen()
   try {
@@ -678,30 +690,39 @@ test('cloud HTTP billing routes use stub adapter and gate canceled subscriptions
       }),
     })
     assert.equal(agentResponse.status, 201)
+    const agentId = String(asRecord((await readJson(agentResponse)).agent).agentId)
     const bindingResponse = await fetch(`${baseUrl}/api/channels/bindings`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         bindingId: 'billing-binding',
-        agentId: 'billing-agent',
+        agentId,
         provider: 'telegram',
         displayName: 'Billing Telegram',
       }),
     })
     assert.equal(bindingResponse.status, 201)
-    const identityResponse = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        provider: 'telegram',
-        externalUserId: 'billing-user',
-        accountId: 'owner-1',
-        role: 'member',
-        status: 'active',
-      }),
+    const bindingId = String(asRecord((await readJson(bindingResponse)).binding).bindingId)
+    const gatewayToken = await fixture.store.issueApiToken({
+      orgId: 'tenant-1',
+      accountId: 'owner-1',
+      name: 'Billing channel gateway',
+      scopes: ['gateway'],
     })
-    assert.equal(identityResponse.status, 200)
-    const identity = asRecord((await readJson(identityResponse)).identity)
+    gatewayTokenId = gatewayToken.token.tokenId
+    await fixture.store.grantApiTokenChannelBinding({
+      orgId: 'tenant-1',
+      tokenId: gatewayTokenId,
+      channelBindingId: bindingId,
+    })
+    const identity = await fixture.service.domains.channels.resolveChannelIdentity(ownerPrincipal, {
+      provider: 'telegram',
+      channelBindingId: bindingId,
+      externalUserId: 'billing-user',
+      accountId: 'owner-1',
+      role: 'member',
+      status: 'active',
+    })
 
     await fixture.store.upsertBillingSubscription({
       orgId: 'tenant-1',
@@ -747,7 +768,7 @@ test('cloud HTTP billing routes use stub adapter and gate canceled subscriptions
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         bindingId: 'billing-binding-blocked',
-        agentId: 'billing-agent',
+        agentId,
         provider: 'slack',
         displayName: 'Blocked Slack',
       }),
@@ -757,10 +778,10 @@ test('cloud HTTP billing routes use stub adapter and gate canceled subscriptions
 
     const blockedChannelBind = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-test-auth': 'gateway' },
       body: JSON.stringify({
         identityId: identity.identityId,
-        channelBindingId: 'billing-binding',
+        channelBindingId: bindingId,
         provider: 'telegram',
         externalChatId: 'billing-chat',
         externalThreadId: 'billing-thread',

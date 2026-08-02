@@ -58,6 +58,10 @@ the development opt-in; an omitted isolation mode remains fail-closed. Use
 `pnpm cloud:smoke:compose` starts the split-role compose topology, waits
 for `/readyz`, runs the deployment smoke against the Cloud Web Workbench at
 `GET /`, and prints service logs if the smoke fails.
+Readiness probes have bounded connect and response timeouts. If local port
+`8787` is occupied, set both `OPEN_COWORK_CLOUD_PUBLISHED_PORT` and
+`OPEN_COWORK_CLOUD_SMOKE_URL`, for example port `18787` and
+`http://127.0.0.1:18787`.
 
 `pnpm deploy:validate` checks local Compose files, Helm chart guardrails, and
 deployment readiness docs. It runs `docker compose config` and Helm

@@ -23,8 +23,8 @@ trusting derived index reads.
 
 ## Workers And Queues
 
-Use `OPENWIKI_QUEUE_BACKEND=postgres` when web and worker run in separate
-containers. Workers claim queued runs atomically through Postgres and refresh a
+Use `OPENWIKI_QUEUE_BACKEND=postgres` when web and worker run as separate
+processes. Workers claim queued runs atomically through Postgres and refresh a
 running-job heartbeat (`OPENWIKI_RUN_HEARTBEAT_MS`, default 10000 ms) while the
 job executes.
 
@@ -50,5 +50,5 @@ failed after their retry budget is exhausted. To stop a queued or running
 Postgres-backed job without editing database rows:
 
 ```sh
-openwiki --root /data/wiki runs cancel run:... --actor actor:user:admin --reason "Superseded by deploy rollback" --json
+openwiki --root /data/wiki runs cancel run:... --actor actor:user:admin --reason "Superseded by runtime rollback" --json
 ```

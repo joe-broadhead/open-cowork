@@ -3,13 +3,18 @@ import { getAppPathHost, getSafeStorageHost, quarantineCorruptFile, writeFileAto
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import type {
+  CloudFeatureConfig,
   CloudProjectSourceSummary,
   SessionArtifact,
   SessionInfo,
   SessionView,
   WorkflowListPayload,
 } from '@open-cowork/shared'
-import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
+import {
+  isArtifactKind,
+  isArtifactStatus,
+  WORKSPACE_PROVIDER_KEY_FEATURE,
+} from '@open-cowork/shared'
 import type { CloudTransportSettingMetadata } from '@open-cowork/cloud-server/transport-adapter'
 import { getAppDataDir } from '@open-cowork/runtime-host/config'
 import {
@@ -35,6 +40,7 @@ export type CloudWorkspaceCacheEncryptionFallback = 'metadata-only' | 'disabled'
 
 export type CloudWorkspaceCacheRecord = {
   workspaceId: string
+  featureSnapshot: Partial<CloudFeatureConfig> | null
   sessions: SessionInfo[]
   views: Record<string, SessionView>
   workflows: WorkflowListPayload | null
@@ -45,6 +51,8 @@ export type CloudWorkspaceCacheRecord = {
 
 export type CloudWorkspaceCache = {
   mode: CloudWorkspaceCacheMode
+  getFeatureSnapshot(workspaceId: string): Partial<CloudFeatureConfig> | null
+  upsertFeatureSnapshot(workspaceId: string, features: Partial<CloudFeatureConfig>, now?: Date): void
   listSessions(workspaceId: string): SessionInfo[] | null
   getSessionInfo(workspaceId: string, sessionId: string): SessionInfo | null
   getSessionView(workspaceId: string, sessionId: string): SessionView | null
@@ -66,6 +74,32 @@ export type CloudWorkspaceCache = {
   // Coalesce a sync pass's per-session upserts into one durable read + write (P1-E).
   beginCacheBatch(): void
   endCacheBatch(): void
+}
+
+const CLOUD_FEATURE_KEYS = [
+  'chat',
+  'agents',
+  'artifacts',
+  'threadIndex',
+  'workflows',
+  'webhooks',
+  'settings',
+  'customSkills',
+  'customAgents',
+  'customMcps',
+  'knowledge',
+  'channels',
+  WORKSPACE_PROVIDER_KEY_FEATURE,
+] as const satisfies readonly (keyof CloudFeatureConfig)[]
+
+function normalizeFeatureSnapshot(value: unknown): Partial<CloudFeatureConfig> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const source = value as Record<string, unknown>
+  const snapshot: Partial<CloudFeatureConfig> = {}
+  for (const key of CLOUD_FEATURE_KEYS) {
+    if (typeof source[key] === 'boolean') snapshot[key] = source[key]
+  }
+  return snapshot
 }
 
 function defaultCachePath() {
@@ -240,6 +274,7 @@ function normalizeRecord(
     : {}
   return {
     workspaceId,
+    featureSnapshot: normalizeFeatureSnapshot(raw.featureSnapshot),
     sessions,
     views,
     workflows: redactWorkflowListForCache(raw.workflows),
@@ -303,6 +338,28 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
       return
     }
     this.mode = requestedMode
+  }
+
+  getFeatureSnapshot(workspaceId: string): Partial<CloudFeatureConfig> | null {
+    return this.readRecord(workspaceId)?.featureSnapshot || null
+  }
+
+  upsertFeatureSnapshot(
+    workspaceId: string,
+    features: Partial<CloudFeatureConfig>,
+    now = new Date(),
+  ): void {
+    if (this.mode === 'disabled') return
+    const id = normalizeWorkspaceId(workspaceId)
+    const snapshot = normalizeFeatureSnapshot(features)
+    if (!id || !snapshot) return
+    const records = this.readRecords()
+    const existing = records.find((record) => record.workspaceId === id) || this.emptyRecord(id, now)
+    this.writeRecord(records, {
+      ...existing,
+      featureSnapshot: snapshot,
+      updatedAt: now.toISOString(),
+    })
   }
 
   listSessions(workspaceId: string): SessionInfo[] | null {
@@ -478,6 +535,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
     const existing = records.find((record) => record.workspaceId === id) || null
     const next: CloudWorkspaceCacheRecord = {
       workspaceId: id,
+      featureSnapshot: existing?.featureSnapshot || null,
       sessions: sessions.map(normalizeSessionInfo).filter((session): session is SessionInfo => Boolean(session)),
       views: this.mode === 'full' ? existing?.views || {} : {},
       workflows: existing?.workflows || null,
@@ -530,6 +588,7 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   private emptyRecord(workspaceId: string, now = new Date()): CloudWorkspaceCacheRecord {
     return {
       workspaceId,
+      featureSnapshot: null,
       sessions: [],
       views: {},
       workflows: null,

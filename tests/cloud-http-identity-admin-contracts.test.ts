@@ -36,6 +36,12 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
     name: 'Desktop token',
     scopes: ['desktop'],
   })
+  const desktopAdmin = await store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Desktop admin token',
+    scopes: ['desktop', 'admin'],
+  })
 
   const runtime = new FakeRuntimeAdapter()
   const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
@@ -53,6 +59,21 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
     }))
     assert.equal(ok.tenantId, 'tenant-1')
     assert.equal(ok.userId, account.accountId)
+
+    const desktopOnlyAdmin = await fetch(`${baseUrl}/api/admin/members`, {
+      headers: { authorization: `Bearer ${issued.plaintext}` },
+    })
+    assert.equal(desktopOnlyAdmin.status, 403)
+    assert.equal(
+      asRecord(asRecord(await readJson(desktopOnlyAdmin)).verdict).policyCode,
+      'authorization.scope_required',
+    )
+    assert.equal((await fetch(`${baseUrl}/api/workspace`, {
+      headers: { authorization: `Bearer ${desktopAdmin.plaintext}` },
+    })).status, 200)
+    assert.equal((await fetch(`${baseUrl}/api/admin/members`, {
+      headers: { authorization: `Bearer ${desktopAdmin.plaintext}` },
+    })).status, 200)
 
     store.revokeApiToken({ tokenId: issued.token.tokenId })
     const rejected = await fetch(`${baseUrl}/api/workspace`, {
@@ -122,6 +143,258 @@ test('cloud HTTP server rejects user-bound admin API token privileges after role
     assert.equal(issueAfterDemotion.status, 403)
   } finally {
     await server.close()
+  }
+})
+
+test('members:read grants the member directory without granting member or role mutation', async () => {
+  const memberReader: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'member-reader-account',
+    accountId: 'member-reader-account',
+    email: 'member-reader@example.test',
+    role: 'member',
+    authSource: 'user',
+  }
+  const fixture = createFixture({ auth: async () => ({ ...memberReader }) })
+  fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const org = fixture.store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  fixture.store.createCustomRole({
+    orgId: org.orgId,
+    roleKey: 'member-reader',
+    name: 'Member reader',
+    baseRole: 'member',
+    permissions: ['members:read'],
+  })
+  const account = fixture.store.createAccount({
+    accountId: memberReader.accountId!,
+    idpSubject: 'member-reader-subject',
+    email: memberReader.email!,
+  })
+  fixture.store.ensureUser({
+    tenantId: 'tenant-1',
+    userId: account.accountId,
+    email: account.email,
+    role: 'member',
+  })
+  fixture.store.upsertMembership({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    role: 'member',
+    customRoleKey: 'member-reader',
+    status: 'active',
+  })
+
+  const baseUrl = await fixture.server.listen()
+  try {
+    const membersResponse = await fetch(`${baseUrl}/api/admin/members`)
+    const membersBody = await readJson(membersResponse)
+    assert.equal(membersResponse.status, 200, JSON.stringify(membersBody))
+    assert.equal(
+      asArray(membersBody.members).some((member) => asRecord(member).accountId === account.accountId),
+      true,
+    )
+
+    const inviteResponse = await fetch(`${baseUrl}/api/admin/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'invitee@example.test', role: 'member' }),
+    })
+    assert.equal(inviteResponse.status, 403)
+    assert.equal(
+      asRecord(asRecord(await readJson(inviteResponse)).verdict).policyCode,
+      'authorization.principal_denied',
+    )
+    assert.equal((await fetch(`${baseUrl}/api/admin/roles`)).status, 403)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('API token authentication hydrates custom roles and intersects permissions with token scope', async () => {
+  let apiTokenAuth: ReturnType<typeof createApiTokenCloudAuthResolver> | undefined
+  const fixture = createFixture({
+    auth: (req) => {
+      if (!apiTokenAuth) throw new Error('API token auth was not initialized.')
+      return apiTokenAuth(req)
+    },
+  })
+  fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const org = fixture.store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  fixture.store.createCustomRole({
+    orgId: org.orgId,
+    roleKey: 'restricted-admin',
+    name: 'Restricted admin',
+    baseRole: 'admin',
+    permissions: ['sessions:read'],
+  })
+  fixture.store.createCustomRole({
+    orgId: org.orgId,
+    roleKey: 'channel-manager',
+    name: 'Channel manager',
+    baseRole: 'member',
+    permissions: ['org:manage'],
+  })
+  fixture.store.createCustomRole({
+    orgId: org.orgId,
+    roleKey: 'operations-reader',
+    name: 'Operations reader',
+    baseRole: 'member',
+    permissions: ['operations:view'],
+  })
+  fixture.store.createCustomRole({
+    orgId: org.orgId,
+    roleKey: 'diagnostics-reader',
+    name: 'Diagnostics reader',
+    baseRole: 'member',
+    permissions: ['diagnostics:view'],
+  })
+
+  const restrictedAccount = fixture.store.createAccount({
+    accountId: 'restricted-admin-account',
+    idpSubject: 'restricted-admin-subject',
+    email: 'restricted-admin@example.test',
+  })
+  fixture.store.ensureUser({
+    tenantId: 'tenant-1',
+    userId: restrictedAccount.accountId,
+    email: restrictedAccount.email,
+    role: 'admin',
+  })
+  fixture.store.upsertMembership({
+    orgId: org.orgId,
+    accountId: restrictedAccount.accountId,
+    role: 'admin',
+    customRoleKey: 'restricted-admin',
+    status: 'active',
+  })
+  const restrictedToken = await fixture.store.issueApiToken({
+    orgId: org.orgId,
+    accountId: restrictedAccount.accountId,
+    name: 'Restricted admin token',
+    scopes: ['admin', 'operator'],
+  })
+
+  const delegatedAccount = fixture.store.createAccount({
+    accountId: 'delegated-channel-account',
+    idpSubject: 'delegated-channel-subject',
+    email: 'delegated-channel@example.test',
+  })
+  fixture.store.ensureUser({
+    tenantId: 'tenant-1',
+    userId: delegatedAccount.accountId,
+    email: delegatedAccount.email,
+    role: 'member',
+  })
+  fixture.store.upsertMembership({
+    orgId: org.orgId,
+    accountId: delegatedAccount.accountId,
+    role: 'member',
+    customRoleKey: 'channel-manager',
+    status: 'active',
+  })
+  const delegatedToken = await fixture.store.issueApiToken({
+    orgId: org.orgId,
+    accountId: delegatedAccount.accountId,
+    name: 'Delegated channel token',
+    scopes: ['admin'],
+  })
+  const delegatedOperatorTokens: Record<'operations' | 'diagnostics', string> = {
+    operations: '',
+    diagnostics: '',
+  }
+  for (const [kind, permissionRole] of [
+    ['operations', 'operations-reader'],
+    ['diagnostics', 'diagnostics-reader'],
+  ] as const) {
+    const account = fixture.store.createAccount({
+      accountId: `${kind}-reader-account`,
+      idpSubject: `${kind}-reader-subject`,
+      email: `${kind}-reader@example.test`,
+    })
+    fixture.store.ensureUser({
+      tenantId: 'tenant-1',
+      userId: account.accountId,
+      email: account.email,
+      role: 'member',
+    })
+    fixture.store.upsertMembership({
+      orgId: org.orgId,
+      accountId: account.accountId,
+      role: 'member',
+      customRoleKey: permissionRole,
+      status: 'active',
+    })
+    const issued = await fixture.store.issueApiToken({
+      orgId: org.orgId,
+      accountId: account.accountId,
+      name: `${kind} reader token`,
+      scopes: ['operator'],
+    })
+    delegatedOperatorTokens[kind] = issued.plaintext
+  }
+  apiTokenAuth = createApiTokenCloudAuthResolver(fixture.store)
+
+  const baseUrl = await fixture.server.listen()
+  const restrictedHeaders = {
+    authorization: `Bearer ${restrictedToken.plaintext}`,
+    'content-type': 'application/json',
+  }
+  const delegatedHeaders = {
+    authorization: `Bearer ${delegatedToken.plaintext}`,
+    'content-type': 'application/json',
+  }
+  try {
+    for (const [path, body] of [
+      ['/api/billing/checkout', { planKey: 'pro' }],
+      ['/api/api-tokens', { name: 'forbidden nested token', scopes: ['desktop'] }],
+      ['/api/channels/agents', { agentId: 'forbidden-agent', name: 'Forbidden agent', profileName: 'full' }],
+    ] as const) {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: restrictedHeaders,
+        body: JSON.stringify(body),
+      })
+      assert.equal(response.status, 403, `restricted admin token must not access ${path}`)
+    }
+
+    const delegatedChannel = await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers: delegatedHeaders,
+      body: JSON.stringify({
+        agentId: 'delegated-agent',
+        name: 'Delegated agent',
+        profileName: 'full',
+      }),
+    })
+    assert.equal(delegatedChannel.status, 201, JSON.stringify(await readJson(delegatedChannel)))
+
+    for (const [path, body] of [
+      ['/api/billing/checkout', { planKey: 'pro' }],
+      ['/api/api-tokens', { name: 'forbidden nested token', scopes: ['desktop'] }],
+    ] as const) {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: delegatedHeaders,
+        body: JSON.stringify(body),
+      })
+      assert.equal(response.status, 403, `channel permission must not grant ${path}`)
+    }
+
+    const operationsHeaders = { authorization: `Bearer ${delegatedOperatorTokens.operations}` }
+    assert.equal((await fetch(`${baseUrl}/api/metrics`, { headers: operationsHeaders })).status, 200)
+    assert.equal((await fetch(`${baseUrl}/api/diagnostics`, { headers: operationsHeaders })).status, 403)
+
+    const diagnosticsHeaders = { authorization: `Bearer ${delegatedOperatorTokens.diagnostics}` }
+    const delegatedDiagnostics = await fetch(`${baseUrl}/api/diagnostics`, { headers: diagnosticsHeaders })
+    assert.equal(delegatedDiagnostics.status, 200, await delegatedDiagnostics.text())
+    assert.equal((await fetch(`${baseUrl}/api/metrics`, { headers: diagnosticsHeaders })).status, 403)
+
+    assert.equal((await fetch(`${baseUrl}/api/metrics`, { headers: restrictedHeaders })).status, 403)
+    assert.equal((await fetch(`${baseUrl}/api/diagnostics`, { headers: restrictedHeaders })).status, 403)
+  } finally {
+    await fixture.server.close()
   }
 })
 
@@ -904,7 +1177,7 @@ test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat
   }
 })
 
-test('cloud HTTP admin APIs reject member-only users while preserving read-only policy', async () => {
+test('cloud HTTP admin APIs give built-in members their read-only policy and directory access', async () => {
   const memberPrincipal = {
     tenantId: 'tenant-1',
     orgId: 'tenant-1',
@@ -922,7 +1195,7 @@ test('cloud HTTP admin APIs reject member-only users while preserving read-only 
     const policy = await fetch(`${baseUrl}/api/admin/policy`)
     assert.equal(policy.status, 200)
     const members = await fetch(`${baseUrl}/api/admin/members`)
-    assert.equal(members.status, 403)
+    assert.equal(members.status, 200)
     const audit = await fetch(`${baseUrl}/api/admin/audit`)
     assert.equal(audit.status, 403)
     const invite = await fetch(`${baseUrl}/api/admin/members`, {

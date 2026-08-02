@@ -68,7 +68,7 @@ been built yet.
 
 Fix sequence:
 
-1. Verify Node is `v22.13.0+`; for CI parity, use the exact version pinned in
+1. Verify Node is `v22.22.3+`; for CI parity, use the exact version pinned in
    `.nvmrc`. Then verify that `pnpm` is installed via Corepack:
    ```bash
    node -v

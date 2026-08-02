@@ -30,9 +30,9 @@ test('cloud gateway wraps all required channel and session operations', async ()
       calls.push(`by-thread:${JSON.stringify(input)}`)
       return null
     },
-    async getSession(sessionId: string) {
-      calls.push(`session:${sessionId}`)
-      return { session: { sessionId }, projection: null }
+    async getChannelSessionSnapshot(sessionBindingId: string) {
+      calls.push(`session:${sessionBindingId}`)
+      return { session: { sessionId: 'session-1' }, projection: null }
     },
     async promptChannelSession(input: unknown) {
       calls.push(`prompt:${JSON.stringify(input)}`)
@@ -41,39 +41,6 @@ test('cloud gateway wraps all required channel and session operations', async ()
         command: { commandId: 'cmd-1' },
         processed: 1,
         projectionFence: fence('cmd-1'),
-      }
-    },
-    async abortSession(sessionId: string) {
-      calls.push(`abort:${sessionId}`)
-      return {
-        command: { commandId: 'cmd-abort' },
-        processed: 1,
-        view: { session: { sessionId }, projection: null },
-        projectionFence: fence('cmd-abort', sessionId),
-      }
-    },
-    async respondToPermission(sessionId: string, input: unknown) {
-      calls.push(`permission:${sessionId}:${JSON.stringify(input)}`)
-      return {
-        command: { commandId: 'cmd-permission' },
-        processed: 1,
-        projectionFence: fence('cmd-permission', sessionId),
-      }
-    },
-    async replyToQuestion(sessionId: string, input: unknown) {
-      calls.push(`question-reply:${sessionId}:${JSON.stringify(input)}`)
-      return {
-        command: { commandId: 'cmd-reply' },
-        processed: 1,
-        projectionFence: fence('cmd-reply', sessionId),
-      }
-    },
-    async rejectQuestion(sessionId: string, input: unknown) {
-      calls.push(`question-reject:${sessionId}:${JSON.stringify(input)}`)
-      return {
-        command: { commandId: 'cmd-reject' },
-        processed: 1,
-        projectionFence: fence('cmd-reject', sessionId),
       }
     },
     async resolveChannelInteraction(input: unknown) {
@@ -89,12 +56,12 @@ test('cloud gateway wraps all required channel and session operations', async ()
       calls.push(`interaction-create:${JSON.stringify(input)}`)
       return { interaction: { interactionId: 'interaction-created' }, plaintextToken: 'token-created' }
     },
-    async readArtifactAttachment(sessionId: string, artifactId: string) {
-      calls.push(`artifact:${sessionId}:${artifactId}`)
+    async readChannelArtifactAttachment(sessionBindingId: string, artifactId: string) {
+      calls.push(`artifact:${sessionBindingId}:${artifactId}`)
       return { filename: 'artifact.txt', mime: 'text/plain', url: 'data:text/plain;base64,b2s=' }
     },
-    subscribeSessionEvents(sessionId: string, input: { onEvent: (event: unknown) => void }) {
-      calls.push(`session-events:${sessionId}`)
+    subscribeChannelSessionEvents(sessionBindingId: string, input: { onEvent: (event: unknown) => void }) {
+      calls.push(`session-events:${sessionBindingId}`)
       input.onEvent({ eventId: 'event-1', sequence: 1, type: 'assistant.message', payload: {} })
       return { close() { sessionClosed = true } }
     },
@@ -131,40 +98,33 @@ test('cloud gateway wraps all required channel and session operations', async ()
   await gateway.resolveIdentity({ provider: 'telegram', externalUserId: 'user-1' })
   await gateway.bindSession({ channelBindingId: 'channel-1', provider: 'telegram', externalChatId: 'chat-1', externalThreadId: 'thread-1' })
   await gateway.findSessionByThread({ provider: 'telegram', externalChatId: 'chat-1', externalThreadId: 'thread-1' })
-  await gateway.getSession('session-1')
+  await gateway.getSession('binding-1')
   const prompt = await gateway.prompt({ bindingId: 'binding-1', text: 'hello' })
-  const abort = await gateway.abortSession('session-1')
-  const permission = await gateway.respondToPermission('session-1', { permissionId: 'permission-1', response: { allowed: true } })
-  const reply = await gateway.replyToQuestion('session-1', { requestId: 'question-1', answers: ['yes'] })
-  const reject = await gateway.rejectQuestion('session-1', { requestId: 'question-2' })
   const interaction = await gateway.resolveChannelInteraction({ token: 'token-1', response: { allowed: true } })
   await gateway.createChannelInteraction({
     agentId: 'agent-1',
+    sessionBindingId: 'binding-1',
     sessionId: 'session-1',
     provider: 'telegram',
     kind: 'permission',
     targetId: 'permission-1',
   })
-  await gateway.readArtifactAttachment?.('session-1', 'artifact-1')
-  assert.equal(gateway.artifactUrl('session-1', 'artifact-1'), 'https://cloud.example.test/api/sessions/session-1/artifacts/artifact-1')
-  const sessionEvents = gateway.subscribeSessionEvents({ sessionId: 'session-1', onEvent() {} })
+  await gateway.readArtifactAttachment?.('binding-1', 'artifact-1')
+  assert.equal(gateway.artifactUrl('binding-1', 'artifact-1'), 'https://cloud.example.test/api/channels/sessions/binding-1/artifacts/artifact-1')
+  const sessionEvents = gateway.subscribeSessionEvents({ sessionBindingId: 'binding-1', onEvent() {} })
   const deliveries = gateway.subscribeDeliveries({
     claimedBy: 'gateway:test',
     channelBindingIds: ['channel-binding-1'],
     onDelivery() {},
   })
   await gateway.updateCursor({ bindingId: 'binding-1', lastEventSequence: 5, lastWorkspaceSequence: 7 })
-  await gateway.ackDelivery('delivery-1', { status: 'sent' })
+  await gateway.ackDelivery('delivery-1', { channelBindingId: 'channel-binding-1', status: 'sent' })
   sessionEvents.close()
   deliveries.close()
 
   assert.equal(sessionClosed, true)
   assert.equal(deliveriesClosed, true)
   assert.equal(prompt.projectionFence?.commandId, 'cmd-1')
-  assert.equal(abort.projectionFence?.commandId, 'cmd-abort')
-  assert.equal(permission.projectionFence?.commandId, 'cmd-permission')
-  assert.equal(reply.projectionFence?.commandId, 'cmd-reply')
-  assert.equal(reject.projectionFence?.commandId, 'cmd-reject')
   assert.equal(interaction.projectionFence?.commandId, 'cmd-interaction')
   assert.deepEqual(calls.map((call) => call.split(':')[0]), [
     'identity',
@@ -172,10 +132,6 @@ test('cloud gateway wraps all required channel and session operations', async ()
     'by-thread',
     'session',
     'prompt',
-    'abort',
-    'permission',
-    'question-reply',
-    'question-reject',
     'interaction',
     'interaction-create',
     'artifact',
@@ -185,4 +141,5 @@ test('cloud gateway wraps all required channel and session operations', async ()
     'ack',
   ])
   assert.equal(calls.some((call) => call === 'deliveries:{"claimedBy":"gateway:test","channelBindingIds":["channel-binding-1"]}'), true)
+  assert.equal(calls.some((call) => call === 'ack:delivery-1:{"channelBindingId":"channel-binding-1","status":"sent"}'), true)
 })

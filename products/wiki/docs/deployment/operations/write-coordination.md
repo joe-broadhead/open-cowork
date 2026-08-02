@@ -7,14 +7,13 @@ coordinator. The coordinator covers proposal apply, proposal/review/comment
 writes, source ingest, service-account token writes, manual commits, Git
 pull/push, publish, and write-mode worker jobs such as static export.
 
-Use the local coordinator for one process or one container with a normal
-workspace filesystem:
+Use the local coordinator for one process with a normal workspace filesystem:
 
 ```sh
 OPENWIKI_WRITE_COORDINATOR_BACKEND=local
 ```
 
-Use the Postgres coordinator when web and worker run as separate containers:
+Use the Postgres coordinator when web and worker run as separate processes:
 
 ```sh
 OPENWIKI_DATABASE_URL=postgres://...
@@ -41,5 +40,5 @@ openwiki --root /data/wiki db recover-write-lease --json
 ```
 
 The command does not remove non-expired leases. If a non-expired lease appears
-stuck, confirm the owning pod/process is dead and inspect Git status before
+stuck, confirm the owning process is dead and inspect Git status before
 changing the lease duration or restarting writers.

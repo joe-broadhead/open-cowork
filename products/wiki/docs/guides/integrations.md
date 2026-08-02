@@ -6,8 +6,7 @@ Current integration areas:
 
 - OpenCode agents, skills, tools, and guardrails
 - Open Cowork MCP and workflow examples
-- GitHub Actions workflows for linting, proposal review, static export, and
-  image publishing
+- GitHub Actions workflows for linting, proposal review, and static export
 
 Install the OpenCode integration pack into another project:
 

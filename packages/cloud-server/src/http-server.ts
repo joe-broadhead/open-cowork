@@ -5,9 +5,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import {
   CLOUD_SESSION_EVENT_TYPES,
-  createCloudProjectionFenceToken,
+  evaluateWorkspaceCapabilityPolicy,
   normalizeCloudProjectSource,
-  type CloudProjectionFenceToken,
   type CloudProjectSourceInput,
 } from '@open-cowork/shared'
 import {
@@ -18,12 +17,6 @@ import {
   isBrowserRendererAssetPath,
   isBrowserRendererChartFramePath,
 } from './browser-renderer-app.ts'
-import {
-  principalHasDesktopApiAccess,
-  principalCanUseGatewayOnlyRoute,
-  routeAllowsOperationalToken,
-  routeAllowsWorkerCredential,
-} from './http-routes/access-policy.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleScimApiRoute } from './http-routes/scim.ts'
 import { handleArtifactsApiRoute } from './http-routes/artifacts.ts'
@@ -43,14 +36,16 @@ import { handleSessionsApiRoute } from './http-routes/sessions.ts'
 import { handleThreadsApiRoute } from './http-routes/threads.ts'
 import { handleWorkflowsApiRoute } from './http-routes/workflows.ts'
 import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
+import { authorizeCloudApiWorkspaceRequest } from './http-routes/workspace-authorization.ts'
 import { CloudByokRuntimeConfigError } from './byok-runtime-config.ts'
+import { internalTokenIsValid } from './http-auth-helpers.ts'
 import {
   CloudHttpError,
   type CloudAuthResolver,
   type CloudHttpRouteContext,
   type CloudHttpServerOptions,
 } from './http-contracts.ts'
-import { CloudServiceError, type CloudPrincipal, type CloudSessionView } from './session-service.ts'
+import { CloudServiceError, type CloudPrincipal } from './session-service.ts'
 import {
   firstHeader,
   parseLimit,
@@ -94,11 +89,18 @@ import {
 } from './http-request-context.ts'
 import type { CloudReadinessReport } from './readiness.ts'
 import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
-import type {
-  SessionEventRecord,
-  SessionCommandRecord,
-} from './control-plane-store.ts'
-import { recordCloudHttpRequest, recordCloudLog, recordCloudMetric } from './observability.ts'
+import {
+  recordCloudHttpRequest,
+  recordCloudLog,
+  recordCloudMetric,
+  recordCloudWorkspacePolicyDecision,
+} from './observability.ts'
+import {
+  currentSessionProjectionSequence,
+  processCommandIfConfigured,
+  processSessionCommandIfConfigured,
+  writeSessionCommandMutationResponse,
+} from './http-session-mutations.ts'
 
 export { CloudHttpError }
 export type {
@@ -188,90 +190,6 @@ function readOptionalDate(value: unknown) {
 
 
 
-async function processCommandIfConfigured(
-  options: CloudHttpServerOptions,
-  principal: CloudPrincipal,
-  sessionId: string,
-) {
-  return processSessionCommandIfConfigured(options, principal.tenantId, sessionId)
-}
-
-async function processSessionCommandIfConfigured(
-  options: CloudHttpServerOptions,
-  tenantId: string,
-  sessionId: string,
-) {
-  if (!options.worker || !options.autoProcessCommands) return 0
-  return options.worker.processSessionCommands(tenantId, sessionId)
-}
-
-function sessionEventCommandId(event: SessionEventRecord) {
-  return readString(readRecord(event.payload)?.commandId)
-}
-
-async function sessionProjectionFenceForCommand(
-  options: CloudHttpServerOptions,
-  principal: CloudPrincipal,
-  command: SessionCommandRecord,
-  view: CloudSessionView,
-  processed: number,
-  afterProjectionSequence: number,
-): Promise<CloudProjectionFenceToken | null> {
-  if (processed <= 0) return null
-  const observedSequence = typeof view.projection?.sequence === 'number' && Number.isInteger(view.projection.sequence) && view.projection.sequence > 0
-    ? view.projection.sequence
-    : null
-  if (observedSequence === null || observedSequence <= afterProjectionSequence) return null
-  const events = await options.service.listEvents(principal, command.sessionId, afterProjectionSequence)
-  const commandEvent = events.find((event) => event.sequence <= observedSequence && sessionEventCommandId(event) === command.commandId)
-  if (!commandEvent) return null
-  return createCloudProjectionFenceToken({
-    scope: 'session',
-    tenantId: principal.tenantId,
-    sessionId: view.session.sessionId,
-    commandId: command.commandId,
-    sequence: commandEvent.sequence,
-    projectionVersion: commandEvent.sequence,
-  })
-}
-
-async function writeSessionCommandMutationResponse(
-  res: ServerResponse,
-  options: CloudHttpServerOptions,
-  principal: CloudPrincipal,
-  sessionId: string,
-  command: SessionCommandRecord,
-  processed: number,
-  beforeProjectionSequence: number,
-  extraBody: Record<string, unknown> = {},
-) {
-  const view = await options.service.getSessionView(principal, sessionId)
-  const projectionFence = await sessionProjectionFenceForCommand(
-    options,
-    principal,
-    command,
-    view,
-    processed,
-    beforeProjectionSequence,
-  )
-  writeJson(res, 202, {
-    ...extraBody,
-    command,
-    processed,
-    view,
-    projectionFence,
-  }, options.corsOrigin)
-}
-
-async function currentSessionProjectionSequence(
-  options: CloudHttpServerOptions,
-  principal: CloudPrincipal,
-  sessionId: string,
-) {
-  const view = await options.service.getSessionView(principal, sessionId)
-  return view.projection?.sequence || 0
-}
-
 async function handleCloudWorkflowWebhook(
   req: IncomingMessage,
   res: ServerResponse,
@@ -287,11 +205,6 @@ async function handleCloudWorkflowWebhook(
     writeError(res, 405, 'Method not allowed.', options.corsOrigin)
     return
   }
-  if (!options.policy.features.workflows || !options.policy.features.webhooks) {
-    writeError(res, 404, 'Webhook not found.', options.corsOrigin)
-    return
-  }
-
   const source = requestSource(req, options.trustProxyHeaders, options.trustedProxyCidrs)
   const startedAt = Date.now()
   const workflowId = decodeURIComponent(match[1] || '')
@@ -328,8 +241,10 @@ async function handleCloudWorkflowWebhook(
       processed,
     }, options.corsOrigin)
   } catch (error) {
-    const status = error instanceof WebhookHttpError ? error.status : 400
-    const message = error instanceof WebhookHttpError ? error.publicMessage : 'Workflow webhook request failed.'
+    const status = error instanceof WebhookHttpError || error instanceof CloudServiceError ? error.status : 400
+    const message = error instanceof WebhookHttpError || error instanceof CloudServiceError
+      ? error.publicMessage
+      : 'Workflow webhook request failed.'
     if (status === 401) {
       await securityStore.recordAuthFailure({
         scope,
@@ -340,7 +255,9 @@ async function handleCloudWorkflowWebhook(
         backoffMs: CLOUD_WEBHOOK_AUTH_BACKOFF_MS,
       })
     }
-    writeError(res, status, message, options.corsOrigin)
+    if (error instanceof CloudServiceError && error.policyCode) {
+      writePolicyError(res, status, message, error.policyCode, options.corsOrigin)
+    } else writeError(res, status, message, options.corsOrigin)
   }
 }
 
@@ -377,6 +294,22 @@ async function handleBillingWebhook(
       rawBody,
       body,
     })
+    const policyDecision = evaluateWorkspaceCapabilityPolicy({
+      action: 'billing.webhookApply',
+      principal: { authSource: 'verified_billing_webhook' },
+      features: options.policy.features,
+    })
+    await recordCloudWorkspacePolicyDecision(options.observability, policyDecision)
+    if (policyDecision.outcome === 'deny') {
+      writePolicyError(
+        res,
+        403,
+        policyDecision.message,
+        policyDecision.code,
+        options.corsOrigin,
+      )
+      return
+    }
     const eventId = verified.eventId || readString(body.id) || createHash('sha256').update(rawBody).digest('hex')
     replayClaim = await securityStore.claimSignature({
       key: `billing:${eventId}`,
@@ -449,31 +382,35 @@ async function handleApiRequest(
     return
   }
 
-  if (!principalHasDesktopApiAccess(context.principal) && !principalCanUseGatewayOnlyRoute(context.principal, {
-    resource,
-    action,
-    method: req.method,
-    sessionId,
-    artifactId,
-  }) && !routeAllowsOperationalToken(context.principal, {
-    resource,
-    action,
-    method: req.method,
-    sessionId,
-    artifactId,
-  }) && !routeAllowsWorkerCredential({
-    resource,
-    action,
-    method: req.method,
-    sessionId,
-    artifactId,
-  })) {
-    writeError(res, 403, 'Desktop cloud API access requires a desktop-scoped API token.', options.corsOrigin)
+  const schedulerTick = resource === 'workflows'
+    && sessionId === 'scheduler'
+    && action === 'tick'
+    && context.segments.length === 4
+    && req.method === 'POST'
+  if (schedulerTick && !options.internalToken) {
+    writeError(res, 404, 'Not found.', options.corsOrigin)
     return
   }
+  const policyPrincipal: CloudPrincipal = schedulerTick && internalTokenIsValid(req, options.internalToken)
+    ? {
+        ...context.principal,
+        authSource: 'api_token',
+        tokenScopes: ['worker-internal'],
+    }
+    : context.principal
+
+  const workspaceAuthorization = await authorizeCloudApiWorkspaceRequest({
+    req,
+    res,
+    options,
+    segments: context.segments,
+    principal: policyPrincipal,
+    readJsonBody,
+  })
+  if (!workspaceAuthorization.allowed) return
 
   const routeTools = {
-    readJsonBody,
+    readJsonBody: workspaceAuthorization.readJsonBody,
     readString,
     readRecord,
     readStringArray,
@@ -693,10 +630,6 @@ async function handleApiRequest(
   }
 
   if (resource === 'channels') {
-    if (!options.policy.features.channels) {
-      writePolicyError(res, 403, 'Channels are disabled for this cloud profile.', 'channels.disabled', options.corsOrigin)
-      return
-    }
     const handled = await handleChannelsApiRoute({
       req,
       res,
@@ -706,7 +639,7 @@ async function handleApiRequest(
       itemId: action,
       itemAction: artifactId,
       tools: {
-        readJsonBody,
+        readJsonBody: workspaceAuthorization.readJsonBody,
         readString,
         readRecord,
         readChannelProvider,
@@ -722,6 +655,7 @@ async function handleApiRequest(
         ssePollMs,
         processSessionCommandIfConfigured,
         writeSessionCommandMutationResponse,
+        handleSessionSse,
       },
     })
     if (!handled) writeError(res, 404, 'Not found.', options.corsOrigin)
@@ -1201,6 +1135,7 @@ export class CloudHttpServer {
           store: knowledgeStore,
           knowledgeEnabled: this.options.policy.features.knowledge,
           runtimeCapabilityPolicy: this.options.runtimeCapabilityPolicy,
+          observability: this.options.observability,
           maxBodyBytes: this.options.maxBodyBytes || 1024 * 1024,
           corsOrigin: requestOptions.corsOrigin,
           tools: { readJsonBody, writeJson, writeError, writePolicyError },
@@ -1292,6 +1227,4 @@ export class CloudHttpServer {
   }
 }
 
-export function createCloudHttpServer(options: CloudHttpServerOptions) {
-  return new CloudHttpServer(options)
-}
+export const createCloudHttpServer = (options: CloudHttpServerOptions) => new CloudHttpServer(options)

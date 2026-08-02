@@ -7,19 +7,22 @@ import {
 } from "@openwiki/http-api";
 import { postgresRuntimeConfigured } from "@openwiki/postgres-runtime";
 import { loadRepository } from "@openwiki/repo";
-import type { DiagnosticCheck } from "./commands/doctor.ts";
-import { requirementFrom, requirementStatus } from "./commands/doctor.ts";
-import type { DeploymentProfileDefinition, DeploymentProfileRequirement } from "./deployment-profiles.ts";
+import {
+  requirementFrom,
+  requirementStatus,
+  type DiagnosticCheck,
+  type DiagnosticRequirement,
+} from "./doctor-diagnostics.ts";
 
-export async function hostedHumanAgentDiagnostics(root: string, profile: DeploymentProfileDefinition): Promise<DiagnosticCheck[]> {
-  if (profile.operationalState === "skip" && profile.mcpTokens === "skip") {
-    return [];
-  }
+export async function hostedRuntimeDiagnostics(
+  root: string,
+  required: DiagnosticRequirement = "warn",
+): Promise<DiagnosticCheck[]> {
   try {
     const repo = await loadRepository(root);
     return [
-      operationalStateDiagnostic(repo.config, profile.operationalState),
-      hostedMcpTokenDiagnostic(repo.config, profile.mcpTokens),
+      operationalStateDiagnostic(repo.config, required),
+      hostedMcpTokenDiagnostic(repo.config, required),
     ];
   } catch (error: unknown) {
     return [
@@ -34,8 +37,7 @@ export async function hostedHumanAgentDiagnostics(root: string, profile: Deploym
 }
 
 /**
- * Doctor / deploy-preflight check for file-backed OAuth under multi-replica or
- * hosted profiles (wiki audit P2-5 / JOE-979).
+ * Doctor check for file-backed OAuth under multi-replica or hosted profiles.
  */
 export function oauthStateDiagnostic(
   config: OpenWikiConfig | undefined | Partial<OpenWikiConfig>,
@@ -160,7 +162,7 @@ function envBooleanEnabled(value: string | undefined): boolean {
 
 function operationalStateDiagnostic(
   config: OpenWikiConfig | undefined,
-  required: DeploymentProfileRequirement | boolean,
+  required: DiagnosticRequirement | boolean,
   env: NodeJS.ProcessEnv = process.env,
 ): DiagnosticCheck {
   const requirement = requirementFrom(required);
@@ -212,7 +214,7 @@ function operationalStateDiagnostic(
 
 function hostedMcpTokenDiagnostic(
   config: OpenWikiConfig | undefined,
-  required: DeploymentProfileRequirement | boolean,
+  required: DiagnosticRequirement | boolean,
   now: Date = new Date(),
 ): DiagnosticCheck {
   const requirement = requirementFrom(required);

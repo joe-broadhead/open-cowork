@@ -3,11 +3,6 @@ import type { CloudApiRouteInput } from './types.ts'
 export async function handleThreadsApiRoute(input: CloudApiRouteInput): Promise<boolean> {
   const { req, res, options, context, itemId: collection, action: itemId, artifactId: itemAction, tools } = input
 
-  if (!options.policy.features.threadIndex) {
-    tools.writePolicyError(res, 403, 'Thread index is disabled for this cloud profile.', 'thread_index.disabled', options.corsOrigin)
-    return true
-  }
-
   if (!collection && req.method === 'GET') {
     tools.writeJson(res, 200, {
       threads: await options.service.domains.threads.listThreadMetadata(context.principal, {

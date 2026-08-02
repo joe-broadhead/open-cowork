@@ -1,61 +1,40 @@
 # Public Release Docs Checklist
 
-Run this checklist before tagging a release candidate, publishing a package, or
-switching repository visibility.
+Use this checklist for a `wiki@v*` GitHub release.
 
-## Distribution Clarity
+## Distribution
 
-- README and the installation guide lead with a path that exists today.
-- Pre-release docs use the source-checkout tarball path:
-  `pnpm pack:cli` followed by
-  `npm install -g ./artifacts/npm/openwiki-cli-0.0.0.tgz`.
-- Published npm examples pin an exact version such as `@openwiki/cli@0.0.0`;
-  `@latest` appears only in explicit upgrade guidance after release notes exist.
-- Docker examples distinguish local builds, preview images, and
-  release-published GHCR digests.
-- Hosted examples use `image@sha256:<digest>` for production commands.
+- README and installation lead with source checkout and the generated CLI
+  tarball.
+- The release links the exact tarball and `SHA256SUMS` from `Release Wiki`.
+- Static export is described as generated output, not canonical state.
+- No npm-registry, container, hosted-capacity, or provider-platform claim is
+  present without immutable evidence from an active root workflow.
 
-## Navigation Hygiene
+## Product And Security
 
-- The primary MkDocs nav points users at product, guide, reference, deployment,
-  development, security, troubleshooting, and changelog pages.
-- Archived execution logs and historical specs are not top-level product
-  guidance.
-- Planning docs that remain published are clearly marked as planning,
-  historical, or release checklist material.
-- Generated reference docs are current with `pnpm docs:reference -- --check`.
+- The first-user path creates a personal wiki, uses proposal-mode agents,
+  verifies backup/restore, and can produce a static export.
+- Source-hosted guidance requires authenticated ingress, same-origin browser
+  protection, scoped service-account tokens, persistent Git storage, backups,
+  and shared Postgres state before multiple writers or replicas.
+- Security reporting points to the private vulnerability path.
 
-## Community And Reporting Paths
+## Navigation
 
-- README links `CONTRIBUTING.md`, `SUPPORT.md`, `SECURITY.md`,
-  `CODE_OF_CONDUCT.md`, and `CHANGELOG.md`.
-- Docs home links support, security reporting, Code of Conduct, and release
-  notes.
-- Security docs route vulnerability reports to private reporting, not public
-  issues.
-- Issue templates point security reports away from public issues.
-
-## Enterprise And Deployment Claims
-
-- Deployment profiles say whether they are supported, private, enterprise,
-  cloud reference, or preview/demo.
-- Write-capable hosted docs require SSO/reverse-proxy auth or scoped
-  service-account tokens before public exposure.
-- Backup, restore, metrics, and readiness claims match the operations runbooks.
-- Cloud Run, Terraform, and provider docs identify storage, auth, state, and
-  backup caveats.
-
-## Ownership And Review
-
-- `.github/CODEOWNERS` has explicit owners for workflow, deployment, HTTP, MCP,
-  Git, repo, schema, security, and release surfaces.
-- PRs touching high-risk areas update tests and docs in the same change.
-- Release notes separate supported profiles from preview/reference profiles.
+- MkDocs navigation contains only existing pages.
+- Generated CLI, MCP, schema, package, operation, and compatibility reference is
+  current.
+- Removed platform documentation and historical execution logs are not linked
+  as product guidance.
 
 ## Validation
 
 ```sh
-pnpm docs:reference -- --check
-python3 -m mkdocs build --strict
-pnpm validate
+pnpm --filter cowork-wiki-workspace docs:reference -- --check
+pnpm --filter cowork-wiki-workspace docs:build
+pnpm --filter cowork-wiki-workspace typecheck
+pnpm --filter cowork-wiki-workspace test
+pnpm --filter cowork-wiki-workspace pack:cli
+node products/wiki/scripts/standalone-smoke.mjs
 ```

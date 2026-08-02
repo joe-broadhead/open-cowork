@@ -440,7 +440,7 @@ test("OAuth fails closed when enabled without an issuer or public origin", async
   });
 });
 
-test("OAuth env toggle accepts Helm boolean values", async () => {
+test("OAuth env toggle accepts common environment boolean values", async () => {
   await withEnv({ OPENWIKI_OAUTH_ENABLED: "true", OPENWIKI_OAUTH_ISSUER: "http://localhost:3030" }, async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "openwiki-oauth-env-"));
     try {

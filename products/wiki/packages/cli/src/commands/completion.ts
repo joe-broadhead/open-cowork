@@ -4,11 +4,9 @@ import { printJson } from "../output.ts";
 const COMMANDS = [
   "help",
   "version",
-  "upgrade",
   "doctor",
   "setup",
   "agent",
-  "deploy",
   "init",
   "index",
   "db",

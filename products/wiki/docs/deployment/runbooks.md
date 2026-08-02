@@ -54,7 +54,7 @@ openwiki --root /data/wiki db write-lease --json
 openwiki --root /data/wiki db recover-write-lease --json
 ```
 
-3. If the lease is not expired, find the owning pod/process from `actor_id`,
+3. If the lease is not expired, find the owning process from `actor_id`,
    `operation`, and logs.
 4. Stop the owner only after confirming it is deadlocked.
 5. Inspect Git state before resuming writes:

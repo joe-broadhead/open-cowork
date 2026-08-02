@@ -13,7 +13,7 @@ const SYNC_MODES = new Set(["manual", "auto"]);
 const SYNC_CONFLICT_POLICIES = new Set(["stop"]);
 const SYNC_KEYS = new Set(["remote", "branch", "mode", "pull_on_start", "push_after_commit", "sync_after_events", "debounce_seconds", "max_attempts", "backoff_seconds", "interval_seconds", "conflict_policy"]);
 const AUTOMATION_EVENTS = new Set(["proposal.applied", "source.ingested", "inbox.proposed", "inbox.processed"]);
-const RUNTIME_PROFILES = new Set(["local", "team", "hosted", "static", "compose", "umbrel", "cloud", "enterprise"]);
+const RUNTIME_PROFILES = new Set(["local", "team", "hosted", "static", "enterprise"]);
 const RUNTIME_KEYS = new Set(["profile", "sync", "backups", "queue", "storage", "connectors", "secrets", "git", "controls", "schema_pack"]);
 const QUEUE_BACKENDS = new Set(["local", "postgres"]);
 const QUEUE_KEYS = new Set(["backend", "poll_ms", "max_jobs_per_worker"]);
@@ -73,7 +73,7 @@ export function validateOpenWikiConfig(config: OpenWikiConfig, options: Validate
 
   validateKnownProperties(runtime, RUNTIME_KEYS, "runtime", issuePath, issues);
   if (runtime.profile !== undefined && (typeof runtime.profile !== "string" || !RUNTIME_PROFILES.has(runtime.profile))) {
-    issues.push(validationIssue("error", "config.runtime.profile.invalid", "runtime.profile must be local, team, hosted, static, compose, umbrel, cloud, or enterprise.", issuePath));
+    issues.push(validationIssue("error", "config.runtime.profile.invalid", "runtime.profile must be local, team, hosted, static, or enterprise.", issuePath));
   }
 
   const sync = runtime.sync;

@@ -1,5 +1,11 @@
 import { randomBytes } from 'node:crypto'
-import { sanitizeLogMessage } from '@open-cowork/shared'
+import {
+  WORKSPACE_ACTION_DEFINITIONS,
+  WORKSPACE_POLICY_DENIAL_CODES,
+  WORKSPACE_PRINCIPAL_CLASSES,
+  sanitizeLogMessage,
+  type WorkspacePolicyDecision,
+} from '@open-cowork/shared'
 
 type Env = Record<string, string | undefined>
 
@@ -97,6 +103,16 @@ const LOCAL_PATH_PATTERNS = [
 // to one bounded bucket rather than creating attacker- or tenant-controlled
 // series. New labels require an explicit cardinality and privacy review.
 const METRIC_ATTRIBUTE_ENUM_VALUES = new Map<string, ReadonlySet<string>>([
+  ['workspace_policy_action', new Set([
+    ...Object.keys(WORKSPACE_ACTION_DEFINITIONS).map((action) => action.toLowerCase()),
+    'unknown',
+  ])],
+  ['workspace_policy_outcome', new Set(['allow', 'deny'])],
+  ['workspace_policy_principal', new Set(WORKSPACE_PRINCIPAL_CLASSES)],
+  ['workspace_policy_reason', new Set([
+    'allowed',
+    ...WORKSPACE_POLICY_DENIAL_CODES,
+  ])],
   ['cloud_auth_accounting_operation', new Set(['check_backoff', 'record_failure'])],
   ['cloud_object_store_kind', new Set([
     'filesystem',
@@ -396,6 +412,39 @@ export async function recordCloudMetric(
   if (!observability) return
   const sanitized = sanitizeCloudMetricRecord(record)
   await observeBestEffort(() => observability.metric(sanitized))
+}
+
+/**
+ * Emit one privacy-bounded authorization observation per workspace request.
+ * Action, principal class, outcome, and reason are closed enums; request paths,
+ * tenant identifiers, resource identifiers, and credential material are never
+ * accepted by this API.
+ */
+export async function recordCloudWorkspacePolicyDecision(
+  observability: CloudObservabilityAdapter | null | undefined,
+  decision: WorkspacePolicyDecision,
+) {
+  if (!observability) return
+  const reason = decision.outcome === 'allow' ? 'allowed' : decision.code
+  const attributes = {
+    workspace_policy_action: decision.action,
+    workspace_policy_principal: decision.principalClass,
+    workspace_policy_outcome: decision.outcome,
+    workspace_policy_reason: reason,
+  }
+  await Promise.all([
+    recordCloudLog(observability, {
+      level: decision.outcome === 'allow' ? 'info' : 'warn',
+      name: 'cloud.workspace_policy.decision',
+      attributes,
+    }),
+    recordCloudMetric(observability, {
+      name: 'open_cowork_cloud_workspace_policy_decisions_total',
+      value: 1,
+      unit: '1',
+      attributes,
+    }),
+  ])
 }
 
 export function createCompositeCloudObservability(adapters: Array<CloudObservabilityAdapter | null | undefined>): CloudObservabilityAdapter {

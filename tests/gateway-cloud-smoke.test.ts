@@ -11,6 +11,7 @@ import {
 import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
 import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import { createCloudHttpServer } from '@open-cowork/cloud-server/http-server'
+import { CloudTransportError } from '@open-cowork/cloud-server/transport-adapter'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from '@open-cowork/cloud-server/runtime-adapter'
 import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
 import { CloudWorker } from '@open-cowork/cloud-server/worker'
@@ -22,6 +23,8 @@ function gatewayPolicy() {
     allowRemoteApprovalResponses: true,
   }
 }
+
+const failedGatewayPrompt = 'fail without a false provider acknowledgement'
 
 class FakeRuntime implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
@@ -43,6 +46,9 @@ class FakeRuntime implements CloudRuntimeAdapter {
 
   async promptSession(input: { sessionId: string, parts: CloudRuntimePromptPart[], agent: string }) {
     this.prompts.push({ sessionId: input.sessionId, parts: input.parts, agent: input.agent })
+    if (input.parts.some((part) => part.type === 'text' && part.text === failedGatewayPrompt)) {
+      throw new Error('Simulated terminal runtime failure.')
+    }
     const events: CloudRuntimeEvent[] = [{
       type: 'assistant.message',
       payload: {
@@ -86,6 +92,12 @@ class FakeRuntime implements CloudRuntimeAdapter {
 
 async function readJson(response: Response) {
   return JSON.parse(await response.text()) as Record<string, unknown>
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
 }
 
 async function runGatewayCloudSmokeScript(input: {
@@ -200,25 +212,29 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
   }
 
   try {
-    assert.equal((await fetch(`${cloudUrl}/api/channels/agents`, {
+    const agentResponse = await fetch(`${cloudUrl}/api/channels/agents`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        agentId: 'agent-1',
+        agentId: 'agent-seed-1',
         name: 'Fake gateway agent',
         profileName: 'full',
       }),
-    })).status, 201)
-    assert.equal((await fetch(`${cloudUrl}/api/channels/bindings`, {
+    })
+    assert.equal(agentResponse.status, 201)
+    const agentId = String(asRecord((await readJson(agentResponse)).agent).agentId)
+    const bindingResponse = await fetch(`${cloudUrl}/api/channels/bindings`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        bindingId: 'fake-binding',
-        agentId: 'agent-1',
+        bindingId: 'fake-binding-seed',
+        agentId,
         provider: 'cli',
         displayName: 'Fake provider',
       }),
-    })).status, 201)
+    })
+    assert.equal(bindingResponse.status, 201)
+    const channelBindingId = String(asRecord((await readJson(bindingResponse)).binding).bindingId)
     assert.equal((await fetch(`${cloudUrl}/api/channels/identities/resolve`, {
       method: 'POST',
       headers,
@@ -242,7 +258,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       providers: [{
         id: 'fake',
         kind: 'fake',
-        channelBindingId: 'fake-binding',
+        channelBindingId,
       }],
     }, gatewayEnv)
     const cloudGateway = createCloudGateway(resolveGatewayCloudConnection(gatewayEnv))
@@ -250,16 +266,21 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       provider: 'cli',
       externalUserId: 'user-1',
     })
+    await store.grantApiTokenChannelBinding({
+      orgId: org.orgId,
+      tokenId: issued.token.tokenId,
+      channelBindingId,
+    })
     const bound = await cloudGateway.bindSession({
       identityId: identity.identityId,
       provider: 'cli',
       externalUserId: 'user-1',
-      channelBindingId: 'fake-binding',
+      channelBindingId,
       externalChatId: 'chat-wrapper',
       externalThreadId: 'thread-wrapper',
       title: 'Wrapper smoke',
     })
-    assert.equal(bound.binding.channelBindingId, 'fake-binding')
+    assert.equal(bound.binding.channelBindingId, channelBindingId)
     assert.equal((await cloudGateway.findSessionByThread({
       provider: 'cli',
       externalChatId: 'chat-wrapper',
@@ -267,7 +288,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     }))?.binding.bindingId, bound.binding.bindingId)
 
     const sessionEvent = waitFor<{ sequence: number, payload: { content?: unknown } }>((resolve, reject) => cloudGateway.subscribeSessionEvents({
-      sessionId: bound.session.session.sessionId,
+      sessionBindingId: bound.binding.bindingId,
       afterSequence: 0,
       onEvent: (event) => {
         if (event.type === 'assistant.message') resolve(event)
@@ -283,7 +304,6 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     })
     const assistantEvent = await sessionEvent.promise
     sessionEvent.close()
-    const wrapperRuntimeSessionId = runtime.prompts.at(-1)?.sessionId
     assert.equal(assistantEvent.payload.content, 'gateway smoke response')
 
     const cursor = await cloudGateway.updateCursor({
@@ -296,29 +316,13 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     if (!cursor.ok) assert.fail(`Expected cursor update to succeed, got ${cursor.reason}`)
     assert.equal(cursor.binding.lastChatMessageId, 'chat-message-1')
 
-    await cloudGateway.respondToPermission(bound.session.session.sessionId, {
-      permissionId: 'permission-wrapper',
-      response: { allowed: true },
-    })
-    await cloudGateway.replyToQuestion(bound.session.session.sessionId, {
-      requestId: 'question-wrapper',
-      answers: ['yes'],
-    })
-    await cloudGateway.rejectQuestion(bound.session.session.sessionId, {
-      requestId: 'question-reject-wrapper',
-    })
-    await cloudGateway.abortSession(bound.session.session.sessionId)
-    assert.deepEqual(runtime.permissions, [{ permissionId: 'permission-wrapper', allowed: true }])
-    assert.deepEqual(runtime.questionReplies, [{ requestId: 'question-wrapper', answers: ['yes'] }])
-    assert.deepEqual(runtime.questionRejections, ['question-reject-wrapper'])
-    assert.deepEqual(runtime.aborted, [wrapperRuntimeSessionId])
-
     const interactionResponse = await fetch(`${cloudUrl}/api/channels/interactions`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         interactionId: 'interaction-wrapper',
-        agentId: 'agent-1',
+        agentId,
+        sessionBindingId: bound.binding.bindingId,
         sessionId: bound.session.session.sessionId,
         provider: 'cli',
         kind: 'permission',
@@ -348,8 +352,8 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       headers,
       body: JSON.stringify({
         deliveryId: 'delivery-wrapper',
-        agentId: 'agent-1',
-        channelBindingId: 'fake-binding',
+        agentId,
+        channelBindingId,
         sessionBindingId: bound.binding.bindingId,
         provider: 'cli',
         target: { externalChatId: 'chat-wrapper', externalThreadId: 'thread-wrapper' },
@@ -363,6 +367,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     assert.equal(delivery.deliveryId, 'delivery-wrapper')
     assert.equal(typeof delivery.claimedBy, 'string')
     assert.equal((await cloudGateway.ackDelivery(delivery.deliveryId, {
+      channelBindingId,
       claimedBy: String(delivery.claimedBy),
       status: 'sent',
     }))?.status, 'sent')
@@ -375,10 +380,26 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       providers: [{
         id: 'fake',
         kind: 'fake',
-        channelBindingId: 'fake-binding',
+        channelBindingId,
       }],
     }, gatewayEnv)
-    const gateway = createGatewayDaemon(daemonGatewayConfig, createCloudGateway(resolveGatewayCloudConnection(gatewayEnv)))
+    const durableCloudGateway = createCloudGateway(resolveGatewayCloudConnection(gatewayEnv))
+    const responseLossPrompt = 'retry without duplicate model work'
+    let losePromptResponse = true
+    const gateway = createGatewayDaemon(daemonGatewayConfig, {
+      ...durableCloudGateway,
+      async prompt(input) {
+        const result = await durableCloudGateway.prompt(input)
+        if (input.text === responseLossPrompt && losePromptResponse) {
+          losePromptResponse = false
+          throw new CloudTransportError({
+            kind: 'network',
+            message: 'Simulated response loss after Cloud committed the prompt.',
+          })
+        }
+        return result
+      },
+    })
     const promptsBeforeDaemon = runtime.prompts.length
     const gatewayUrl = await gateway.start()
     const fakeProvider = gateway.runtime.providers.get('fake')?.provider as {
@@ -424,6 +445,43 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       assert.equal(approval.status, 202)
       await waitUntil(() => runtime.permissions.some((permission) => permission.allowed))
       assert.equal(fakeProvider.answered.at(-1)?.interactionId, 'fake-callback-1')
+
+      const promptsBeforeResponseLoss = runtime.prompts.length
+      const responseLossEvent = {
+        id: 'fake-response-loss-event-1',
+        text: responseLossPrompt,
+        chatId: 'chat-response-loss',
+        userId: 'user-1',
+      }
+      await assert.rejects(
+        () => gateway.runtime.providers.emitFake('fake', responseLossEvent),
+        /Simulated response loss after Cloud committed the prompt/,
+      )
+      assert.equal(runtime.prompts.length, promptsBeforeResponseLoss + 1)
+      await gateway.runtime.providers.emitFake('fake', responseLossEvent)
+      assert.equal(runtime.prompts.length, promptsBeforeResponseLoss + 1)
+
+      const promptsBeforeFailedCommand = runtime.prompts.length
+      const failedCommandEvent = {
+        id: 'fake-failed-command-event-1',
+        text: failedGatewayPrompt,
+        chatId: 'chat-failed-command',
+        userId: 'user-1',
+      }
+      await assert.rejects(
+        () => gateway.runtime.providers.emitFake('fake', failedCommandEvent),
+        /Internal server error/,
+      )
+      assert.equal(runtime.prompts.length, promptsBeforeFailedCommand + 1)
+      await assert.rejects(
+        () => gateway.runtime.providers.emitFake('fake', failedCommandEvent),
+        /failed idempotent command/,
+      )
+      assert.equal(runtime.prompts.length, promptsBeforeFailedCommand + 1)
+      assert.equal(
+        fakeProvider.sent.some((entry) => entry.text === 'Sorry — I could not process that message. Please try again.'),
+        true,
+      )
     } finally {
       await gateway.stop()
     }

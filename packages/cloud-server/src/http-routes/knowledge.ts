@@ -1,7 +1,10 @@
 import { isKnowledgeSpaceVisibility, type KnowledgeStore, type KnowledgeStoreListOptions, normalizeKnowledgeProposalContent, sanitizeLogMessage } from '@open-cowork/shared'
 import type { CloudApiRouteInput } from './types.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
-import { principalHasOrgAdminRole, principalHasPrivilegedTokenScope } from '../principal-access.ts'
+import {
+  principalHasHumanPermissionOrAdminRole,
+  principalHasPrivilegedTokenScope,
+} from '../principal-access.ts'
 function knowledgeWorkspaceId(context: CloudApiRouteInput['context']) {
   return `cloud:${context.principal.tenantId.trim() || context.principal.orgId || context.principal.userId || 'default'}`
 }
@@ -69,8 +72,9 @@ function id(value: string | undefined, label: string) {
 function assertKnowledgeReviewAuthority(input: CloudApiRouteInput) {
   const { principal } = input.context
   const allowed = principal.authSource === 'api_token'
-    ? principalHasPrivilegedTokenScope(principal, 'admin')
-    : principalHasOrgAdminRole(principal)
+    ? principalHasPrivilegedTokenScope(principal, 'admin', ['org:manage'])
+    : principal.authSource === 'local'
+      || principalHasHumanPermissionOrAdminRole(principal, ['org:manage'])
   if (!allowed) {
     throw new CloudServiceError(403, 'Knowledge proposal review requires an org admin or admin-scoped API token.')
   }
@@ -78,11 +82,6 @@ function assertKnowledgeReviewAuthority(input: CloudApiRouteInput) {
 
 export async function handleKnowledgeApiRoute(input: CloudApiRouteInput): Promise<void> {
   const { req, res, options, itemId: collection, action: itemId, artifactId: itemAction, tools } = input
-
-  if (!options.policy.features.knowledge) {
-    tools.writePolicyError(res, 403, 'Knowledge is disabled for this cloud profile.', 'knowledge.disabled', options.corsOrigin)
-    return
-  }
 
   try {
     await options.service.ensurePrincipal(input.context.principal)

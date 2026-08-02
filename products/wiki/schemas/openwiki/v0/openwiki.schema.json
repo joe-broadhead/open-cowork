@@ -15,7 +15,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "profile": { "enum": ["local", "team", "hosted", "static", "compose", "umbrel", "cloud", "enterprise"] },
+        "profile": { "enum": ["local", "team", "hosted", "static", "enterprise"] },
         "sync": {
           "type": "object",
           "additionalProperties": false,

@@ -8,6 +8,17 @@ ready_file="${TMPDIR:-/tmp}/open-cowork-cloud-readyz-${project_suffix}.json"
 live_file="${TMPDIR:-/tmp}/open-cowork-cloud-livez-${project_suffix}.json"
 gateway_health_file="${TMPDIR:-/tmp}/open-cowork-gateway-ready-${project_suffix}.json"
 gateway_smoke_url="${OPEN_COWORK_GATEWAY_SMOKE_URL:-}"
+cloud_smoke_url_input="${OPEN_COWORK_CLOUD_SMOKE_URL:-http://127.0.0.1:${OPEN_COWORK_CLOUD_PUBLISHED_PORT:-8787}}"
+cloud_smoke_url="${cloud_smoke_url_input%/}"
+curl_connect_timeout_seconds="${OPEN_COWORK_SMOKE_CONNECT_TIMEOUT_SECONDS:-3}"
+curl_max_time_seconds="${OPEN_COWORK_SMOKE_MAX_TIME_SECONDS:-10}"
+curl_args=(
+  --fail
+  --silent
+  --show-error
+  --connect-timeout "${curl_connect_timeout_seconds}"
+  --max-time "${curl_max_time_seconds}"
+)
 
 cleanup() {
   docker compose -p "${project_name}" -f "${compose_file}" down -v --remove-orphans >/dev/null 2>&1 || true
@@ -47,6 +58,8 @@ run_split_role_isolation_proof() {
 }
 
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 if ! docker compose -p "${project_name}" -f "${compose_file}" up --build -d; then
   print_diagnostics
@@ -55,15 +68,15 @@ fi
 
 cloud_ready=false
 for _ in $(seq 1 90); do
-  if curl -fsS "http://127.0.0.1:8787/readyz" >"${ready_file}"; then
+  if curl "${curl_args[@]}" "${cloud_smoke_url}/readyz" >"${ready_file}"; then
     cat "${ready_file}"
-    if ! curl -fsS "http://127.0.0.1:8787/livez" >"${live_file}"; then
+    if ! curl "${curl_args[@]}" "${cloud_smoke_url}/livez" >"${live_file}"; then
       print_diagnostics
       exit 1
     fi
     cat "${live_file}"
     if [ -z "${gateway_smoke_url}" ]; then
-      if ! OPEN_COWORK_SMOKE_CLOUD_URL="http://127.0.0.1:8787" \
+      if ! OPEN_COWORK_SMOKE_CLOUD_URL="${cloud_smoke_url}" \
         OPEN_COWORK_SMOKE_SKIP_GATEWAY=true \
         pnpm deploy:smoke; then
         print_diagnostics
@@ -83,9 +96,9 @@ done
 
 if [ "${cloud_ready}" = true ] && [ -n "${gateway_smoke_url}" ]; then
   for _ in $(seq 1 90); do
-    if curl -fsS "${gateway_smoke_url}" >"${gateway_health_file}"; then
+    if curl "${curl_args[@]}" "${gateway_smoke_url}" >"${gateway_health_file}"; then
       cat "${gateway_health_file}"
-      if ! OPEN_COWORK_SMOKE_CLOUD_URL="http://127.0.0.1:8787" \
+      if ! OPEN_COWORK_SMOKE_CLOUD_URL="${cloud_smoke_url}" \
         OPEN_COWORK_SMOKE_GATEWAY_URL="${gateway_smoke_url%/ready}" \
         pnpm deploy:smoke; then
         print_diagnostics

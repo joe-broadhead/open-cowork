@@ -22,7 +22,7 @@ entered through the in-app Settings panel.
 git clone https://github.com/joe-broadhead/open-cowork.git
 cd open-cowork
 node -v
-# Supported: v22.13.0 or newer; CI uses the exact .nvmrc version
+# Supported: v22.22.3 or newer; CI uses the exact .nvmrc version
 corepack enable
 corepack prepare pnpm@10.32.1 --activate
 pnpm -v

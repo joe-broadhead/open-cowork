@@ -16,11 +16,7 @@ import type {
   CloudChannelPromptMutationResponse,
   IssuedChannelInteractionRecord,
 } from '@open-cowork/cloud-client/domains/channels'
-import type {
-  CloudSessionCommandAckResponse,
-  CloudSessionCommandMutationResponse,
-  CloudSessionView,
-} from '@open-cowork/cloud-client/domains/sessions'
+import type { CloudSessionView } from '@open-cowork/cloud-client/domains/sessions'
 import type {
   SessionArtifactAttachment,
 } from '@open-cowork/cloud-client/domains/artifacts'
@@ -54,12 +50,12 @@ export type CloudGateway = {
     externalChatId: string
     externalThreadId: string
   }): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView } | null>
-  getSession(sessionId: string): Promise<CloudSessionView>
+  getSession(sessionBindingId: string): Promise<CloudSessionView>
   prompt(input: ChannelActorInput & {
     bindingId: string
     text: string
     agent?: string | null
-    commandId?: string | null
+    idempotencyKey?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
   claimProviderEvent(input: {
     provider: CloudChannelProviderId
@@ -88,23 +84,19 @@ export type CloudGateway = {
   }): Promise<CloudChannelInteractionMutationResponse>
   createChannelInteraction(input: {
     agentId: string
+    sessionBindingId: string
     sessionId: string
     provider: CloudChannelProviderId
     kind: 'permission' | 'question'
     targetId: string
     externalInteractionId?: string | null
-    createdByIdentityId?: string | null
     expiresAt?: string | null
     interactionId?: string | null
   }): Promise<IssuedChannelInteractionRecord>
-  abortSession(sessionId: string): Promise<CloudSessionCommandMutationResponse>
-  respondToPermission(sessionId: string, input: { permissionId: string, response: unknown }): Promise<CloudSessionCommandAckResponse>
-  replyToQuestion(sessionId: string, input: { requestId: string, answers: unknown[] }): Promise<CloudSessionCommandAckResponse>
-  rejectQuestion(sessionId: string, input: { requestId: string }): Promise<CloudSessionCommandAckResponse>
-  readArtifactAttachment?(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>
-  artifactUrl(sessionId: string, artifactId: string): string
+  readArtifactAttachment?(sessionBindingId: string, artifactId: string): Promise<SessionArtifactAttachment>
+  artifactUrl(sessionBindingId: string, artifactId: string): string
   subscribeSessionEvents(input: {
-    sessionId: string
+    sessionBindingId: string
     afterSequence?: number
     onEvent: (event: CloudTransportSessionEvent) => void
     onError?: (error: unknown) => void
@@ -124,6 +116,7 @@ export type CloudGateway = {
     lastChatMessageId?: string | null
   }): Promise<ChannelCursorUpdateResult>
   ackDelivery(deliveryId: string, input: {
+    channelBindingId?: string | null
     claimedBy?: string | null
     status: 'sent' | 'failed' | 'dead'
     lastError?: string | null
@@ -135,8 +128,8 @@ export type CloudGateway = {
     channelBindingId?: string | null
     limit?: number | null
   }): Promise<ChannelDeliveryRecord[]>
-  retryDelivery?(deliveryId: string): Promise<ChannelDeliveryRecord | null>
-  deadLetterDelivery?(deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
+  retryDelivery?(deliveryId: string, input?: { channelBindingId?: string | null }): Promise<ChannelDeliveryRecord | null>
+  deadLetterDelivery?(deliveryId: string, input?: { channelBindingId?: string | null, lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
 }
 
 export function createCloudGateway(connection: GatewayCloudConnectionConfig, adapter = createCloudAdapter(connection)): CloudGateway {
@@ -153,8 +146,9 @@ export function createCloudGateway(connection: GatewayCloudConnectionConfig, ada
       assertMethod(adapter.getChannelSessionByThread, 'getChannelSessionByThread')
       return adapter.getChannelSessionByThread(input)
     },
-    getSession(sessionId) {
-      return adapter.getSession(sessionId)
+    getSession(sessionBindingId) {
+      assertMethod(adapter.getChannelSessionSnapshot, 'getChannelSessionSnapshot')
+      return adapter.getChannelSessionSnapshot(sessionBindingId)
     },
     async prompt(input) {
       assertMethod(adapter.promptChannelSession, 'promptChannelSession')
@@ -176,27 +170,16 @@ export function createCloudGateway(connection: GatewayCloudConnectionConfig, ada
       assertMethod(adapter.createChannelInteraction, 'createChannelInteraction')
       return adapter.createChannelInteraction(input)
     },
-    abortSession(sessionId) {
-      return adapter.abortSession(sessionId)
+    readArtifactAttachment(sessionBindingId, artifactId) {
+      assertMethod(adapter.readChannelArtifactAttachment, 'readChannelArtifactAttachment')
+      return adapter.readChannelArtifactAttachment(sessionBindingId, artifactId)
     },
-    respondToPermission(sessionId, input) {
-      return adapter.respondToPermission(sessionId, input)
-    },
-    replyToQuestion(sessionId, input) {
-      return adapter.replyToQuestion(sessionId, input)
-    },
-    rejectQuestion(sessionId, input) {
-      return adapter.rejectQuestion(sessionId, input)
-    },
-    readArtifactAttachment(sessionId, filePathOrArtifactId) {
-      assertMethod(adapter.readArtifactAttachment, 'readArtifactAttachment')
-      return adapter.readArtifactAttachment(sessionId, filePathOrArtifactId)
-    },
-    artifactUrl(sessionId, artifactId) {
-      return `${normalizeBaseUrl(connection.baseUrl)}/api/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`
+    artifactUrl(sessionBindingId, artifactId) {
+      return `${normalizeBaseUrl(connection.baseUrl)}/api/channels/sessions/${encodeURIComponent(sessionBindingId)}/artifacts/${encodeURIComponent(artifactId)}`
     },
     subscribeSessionEvents(input) {
-      return adapter.subscribeSessionEvents(input.sessionId, {
+      assertMethod(adapter.subscribeChannelSessionEvents, 'subscribeChannelSessionEvents')
+      return adapter.subscribeChannelSessionEvents(input.sessionBindingId, {
         afterSequence: input.afterSequence,
         onEvent: input.onEvent,
         onError: input.onError,
@@ -218,9 +201,9 @@ export function createCloudGateway(connection: GatewayCloudConnectionConfig, ada
       assertMethod(adapter.listChannelDeliveries, 'listChannelDeliveries')
       return adapter.listChannelDeliveries(input)
     },
-    async retryDelivery(deliveryId) {
+    async retryDelivery(deliveryId, input = {}) {
       assertMethod(adapter.retryChannelDelivery, 'retryChannelDelivery')
-      return adapter.retryChannelDelivery(deliveryId)
+      return adapter.retryChannelDelivery(deliveryId, input)
     },
     async deadLetterDelivery(deliveryId, input = {}) {
       assertMethod(adapter.deadLetterChannelDelivery, 'deadLetterChannelDelivery')

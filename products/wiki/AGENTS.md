@@ -25,7 +25,7 @@ are derived or adapter layers.
 - source fetching and SSRF controls
 - auth, policy, trusted headers, and browser write protection
 - schema/protocol contracts
-- deployment manifests and image publishing
+- source-hosted runtime boundaries and release artifacts
 
 ## Useful Commands
 

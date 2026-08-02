@@ -8,10 +8,14 @@ import {
   type PublicChannelDeliveryRecord,
 } from '../public-channel-records.ts'
 import type { CloudPrincipal } from '../session-service.ts'
-import { resolveGatewayChannelBindingScope as deliveryOperatorScope } from './channel-binding-scope.ts'
+import {
+  resolveGatewayChannelBindingScope as deliveryOperatorScope,
+  resolveGatewayChannelSessionBinding,
+} from './channel-binding-scope.ts'
 import {
   assertGatewayAccess,
   CHANNEL_HOUR_MS,
+  principalCanManageChannels,
   type CloudChannelDomainServiceOptions,
 } from './channel-domain-context.ts'
 
@@ -30,19 +34,20 @@ async function validateChannelDeliveryTarget(
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const orgId = options.principalOrgId(principal)
-  const agent = await options.store.getHeadlessAgent(orgId, input.agentId)
-  if (!agent) throw new CloudServiceError(404, 'Headless agent was not found.')
+  const operatorScope = await deliveryOperatorScope(options, principal, [input.channelBindingId])
   const channelBinding = await options.store.getChannelBinding(orgId, input.channelBindingId)
-  if (!channelBinding) throw new CloudServiceError(404, 'Channel binding was not found.')
-  if (channelBinding.agentId !== agent.agentId) {
-    throw new CloudServiceError(403, 'Channel delivery binding does not belong to the selected headless agent.')
+  if (!channelBinding || channelBinding.status !== 'active' || channelBinding.agentId !== input.agentId) {
+    throw channelDeliveryTargetDenied()
   }
+  const agent = await options.store.getHeadlessAgent(orgId, channelBinding.agentId)
+  if (!agent || agent.status !== 'active') throw channelDeliveryTargetDenied()
   if (channelBinding.provider !== input.provider) {
     throw new CloudServiceError(400, 'Channel delivery provider does not match the channel binding.')
   }
-  await deliveryOperatorScope(options, principal, [channelBinding.bindingId])
   if (input.sessionBindingId) {
-    const sessionBinding = await options.store.getChannelSessionBinding(orgId, input.sessionBindingId)
+    const sessionBinding = operatorScope.gatewayTokenId
+      ? await resolveGatewayChannelSessionBinding(options, principal, input.sessionBindingId)
+      : await options.store.getChannelSessionBinding(orgId, input.sessionBindingId)
     if (!sessionBinding) throw new CloudServiceError(404, 'Channel session binding was not found.')
     if (
       sessionBinding.agentId !== agent.agentId
@@ -53,6 +58,10 @@ async function validateChannelDeliveryTarget(
     }
   }
   return { orgId, agent, channelBinding }
+}
+
+function channelDeliveryTargetDenied() {
+  return new CloudServiceError(403, 'Gateway API token is not authorized for the requested channel binding.')
 }
 
 export async function assertChannelDeliveryTarget(
@@ -107,7 +116,11 @@ export async function listChannelDeliveries(
   } = {},
 ): Promise<PublicChannelDeliveryRecord[]> {
   await options.ensurePrincipal(principal)
-  const scope = await deliveryOperatorScope(options, principal, input.channelBindingId ? [input.channelBindingId] : null)
+  const scope = await resolveDeliveryAdminOrGatewayScope(
+    options,
+    principal,
+    input.channelBindingId ? [input.channelBindingId] : null,
+  )
   return (await options.store.listChannelDeliveries({
     orgId: options.principalOrgId(principal),
     deliveryId: input.deliveryId || null,
@@ -121,13 +134,18 @@ export async function listChannelDeliveries(
 export async function retryChannelDelivery(
   options: CloudChannelDomainServiceOptions,
   principal: CloudPrincipal,
-  deliveryId: string,
+  input: { deliveryId: string, channelBindingId?: string | null },
 ): Promise<PublicChannelDeliveryRecord | null> {
   await options.ensurePrincipal(principal)
-  const scope = await deliveryOperatorScope(options, principal)
+  const scope = await resolveDeliveryAdminOrGatewayScope(
+    options,
+    principal,
+    input.channelBindingId ? [input.channelBindingId] : null,
+  )
   const delivery = await options.store.ackChannelDelivery({
     orgId: options.principalOrgId(principal),
-    deliveryId,
+    deliveryId: input.deliveryId,
+    channelBindingId: input.channelBindingId,
     channelBindingIds: scope.channelBindingIds,
     lastClaimedBy: scope.gatewayTokenId,
     status: 'failed',
@@ -140,13 +158,18 @@ export async function retryChannelDelivery(
 export async function deadLetterChannelDelivery(
   options: CloudChannelDomainServiceOptions,
   principal: CloudPrincipal,
-  input: { deliveryId: string, lastError?: string | null },
+  input: { deliveryId: string, channelBindingId?: string | null, lastError?: string | null },
 ): Promise<PublicChannelDeliveryRecord | null> {
   await options.ensurePrincipal(principal)
-  const scope = await deliveryOperatorScope(options, principal)
+  const scope = await resolveDeliveryAdminOrGatewayScope(
+    options,
+    principal,
+    input.channelBindingId ? [input.channelBindingId] : null,
+  )
   const delivery = await options.store.ackChannelDelivery({
     orgId: options.principalOrgId(principal),
     deliveryId: input.deliveryId,
+    channelBindingId: input.channelBindingId,
     channelBindingIds: scope.channelBindingIds,
     lastClaimedBy: scope.gatewayTokenId,
     status: 'dead',
@@ -154,6 +177,21 @@ export async function deadLetterChannelDelivery(
     nextAttemptAt: null,
   })
   return delivery ? publicChannelDelivery(delivery) : null
+}
+
+async function resolveDeliveryAdminOrGatewayScope(
+  options: CloudChannelDomainServiceOptions,
+  principal: CloudPrincipal,
+  requestedChannelBindingIds: readonly string[] | null,
+) {
+  if (principalCanManageChannels(principal)) {
+    const requested = [...new Set((requestedChannelBindingIds || []).map((value) => value.trim()).filter(Boolean))]
+    return {
+      gatewayTokenId: null,
+      channelBindingIds: requested.length > 0 ? requested : null,
+    }
+  }
+  return deliveryOperatorScope(options, principal, requestedChannelBindingIds)
 }
 
 export async function claimNextChannelDelivery(
@@ -210,6 +248,7 @@ export async function ackChannelDelivery(
   principal: CloudPrincipal,
   input: {
     deliveryId: string
+    channelBindingId?: string | null
     claimedBy?: string | null
     status: Extract<ChannelDeliveryRecord['status'], 'sent' | 'failed' | 'dead'>
     lastError?: string | null
@@ -218,10 +257,15 @@ export async function ackChannelDelivery(
 ): Promise<PublicChannelDeliveryRecord | null> {
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
-  const scope = await deliveryOperatorScope(options, principal)
+  const scope = await deliveryOperatorScope(
+    options,
+    principal,
+    input.channelBindingId ? [input.channelBindingId] : null,
+  )
   const delivery = await options.store.ackChannelDelivery({
     orgId: options.principalOrgId(principal),
     deliveryId: input.deliveryId,
+    channelBindingId: input.channelBindingId,
     channelBindingIds: scope.channelBindingIds,
     lastClaimedBy: scope.gatewayTokenId,
     claimedBy: input.claimedBy,

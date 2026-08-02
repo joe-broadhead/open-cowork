@@ -40,7 +40,7 @@ test('session stream manager renders session events once and persists cursor aft
   provider.capabilities.maxTextLength = 100
   const freshResponse = 'x'.repeat(205)
   const subscriptions: Array<{
-    sessionId: string
+    sessionBindingId: string
     afterSequence: number | undefined
     onEvent: (event: unknown) => void
     onError?: (error: unknown) => void
@@ -48,7 +48,7 @@ test('session stream manager renders session events once and persists cursor aft
   }> = []
   const cursorUpdates: unknown[] = []
   const cloud = {
-    subscribeSessionEvents(input: { sessionId: string, afterSequence?: number, onEvent: (event: unknown) => void, onError?: (error: unknown) => void }) {
+    subscribeSessionEvents(input: { sessionBindingId: string, afterSequence?: number, onEvent: (event: unknown) => void, onError?: (error: unknown) => void }) {
       subscriptions.push({ ...input, closed: false })
       return {
         close() {
@@ -212,6 +212,7 @@ test('session stream manager renders permission requests as channel buttons', as
   assert.deepEqual({ ...created, interactionId: undefined }, {
     interactionId: undefined,
     agentId: 'agent-1',
+    sessionBindingId: 'binding-1',
     sessionId: 'session-1',
     provider: 'cli',
     kind: 'permission',
@@ -748,8 +749,8 @@ async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void>
 
 function evictionCloud(closed: string[]) {
   return {
-    subscribeSessionEvents(input: { sessionId: string }) {
-      return { close() { closed.push(input.sessionId) } }
+    subscribeSessionEvents(input: { sessionBindingId: string }) {
+      return { close() { closed.push(input.sessionBindingId) } }
     },
     async updateCursor(input: unknown) { return cursorOk(input) },
   } as unknown as CloudGateway
@@ -772,7 +773,7 @@ test('session stream manager evicts the least-recently-active stream when over t
 
   assert.equal(manager.activeCount(), 2)
   assert.equal(metrics.streamEvictions, 1)
-  assert.deepEqual(closed, ['session-1'])
+  assert.deepEqual(closed, ['binding-1'])
   manager.closeAll()
 })
 
@@ -788,7 +789,7 @@ test('session stream manager evicts streams idle beyond the TTL on the next ensu
   manager.ensure({ provider, binding: evictionBinding(2) })
 
   assert.equal(manager.activeCount(), 1)
-  assert.deepEqual(closed, ['session-1'])
+  assert.deepEqual(closed, ['binding-1'])
   manager.closeAll()
 })
 
@@ -796,13 +797,13 @@ test('session stream manager applies backpressure and resubscribes from the adva
   const provider = new FakeChannelProvider()
   const metrics = createGatewayMetrics()
   const subscriptions: Array<{
-    sessionId: string
+    sessionBindingId: string
     afterSequence?: number
     onEvent: (event: unknown) => void
     closed: boolean
   }> = []
   const cloud = {
-    subscribeSessionEvents(input: { sessionId: string, afterSequence?: number, onEvent: (event: unknown) => void }) {
+    subscribeSessionEvents(input: { sessionBindingId: string, afterSequence?: number, onEvent: (event: unknown) => void }) {
       const record = { ...input, closed: false }
       subscriptions.push(record)
       return { close() { record.closed = true } }

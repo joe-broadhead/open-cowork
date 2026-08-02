@@ -1,48 +1,33 @@
-import type { DeploymentProfileRequirement } from "./deployment-profiles.ts";
+import type { DiagnosticRequirement } from "./doctor-diagnostics.ts";
 
-export type DoctorProfile = "personal" | "hosted" | "kubernetes";
+export type DoctorProfile = "personal" | "hosted";
 
 interface DoctorProfileRequirements {
-  publicOrigin: DeploymentProfileRequirement;
-  rateLimits: DeploymentProfileRequirement;
-  imageDigest: DeploymentProfileRequirement;
-  gitRemote: DeploymentProfileRequirement;
-  postgres: DeploymentProfileRequirement;
-  writeCoordinator: DeploymentProfileRequirement;
+  publicOrigin: DiagnosticRequirement;
+  rateLimits: DiagnosticRequirement;
+  gitRemote: DiagnosticRequirement;
+  postgres: DiagnosticRequirement;
+  writeCoordinator: DiagnosticRequirement;
 }
 
 export function doctorProfileFor(value: string | undefined): DoctorProfile | undefined {
   if (value === undefined) {
     return undefined;
   }
-  if (value === "personal" || value === "local-personal") {
+  if (value === "personal") {
     return "personal";
   }
-  if (value === "hosted" || value === "compose" || value === "docker-private") {
+  if (value === "hosted") {
     return "hosted";
   }
-  if (value === "kubernetes" || value === "k8s" || value === "kubernetes-enterprise") {
-    return "kubernetes";
-  }
-  throw new Error("doctor --profile expected personal, hosted, or kubernetes.");
+  throw new Error("doctor --profile expected personal or hosted.");
 }
 
 export function doctorProfileRequirements(profile: DoctorProfile | undefined): DoctorProfileRequirements {
-  if (profile === "kubernetes") {
-    return {
-      publicOrigin: "required",
-      rateLimits: "required",
-      imageDigest: "required",
-      gitRemote: "required",
-      postgres: "required",
-      writeCoordinator: "required",
-    };
-  }
   if (profile === "hosted") {
     return {
       publicOrigin: "warn",
       rateLimits: "warn",
-      imageDigest: "warn",
       gitRemote: "warn",
       postgres: "warn",
       writeCoordinator: "warn",
@@ -51,7 +36,6 @@ export function doctorProfileRequirements(profile: DoctorProfile | undefined): D
   return {
     publicOrigin: "skip",
     rateLimits: "skip",
-    imageDigest: "skip",
     gitRemote: profile === "personal" ? "warn" : "skip",
     postgres: "skip",
     writeCoordinator: "skip",

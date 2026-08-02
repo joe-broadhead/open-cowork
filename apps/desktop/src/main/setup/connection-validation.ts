@@ -23,6 +23,8 @@ export type SetupConnectionValidator = (
 
 const CONNECTION_CHECK_TIMEOUT_MS = 30_000
 const CONNECTION_CHECK_CLEANUP_TIMEOUT_MS = 5_000
+const CONNECTION_CHECK_CATALOG_READY_TIMEOUT_MS = 5_000
+const CONNECTION_CHECK_POLL_INTERVAL_MS = 100
 const E2E_SETUP_VALIDATION_KEY_ENV = 'OPEN_COWORK_E2E_SETUP_VALIDATION_KEY'
 
 class SafeSetupConnectionError extends Error {
@@ -66,6 +68,78 @@ function connectionCheckOptions(timeoutMs = CONNECTION_CHECK_TIMEOUT_MS) {
     throwOnError: true as const,
     signal: AbortSignal.timeout(timeoutMs),
   }
+}
+
+function delay(ms: number) {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, ms))
+}
+
+type SetupAssistantMessage = {
+  type: 'assistant'
+  model: { providerID: string, id: string }
+  error?: unknown
+  finish?: unknown
+  time?: { completed?: unknown }
+}
+
+function isSetupAssistantMessage(message: unknown): message is SetupAssistantMessage {
+  if (!message || typeof message !== 'object') return false
+  const candidate = message as { type?: unknown, model?: { providerID?: unknown, id?: unknown } }
+  return candidate.type === 'assistant'
+    && typeof candidate.model?.providerID === 'string'
+    && typeof candidate.model.id === 'string'
+}
+
+function setupAssistantFinished(assistant: SetupAssistantMessage) {
+  if (assistant.error !== undefined) return true
+  const finish = typeof assistant.finish === 'string' ? assistant.finish.trim().toLowerCase() : ''
+  if (finish === 'tool-calls' || finish === 'tool_calls') return false
+  return finish.length > 0 || typeof assistant.time?.completed === 'number'
+}
+
+export async function waitForSetupConnectionProvider(
+  loadProviders: (timeoutMs: number) => Promise<ProviderLike[]>,
+  runtimeProviderId: string,
+  options: { timeoutMs?: number, pollIntervalMs?: number } = {},
+) {
+  const timeoutMs = options.timeoutMs ?? CONNECTION_CHECK_CATALOG_READY_TIMEOUT_MS
+  const pollIntervalMs = options.pollIntervalMs ?? CONNECTION_CHECK_POLL_INTERVAL_MS
+  const deadline = Date.now() + timeoutMs
+  do {
+    const providers = await loadProviders(Math.max(1, deadline - Date.now()))
+    const provider = providers.find((entry) => providerMatches(entry, runtimeProviderId))
+    if (provider) return provider
+    const remainingMs = deadline - Date.now()
+    if (remainingMs > 0) await delay(Math.min(pollIntervalMs, remainingMs))
+  } while (Date.now() < deadline)
+  return null
+}
+
+export async function waitForCompletedSetupAssistant(
+  loadMessages: (timeoutMs: number) => Promise<unknown[]>,
+  options: { timeoutMs?: number, pollIntervalMs?: number } = {},
+) {
+  const timeoutMs = options.timeoutMs ?? CONNECTION_CHECK_TIMEOUT_MS
+  const pollIntervalMs = options.pollIntervalMs ?? CONNECTION_CHECK_POLL_INTERVAL_MS
+  const deadline = Date.now() + timeoutMs
+  do {
+    let messages: unknown[]
+    try {
+      messages = await loadMessages(Math.max(1, deadline - Date.now()))
+    } catch (error) {
+      if (isConnectionCheckTimeout(error)) {
+        throw new SafeSetupConnectionError('The model service timed out while waiting for the connection check. Try again.')
+      }
+      throw error
+    }
+    const assistant = messages.find((message): message is SetupAssistantMessage => (
+      isSetupAssistantMessage(message) && setupAssistantFinished(message)
+    ))
+    if (assistant) return assistant
+    const remainingMs = deadline - Date.now()
+    if (remainingMs > 0) await delay(Math.min(pollIntervalMs, remainingMs))
+  } while (Date.now() < deadline)
+  throw new SafeSetupConnectionError('The model service timed out while waiting for the connection check. Try again.')
 }
 
 export function resolveDevelopmentSetupConnectionValidator(options: {
@@ -179,25 +253,17 @@ async function runDisposableModelTurn(
       throw new SafeSetupConnectionError('The model service admitted the connection check to a different session. Test the selected connection again.')
     }
 
-    await client.v2.session.wait({ sessionID: sessionId }, connectionCheckOptions())
-    const response = await client.v2.session.messages({
-      sessionID: sessionId,
-      limit: 20,
-      order: 'desc',
-    }, connectionCheckOptions())
-    const messages = unwrapNativeData<unknown[]>(response)
-    const assistant = messages.find((message): message is {
-      type: 'assistant'
-      model: { providerID: string, id: string }
-      error?: unknown
-    } => {
-      if (!message || typeof message !== 'object') return false
-      const candidate = message as { type?: unknown, model?: { providerID?: unknown, id?: unknown } }
-      return candidate.type === 'assistant'
-        && typeof candidate.model?.providerID === 'string'
-        && typeof candidate.model.id === 'string'
+    // OpenCode 1.18.1 exposes session.wait in the SDK but returns "not available
+    // yet" at runtime. Observe completion through its native V2 message seam.
+    const assistant = await waitForCompletedSetupAssistant(async (timeoutMs) => {
+      const response = await client.v2.session.messages({
+        sessionID: sessionId!,
+        limit: 20,
+        order: 'desc',
+      }, connectionCheckOptions(timeoutMs))
+      return unwrapNativeData<unknown[]>(response)
     })
-    if (!assistant || assistant.error) throw connectionFailure(providerId)
+    if (assistant.error !== undefined) throw connectionFailure(providerId)
     if (!modelMatchesSelection(assistant.model, runtimeProviderId, selectedRuntimeModelId)) {
       throw new SafeSetupConnectionError('The model service answered with a different provider or model. Test the selected connection again.')
     }
@@ -233,16 +299,18 @@ export const validateRuntimeSetupConnection: SetupConnectionValidator = async (p
   const providerName = getProviderDescriptor(providerId)?.name || providerId
   const apiCredentialSynced = await syncApiCredential(providerId)
   const runtimeProviderId = toOpenCodeRuntimeProviderId(providerId)
-  let providers: ProviderLike[]
+  let provider: ProviderLike | null
   try {
-    providers = await listNativeProviders(client, connectionCheckOptions())
+    provider = await waitForSetupConnectionProvider(
+      (timeoutMs) => listNativeProviders(client, connectionCheckOptions(timeoutMs)),
+      runtimeProviderId,
+    )
   } catch (error) {
     if (isConnectionCheckTimeout(error)) {
       throw new SafeSetupConnectionError('The model service timed out while loading its provider catalog. Try the connection check again.')
     }
     throw new SafeSetupConnectionError('The model service could not load its provider catalog. Try the connection check again.')
   }
-  const provider = providers.find((entry) => providerMatches(entry, runtimeProviderId))
 
   if (!provider) {
     throw new SafeSetupConnectionError(`${providerName} is not available in the model service. Choose another provider or update setup settings.`)

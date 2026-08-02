@@ -70,7 +70,7 @@ async function binaryCheck(moduleDir: string, sourceRoot: string, mode: "package
 }
 
 async function versionCheck(): Promise<SelfCheck> {
-  const report = await cliVersionReport(false);
+  const report = await cliVersionReport();
   return {
     name: "version",
     status: report.node.supported && report.git.available ? "pass" : "warn",

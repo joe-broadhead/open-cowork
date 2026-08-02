@@ -1,6 +1,0 @@
-terraform {
-  backend "gcs" {
-    bucket = "openwiki-terraform-state"
-    prefix = "openwiki/gcp"
-  }
-}

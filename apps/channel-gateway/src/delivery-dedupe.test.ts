@@ -99,6 +99,7 @@ test('gateway runtime re-acks instead of re-sending a re-served delivery that wa
     handlers.onDelivery?.(deliveryRecord({ deliveryId: 'delivery-1' }))
     await waitFor(() => acks.length === 1)
     assert.equal(acks[0]?.input.status, 'sent')
+    assert.equal(acks[0]?.input.channelBindingId, 'fake-binding')
     assert.equal(provider.sent.length, 1)
     assert.equal(runtime.metrics.deliveryDuplicatesSuppressed, 0)
 
@@ -108,9 +109,80 @@ test('gateway runtime re-acks instead of re-sending a re-served delivery that wa
     await waitFor(() => acks.length === 2)
     assert.equal(acks[1]?.deliveryId, 'delivery-1')
     assert.equal(acks[1]?.input.status, 'sent')
+    assert.equal(acks[1]?.input.channelBindingId, 'fake-binding')
     assert.equal(provider.sent.length, 1)
     // The suppressed re-serve must be visible to operators as a counter increment.
     assert.equal(runtime.metrics.deliveryDuplicatesSuppressed, 1)
+  } finally {
+    await runtime.stop()
+  }
+})
+
+test('gateway runtime isolates identical public delivery ids across channel bindings', async () => {
+  const { cloud, acks, handlers } = fakeCloud()
+  const runtime = createGatewayRuntime(resolveGatewayConfig({
+    server: { adminToken: 'admin-token' },
+    providers: [{
+      id: 'fake-primary',
+      kind: 'fake',
+      channelBindingId: 'binding-primary',
+    }, {
+      id: 'fake-secondary',
+      kind: 'fake',
+      channelBindingId: 'binding-secondary',
+    }],
+  }), cloud)
+  const primary = runtime.providers.get('fake-primary')?.provider as unknown as {
+    sent: Array<{ options?: { deliveryId?: string } }>
+  } | undefined
+  const secondary = runtime.providers.get('fake-secondary')?.provider as unknown as {
+    sent: Array<{ options?: { deliveryId?: string } }>
+  } | undefined
+  assert.ok(primary)
+  assert.ok(secondary)
+
+  await runtime.start()
+  try {
+    // Both copies enter the dispatcher before either settles. Pending-work
+    // dedupe must use binding + public id, so neither binding suppresses the
+    // other while it is queued or in flight.
+    handlers.onDelivery?.(deliveryRecord({
+      deliveryId: 'delivery-shared-pending',
+      channelBindingId: 'binding-primary',
+    }))
+    handlers.onDelivery?.(deliveryRecord({
+      deliveryId: 'delivery-shared-pending',
+      channelBindingId: 'binding-secondary',
+    }))
+    await waitFor(() => acks.filter((ack) => ack.deliveryId === 'delivery-shared-pending').length === 2)
+    assert.equal(primary.sent.length, 1)
+    assert.equal(secondary.sent.length, 1)
+
+    // Deliver the next shared id sequentially. The first successful send is
+    // already in the sent cache before the second arrives, so this also proves
+    // the re-serve cache cannot make one binding impersonate another.
+    handlers.onDelivery?.(deliveryRecord({
+      deliveryId: 'delivery-shared-sent',
+      channelBindingId: 'binding-primary',
+    }))
+    await waitFor(() => acks.filter((ack) => ack.deliveryId === 'delivery-shared-sent').length === 1)
+    handlers.onDelivery?.(deliveryRecord({
+      deliveryId: 'delivery-shared-sent',
+      channelBindingId: 'binding-secondary',
+    }))
+    await waitFor(() => acks.filter((ack) => ack.deliveryId === 'delivery-shared-sent').length === 2)
+
+    assert.equal(primary.sent.length, 2)
+    assert.equal(secondary.sent.length, 2)
+    assert.deepEqual(
+      acks.map((ack) => `${String(ack.input.channelBindingId)}:${ack.deliveryId}`).sort(),
+      [
+        'binding-primary:delivery-shared-pending',
+        'binding-primary:delivery-shared-sent',
+        'binding-secondary:delivery-shared-pending',
+        'binding-secondary:delivery-shared-sent',
+      ],
+    )
   } finally {
     await runtime.stop()
   }
@@ -136,12 +208,14 @@ test('gateway runtime still re-sends a re-served delivery whose earlier attempt 
     handlers.onDelivery?.(deliveryRecord({ deliveryId: 'delivery-1' }))
     await waitFor(() => acks.length === 1)
     assert.equal(acks[0]?.input.status, 'failed')
+    assert.equal(acks[0]?.input.channelBindingId, 'fake-binding')
 
     // A failed attempt never reached the channel, so the cloud's retry of the SAME id must be
     // sent for real — the dedupe cache only ever suppresses ids that actually went out.
     handlers.onDelivery?.(deliveryRecord({ deliveryId: 'delivery-1', attemptCount: 2 }))
     await waitFor(() => acks.length === 2)
     assert.equal(acks[1]?.input.status, 'sent')
+    assert.equal(acks[1]?.input.channelBindingId, 'fake-binding')
   } finally {
     await runtime.stop()
   }

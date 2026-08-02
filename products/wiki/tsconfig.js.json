@@ -11,8 +11,6 @@
     "packages/cli/scripts/build.mjs",
     "packages/web/scripts/build.mjs",
     "packages/web/scripts/check-bundle.mjs",
-    "packages/web/src/client/graph/*.js",
-    "scripts/openwiki-public-release-check.mjs",
-    "scripts/openwiki-release-status.mjs"
+    "packages/web/src/client/graph/*.js"
   ]
 }

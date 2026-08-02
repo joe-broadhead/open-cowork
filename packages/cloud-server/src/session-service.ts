@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import type { CoordinationWatchEvent } from '@open-cowork/shared'
+import type { CloudAbuseConfig, CloudBillingConfig, CoordinationWatchEvent } from '@open-cowork/shared'
 import {
   type CloudSessionMessage,
   type CloudSessionProjectionView,
@@ -111,8 +111,6 @@ import {
 import {
   stableCloudId,
 } from './session-input-validation.ts'
-import type { CloudAbuseConfig, CloudBillingConfig } from '@open-cowork/shared'
-
 import {
   DISABLED_ABUSE_POLICY,
   HOUR_MS,
@@ -323,6 +321,7 @@ export class CloudSessionService {
       emailSender,
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       assertOrgAdmin: (principal) => this.assertOrgAdmin(principal),
+      assertPermission: (principal, permission) => this.principalService.assertPermission(principal, permission),
       principalOrgId: (principal) => this.principalOrgId(principal),
     })
     this.roleService = new CloudRoleService({
@@ -386,7 +385,7 @@ export class CloudSessionService {
       ensurePrincipal: (principal) => this.ensurePrincipal(principal),
       principalOrgId: (principal) => this.principalOrgId(principal),
       getBillingSubscription: (principal) => this.billingOperations.getBillingSubscription(principal),
-      getUsageSummary: (principal, limit) => this.getUsageSummary(principal, limit),
+      getUsageSummary: (orgId, limit) => this.usageGovernance.getUsageSummary(orgId, limit),
     })
     this.apiTokenOperations = new CloudApiTokenOperationsService({
       store,
@@ -652,7 +651,7 @@ export class CloudSessionService {
 
   private requiresGatewayChannelSessionScope(principal: CloudPrincipal) {
     if (principal.authSource !== 'api_token') return false
-    if (!principalHasPrivilegedTokenScope(principal, 'gateway')) return false
+    if (!principalHasPrivilegedTokenScope(principal, 'gateway', ['org:manage'])) return false
     return !principalHasTokenScope(principal, 'desktop')
   }
 

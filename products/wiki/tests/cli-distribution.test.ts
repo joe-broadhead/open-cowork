@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
@@ -234,7 +234,7 @@ test("agent configure creates token files and never accepts raw token CLI secret
   }
 });
 
-test("user-facing command aliases cover pages, spaces, deploy profiles, and upgrade guidance", async () => {
+test("user-facing command aliases cover pages and spaces", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "openwiki-cli-surface-"));
   try {
     const wikiRoot = path.join(temp, "wiki");
@@ -291,20 +291,24 @@ test("user-facing command aliases cover pages, spaces, deploy profiles, and upgr
     assert.ok(spaces.spaces.some((space) => space.id.startsWith("section:")));
     assert.ok(spaces.spaces.every((space) => Array.isArray(space.path_coverage) && Array.isArray(space.viewers)));
 
-    const profileList = JSON.parse((await runSourceCli(["deploy", "profile", "list", "--json"])).stdout) as {
-      profiles: Array<{ name: string; trust_boundary: string }>;
-    };
-    assert.ok(profileList.profiles.some((profile) => profile.name === "local-personal"));
-    assert.ok(profileList.profiles.some((profile) => profile.name === "cloud-run-readmostly"));
-
-    const upgrade = JSON.parse((await runSourceCli(["upgrade", "--json"])).stdout) as {
-      latest_command: string;
-      upgrade_command: string;
-    };
-    assert.equal(upgrade.latest_command, "npm view @openwiki/cli version");
-    assert.equal(upgrade.upgrade_command, "npm install -g @openwiki/cli@latest");
   } finally {
     await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("version and doctor reject retired or command-invalid arguments", async () => {
+  for (const invocation of [
+    ["version", "--check"],
+    ["version", "check"],
+    ["version", "--limit", "5"],
+    ["doctor", "unexpected"],
+    ["doctor", "--image", "openwiki:latest"],
+    ["doctor", "--deploy-profile", "kubernetes"],
+    ["doctor", "--out-dir", "public"],
+  ]) {
+    const result = await runSourceCliResult(invocation);
+    assert.equal(result.code, 1, `${invocation.join(" ")} should fail`);
+    assert.match(result.stderr, /does not accept/, invocation.join(" "));
   }
 });
 
@@ -456,7 +460,7 @@ test("agent configure generates hosted Streamable HTTP MCP configs", async () =>
   }
 });
 
-test("doctor and deploy preflight expose JSON diagnostics", async () => {
+test("doctor exposes local and source-hosted JSON diagnostics", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "openwiki-diagnostics-"));
   try {
     const wikiRoot = path.join(temp, "wiki");
@@ -541,189 +545,8 @@ test("doctor and deploy preflight expose JSON diagnostics", async () => {
     assert.equal(hostedDoctor.profile, "hosted");
     assert.ok(hostedDoctor.checks.some((check) => check.name === "public-origin"));
     assert.ok(hostedDoctor.checks.some((check) => check.name === "backup-provider:local"));
-
-    const kubernetesDoctorResult = await runSourceCliAllowFailure(
-      [
-        "--root",
-        wikiRoot,
-        "doctor",
-        "--profile",
-        "kubernetes",
-        "--public-origin",
-        "https://wiki.example.com",
-        "--image",
-        "ghcr.io/joe-broadhead/open-wiki@sha256:abc123",
-        "--json",
-      ],
-      {
-        OPENWIKI_RATE_LIMIT_ENABLED: "1",
-        OPENWIKI_WRITE_COORDINATOR_BACKEND: "postgres",
-        OPENWIKI_TRUST_AUTH_HEADERS_SECRET: "trusted-header-secret",
-      },
-    );
-    const kubernetesDoctor = JSON.parse(kubernetesDoctorResult.stdout) as { profile: string; status: string; checks: Array<{ name: string; status: string }> };
-    assert.equal(kubernetesDoctorResult.code, kubernetesDoctor.status === "fail" ? 1 : 0);
-    assert.equal(kubernetesDoctor.profile, "kubernetes");
-    assert.ok(kubernetesDoctor.checks.some((check) => check.name === "write-coordinator" && check.status === "pass"));
-    assert.ok(kubernetesDoctor.checks.some((check) => check.name === "postgres"));
-
-    const preflight = JSON.parse((await runSourceCli(["--root", wikiRoot, "deploy", "preflight", "--deploy-profile", "local-personal", "--json"])).stdout) as {
-      command: string;
-      deployment_profile: { name: string; trust_boundary: string };
-      checks: Array<{ name: string }>;
-    };
-    assert.equal(preflight.command, "deploy-preflight");
-    assert.equal(preflight.deployment_profile.name, "local-personal");
-    assert.match(preflight.deployment_profile.trust_boundary, /local machine/);
-    assert.ok(preflight.checks.some((check) => check.name === "public-origin"));
-    assert.ok(preflight.checks.some((check) => check.name === "write-coordinator"));
-    assert.ok(preflight.checks.some((check) => check.name === "backup-state"));
-    assert.ok(preflight.checks.some((check) => check.name === "postgres-backup"));
-    assert.ok(preflight.checks.some((check) => check.name === "object-storage-backup"));
-
-    const hostedPreflight = JSON.parse(
-      (
-        await runSourceCliAllowFailure(
-          [
-            "--root", wikiRoot, "deploy", "preflight", "--deploy-profile", "hosted-enterprise",
-            "--public-origin", "https://wiki.example.com",
-            "--image", "ghcr.io/joe-broadhead/open-wiki@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "--json",
-          ],
-          {
-            OPENWIKI_TRUST_AUTH_HEADERS: "1",
-            OPENWIKI_TRUST_AUTH_HEADERS_SECRET: "hosted-trusted-header-secret",
-            OPENWIKI_TRUST_PROXY_ORIGIN: "1",
-            OPENWIKI_TRUST_PROXY_ORIGIN_SECRET: "hosted-proxy-origin-secret",
-            OPENWIKI_RATE_LIMIT_ENABLED: "1",
-            OPENWIKI_DATABASE_URL: "postgres://openwiki:openwiki@127.0.0.1:5432/openwiki",
-            OPENWIKI_OPERATIONAL_STATE_BACKEND: "postgres",
-            OPENWIKI_WRITE_COORDINATOR_BACKEND: "postgres",
-            OPENWIKI_OBJECT_STORAGE_BACKUP_CONFIGURED: "1",
-            OPENWIKI_POSTGRES_BACKUP_CONFIGURED: "1",
-          },
-        )
-      ).stdout,
-    ) as { status: string; deployment_profile: { name: string }; checks: Array<{ name: string; status: string }> };
-    assert.equal(hostedPreflight.status, "fail");
-    assert.equal(hostedPreflight.deployment_profile.name, "hosted-enterprise");
-    for (const [name, status] of [
-      ["public-origin", "pass"], ["image-digest", "pass"], ["trusted-headers", "pass"], ["rate-limits", "pass"],
-      ["operational-state", "pass"], ["object-storage-backup", "pass"], ["hosted-mcp-tokens", "pass"], ["backup-state", "pass"],
-      ["git-remote", "fail"],
-    ] as const) {
-      assert.ok(hostedPreflight.checks.some((check) => check.name === name && check.status === status));
-    }
-
-    const hostedWeakPreflight = JSON.parse(
-      (
-        await runSourceCli(
-          [
-            "--root",
-            wikiRoot,
-            "deploy",
-            "preflight",
-            "--deploy-profile",
-            "docker-private",
-            "--public-origin",
-            "https://wiki.example.com",
-            "--json",
-          ],
-          {
-            OPENWIKI_TRUST_AUTH_HEADERS: "1",
-            OPENWIKI_TRUST_AUTH_HEADERS_SECRET: "hosted-trusted-header-secret",
-            OPENWIKI_TRUST_PROXY_ORIGIN: "1",
-            OPENWIKI_TRUST_PROXY_ORIGIN_SECRET: "hosted-proxy-origin-secret",
-            OPENWIKI_RATE_LIMIT_ENABLED: "0",
-            OPENWIKI_OPERATIONAL_STATE_BACKEND: "memory",
-            OPENWIKI_WRITE_COORDINATOR_BACKEND: "memory",
-            OPENWIKI_POSTGRES_BACKUP_CONFIGURED: "1",
-          },
-        )
-      ).stdout,
-    ) as { status: string; checks: Array<{ name: string; status: string }> };
-    assert.equal(hostedWeakPreflight.status, "warn");
-    assert.ok(hostedWeakPreflight.checks.some((check) => check.name === "rate-limits" && check.status === "warn"));
-    assert.ok(hostedWeakPreflight.checks.some((check) => check.name === "operational-state" && check.status === "warn"));
-
-    const staticOut = path.join(wikiRoot, "public");
-    await mkdir(staticOut);
-    await mkdir(path.join(staticOut, "agents"));
-    await Promise.all([
-      writeFile(path.join(staticOut, "index.html"), "<!doctype html>\n"),
-      writeFile(path.join(staticOut, "search-index.json"), "{}\n"),
-      writeFile(path.join(staticOut, "graph.json"), "{}\n"),
-      writeFile(path.join(staticOut, "graph-report.json"), "{}\n"),
-      writeFile(path.join(staticOut, "agents", "index.md"), "# Agent Guide\n"),
-      writeFile(path.join(staticOut, "static-export-report.json"), "{}\n"),
-    ]);
-    const staticPreflight = JSON.parse(
-      (
-        await runSourceCli([
-          "--root",
-          wikiRoot,
-          "deploy",
-          "preflight",
-          "--deploy-profile",
-          "public-static",
-          "--public-origin",
-          "https://docs.example.com",
-          "--out-dir",
-          "public",
-          "--json",
-        ])
-      ).stdout,
-    ) as { deployment_profile: { name: string }; checks: Array<{ name: string; status: string }> };
-    assert.equal(staticPreflight.deployment_profile.name, "public-static");
-    assert.ok(staticPreflight.checks.some((check) => check.name === "static-artifacts" && check.status === "pass"));
-
-    const cloudRunPreflight = JSON.parse(
-      (
-        await runSourceCli([
-          "--root",
-          wikiRoot,
-          "deploy",
-          "preflight",
-          "--deploy-profile",
-          "cloud-run",
-          "--public-origin",
-          "https://wiki.example.com",
-          "--image",
-          "ghcr.io/joe-broadhead/open-wiki@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "--json",
-        ])
-      ).stdout,
-    ) as { status: string; deployment_profile: { name: string }; checks: Array<{ name: string; status: string; message: string }> };
-    assert.equal(cloudRunPreflight.status, "warn");
-    assert.equal(cloudRunPreflight.deployment_profile.name, "cloud-run-readmostly");
-    assert.ok(cloudRunPreflight.checks.some((check) => check.name === "profile-preview" && check.status === "warn"));
-
-    let unsafeTrustedHeadersStdout = "";
-    await assert.rejects(
-      async () => {
-        try {
-          await runSourceCli(
-            ["--root", wikiRoot, "deploy", "preflight", "--deploy-profile", "kubernetes", "--public-origin", "https://wiki.example.com", "--json"],
-            {
-              OPENWIKI_TRUST_AUTH_HEADERS: "1",
-              OPENWIKI_TRUST_AUTH_HEADERS_SECRET: "short",
-              OPENWIKI_WRITE_COORDINATOR_BACKEND: "postgres",
-              OPENWIKI_IMAGE: "ghcr.io/openwiki/openwiki@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            },
-          );
-        } catch (error) {
-          unsafeTrustedHeadersStdout = typeof (error as { stdout?: unknown }).stdout === "string" ? (error as { stdout: string }).stdout : "";
-          throw error;
-        }
-      },
-      /Command failed/,
-    );
-    const unsafeTrustedHeaders = JSON.parse(unsafeTrustedHeadersStdout) as { status: string; checks: Array<{ name: string; status: string; message: string }> };
-    assert.equal(unsafeTrustedHeaders.status, "fail");
-    assert.ok(
-      unsafeTrustedHeaders.checks.some(
-        (check) => check.name === "trusted-headers" && check.status === "fail" && /at least 16 characters/.test(check.message),
-      ),
-    );
+    assert.ok(hostedDoctor.checks.some((check) => check.name === "operational-state" && check.status === "warn"));
+    assert.ok(hostedDoctor.checks.some((check) => check.name === "hosted-mcp-tokens" && check.status === "pass"));
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -783,15 +606,17 @@ async function runSourceCli(args: string[], env: Record<string, string> = {}): P
   });
 }
 
-async function runSourceCliAllowFailure(args: string[], env: Record<string, string> = {}): Promise<{ stdout: string; stderr: string; code: number }> {
+async function runSourceCliResult(
+  args: string[],
+  env: Record<string, string> = {},
+): Promise<{ stdout: string; stderr: string; code: number }> {
   try {
-    const result = await runSourceCli(args, env);
-    return { ...result, code: 0 };
+    return { ...await runSourceCli(args, env), code: 0 };
   } catch (error: unknown) {
     if (error && typeof error === "object") {
-      const record = error as Record<string, unknown>;
-      if (typeof record.stdout === "string" && typeof record.stderr === "string" && typeof record.code === "number") {
-        return { stdout: record.stdout, stderr: record.stderr, code: record.code };
+      const result = error as { stdout?: unknown; stderr?: unknown; code?: unknown };
+      if (typeof result.stdout === "string" && typeof result.stderr === "string" && typeof result.code === "number") {
+        return { stdout: result.stdout, stderr: result.stderr, code: result.code };
       }
     }
     throw error;

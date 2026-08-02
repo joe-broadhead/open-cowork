@@ -154,6 +154,12 @@ function deliveryLaneKey(delivery: ChannelDeliveryRecord): string {
   return `${delivery.channelBindingId}\u0000${target}`
 }
 
+function deliveryIdentityKey(
+  delivery: Pick<ChannelDeliveryRecord, 'channelBindingId' | 'deliveryId'>,
+): string {
+  return JSON.stringify([delivery.channelBindingId, delivery.deliveryId])
+}
+
 // Bounded delivery worker pool (audit P1-G2). The raw path fired handleDelivery immediately for
 // every delivery, so a backlog drain (e.g. after downtime) spawned unbounded concurrent outbound
 // sends → provider 429s → transient-retry storm → out-of-order channel messages. This caps global
@@ -184,11 +190,11 @@ export function createDeliveryDispatcher(input: {
   // ordering and the global concurrency cap are preserved. Invariant: a lane key is in `readyLanes`
   // iff `lane.ready` is true, and never while the lane is running.
   const readyLanes: string[] = []
-  // Delivery ids currently queued or in-flight (audit #857 idempotency). The cloud claim is not
+  // Binding-qualified delivery keys currently queued or in-flight (audit #857 idempotency). The cloud claim is not
   // renewed in-flight, so a delivery that waits here past its claim TTL can be re-served while the
   // first copy is still pending; without this guard both copies would send and the user would see
   // the message twice. Bounded by maxQueueDepth + maxConcurrency.
-  const pendingDeliveryIds = new Set<string>()
+  const pendingDeliveryKeys = new Set<string>()
   const inFlight = new Set<Promise<void>>()
   let active = 0
   let queued = 0
@@ -216,7 +222,7 @@ export function createDeliveryDispatcher(input: {
         .finally(() => {
           active -= 1
           lane.running = false
-          pendingDeliveryIds.delete(delivery.deliveryId)
+          pendingDeliveryKeys.delete(deliveryIdentityKey(delivery))
           if (lane.queue.length === 0) lanes.delete(key)
           else markReady(key, lane) // back of the line: freed slots rotate across waiting lanes
           inFlight.delete(task)
@@ -229,8 +235,9 @@ export function createDeliveryDispatcher(input: {
   return {
     enqueue(delivery) {
       // Drop a re-served copy of a delivery that is still queued or in-flight here (audit #857).
-      // Left unacked on purpose: the surviving copy acks the shared delivery id when it settles.
-      if (pendingDeliveryIds.has(delivery.deliveryId)) {
+      // Left unacked on purpose: the surviving copy acks this binding's delivery when it settles.
+      const deliveryKey = deliveryIdentityKey(delivery)
+      if (pendingDeliveryKeys.has(deliveryKey)) {
         input.onDuplicate?.(delivery)
         return
       }
@@ -245,7 +252,7 @@ export function createDeliveryDispatcher(input: {
       if (!lane) { lane = { queue: [], running: false, ready: false }; lanes.set(key, lane) }
       lane.queue.push(delivery)
       queued += 1
-      pendingDeliveryIds.add(delivery.deliveryId)
+      pendingDeliveryKeys.add(deliveryKey)
       if (!lane.running) markReady(key, lane)
       input.onQueueDepth?.(queued)
       pump()
@@ -287,17 +294,19 @@ export function createGatewayRuntime(
   const claimedBy = `gateway:${config.instanceId}`
   const channelBindingIds = [...new Set(config.providers.filter((provider) => provider.enabled).map((provider) => provider.channelBindingId))]
   const deliverySubscriptions: Array<{ close(): void }> = []
-  // Insertion-ordered set of recently-sent delivery ids (see SENT_DELIVERY_CACHE_SIZE). Like the
-  // dropped-message notice, this keeps the channel idempotent on the delivery id when the cloud
-  // re-serves work we already completed.
-  const sentDeliveryIds = new Set<string>()
-  const rememberSentDelivery = (deliveryId: string) => {
-    sentDeliveryIds.delete(deliveryId) // re-insert so eviction order tracks recency
-    sentDeliveryIds.add(deliveryId)
-    while (sentDeliveryIds.size > SENT_DELIVERY_CACHE_SIZE) {
-      const oldest = sentDeliveryIds.values().next().value
+  // Insertion-ordered set of recently-sent binding + delivery-id tuples (see
+  // SENT_DELIVERY_CACHE_SIZE). This keeps each channel binding idempotent when
+  // the cloud re-serves work we already completed without collapsing equal
+  // public ids owned by different bindings.
+  const sentDeliveryKeys = new Set<string>()
+  const rememberSentDelivery = (delivery: ChannelDeliveryRecord) => {
+    const deliveryKey = deliveryIdentityKey(delivery)
+    sentDeliveryKeys.delete(deliveryKey) // re-insert so eviction order tracks recency
+    sentDeliveryKeys.add(deliveryKey)
+    while (sentDeliveryKeys.size > SENT_DELIVERY_CACHE_SIZE) {
+      const oldest = sentDeliveryKeys.values().next().value
       if (oldest === undefined) break
-      sentDeliveryIds.delete(oldest)
+      sentDeliveryKeys.delete(oldest)
     }
   }
   const deliveryDispatcher = createDeliveryDispatcher({
@@ -354,9 +363,10 @@ export function createGatewayRuntime(
             // learned the send succeeded, so it re-served the id. Re-ack instead of re-sending so
             // the user does not see the message twice; at-least-once is untouched because only
             // ids that actually reached the provider are ever recorded here.
-            if (sentDeliveryIds.has(delivery.deliveryId)) {
+            if (sentDeliveryKeys.has(deliveryIdentityKey(delivery))) {
               metrics.deliveryDuplicatesSuppressed += 1
               void cloud.ackDelivery(delivery.deliveryId, {
+                channelBindingId: delivery.channelBindingId,
                 status: 'sent',
                 claimedBy: delivery.claimedBy,
                 lastError: null,
@@ -525,7 +535,7 @@ async function handleMessage(
       bindingId: bound.binding.bindingId,
       text,
       agent: providerConfig.defaultAgent,
-      commandId: claimedEvent.eventId,
+      idempotencyKey: eventClaim.event.eventId,
       identityId: identity.identityId,
       provider,
       externalWorkspaceId,
@@ -559,9 +569,9 @@ async function handleMessage(
       )
       if (retryPersisted) inboundOutcome = 'retry'
       // Don't SILENTLY drop a permanently-failed inbound message (audit P2-15). A retryable failure
-      // will be re-attempted (and the cloud dedups the re-prompt on commandId == eventId), so stay
-      // quiet for those; but a non-retryable failure means the message is dropped for good, so tell
-      // the user in-channel rather than leaving the bot looking like it ignored them.
+      // will be re-attempted while the provider-event claim remains the idempotency boundary, so
+      // stay quiet for those; but a non-retryable failure means the message is dropped for good, so
+      // tell the user in-channel rather than leaving the bot looking like it ignored them.
       if (!retryable) {
         await notifyChannelOfDroppedMessage(
           providers,
@@ -635,7 +645,7 @@ async function handleDelivery(
   providers: GatewayProviderRegistry,
   cloud: CloudGateway,
   metrics: GatewayMetrics,
-  onSent?: (deliveryId: string) => void,
+  onSent?: (delivery: ChannelDeliveryRecord) => void,
 ) {
   const deliveryStartedAt = Date.now()
   metrics.deliveriesReceived += 1
@@ -657,6 +667,7 @@ async function handleDelivery(
       latencyMs: Date.now() - deliveryStartedAt,
     })
     await cloud.ackDelivery(delivery.deliveryId, {
+      channelBindingId: delivery.channelBindingId,
       status: 'dead',
       claimedBy: delivery.claimedBy,
       lastError: `No provider registered for ${delivery.provider}.`,
@@ -689,8 +700,9 @@ async function handleDelivery(
     terminalOutcomeRecorded = true
     // Record the send before acking: if the 'sent' ack fails the cloud will re-serve this id, and
     // the dedupe cache must already know the message reached the provider (audit #857).
-    onSent?.(delivery.deliveryId)
+    onSent?.(delivery)
     await cloud.ackDelivery(delivery.deliveryId, {
+      channelBindingId: delivery.channelBindingId,
       status: 'sent',
       claimedBy: delivery.claimedBy,
       lastError: null,
@@ -712,6 +724,7 @@ async function handleDelivery(
     let observedOutcome: 'retry' | 'error' = 'error'
     try {
       await cloud.ackDelivery(delivery.deliveryId, {
+        channelBindingId: delivery.channelBindingId,
         status: shouldRetry ? 'failed' : 'dead',
         claimedBy: delivery.claimedBy,
         lastError: failure.message,

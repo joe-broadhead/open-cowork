@@ -9,16 +9,7 @@ openwiki --root ./wiki index
 openwiki --root ./wiki export static --out-dir public --base-url https://example.com
 ```
 
-Publish `public/` to GitHub Pages or any static host.
-
-## Preflight
-
-```sh
-openwiki --root ./wiki deploy preflight \
-  --deploy-profile public-static \
-  --public-origin https://example.com \
-  --out-dir public
-```
+Publish `public/` to any static host.
 
 ## Security Notes
 
@@ -46,9 +37,8 @@ the site from Git after restore.
 ## Rollback
 
 Roll back the source Git repository to the previous published commit and rerun
-static export. For GitHub Pages, redeploy the last known-good artifact or rerun
-the static workflow at the previous commit. Do not edit generated static files
-as the source of truth.
+static export. Redeploy the last known-good artifact rather than editing
+generated static files as the source of truth.
 
 ## MCP
 

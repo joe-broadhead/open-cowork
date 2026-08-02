@@ -3,16 +3,16 @@
 > **Monorepo partition:** this tree lives at `products/wiki` in
 > [open-cowork](https://github.com/joe-broadhead/open-cowork). Workspace package
 > `cowork-wiki-workspace`; packages under `@openwiki/*`; CLI bins `cowork-wiki`
-> (preferred) and `openwiki` (compat). Nested `pnpm-workspace.yaml` is disabled
-> (`pnpm-workspace.yaml.nested-disabled`) so the monorepo root owns workspaces.
-> Import source commit is recorded in `.import-source-commit`. Path-filtered CI:
-> `.github/workflows/ci-wiki.yml`. Standalone smoke:
+> (preferred) and `openwiki` (compat). The monorepo root owns workspaces and the
+> single Node/pnpm toolchain. Import source commit is recorded in
+> `.import-source-commit`. Path-filtered CI runs from the root `CI Wiki`
+> workflow. Standalone smoke:
 > `node scripts/standalone-smoke.mjs` (from monorepo root:
-> `pnpm smoke:wiki-standalone`). Product release workflow:
-> `.github/workflows/release-wiki.yml` (`wiki@v*` tags).
+> `pnpm smoke:wiki-standalone`). The root `Release Wiki` workflow handles
+> `wiki@v*` tags.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node 22.22.3+](https://img.shields.io/badge/node-22.22.3%2B-brightgreen.svg?logo=nodedotjs&logoColor=white)](.nvmrc)
+[![Node 22.22.3+](https://img.shields.io/badge/node-22.22.3%2B-brightgreen.svg?logo=nodedotjs&logoColor=white)](../../.nvmrc)
 [![pnpm](https://img.shields.io/badge/pnpm-10.32.1-F69220.svg?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/open-cowork/open-wiki/)
 
@@ -51,8 +51,9 @@ and static export all serve the same records.
   tiers, with per-operation policy authorization on top of tier selection.
 - **Exposes the same operations everywhere**: web UI, CLI, HTTP API
   (OpenAPI 3.1), MCP, and machine-readable static export.
-- **Runs local-first and scales hosted** — SQLite and one process locally;
-  Postgres, workers, and queues for teams.
+- **Runs local-first with an operator-owned hosted evaluation path** — SQLite
+  and one process locally; Postgres, workers, and queues are available for
+  source-hosted evaluation.
 
 ## Quick Start
 
@@ -86,25 +87,23 @@ one versioned wiki:
 
 ## Requirements
 
-- Node.js `>=22.22.3` supported minimum; Node 24 is the primary CI and container runtime
+- Node.js `>=22.22.3`; contributor and CI parity use the exact root `.nvmrc` version
 - Git for versioned wiki storage and sync
-- pnpm `11.9.0` for contributor source checkouts
-- Docker for container deployment tests
+- pnpm `10.32.1` for contributor source checkouts
 
 ## Interfaces
 
 - **Web UI**: search, read, propose edits, review proposals, inspect history, and manage Spaces.
 - **MCP server**: read, proposal, and trusted write tool modes for agents.
-- **CLI**: setup, pages, proposals, Spaces, agents, sync, backup, deploy, serve, and jobs.
+- **CLI**: setup, pages, proposals, Spaces, agents, sync, backup, serve, static export, and jobs.
 - **HTTP API**: the same operations for integrations and hosted deployments.
 - **Static export**: public read-only HTML plus machine-readable artifacts.
 
-## Deployment Modes
+## Runtime And Publishing Paths
 
-- **Static export / GitHub Pages**: safest public read-only tier.
-- **Source checkout**: local development and evaluation.
-- **Docker / Compose**: trusted local or team deployments.
-- **Helm / Kubernetes / Terraform**: hosted starting points that need production hardening.
+- **Local source checkout or CLI tarball**: personal and trusted single-node use.
+- **Static export**: public read-only publishing.
+- **Source-operated hosted runtime**: authenticated evaluation on operator-managed infrastructure; no packaged hosting distribution is supplied.
 
 Hosted write-capable deployments require an explicit auth boundary. Users sign
 in through an organization SSO or reverse proxy; OpenWiki receives trusted
@@ -145,7 +144,6 @@ mkdocs serve
 packages/       TypeScript workspace packages
 schemas/        JSON Schemas for OpenWiki protocol records
 docs/           MkDocs documentation, specs, ADRs, and guides
-deploy/         Docker, Compose, Helm, Kubernetes, Umbrel, and Terraform assets
 integrations/   OpenCode and Open Cowork integration packs
 templates/      Reference docs for code-backed starter wiki templates
 examples/       Example workspaces
@@ -178,13 +176,11 @@ benchmarks are available with `pnpm perf:scale:10k` and
 
 ## Release Status
 
-OpenWiki `v0.0.0` is a public preview. Expect rapid iteration on the road to
-`v0.1.0`: the protocol spec, record schemas, and adapter contracts are
-stable-by-intent, while packaging, hosted deployment profiles, and enterprise
-policy packs continue to evolve. Distribution channels are the source
-checkout above, the tagged `ghcr.io/joe-broadhead/open-wiki` container image,
-and the generated `@openwiki/cli` npm package with the stable `openwiki`
-binary. The release checklist lives in
+OpenWiki `v0.0.0` is pre-release. The supported monorepo surfaces are source
+checkout, static-export output, and the generated CLI tarball exercised by
+`.github/workflows/ci-wiki.yml`; `wiki@v*` tags attach that tarball to a GitHub
+release through `.github/workflows/release-wiki.yml`. No npm-registry package
+or container image is currently published from this repository. See
 [`docs/development/release.md`](docs/development/release.md).
 
 ## Contributing

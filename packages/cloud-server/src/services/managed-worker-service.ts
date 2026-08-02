@@ -9,7 +9,10 @@ import type {
   ManagedWorkerStatus,
 } from '../control-plane-store.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
-import { principalHasOrgAdminRole, principalHasPrivilegedTokenScope } from '../principal-access.ts'
+import {
+  principalHasHumanPermissionOrAdminRole,
+  principalHasPrivilegedTokenScope,
+} from '../principal-access.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 
 export type PublicManagedWorkerCredentialRecord = Omit<ManagedWorkerCredentialRecord, 'tokenHash'>
@@ -304,10 +307,10 @@ export class CloudManagedWorkerService {
 function principalCanManageWorkers(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') {
-    return principalHasPrivilegedTokenScope(principal, 'admin')
-      || principalHasPrivilegedTokenScope(principal, 'operator')
+    return principalHasPrivilegedTokenScope(principal, 'admin', ['org:manage'])
+      || principalHasPrivilegedTokenScope(principal, 'operator', ['org:manage'])
   }
-  return principalHasOrgAdminRole(principal)
+  return principalHasHumanPermissionOrAdminRole(principal, ['org:manage'])
 }
 
 function principalCanHeartbeatWorker(principal: CloudPrincipal, workerId: string) {

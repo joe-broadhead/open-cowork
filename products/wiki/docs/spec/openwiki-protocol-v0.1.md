@@ -51,7 +51,7 @@ OpenWiki v0.1 is TypeScript-first.
   frontmatter, not MDX, for v0.1.
 - YAML is allowed for human-authored manifests. JSON and JSONL are the protocol
   and export formats.
-- Shell is allowed only for packaging and deployment wrappers.
+- Shell is allowed only for packaging and operator wrappers.
 - Python is allowed for development scripts and evals, but not as a product
   runtime dependency in v0.1.
 - Rust is not part of the v0.1 critical path. Rust MAY be introduced later as
@@ -60,9 +60,9 @@ OpenWiki v0.1 is TypeScript-first.
 
 ### 3.2 Runtime and Toolchain
 
-- Node.js 24 is the primary CI and container runtime target for apps, servers,
-  and workers.
-- Packages SHOULD preserve `>=22.22.3` compatibility. OpenWiki uses
+- The Node.js version pinned by the monorepo root `.nvmrc` is the primary CI
+  and runtime target for apps, servers, and workers.
+- Packages require `>=22.22.3` compatibility. OpenWiki uses
   `node:sqlite` with SQLite FTS5; Node 22.13.0 loads `node:sqlite` but its
   hosted Linux build lacks FTS5, so 22.22.3 is the tested minimum Node 22
   release for the full local search/indexing path. Node still reports SQLite as
@@ -90,8 +90,8 @@ OpenWiki has three product layers:
 2. OpenWiki Runtime
    - Search, indexing, graph extraction, MCP, CLI, HTTP API, auth, jobs, and Git workflows.
 3. OpenWiki Surfaces
-   - Human website, Open Cowork pack, OpenCode pack, static export, cloud app,
-     Umbrel package, and enterprise deployment.
+   - Human website, Open Cowork pack, OpenCode pack, CLI tarball, static export,
+     and source-operated hosted runtime.
 
 Only the repository format is canonical. Runtime state and surfaces are derived.
 

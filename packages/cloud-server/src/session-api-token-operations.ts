@@ -44,7 +44,7 @@ export class CloudApiTokenOperationsService {
 
   async listApiTokens(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<PublicApiTokenRecord[]> {
     await this.ensurePrincipal(principal)
-    this.assertApiTokenAdmin(principal)
+    this.assertApiTokenAdmin(principal, 'api_tokens:read')
     const tokens = (await this.store.listApiTokens(this.principalOrgId(principal)))
       .slice(0, normalizedCloudListLimit(input.limit))
     return Promise.all(tokens.map((token) => this.publicApiTokenWithChannelBindings(token)))
@@ -60,7 +60,7 @@ export class CloudApiTokenOperationsService {
     },
   ): Promise<IssuedPublicApiTokenRecord> {
     await this.ensurePrincipal(principal)
-    this.assertApiTokenAdmin(principal)
+    this.assertApiTokenAdmin(principal, 'api_tokens:manage')
     const scopes = enforceApiTokenScopePolicy(normalizeApiTokenScopes(input.scopes), this.identityPolicy)
     const channelBindingIds = await this.normalizeApiTokenChannelBindingIds(principal, input.channelBindingIds, scopes)
     const issued = await this.store.issueApiToken({
@@ -95,7 +95,7 @@ export class CloudApiTokenOperationsService {
 
   async revokeApiToken(principal: CloudPrincipal, tokenId: string): Promise<PublicApiTokenRecord | null> {
     await this.ensurePrincipal(principal)
-    this.assertApiTokenAdmin(principal)
+    this.assertApiTokenAdmin(principal, 'api_tokens:manage')
     const revoked = await this.store.revokeApiToken({
       tokenId,
       orgId: this.principalOrgId(principal),
@@ -114,7 +114,7 @@ export class CloudApiTokenOperationsService {
     input: { channelBindingId: string },
   ): Promise<{ grant: { orgId: string, tokenId: string, channelBindingId: string, createdAt: string }, token: PublicApiTokenRecord }> {
     await this.ensurePrincipal(principal)
-    this.assertApiTokenAdmin(principal)
+    this.assertApiTokenAdmin(principal, 'api_tokens:manage')
     const orgId = this.principalOrgId(principal)
     const token = (await this.store.listApiTokens(orgId)).find((candidate) => candidate.tokenId === tokenId)
     if (!token) throw new CloudServiceError(404, 'API token was not found.')
@@ -171,8 +171,11 @@ export class CloudApiTokenOperationsService {
     return binding.bindingId
   }
 
-  private assertApiTokenAdmin(principal: CloudPrincipal) {
-    if (!principalCanManageApiTokens(principal)) {
+  private assertApiTokenAdmin(
+    principal: CloudPrincipal,
+    permission: 'api_tokens:read' | 'api_tokens:manage',
+  ) {
+    if (!principalCanManageApiTokens(principal, permission)) {
       throw new CloudServiceError(403, 'API token administration requires an org admin or admin-scoped API token.')
     }
   }

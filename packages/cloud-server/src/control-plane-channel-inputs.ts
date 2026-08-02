@@ -99,12 +99,13 @@ export type CreateChannelInteractionInput = {
   interactionId: string
   orgId: string
   agentId: string
+  channelBindingId: string
+  sessionBindingId: string
   sessionId: string
   provider: ChannelProviderId
   externalInteractionId?: string | null
   kind: ChannelInteractionKind
   targetId: string
-  createdByIdentityId?: string | null
   expiresAt: Date
   tokenSecret?: string
   createdAt?: Date
@@ -112,6 +113,7 @@ export type CreateChannelInteractionInput = {
 
 export type ResolveChannelInteractionInput = {
   orgId: string
+  channelBindingIds?: readonly string[] | null
   token?: string | null
   externalInteractionId?: string | null
   provider?: ChannelProviderId | null
@@ -155,6 +157,7 @@ export type ClaimChannelDeliveryInput = {
 export type AckChannelDeliveryInput = {
   orgId: string
   deliveryId: string
+  channelBindingId?: string | null
   channelBindingIds?: readonly string[] | null
   claimedBy?: string | null
   lastClaimedBy?: string | null

@@ -21,6 +21,7 @@ import {
 
 type PackageJson = {
   name?: string
+  version?: string
   dependencies?: Record<string, string>
   devDependencies?: Record<string, string>
   packageManager?: string
@@ -69,12 +70,18 @@ const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml',
 const monthlyMaintenanceWorkflow = readFileSync(new URL('../.github/workflows/monthly-maintenance.yml', import.meta.url), 'utf8')
 const weeklyGatewayWorkflow = readFileSync(new URL('../.github/workflows/weekly-gateway.yml', import.meta.url), 'utf8')
 const gatewayWorkflow = readFileSync(new URL('../.github/workflows/ci-gateway.yml', import.meta.url), 'utf8')
+const wikiCiWorkflow = readFileSync(new URL('../.github/workflows/ci-wiki.yml', import.meta.url), 'utf8')
+const wikiReleaseWorkflow = readFileSync(new URL('../.github/workflows/release-wiki.yml', import.meta.url), 'utf8')
+const wikiReleaseVerificationScript = fileURLToPath(new URL('../products/wiki/scripts/verify-release-artifact.mjs', import.meta.url))
 const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', import.meta.url), 'utf8')
 const npmrc = readFileSync(new URL('../.npmrc', import.meta.url), 'utf8')
 const readmeDocs = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
 const contributingDocs = readFileSync(new URL('../CONTRIBUTING.md', import.meta.url), 'utf8')
 const gettingStartedDocs = readFileSync(new URL('../docs/getting-started.md', import.meta.url), 'utf8')
 const firstContributionDocs = readFileSync(new URL('../docs/first-contribution.md', import.meta.url), 'utf8')
+const docsIndex = readFileSync(new URL('../docs/index.md', import.meta.url), 'utf8')
+const troubleshootingDocs = readFileSync(new URL('../docs/troubleshooting.md', import.meta.url), 'utf8')
+const agentInstructions = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8')
 const securityModelDocs = readFileSync(new URL('../docs/security-model.md', import.meta.url), 'utf8')
 const releaseChecklistDocs = readFileSync(new URL('../docs/release-checklist.md', import.meta.url), 'utf8')
 const mkdocsConfig = readFileSync(new URL('../mkdocs.yml', import.meta.url), 'utf8')
@@ -750,6 +757,13 @@ test('contributor setup docs and dependency update governance match enforced eng
   }
   assert.match(readmeDocs, /\[!\[pnpm 10\.32\.1\]/)
   assert.doesNotMatch(readmeDocs, /\[!\[pnpm 10\+\]/)
+  assert.match(readmeDocs, /\[!\[Node 22\.22\.3\+\]/)
+  assert.match(readmeDocs, /Node `>=22\.22\.3` \(supported monorepo floor\)/)
+  for (const docs of [readmeDocs, gettingStartedDocs, firstContributionDocs, docsIndex]) {
+    assert.match(docs, /Supported: v22\.22\.3 or newer; CI uses the exact \.nvmrc version/)
+  }
+  assert.match(troubleshootingDocs, /Verify Node is `v22\.22\.3\+`/)
+  assert.match(agentInstructions, /Node: see `\.nvmrc` \(\*\*≥22\.22\.3\*\*\)/)
   for (const workflow of [ciWorkflow, docsWorkflow, releaseWorkflow, monthlyMaintenanceWorkflow, weeklyGatewayWorkflow]) {
     assert.match(workflow, /version: 10\.32\.1/)
   }
@@ -1041,16 +1055,18 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
 
-  for (const expectedCall of [
-    'waitForCdp(port, appShellTimeoutMs)',
-    'waitForCdpPage(browser, appShellTimeoutMs)',
-    'waitForCdpAppPage(browser, appShellTimeoutMs)',
-  ]) {
+  const packagedCdpTimeoutCalls: Array<[string, number]> = [
+    ['waitForOwnedCdp(port, processId, appShellTimeoutMs)', 1],
+    ['waitForCdp(port, appShellTimeoutMs)', 1],
+    ['waitForCdpPage(browser, appShellTimeoutMs)', 2],
+    ['waitForCdpAppPage(browser, appShellTimeoutMs)', 2],
+  ]
+  for (const [expectedCall, expectedCount] of packagedCdpTimeoutCalls) {
     const matches = [...smokeHelpers.matchAll(new RegExp(expectedCall.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))]
     assert.equal(
       matches.length,
-      2,
-      `both packaged CDP launch paths must honor the packaged launch timeout via ${expectedCall}`,
+      expectedCount,
+      `packaged CDP launch paths must honor the packaged launch timeout via ${expectedCall}`,
     )
   }
 
@@ -1213,4 +1229,215 @@ test('ci and release workflows use canonical release gate scripts', () => {
 
   assert.match(packagingDocs, /gh attestation verify "oci:\/\/\$\{digest_ref\}"/)
   assert.match(packagingDocs, /--predicate-type https:\/\/cyclonedx\.org\/bom/)
+})
+
+test('Wiki CI and releases prove only the supported source and CLI distribution contract', () => {
+  for (const workflow of [wikiCiWorkflow, wikiReleaseWorkflow]) {
+    assert.match(workflow, /actions\/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97/)
+    for (const command of [
+      'python -m pip install -r products/wiki/docs/requirements.txt',
+      'pnpm --filter cowork-wiki-workspace lint',
+      'pnpm --filter cowork-wiki-workspace docs:reference -- --check',
+      'pnpm --filter cowork-wiki-workspace docs:build',
+      'pnpm --filter cowork-wiki-workspace test',
+      'pnpm --filter cowork-wiki-workspace pack:cli',
+      'node products/wiki/scripts/standalone-smoke.mjs',
+    ]) {
+      assert.match(workflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `Wiki workflow must run ${command}`)
+    }
+    assert.doesNotMatch(workflow, /evidence:hosted-readiness|release:(?:evidence|smoke|status)/)
+  }
+
+  assert.doesNotMatch(wikiReleaseWorkflow, /skip_tests/, 'Wiki releases must not bypass validation')
+  assert.doesNotMatch(wikiReleaseWorkflow, /\$\(ls /, 'Wiki releases must resolve the single packed artifact fail-closed')
+  assert.match(
+    wikiReleaseWorkflow,
+    /if \[\[ "\$GITHUB_REF_TYPE" != "tag" \]\]; then\s+release_ref="manual"/,
+    'Manual Wiki dry runs must verify an explicitly untagged artifact rather than treating the branch as a tag',
+  )
+  assert.match(
+    wikiReleaseWorkflow,
+    /node products\/wiki\/scripts\/verify-release-artifact\.mjs "\$release_ref" products\/wiki\/artifacts\/npm >> "\$GITHUB_OUTPUT"/,
+  )
+  assert.ok(
+    wikiReleaseWorkflow.indexOf('node products/wiki/scripts/verify-release-artifact.mjs') < wikiReleaseWorkflow.indexOf('gh release create'),
+    'Wiki release artifact integrity must be verified before release creation',
+  )
+  assert.match(
+    wikiReleaseWorkflow,
+    /WIKI_PRERELEASE: \$\{\{ steps\.wiki-pack\.outputs\.prerelease \}\}/,
+    'Wiki releases must consume the verifier prerelease classification',
+  )
+  assert.match(wikiReleaseWorkflow, /case "\$WIKI_PRERELEASE" in/)
+  assert.match(wikiReleaseWorkflow, /true\) prerelease_args=\(--prerelease\)/)
+  assert.match(wikiReleaseWorkflow, /"\$\{prerelease_args\[@\]\}"/)
+  assert.doesNotMatch(
+    wikiReleaseWorkflow,
+    /gh release upload|--clobber/,
+    'Wiki releases must fail rather than mutate assets attached to an existing release',
+  )
+  assert.match(wikiReleaseWorkflow, /shasum -a 256 \.\/\*\.tgz/)
+  for (const retiredPath of [
+    '../products/wiki/.github',
+    '../products/wiki/deploy',
+    '../products/wiki/Dockerfile',
+    '../products/wiki/.dockerignore',
+  ]) {
+    assert.equal(existsSync(new URL(retiredPath, import.meta.url)), false, `${retiredPath} must remain deleted`)
+  }
+})
+
+test('Wiki release artifact verification accepts matching tag forms and rejects a version mismatch', () => {
+  const wikiVersion = workspacePackageJson('products/wiki').version
+  assert.equal(typeof wikiVersion, 'string')
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'open-cowork-wiki-release-'))
+  const packageRoot = join(fixtureRoot, 'package')
+  const artifactsRoot = join(fixtureRoot, 'artifacts')
+  mkdirSync(packageRoot)
+  mkdirSync(artifactsRoot)
+  writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: '@openwiki/cli', version: wikiVersion }))
+  writeFileSync(join(packageRoot, 'index.js'), 'export {}\n')
+
+  try {
+    const verify = (tag: string, directory: string) => spawnSync(
+      process.execPath,
+      [wikiReleaseVerificationScript, tag, directory],
+      { cwd: fileURLToPath(repoRoot), encoding: 'utf8' },
+    )
+    const packed = spawnSync('npm', ['pack', '--pack-destination', artifactsRoot], {
+      cwd: packageRoot,
+      encoding: 'utf8',
+    })
+    assert.equal(packed.status, 0, packed.stderr)
+
+    for (const tag of [`wiki@v${wikiVersion}`, `wiki-v${wikiVersion}`, 'manual']) {
+      const verified = verify(tag, artifactsRoot)
+      assert.equal(verified.status, 0, `${tag}: ${verified.stderr}`)
+      assert.equal(
+        verified.stdout,
+        `tarball=${join(artifactsRoot, `openwiki-cli-${wikiVersion}.tgz`)}\nprerelease=false\n`,
+      )
+    }
+
+    const mismatched = verify('wiki-v999.999.999', artifactsRoot)
+    assert.notEqual(mismatched.status, 0)
+    assert.equal(
+      mismatched.stderr,
+      `::error::Wiki tag version 999.999.999 does not match Wiki package version ${wikiVersion}\n`,
+    )
+
+    const emptyArtifacts = join(fixtureRoot, 'empty-artifacts')
+    mkdirSync(emptyArtifacts)
+    const empty = verify(`wiki-v${wikiVersion}`, emptyArtifacts)
+    assert.notEqual(empty.status, 0)
+    assert.match(empty.stderr, /Expected exactly one packed Wiki CLI tarball; found 0/)
+
+    const [tarballName] = readdirSync(artifactsRoot)
+    const tarballContents = readFileSync(join(artifactsRoot, tarballName))
+    const multipleArtifacts = join(fixtureRoot, 'multiple-artifacts')
+    mkdirSync(multipleArtifacts)
+    writeFileSync(join(multipleArtifacts, tarballName), tarballContents)
+    writeFileSync(join(multipleArtifacts, 'duplicate.tgz'), tarballContents)
+    const multiple = verify(`wiki-v${wikiVersion}`, multipleArtifacts)
+    assert.notEqual(multiple.status, 0)
+    assert.match(multiple.stderr, /Expected exactly one packed Wiki CLI tarball; found 2/)
+
+    const wrongBasenameArtifacts = join(fixtureRoot, 'wrong-basename-artifacts')
+    mkdirSync(wrongBasenameArtifacts)
+    writeFileSync(join(wrongBasenameArtifacts, `wiki-cli-${wikiVersion}.tgz`), tarballContents)
+    const wrongBasename = verify(`wiki-v${wikiVersion}`, wrongBasenameArtifacts)
+    assert.notEqual(wrongBasename.status, 0)
+    assert.equal(
+      wrongBasename.stderr,
+      `::error::Wiki tarball basename wiki-cli-${wikiVersion}.tgz does not match expected openwiki-cli-${wikiVersion}.tgz\n`,
+    )
+
+    const wrongNamePackageRoot = join(fixtureRoot, 'wrong-name-package')
+    const wrongNameArtifacts = join(fixtureRoot, 'wrong-name-artifacts')
+    mkdirSync(wrongNamePackageRoot)
+    mkdirSync(wrongNameArtifacts)
+    writeFileSync(join(wrongNamePackageRoot, 'package.json'), JSON.stringify({
+      name: 'openwiki-cli',
+      version: wikiVersion,
+      bin: { openwiki: './index.js' },
+    }))
+    writeFileSync(join(wrongNamePackageRoot, 'index.js'), '#!/usr/bin/env node\n')
+    const wrongNamePack = spawnSync('npm', ['pack', '--pack-destination', wrongNameArtifacts], {
+      cwd: wrongNamePackageRoot,
+      encoding: 'utf8',
+    })
+    assert.equal(wrongNamePack.status, 0, wrongNamePack.stderr)
+    const wrongName = verify(`wiki-v${wikiVersion}`, wrongNameArtifacts)
+    assert.notEqual(wrongName.status, 0)
+    assert.equal(
+      wrongName.stderr,
+      '::error::Wiki tarball package name openwiki-cli does not match expected @openwiki/cli\n',
+    )
+
+    const mismatchedPackageRoot = join(fixtureRoot, 'mismatched-package')
+    const mismatchedPackedRoot = join(fixtureRoot, 'mismatched-packed')
+    const mismatchedArtifacts = join(fixtureRoot, 'mismatched-artifacts')
+    mkdirSync(mismatchedPackageRoot)
+    mkdirSync(mismatchedPackedRoot)
+    mkdirSync(mismatchedArtifacts)
+    writeFileSync(join(mismatchedPackageRoot, 'package.json'), JSON.stringify({ name: '@openwiki/cli', version: '999.999.999' }))
+    writeFileSync(join(mismatchedPackageRoot, 'index.js'), 'export {}\n')
+    const mismatchedPack = spawnSync('npm', ['pack', '--pack-destination', mismatchedPackedRoot], {
+      cwd: mismatchedPackageRoot,
+      encoding: 'utf8',
+    })
+    assert.equal(mismatchedPack.status, 0, mismatchedPack.stderr)
+    const [mismatchedTarballName] = readdirSync(mismatchedPackedRoot)
+    writeFileSync(
+      join(mismatchedArtifacts, `openwiki-cli-${wikiVersion}.tgz`),
+      readFileSync(join(mismatchedPackedRoot, mismatchedTarballName)),
+    )
+    const mismatchedInternalVersion = verify(`wiki-v${wikiVersion}`, mismatchedArtifacts)
+    assert.notEqual(mismatchedInternalVersion.status, 0)
+    assert.equal(
+      mismatchedInternalVersion.stderr,
+      `::error::Wiki tarball package version 999.999.999 does not match Wiki package version ${wikiVersion}\n`,
+    )
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true })
+  }
+})
+
+test('Wiki release artifact verification classifies semantic prerelease tags', () => {
+  const version = '1.2.3-rc.1'
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'open-cowork-wiki-prerelease-'))
+  const wikiRoot = join(fixtureRoot, 'wiki')
+  const scriptRoot = join(wikiRoot, 'scripts')
+  const packageRoot = join(fixtureRoot, 'package')
+  const artifactsRoot = join(fixtureRoot, 'artifacts')
+  mkdirSync(scriptRoot, { recursive: true })
+  mkdirSync(packageRoot)
+  mkdirSync(artifactsRoot)
+  writeFileSync(join(wikiRoot, 'package.json'), JSON.stringify({ version }))
+  writeFileSync(
+    join(scriptRoot, 'verify-release-artifact.mjs'),
+    readFileSync(wikiReleaseVerificationScript),
+  )
+  writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: '@openwiki/cli', version }))
+  writeFileSync(join(packageRoot, 'index.js'), 'export {}\n')
+
+  try {
+    const packed = spawnSync('npm', ['pack', '--pack-destination', artifactsRoot], {
+      cwd: packageRoot,
+      encoding: 'utf8',
+    })
+    assert.equal(packed.status, 0, packed.stderr)
+    const verified = spawnSync(
+      process.execPath,
+      [join(scriptRoot, 'verify-release-artifact.mjs'), `wiki-v${version}`, artifactsRoot],
+      { encoding: 'utf8' },
+    )
+    assert.equal(verified.status, 0, verified.stderr)
+    assert.equal(
+      verified.stdout,
+      `tarball=${join(artifactsRoot, `openwiki-cli-${version}.tgz`)}\nprerelease=true\n`,
+    )
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true })
+  }
 })

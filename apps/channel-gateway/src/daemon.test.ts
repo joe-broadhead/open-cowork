@@ -293,7 +293,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
 })
 
 test('gateway runtime claims provider events before prompting and skips duplicate claims', async () => {
-  const prompted: Array<{ text: string, commandId?: string | null }> = []
+  const prompted: string[] = []
   const claims: Array<{ providerEventId: string, providerInstanceId: string, eventType: string }> = []
   const completed: Array<{ eventId: string, status: string }> = []
   const seen = new Set<string>()
@@ -341,7 +341,7 @@ test('gateway runtime claims provider events before prompting and skips duplicat
     async findSessionByThread() { return null },
     async getSession() { return { session: { sessionId: 'session-1' }, projection: null } as never },
     async prompt(input) {
-      prompted.push({ text: input.text, commandId: input.commandId })
+      prompted.push(input.text)
       return { binding: { bindingId: input.bindingId } as never, command: { commandId: 'cmd-1' } as never, processed: 1 }
     },
     async claimProviderEvent(input) {
@@ -406,7 +406,7 @@ test('gateway runtime claims provider events before prompting and skips duplicat
     await runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it', chatId: 'chat-1', userId: 'user-1' })
     await runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it again', chatId: 'chat-1', userId: 'user-1' })
 
-    assert.deepEqual(prompted, [{ text: 'ship it', commandId: 'event-fake-provider-event-1-message' }])
+    assert.deepEqual(prompted, ['ship it'])
     assert.deepEqual(claims, [
       { providerEventId: 'provider-event-1', providerInstanceId: 'fake', eventType: 'message' },
       { providerEventId: 'provider-event-1', providerInstanceId: 'fake', eventType: 'message' },
@@ -586,7 +586,7 @@ test('gateway runtime tells the channel when an inbound message is permanently d
 })
 
 test('gateway runtime does not make an already prompted provider event retryable when completion fails', async () => {
-  const prompted: Array<{ text: string, commandId?: string | null }> = []
+  const prompted: string[] = []
   const completed: Array<{ eventId: string, status: string }> = []
   const seen = new Set<string>()
   const cloud: CloudGateway = {
@@ -633,8 +633,8 @@ test('gateway runtime does not make an already prompted provider event retryable
     async findSessionByThread() { return null },
     async getSession() { return { session: { sessionId: 'session-1' }, projection: null } as never },
     async prompt(input) {
-      prompted.push({ text: input.text, commandId: input.commandId })
-      return { binding: { bindingId: input.bindingId } as never, command: { commandId: input.commandId || 'cmd-1' } as never, processed: 1 }
+      prompted.push(input.text)
+      return { binding: { bindingId: input.bindingId } as never, command: { commandId: 'cmd-1' } as never, processed: 1 }
     },
     async claimProviderEvent(input) {
       const key = `${input.providerInstanceId}:${input.eventType}:${input.providerEventId}`
@@ -697,7 +697,7 @@ test('gateway runtime does not make an already prompted provider event retryable
     )
     await runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it again', chatId: 'chat-1', userId: 'user-1' })
 
-    assert.deepEqual(prompted, [{ text: 'ship it', commandId: 'event-fake-provider-event-1-message' }])
+    assert.deepEqual(prompted, ['ship it'])
     assert.deepEqual(completed, [
       { eventId: 'event-fake-provider-event-1-message', status: 'processed' },
     ])
@@ -1829,18 +1829,24 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
     subscribeDeliveries() { return { close() {} } },
     async listDeliveries(input) {
       calls.push(`list:${input.deliveryId || ''}:${input.status || ''}:${input.channelBindingId}`)
+      if (input.deliveryId === 'delivery-shared') {
+        return [deliveryRecord({
+          deliveryId: 'delivery-shared',
+          channelBindingId: input.channelBindingId,
+        })]
+      }
       if (input.deliveryId && input.deliveryId !== `delivery-${input.channelBindingId}`) return []
       return [deliveryRecord({
         deliveryId: `delivery-${input.channelBindingId}`,
         channelBindingId: input.channelBindingId,
       })]
     },
-    async retryDelivery(deliveryId: string) {
-      calls.push(`retry:${deliveryId}`)
+    async retryDelivery(deliveryId: string, input) {
+      calls.push(`retry:${deliveryId}:${input?.channelBindingId}`)
       return deliveryRecord({ deliveryId })
     },
     async deadLetterDelivery(deliveryId: string, input) {
-      calls.push(`dead:${deliveryId}:${input?.lastError}`)
+      calls.push(`dead:${deliveryId}:${input?.channelBindingId}:${input?.lastError}`)
       return deliveryRecord({ deliveryId })
     },
   } as CloudGateway
@@ -1884,7 +1890,19 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
     assert.deepEqual(unrelated.deliveries, [])
     const blockedRetry = await fetch(`${url}/deliveries/delivery-unconfigured/retry`, { method: 'POST', headers: auth })
     assert.equal(blockedRetry.status, 404)
-    const retried = await readJson(await fetch(`${url}/deliveries/delivery-fake-binding/retry`, { method: 'POST', headers: auth }))
+    const ambiguousRetry = await fetch(`${url}/deliveries/delivery-shared/retry`, { method: 'POST', headers: auth })
+    assert.equal(ambiguousRetry.status, 404)
+    const scopedSharedRetry = await fetch(`${url}/deliveries/delivery-shared/retry`, {
+      method: 'POST',
+      headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ channelBindingId: 'secondary-binding' }),
+    })
+    assert.equal(scopedSharedRetry.status, 200)
+    const retried = await readJson(await fetch(`${url}/deliveries/delivery-fake-binding/retry`, {
+      method: 'POST',
+      headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ channelBindingId: 'fake-binding' }),
+    }))
     assert.equal((retried.delivery as { deliveryId: string }).deliveryId, 'delivery-fake-binding')
     const dead = await readJson(await fetch(`${url}/deliveries/delivery-fake-binding/dead-letter`, {
       method: 'POST',
@@ -1892,7 +1910,7 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
         ...auth,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ lastError: 'operator stop' }),
+      body: JSON.stringify({ channelBindingId: 'fake-binding', lastError: 'operator stop' }),
     }))
     assert.equal((dead.delivery as { deliveryId: string }).deliveryId, 'delivery-fake-binding')
     assert.deepEqual(calls, [
@@ -1901,12 +1919,14 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
       'list::failed:secondary-binding',
       'list:delivery-unconfigured::fake-binding',
       'list:delivery-unconfigured::secondary-binding',
+      'list:delivery-shared::fake-binding',
+      'list:delivery-shared::secondary-binding',
+      'list:delivery-shared::secondary-binding',
+      'retry:delivery-shared:secondary-binding',
       'list:delivery-fake-binding::fake-binding',
-      'list:delivery-fake-binding::secondary-binding',
-      'retry:delivery-fake-binding',
+      'retry:delivery-fake-binding:fake-binding',
       'list:delivery-fake-binding::fake-binding',
-      'list:delivery-fake-binding::secondary-binding',
-      'dead:delivery-fake-binding:operator stop',
+      'dead:delivery-fake-binding:fake-binding:operator stop',
     ])
   } finally {
     await http.close()

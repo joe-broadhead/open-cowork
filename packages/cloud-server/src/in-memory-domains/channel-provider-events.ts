@@ -52,11 +52,21 @@ export class InMemoryChannelProviderEventsDomain {
     if (!existing) {
       const record: ChannelProviderEventRecord = {
         eventId: normalizeText(
-          input.eventId || stableId('channel_provider_event', input.orgId, provider, input.providerInstanceId, input.externalWorkspaceId || '', eventType, input.providerEventId),
+          input.eventId || stableId(
+            'channel_provider_event',
+            input.orgId,
+            input.channelBindingId || '',
+            provider,
+            input.providerInstanceId,
+            input.externalWorkspaceId || '',
+            eventType,
+            input.providerEventId,
+          ),
           CHANNEL_TEXT_MAX_LENGTH,
           'Channel provider event id',
         ),
         orgId: input.orgId,
+        channelBindingId: normalizeNullableText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
         provider,
         providerInstanceId: normalizeText(input.providerInstanceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel provider instance id'),
         externalWorkspaceId: normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel external workspace id'),
@@ -80,6 +90,7 @@ export class InMemoryChannelProviderEventsDomain {
     existing.updatedAt = nowIsoValue
     if (canReclaim) {
       existing.provider = provider
+      existing.channelBindingId = normalizeNullableText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id')
       existing.eventType = eventType
       existing.status = 'processing'
       existing.claimedBy = normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Provider event claimant')
@@ -124,12 +135,12 @@ function providerEventMatchesChannelBindingScope(
   channelBindingIds: readonly string[] | null | undefined,
 ) {
   if (channelBindingIds === null || channelBindingIds === undefined) return true
-  const bindingId = typeof event.metadata.channelBindingId === 'string' ? event.metadata.channelBindingId : null
-  return bindingId !== null && channelBindingIds.includes(bindingId)
+  return event.channelBindingId !== null && channelBindingIds.includes(event.channelBindingId)
 }
 
 function channelProviderEventKey(input: {
   orgId: string
+  channelBindingId?: string | null
   provider: ChannelProviderId
   providerInstanceId: string
   externalWorkspaceId?: string | null
@@ -138,6 +149,7 @@ function channelProviderEventKey(input: {
 }) {
   return key(
     input.orgId,
+    normalizeNullableText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id') || '',
     normalizeProvider(input.provider),
     normalizeText(input.providerInstanceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel provider instance id'),
     normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel external workspace id') || '',

@@ -1173,12 +1173,13 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     interactionId: 'interaction-1',
     orgId: org.orgId,
     agentId: agent.agentId,
+    channelBindingId: channelBinding.bindingId,
+    sessionBindingId: sessionBinding.bindingId,
     sessionId: 'session-1',
     provider: 'telegram',
     externalInteractionId: 'button-1',
     kind: 'permission',
     targetId: 'permission-1',
-    createdByIdentityId: identity.identityId,
     expiresAt: new Date('2026-01-01T01:00:00.000Z'),
     tokenSecret: 'test-secret',
   })
@@ -1188,6 +1189,8 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     interactionId: 'interaction-1',
     orgId: org.orgId,
     agentId: agent.agentId,
+    channelBindingId: channelBinding.bindingId,
+    sessionBindingId: sessionBinding.bindingId,
     sessionId: 'session-1',
     provider: 'telegram',
     kind: 'permission',
@@ -1200,6 +1203,16 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     identityId: identity.identityId,
     usedAt: new Date('2026-01-01T00:01:00.000Z'),
   }))?.status, 'used')
+  const interactionAudit = store.listAuditEvents(org.orgId).find((event) => (
+    event.eventType === 'channel_interaction.used'
+    && event.targetId === issued.interaction.interactionId
+  ))
+  assert.ok(interactionAudit)
+  assert.deepEqual(interactionAudit.metadata, {
+    kind: issued.interaction.kind,
+    targetId: issued.interaction.targetId,
+  })
+  assert.equal('tokenHash' in interactionAudit.metadata, false)
   assert.equal(await store.resolveChannelInteraction({
     orgId: org.orgId,
     token: issued.plaintextToken,
@@ -1402,6 +1415,8 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     interactionId: 'interaction-2',
     orgId: org.orgId,
     agentId: agent.agentId,
+    channelBindingId: channelBinding.bindingId,
+    sessionBindingId: sessionBinding.bindingId,
     sessionId: 'session-1',
     provider: 'telegram',
     kind: 'question',

@@ -31,14 +31,11 @@ interface VersionReport {
   compatibility: {
     warnings: string[];
   };
-  latest_command?: string;
-  upgrade_command?: string;
 }
 
 export async function versionCommand(args: string[], options: { json: boolean }): Promise<void> {
   const short = args.includes("--short");
-  const check = args.includes("--check") || args.includes("check");
-  const report = await cliVersionReport(check);
+  const report = await cliVersionReport();
   if (short && !options.json) {
     console.log(report.version);
     return;
@@ -56,13 +53,9 @@ export async function versionCommand(args: string[], options: { json: boolean })
   for (const warning of report.compatibility.warnings) {
     console.log(`Warning: ${warning}`);
   }
-  if (check) {
-    console.log(`Check latest: ${report.latest_command}`);
-    console.log(`Upgrade: ${report.upgrade_command}`);
-  }
 }
 
-export async function cliVersionReport(includeUpgradeCommands = false): Promise<VersionReport> {
+export async function cliVersionReport(): Promise<VersionReport> {
   const version = await readOpenWikiVersion();
   const nodeSupported = compareSemver(process.versions.node, MIN_NODE_VERSION) >= 0;
   const git = await gitVersionReport();
@@ -82,12 +75,6 @@ export async function cliVersionReport(includeUpgradeCommands = false): Promise<
     git,
     ...(build === undefined ? {} : { build }),
     compatibility: { warnings },
-    ...(includeUpgradeCommands
-      ? {
-          latest_command: "npm view @openwiki/cli version",
-          upgrade_command: "npm install -g @openwiki/cli@latest",
-        }
-      : {}),
   };
 }
 

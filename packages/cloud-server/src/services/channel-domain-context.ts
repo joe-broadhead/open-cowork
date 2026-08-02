@@ -14,7 +14,7 @@ import type {
   SessionRecord,
 } from '../control-plane-store.ts'
 import {
-  principalHasOrgAdminRole,
+  principalHasHumanPermissionOrAdminRole,
   principalHasPrivilegedTokenScope,
 } from '../principal-access.ts'
 import type {
@@ -94,8 +94,10 @@ export function normalizedCloudListLimit(value: number | null | undefined, fallb
 
 export function principalCanManageChannels(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
+  if (principal.authSource === 'api_token') {
+    return principalHasPrivilegedTokenScope(principal, 'admin', ['org:manage'])
+  }
+  return principalHasHumanPermissionOrAdminRole(principal, ['org:manage'])
 }
 
 export function assertChannelSetupAllowed(principal: CloudPrincipal) {
@@ -106,8 +108,9 @@ export function assertChannelSetupAllowed(principal: CloudPrincipal) {
 
 export function assertGatewayAccess(principal: CloudPrincipal) {
   const allowed = principal.authSource === 'local'
-    || (principal.authSource === 'api_token' && principalHasPrivilegedTokenScope(principal, 'gateway'))
-    || principalHasOrgAdminRole(principal)
+    || (principal.authSource === 'api_token'
+      && principalHasPrivilegedTokenScope(principal, 'gateway', ['org:manage']))
+    || principalCanManageChannels(principal)
   if (!allowed) throw new CloudServiceError(403, 'Gateway channel access requires a gateway-scoped API token.')
 }
 
@@ -137,19 +140,19 @@ export async function requireChannelActor(
           externalUserId: input.externalUserId,
         })
       : null
-  if (!identity) throw new CloudServiceError(403, 'Channel actor identity is not authorized.')
-  if (identity.status !== 'active') throw new CloudServiceError(403, 'Channel actor identity is not active.')
+  if (!identity) throw channelActorDenied()
+  if (identity.status !== 'active') throw channelActorDenied()
   if (scope.provider && identity.provider !== scope.provider) {
-    throw new CloudServiceError(403, 'Channel actor identity is not authorized for this provider.')
+    throw channelActorDenied()
   }
   if (scope.externalWorkspaceId !== undefined && identity.externalWorkspaceId !== (scope.externalWorkspaceId || null)) {
-    throw new CloudServiceError(403, 'Channel actor identity is not authorized for this channel workspace.')
+    throw channelActorDenied()
   }
   if (purpose === 'prompt' && !channelRoleCanPrompt(identity.role)) {
-    throw new CloudServiceError(403, 'Channel actor is not allowed to prompt this agent.')
+    throw channelActorDenied()
   }
   if (purpose === 'approve' && !channelRoleCanApprove(identity.role)) {
-    throw new CloudServiceError(403, 'Channel actor is not allowed to approve this interaction.')
+    throw channelActorDenied()
   }
   return identity
 }
@@ -180,5 +183,9 @@ export async function requireChannelActorForSession(
     if (!channelBinding) continue
     if (channelBinding.externalWorkspaceId === actor.externalWorkspaceId) return actor
   }
-  throw new CloudServiceError(403, 'Channel actor identity is not authorized for this channel session.')
+  throw channelActorDenied()
+}
+
+function channelActorDenied() {
+  return new CloudServiceError(403, 'Channel actor identity is not authorized for this channel session.')
 }

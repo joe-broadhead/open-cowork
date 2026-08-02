@@ -47,7 +47,7 @@ openwiki --root /data/wiki backup configure s3 \
 
 ```sh
 openwiki --root /data/wiki backup configure minio \
-  --id umbrel-minio \
+  --id local-minio \
   --endpoint-url http://minio:9000 \
   --bucket openwiki \
   --prefix backups \
@@ -56,8 +56,7 @@ openwiki --root /data/wiki backup configure minio \
   --force-path-style
 ```
 
-Use HTTPS for hosted MinIO. Plain HTTP is intended for trusted local Docker or
-Umbrel networks.
+Use HTTPS for networked MinIO. Plain HTTP is only for a trusted local network.
 
 ## GCS
 
@@ -163,32 +162,21 @@ provider audit logs for stale credential use. Backup artifacts, events,
 manifests, Git config, static exports, and docs must contain only destination
 metadata, environment variable names, or redacted diagnostics.
 
-`openwiki doctor --profile personal|hosted|kubernetes` and
-`openwiki deploy preflight --deploy-profile <profile>` include the same
-provider readiness state for each configured backup destination. Use those
-checks before enabling scheduled backup workers in Docker, Kubernetes, Umbrel,
-or cloud profiles.
+`openwiki doctor --profile personal|hosted` includes provider readiness for each
+configured backup destination. Use it before enabling a scheduled backup
+worker.
 
 ## Deployment Secrets
 
-Do not put raw provider keys in `openwiki.json`, Helm values, Compose files, Git
-remotes, backup manifests, or static exports.
+Do not put raw provider keys in `openwiki.json`, Git remotes, backup manifests,
+or static exports. Pass referenced environment variables from an operator-owned
+secret store. Prefer workload identity or bucket-scoped IAM over long-lived
+keys. If static keys are unavoidable, rotate them at the provider, update the
+referenced secret, verify the destination, then revoke the old credential.
 
-- Docker and Compose: pass credential environment variables from a local
-  `.env`, shell environment, or Docker secret. The example Compose file uses
-  placeholders; production operators should populate them from an external
-  secret store.
-- Kubernetes and Helm: mount provider credentials through Kubernetes Secrets,
-  `workspaceBackup.existingSecret`, `workspaceBackup.envFrom`, CSI secret
-  drivers, IRSA/workload identity, or the cloud provider's managed identity.
-- AWS and GCP: prefer bucket-scoped IAM or workload identity
-  over long-lived access keys where the platform supports it. If you must use
-  static keys, rotate them in the provider and then update the deployment
-  secret referenced by the destination's `*_env` field.
-- Umbrel and local personal installs: keep credentials in user-managed Docker
-  environment secrets, rclone config, OS keychain-backed Git helpers, or a
-  local secret manager. Back up those credentials separately from OpenWiki
-  backup artifacts.
+Local users can keep credentials in a user-managed secret manager, OS
+keychain-backed helper, or rclone configuration. Back up credentials separately
+from OpenWiki artifacts.
 
 ## Operate
 

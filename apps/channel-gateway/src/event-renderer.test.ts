@@ -162,6 +162,7 @@ test('event renderer chunks buttonless assistant output and renders approval com
   assert.deepEqual({ ...created, interactionId: undefined }, {
     interactionId: undefined,
     agentId: 'agent-1',
+    sessionBindingId: 'binding-1',
     sessionId: 'session-1',
     provider: 'cli',
     kind: 'permission',
@@ -377,8 +378,8 @@ test('event renderer sends cloud artifacts as files when provider limits allow i
   const provider = createFileCapableFakeProvider()
   const state = createGatewaySessionRenderState()
   const cloud = cloudStub({
-    async readArtifactAttachment(sessionId: string, artifactId: string) {
-      assert.equal(sessionId, 'session-1')
+    async readArtifactAttachment(sessionBindingId: string, artifactId: string) {
+      assert.equal(sessionBindingId, 'binding-1')
       assert.equal(artifactId, 'artifact-1')
       return {
         filename: 'report.txt',
@@ -436,8 +437,8 @@ test('event renderer sends authenticated artifact links for link-only or oversiz
       async readArtifactAttachment() {
         throw new Error('link-only provider should not fetch artifact bytes')
       },
-      artifactUrl(sessionId: string, artifactId: string) {
-        return `https://cloud.example.test/api/sessions/${sessionId}/artifacts/${artifactId}`
+      artifactUrl(sessionBindingId: string, artifactId: string) {
+        return `https://cloud.example.test/api/channels/sessions/${sessionBindingId}/artifacts/${artifactId}`
       },
     }),
     provider,
@@ -458,7 +459,7 @@ test('event renderer sends authenticated artifact links for link-only or oversiz
   })
 
   assert.equal(provider.sent[0]?.kind, 'text')
-  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/sessions\/session-1\/artifacts\/artifact-1/)
+  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/channels\/sessions\/binding-1\/artifacts\/artifact-1/)
   assert.doesNotMatch(provider.sent[0]?.text || '', /private-object-key/)
   assert.doesNotMatch(provider.sent[0]?.text || '', /secret/)
 })
@@ -467,8 +468,8 @@ test('event renderer notifies channels when artifact lifecycle metadata changes'
   const provider = createButtonlessFakeProvider({ capabilities: { fileDownloads: false } })
   const result = await renderGatewaySessionEvent({
     cloud: cloudStub({
-      artifactUrl(sessionId: string, artifactId: string) {
-        return `https://cloud.example.test/api/sessions/${sessionId}/artifacts/${artifactId}`
+      artifactUrl(sessionBindingId: string, artifactId: string) {
+        return `https://cloud.example.test/api/channels/sessions/${sessionBindingId}/artifacts/${artifactId}`
       },
     }),
     provider,
@@ -491,7 +492,7 @@ test('event renderer notifies channels when artifact lifecycle metadata changes'
   assert.equal(result.handled, true)
   assert.equal(provider.sent[0]?.kind, 'text')
   assert.match(provider.sent[0]?.text || '', /report\.txt/)
-  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/sessions\/session-1\/artifacts\/artifact-1/)
+  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/channels\/sessions\/binding-1\/artifacts\/artifact-1/)
 })
 
 test('event renderer does not resend artifact files for lifecycle metadata updates', async () => {
@@ -502,8 +503,8 @@ test('event renderer does not resend artifact files for lifecycle metadata updat
       async readArtifactAttachment() {
         throw new Error('artifact.updated must not fetch artifact bytes')
       },
-      artifactUrl(sessionId: string, artifactId: string) {
-        return `https://cloud.example.test/api/sessions/${sessionId}/artifacts/${artifactId}`
+      artifactUrl(sessionBindingId: string, artifactId: string) {
+        return `https://cloud.example.test/api/channels/sessions/${sessionBindingId}/artifacts/${artifactId}`
       },
     }),
     provider,
@@ -523,8 +524,8 @@ test('event renderer does not resend artifact files for lifecycle metadata updat
   })
   const duplicate = await renderGatewaySessionEvent({
     cloud: cloudStub({
-      artifactUrl(sessionId: string, artifactId: string) {
-        return `https://cloud.example.test/api/sessions/${sessionId}/artifacts/${artifactId}`
+      artifactUrl(sessionBindingId: string, artifactId: string) {
+        return `https://cloud.example.test/api/channels/sessions/${sessionBindingId}/artifacts/${artifactId}`
       },
     }),
     provider,
@@ -543,7 +544,7 @@ test('event renderer does not resend artifact files for lifecycle metadata updat
   assert.equal(provider.sent.length, 1)
   assert.equal(provider.sent[0]?.kind, 'text')
   assert.match(provider.sent[0]?.text || '', /Artifact updated: report\.txt \(final\)/)
-  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/sessions\/session-1\/artifacts\/artifact-1/)
+  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/channels\/sessions\/binding-1\/artifacts\/artifact-1/)
 })
 
 function bindingRecord() {

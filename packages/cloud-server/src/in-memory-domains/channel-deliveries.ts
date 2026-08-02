@@ -8,6 +8,7 @@ import {
 } from './store-helpers.ts'
 import { quotaExceeded } from '../control-plane-errors.ts'
 import { normalizeChannelProviderId as normalizeProvider } from '../channel-provider-utils.ts'
+import { encodeChannelDeliveryIdentity } from '../channel-delivery-identity.ts'
 import type {
   AckChannelDeliveryInput,
   ChannelBindingRecord,
@@ -35,6 +36,9 @@ type InMemoryChannelDeliveriesHost = {
 }
 
 export class InMemoryChannelDeliveriesDomain {
+  // Public delivery ids are idempotency keys scoped to an org + channel
+  // binding. Never key this map by the caller-controlled id alone: doing so
+  // lets one binding receive another binding's delivery record on collision.
   private readonly deliveries = new Map<string, ChannelDeliveryRecord>()
   private readonly host: InMemoryChannelDeliveriesHost
 
@@ -62,11 +66,13 @@ export class InMemoryChannelDeliveriesDomain {
         throw new Error('Channel delivery session binding does not match channel binding.')
       }
     }
-    const existing = this.deliveries.get(input.deliveryId)
+    const deliveryId = normalizeText(input.deliveryId, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery id')
+    const storageKey = channelDeliveryStorageKey(input.orgId, input.channelBindingId, deliveryId)
+    const existing = this.deliveries.get(storageKey)
     if (existing) return clone(existing)
     const now = nowIso(input.createdAt)
     const record: ChannelDeliveryRecord = {
-      deliveryId: normalizeText(input.deliveryId, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery id'),
+      deliveryId,
       orgId: input.orgId,
       agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
       channelBindingId: normalizeText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
@@ -85,7 +91,7 @@ export class InMemoryChannelDeliveriesDomain {
       createdAt: now,
       updatedAt: now,
     }
-    this.deliveries.set(record.deliveryId, record)
+    this.deliveries.set(storageKey, record)
     return clone(record)
   }
 
@@ -142,13 +148,17 @@ export class InMemoryChannelDeliveriesDomain {
 
   ack(input: AckChannelDeliveryInput): ChannelDeliveryRecord | null {
     if (input.channelBindingIds?.length === 0) return null
-    const delivery = this.deliveries.get(input.deliveryId)
-    if (!delivery || delivery.orgId !== input.orgId) return null
-    if (input.channelBindingIds && !input.channelBindingIds.includes(delivery.channelBindingId)) return null
-    if (input.claimedBy && delivery.claimedBy !== input.claimedBy) return null
-    if (input.lastClaimedBy && delivery.lastClaimedBy !== input.lastClaimedBy) {
-      return null
-    }
+    const matches = Array.from(this.deliveries.values())
+      .filter((delivery) => delivery.orgId === input.orgId && delivery.deliveryId === input.deliveryId)
+      .filter((delivery) => !input.channelBindingId || delivery.channelBindingId === input.channelBindingId)
+      .filter((delivery) => !input.channelBindingIds || input.channelBindingIds.includes(delivery.channelBindingId))
+      .filter((delivery) => !input.claimedBy || delivery.claimedBy === input.claimedBy)
+      .filter((delivery) => !input.lastClaimedBy || delivery.lastClaimedBy === input.lastClaimedBy)
+    // A public id may legitimately exist on multiple bindings. Refuse an
+    // ambiguous mutation instead of updating whichever record happened to be
+    // inserted first.
+    if (matches.length !== 1) return null
+    const delivery = matches[0]!
     const updatedAt = nowIso(input.updatedAt)
     delivery.status = input.status
     delivery.claimedBy = null
@@ -168,9 +178,15 @@ export class InMemoryChannelDeliveriesDomain {
       .filter((delivery) => (delivery.status === 'sent' || delivery.status === 'dead') && delivery.updatedAt < cutoff)
       .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
       .slice(0, limit)
-    for (const delivery of stale) this.deliveries.delete(delivery.deliveryId)
+    for (const delivery of stale) {
+      this.deliveries.delete(channelDeliveryStorageKey(delivery.orgId, delivery.channelBindingId, delivery.deliveryId))
+    }
     return stale.length
   }
+}
+
+function channelDeliveryStorageKey(orgId: string, channelBindingId: string, deliveryId: string) {
+  return encodeChannelDeliveryIdentity(orgId, channelBindingId, deliveryId)
 }
 
 function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {

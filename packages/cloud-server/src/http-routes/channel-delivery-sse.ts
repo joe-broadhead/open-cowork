@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { principalHasGatewayAccess } from './access-policy.ts'
 import { SSE_MAX_BUFFERED_BYTES } from './sse-limits.ts'
 import type { CloudHttpServerOptions } from '../http-contracts.ts'
 import { CloudServiceError, type CloudPrincipal } from '../session-service.ts'
@@ -47,11 +46,6 @@ export async function handleChannelDeliveriesSse(
   context: RouteContext,
   tools: ChannelDeliverySseTools,
 ) {
-  if (!principalHasGatewayAccess(context.principal)) {
-    tools.writeError(res, 403, 'Gateway channel access requires a gateway-scoped API token.', options.corsOrigin)
-    return
-  }
-  tools.writeCorsHeaders(res, options.corsOrigin)
   const requestedClaimedBy = context.url.searchParams.get('claimedBy')
     || (context.principal.authSource === 'api_token' && context.principal.tokenId ? context.principal.tokenId : null)
     || context.principal.userId
@@ -59,6 +53,11 @@ export async function handleChannelDeliveriesSse(
   const channelBindingIds = context.url.searchParams.getAll('channelBindingId')
     .map((value) => value.trim())
     .filter(Boolean)
+  await options.service.domains.channels.assertGatewayChannelBindingScope(
+    context.principal,
+    channelBindingIds.length > 0 ? channelBindingIds : null,
+  )
+  tools.writeCorsHeaders(res, options.corsOrigin)
   const ttlMsRaw = Number(context.url.searchParams.get('ttlMs') || 30_000)
   const ttlMs = Number.isInteger(ttlMsRaw) && ttlMsRaw > 0 ? ttlMsRaw : 30_000
   let closed = false

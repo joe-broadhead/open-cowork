@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 test('product boundary checker passes on the monorepo tree', () => {
@@ -13,17 +14,19 @@ test('product boundary checker passes on the monorepo tree', () => {
 })
 
 test('product boundary checker fails on intentional desktop→gateway import', () => {
-  const probeDir = join('packages', 'app', 'src')
-  const probe = join(probeDir, '__boundary_probe_forbidden_import__.ts')
-  mkdirSync(probeDir, { recursive: true })
-  writeFileSync(probe, "import 'cowork-gateway'\n", 'utf8')
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'open-cowork-product-boundaries-'))
   try {
-    const result = spawnSync(process.execPath, ['scripts/check-product-boundaries.mjs'], {
+    const probeDir = join(fixtureRoot, 'packages', 'app', 'src')
+    const probe = join(probeDir, '__boundary_probe_forbidden_import__.ts')
+    mkdirSync(probeDir, { recursive: true })
+    writeFileSync(probe, "import 'cowork-gateway'\n", 'utf8')
+    const result = spawnSync(process.execPath, [join(process.cwd(), 'scripts/check-product-boundaries.mjs')], {
+      cwd: fixtureRoot,
       encoding: 'utf8',
     })
     assert.notEqual(result.status, 0)
     assert.match(result.stderr + result.stdout, /desktop-to-products|FAILED/)
   } finally {
-    rmSync(probe, { force: true })
+    rmSync(fixtureRoot, { recursive: true, force: true })
   }
 })

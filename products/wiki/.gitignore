@@ -8,7 +8,6 @@ artifacts/
 site/
 *.log
 evals/*/latest.json
-**/.terraform/
 packages/web/assets/
 packages/web/preview/
 .opencode/node_modules/

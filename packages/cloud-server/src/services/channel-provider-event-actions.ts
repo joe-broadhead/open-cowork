@@ -32,7 +32,6 @@ export async function claimChannelProviderEvent(
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const channelBinding = await resolveGatewayChannelBindingForProviderScope(options, principal, input, 'Provider event claim')
-  await resolveGatewayChannelBindingScope(options, principal, [channelBinding.bindingId])
   return options.store.claimChannelProviderEvent({
     orgId: options.principalOrgId(principal),
     provider: input.provider,

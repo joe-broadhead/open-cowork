@@ -353,12 +353,19 @@ async function createContinuationFixture() {
     name: 'Web continuation token',
     scopes: ['desktop', 'admin'],
   })).plaintext
-  const gatewayToken = (await store.issueApiToken({
+  const gatewayIssued = await store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
     name: 'Gateway continuation token',
-    scopes: ['gateway', 'admin'],
+    scopes: ['gateway'],
+  })
+  const setupToken = (await store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Channel setup token',
+    scopes: ['admin'],
   })).plaintext
+  const gatewayToken = gatewayIssued.plaintext
   const runtime = new ContinuationRuntime()
   const policy = {
     ...resolveCloudRuntimePolicy(DEFAULT_CONFIG),
@@ -380,7 +387,7 @@ async function createContinuationFixture() {
     headers: { authorization: `Bearer ${token}` },
   })
   const webClient = clientFor(webToken)
-  const setupClient = clientFor(gatewayToken)
+  const setupClient = clientFor(setupToken)
   const workspace = await webClient.getWorkspace()
   const now = '2026-05-28T10:00:00.000Z'
   const connection: CloudWorkspaceConnectionRecord = {
@@ -430,9 +437,12 @@ async function createContinuationFixture() {
     desktop,
     desktopToken,
     gateway,
+    gatewayTokenId: gatewayIssued.token.tokenId,
     gatewayToken,
     runtime,
     setupClient,
+    store,
+    orgId: org.orgId,
     webToken,
     webClient,
   }
@@ -452,6 +462,11 @@ async function setupGatewayBinding(fixture: ContinuationFixture) {
     displayName: 'CLI continuation binding',
   })
   assert.ok(channelBinding)
+  fixture.store.grantApiTokenChannelBinding({
+    orgId: fixture.orgId,
+    tokenId: fixture.gatewayTokenId,
+    channelBindingId: channelBinding.bindingId,
+  })
   const identity = await fixture.setupClient.resolveChannelIdentity?.({
     provider: 'cli',
     externalUserId: 'cli-user-1',
@@ -519,12 +534,12 @@ test('desktop-created cloud sessions are visible to web clients over bearer-auth
 test('gateway prompts continue the same cloud thread and resolve approvals for desktop and web', async () => {
   const fixture = await createContinuationFixture()
   try {
-    const { agent, identity } = await setupGatewayBinding(fixture)
+    const { agent, channelBinding, identity } = await setupGatewayBinding(fixture)
     const bound = await fixture.gateway.bindSession({
       identityId: identity.identityId,
       provider: 'cli',
       externalUserId: 'cli-user-1',
-      channelBindingId: 'cli-binding',
+      channelBindingId: channelBinding.bindingId,
       externalChatId: 'chat-1',
       externalThreadId: 'thread-1',
       title: 'Gateway continuation thread',
@@ -566,11 +581,11 @@ test('gateway prompts continue the same cloud thread and resolve approvals for d
 
     const permissionInteraction = await fixture.gateway.createChannelInteraction({
       agentId: agent.agentId,
+      sessionBindingId: bound.binding.bindingId,
       sessionId,
       provider: 'cli',
       kind: 'permission',
       targetId: permissionId,
-      createdByIdentityId: identity.identityId,
     })
     await fixture.gateway.resolveChannelInteraction({
       identityId: identity.identityId,
@@ -582,11 +597,11 @@ test('gateway prompts continue the same cloud thread and resolve approvals for d
 
     const questionInteraction = await fixture.gateway.createChannelInteraction({
       agentId: agent.agentId,
+      sessionBindingId: bound.binding.bindingId,
       sessionId,
       provider: 'cli',
       kind: 'question',
       targetId: questionId,
-      createdByIdentityId: identity.identityId,
     })
     await fixture.gateway.resolveChannelInteraction({
       identityId: identity.identityId,

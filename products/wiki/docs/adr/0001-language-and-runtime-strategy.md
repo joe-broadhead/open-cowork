@@ -8,8 +8,7 @@ Date: 2026-05-21
 
 OpenWiki needs to ship one protocol across several surfaces: repository format,
 CLI, MCP, HTTP API, worker jobs, web UI, static export, OpenCode maintenance,
-Open Cowork packs, Docker Compose, Umbrel, GitHub Pages, and later enterprise
-deployments.
+Open Cowork packs, CLI tarballs, and source-operated hosted runtimes.
 
 The project also needs a search path that can start local and explainable, then
 grow toward dbt-nova-style fusion search with optional dense, sparse, and
@@ -22,7 +21,7 @@ OpenWiki v0.1 is TypeScript-first.
 - TypeScript is the primary product language for core packages, repository
   parsing, schemas, CLI, MCP, HTTP API, workflows, workers, integrations, and
   the server-rendered web UI.
-- Node.js 24 is the primary CI and container runtime target. Package
+- The product follows the open-cowork root `.nvmrc` for active CI. Package
   compatibility remains `>=22.22.3`, the tested Node 22 release where
   `node:sqlite` and SQLite FTS5 both work for the full local search/indexing
   path; SQLite remains marked experimental by Node and may emit runtime
@@ -32,7 +31,7 @@ OpenWiki v0.1 is TypeScript-first.
 - Markdown with YAML frontmatter is the page authoring format for v0.1.
 - YAML is allowed for human-authored manifests. JSON, JSONL, JSON Schema, and
   OpenAPI are the protocol and interchange formats.
-- Shell is allowed for packaging and deployment wrappers only.
+- Shell is allowed for packaging and operator wrappers only.
 - Python is allowed for development scripts and evals, but not as a v0.1
   product runtime dependency.
 - Rust is reserved for optional high-performance search, indexing, or native

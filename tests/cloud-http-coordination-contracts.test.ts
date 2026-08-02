@@ -179,18 +179,20 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ agentId: 'agent-1', name: 'Watch delivery agent' }),
     }))
-    assert.equal(asRecord(channelAgent.agent).agentId, 'agent-1')
+    const channelAgentId = String(asRecord(channelAgent.agent).agentId)
+    assert.ok(channelAgentId)
     const channelBinding = await readJson(await fetch(`${baseUrl}/api/channels/bindings`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         bindingId: 'binding-1',
-        agentId: 'agent-1',
+        agentId: channelAgentId,
         provider: 'telegram',
         displayName: 'Project telegram',
       }),
     }))
-    assert.equal(asRecord(channelBinding.binding).bindingId, 'binding-1')
+    const channelBindingId = String(asRecord(channelBinding.binding).bindingId)
+    assert.ok(channelBindingId)
 
     const unsupportedWorkflowWatch = await fetch(`${baseUrl}/api/coordination/watches`, {
       method: 'POST',
@@ -200,8 +202,8 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
         events: ['run.finished'],
         channel: {
           provider: 'telegram',
-          agentId: 'agent-1',
-          channelBindingId: 'binding-1',
+          agentId: channelAgentId,
+          channelBindingId,
           target: { chatId: 'workflow-chat' },
         },
         recipient: { role: 'member' },
@@ -221,8 +223,8 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
         events: ['task.moved', 'task.review_ready'],
         channel: {
           provider: 'telegram',
-          agentId: 'agent-1',
-          channelBindingId: 'binding-1',
+          agentId: channelAgentId,
+          channelBindingId,
           target: { chatId: 'project-chat' },
         },
         recipient: { role: 'member', identityId: 'identity-1' },
@@ -243,7 +245,7 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
     }))
     assert.equal(movedToReview.column, 'review')
     const projectWatchDeliveries = await eventually(
-      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId: 'binding-1', limit: 10 }),
+      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId, limit: 10 }),
       (deliveries) => {
         const watchEventTypes = deliveries
           .filter((delivery) => asRecord(delivery.payload).watchId === watchId)
@@ -282,7 +284,7 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
     }))
     assert.equal(linkedWatchTask.column, 'doing')
     const linkWorkDelivery = await eventually(
-      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId: 'binding-1', limit: 20 }),
+      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId, limit: 20 }),
       (deliveries) => deliveries.some((delivery) => (
         delivery.eventType === 'task.moved'
         && asRecord(delivery.payload).watchId === watchId
@@ -494,7 +496,8 @@ test('cloud coordination stale watches remain visible and removable after channe
         recipient: { role: 'member' },
       }),
     })
-    assert.equal(invalidNewWatch.status, 404)
+    assert.equal(invalidNewWatch.status, 403)
+    assert.match(String((await readJson(invalidNewWatch)).error), /not authorized/i)
   } finally {
     await fixture.server.close()
     clearCoordinationStoreCache()
@@ -804,7 +807,7 @@ test('cloud HTTP watch creation validates channel authority before persisting su
   }
 })
 
-test('cloud gateway watch creation defaults omitted non-admin-scoped recipients to viewer', async () => {
+test('cloud gateway principals cannot create or mutate coordination watches', async () => {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const dataDir = await mkdtemp(join(tmpdir(), 'open-cowork-cloud-watch-recipient-'))
   process.env.OPEN_COWORK_USER_DATA_DIR = dataDir
@@ -911,8 +914,8 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
       }),
     })
     const gatewayWatch = await readJson(gatewayWatchResponse)
-    assert.equal(gatewayWatchResponse.status, 201, JSON.stringify(gatewayWatch))
-    assert.equal(asRecord(gatewayWatch.recipient).role, 'viewer')
+    assert.equal(gatewayWatchResponse.status, 403, JSON.stringify(gatewayWatch))
+    assert.equal(asRecord(gatewayWatch.verdict).policyCode, 'authorization.scope_required')
 
     const gatewayNoRoleRecipientWatchResponse = await fetch(`${baseUrl}/api/coordination/watches`, {
       method: 'POST',
@@ -930,9 +933,8 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
       }),
     })
     const gatewayNoRoleRecipientWatch = await readJson(gatewayNoRoleRecipientWatchResponse)
-    assert.equal(gatewayNoRoleRecipientWatchResponse.status, 201, JSON.stringify(gatewayNoRoleRecipientWatch))
-    assert.equal(asRecord(gatewayNoRoleRecipientWatch.recipient).role, 'viewer')
-    assert.equal(asRecord(gatewayNoRoleRecipientWatch.recipient).identityId, 'identity-watch-recipient')
+    assert.equal(gatewayNoRoleRecipientWatchResponse.status, 403, JSON.stringify(gatewayNoRoleRecipientWatch))
+    assert.equal(asRecord(gatewayNoRoleRecipientWatch.verdict).policyCode, 'authorization.scope_required')
 
     const ownerLegacyWatch = await fixture.service.domains.coordination.createCloudCoordinationWatch(ownerPrincipal, {
       workspaceId: 'cloud:tenant-1',
@@ -963,16 +965,7 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
       (records) => records.some((delivery) => asRecord(delivery.payload).watchId === ownerLegacyWatch.id),
       'owner watch needs_input delivery',
     )
-    assert.equal(
-      deliveries.some((delivery) => asRecord(delivery.payload).watchId === gatewayWatch.id),
-      false,
-      'viewer watch must not receive needs_input deliveries',
-    )
-    assert.equal(
-      deliveries.some((delivery) => asRecord(delivery.payload).watchId === gatewayNoRoleRecipientWatch.id),
-      false,
-      'viewer watch with no-role recipient must not receive needs_input deliveries',
-    )
+    assert.equal(deliveries.length, 1)
 
     const deniedUpdate = await fetch(`${baseUrl}/api/coordination/watches/${String(ownerLegacyWatch.id)}`, {
       method: 'POST',
@@ -980,7 +973,10 @@ test('cloud gateway watch creation defaults omitted non-admin-scoped recipients 
       body: JSON.stringify({ status: 'paused' }),
     })
     assert.equal(deniedUpdate.status, 403)
-    assert.match(String((await readJson(deniedUpdate)).error), /recipient roles/i)
+    assert.equal(
+      asRecord(asRecord(await readJson(deniedUpdate)).verdict).policyCode,
+      'authorization.scope_required',
+    )
   } finally {
     if (listening) await fixture.server.close()
     clearCoordinationStoreCache()

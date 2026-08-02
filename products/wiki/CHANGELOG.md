@@ -4,7 +4,13 @@ All notable changes to OpenWiki will be documented in this file.
 
 ## Unreleased
 
-No changes yet.
+### Removed
+
+- Release-evidence scripts, deployment preflight/upgrade CLI commands, and their
+  obsolete tests and public documentation. Active paths are source checkout,
+  generated CLI tarball, source-operated runtime evaluation, and static export.
+- Dormant nested GitHub workflows, container build files, and the unmaintained
+  Compose, Kubernetes, Helm, Terraform, proxy, observability, and Umbrel bundle.
 
 ## 0.0.0 - 2026-07-04
 

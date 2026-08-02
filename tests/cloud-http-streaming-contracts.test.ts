@@ -259,6 +259,88 @@ test('cloud HTTP session SSE does not open after disconnect during cursor lookup
   }
 })
 
+test('cloud HTTP workspace SSE completes authorization before writing stream headers', async () => {
+  const fixture = createFixture({ ssePollMs: 10 })
+  const principal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'denied-user',
+    accountId: 'denied-user',
+    email: 'denied@example.test',
+    role: 'member' as const,
+  }
+  const originalGetWorkspaceEventCursor = fixture.service.getWorkspaceEventCursor.bind(fixture.service)
+  fixture.service.getWorkspaceEventCursor = async () => {
+    throw new Error('Cloud membership is not active.')
+  }
+
+  class TrackingResponse extends EventEmitter {
+    destroyed = false
+    writableEnded = false
+    writableLength = 0
+    headerWrites = 0
+    writeHeadCalls = 0
+    writeCalls = 0
+
+    setHeader() {
+      this.headerWrites += 1
+      return this
+    }
+    writeHead() {
+      this.writeHeadCalls += 1
+      return this
+    }
+    write() {
+      this.writeCalls += 1
+      return true
+    }
+  }
+
+  const request = Object.assign(new EventEmitter(), {
+    headers: {},
+    destroyed: false,
+    socket: { setKeepAlive() {} },
+  })
+  const response = new TrackingResponse()
+  const context = {
+    principal,
+    authSource: 'resolver' as const,
+    cookieSession: null,
+    url: new URL('http://cloud.test/api/events?after=0'),
+    segments: ['api', 'events'],
+  }
+
+  try {
+    await assert.rejects(() => handleWorkspaceSse(
+      request as unknown as IncomingMessage,
+      response as unknown as ServerResponse,
+      {
+        service: fixture.service,
+        policy: fixture.policy,
+        corsOrigin: 'https://cowork.example.test',
+        ssePollMs: 10,
+      },
+      context,
+    ), /membership is not active/i)
+    assert.deepEqual({
+      headerWrites: response.headerWrites,
+      writeHeadCalls: response.writeHeadCalls,
+      writeCalls: response.writeCalls,
+      subscribers: fixture.service.workspaceEventBus.subscriberCount,
+    }, {
+      headerWrites: 0,
+      writeHeadCalls: 0,
+      writeCalls: 0,
+      subscribers: 0,
+    })
+  } finally {
+    request.emit('close')
+    response.emit('close')
+    fixture.service.getWorkspaceEventCursor = originalGetWorkspaceEventCursor
+  }
+})
+
 test('cloud HTTP server close handles workspace SSE shutdown during replay load', async () => {
   const fixture = createFixture({ ssePollMs: 10 })
   const originalListWorkspaceEvents = fixture.service.listWorkspaceEvents.bind(fixture.service)

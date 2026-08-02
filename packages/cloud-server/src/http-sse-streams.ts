@@ -294,6 +294,45 @@ export async function handleWorkspaceSse(
     replayUnsubscribe?.()
     unsubscribe?.()
   }
+  const unavailable = () => (
+    cleaned
+    || req.destroyed
+    || req.aborted
+    || res.destroyed
+    || res.writableEnded
+  )
+  const disarmPreflightClose = () => {
+    req.off('close', cleanup)
+    res.off('close', cleanup)
+  }
+  // Membership authorization is performed by the cursor lookup. Complete it
+  // before CORS/SSE headers so a revoked member receives a normal HTTP denial,
+  // never a partially-open 200 event stream.
+  req.once('close', cleanup)
+  res.once('close', cleanup)
+  if (unavailable()) {
+    disarmPreflightClose()
+    cleanup()
+    return
+  }
+  let cursor: Awaited<ReturnType<typeof options.service.getWorkspaceEventCursor>>
+  try {
+    cursor = await options.service.getWorkspaceEventCursor(context.principal)
+  } catch (error) {
+    const disconnected = unavailable()
+    disarmPreflightClose()
+    if (disconnected) {
+      cleanup()
+      return
+    }
+    throw error
+  }
+  if (unavailable()) {
+    disarmPreflightClose()
+    cleanup()
+    return
+  }
+  disarmPreflightClose()
   writeCorsHeaders(res, options.corsOrigin)
   if (!trackSseStream(req, res, options, cleanup, context.principal.orgId || context.principal.tenantId)) return
   res.writeHead(200, {
@@ -306,8 +345,6 @@ export async function handleWorkspaceSse(
   lifetimeTimer = armSseSocketLifetime(req, res)
   const stream = createOrderedSseWriter(res, afterSequence, () => cleaned)
 
-  const cursor = await options.service.getWorkspaceEventCursor(context.principal)
-  if (cleaned || res.destroyed) return
   const earliestSequence = cursor.earliestSequence
   const hasReplayGap = afterSequence > 0
     && earliestSequence !== null

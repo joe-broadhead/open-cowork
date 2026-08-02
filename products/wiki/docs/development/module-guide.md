@@ -13,7 +13,7 @@ internal modules when it can be tested and reviewed independently.
 | Package | Concern | Module |
 | --- | --- | --- |
 | `@openwiki/cli` | Flag parsing and typed option normalization | `packages/cli/src/args.ts` |
-| `@openwiki/cli` | Deployment profile definitions and alias resolution | `packages/cli/src/deployment-profiles.ts` |
+| `@openwiki/cli` | Runtime diagnostic profile requirements | `packages/cli/src/doctor-profiles.ts` |
 | `@openwiki/cli` | Human/JSON output helpers and live help text | `packages/cli/src/output.ts` |
 | `@openwiki/cli` | Process signal handling and server shutdown registration | `packages/cli/src/process-lifecycle.ts` |
 | `@openwiki/cli` | Git sync command contracts and human output | `packages/cli/src/commands/sync-types.ts`, `packages/cli/src/commands/sync-output.ts` |
