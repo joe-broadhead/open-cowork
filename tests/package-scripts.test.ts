@@ -69,6 +69,8 @@ const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml',
 const monthlyMaintenanceWorkflow = readFileSync(new URL('../.github/workflows/monthly-maintenance.yml', import.meta.url), 'utf8')
 const weeklyGatewayWorkflow = readFileSync(new URL('../.github/workflows/weekly-gateway.yml', import.meta.url), 'utf8')
 const gatewayWorkflow = readFileSync(new URL('../.github/workflows/ci-gateway.yml', import.meta.url), 'utf8')
+const wikiCiWorkflow = readFileSync(new URL('../.github/workflows/ci-wiki.yml', import.meta.url), 'utf8')
+const wikiReleaseWorkflow = readFileSync(new URL('../.github/workflows/release-wiki.yml', import.meta.url), 'utf8')
 const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', import.meta.url), 'utf8')
 const npmrc = readFileSync(new URL('../.npmrc', import.meta.url), 'utf8')
 const readmeDocs = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
@@ -1225,4 +1227,34 @@ test('ci and release workflows use canonical release gate scripts', () => {
 
   assert.match(packagingDocs, /gh attestation verify "oci:\/\/\$\{digest_ref\}"/)
   assert.match(packagingDocs, /--predicate-type https:\/\/cyclonedx\.org\/bom/)
+})
+
+test('Wiki CI and releases prove only the supported source and CLI distribution contract', () => {
+  for (const workflow of [wikiCiWorkflow, wikiReleaseWorkflow]) {
+    assert.match(workflow, /actions\/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97/)
+    for (const command of [
+      'python -m pip install -r products/wiki/docs/requirements.txt',
+      'pnpm --filter cowork-wiki-workspace lint',
+      'pnpm --filter cowork-wiki-workspace docs:reference -- --check',
+      'pnpm --filter cowork-wiki-workspace docs:build',
+      'pnpm --filter cowork-wiki-workspace test',
+      'pnpm --filter cowork-wiki-workspace pack:cli',
+      'node products/wiki/scripts/standalone-smoke.mjs',
+    ]) {
+      assert.match(workflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `Wiki workflow must run ${command}`)
+    }
+    assert.doesNotMatch(workflow, /evidence:hosted-readiness|release:(?:evidence|smoke|status)/)
+  }
+
+  assert.doesNotMatch(wikiReleaseWorkflow, /skip_tests/, 'Wiki releases must not bypass validation')
+  assert.doesNotMatch(wikiReleaseWorkflow, /\$\(ls /, 'Wiki releases must resolve the single packed artifact fail-closed')
+  assert.match(wikiReleaseWorkflow, /shasum -a 256 \.\/\*\.tgz/)
+  for (const retiredPath of [
+    '../products/wiki/.github',
+    '../products/wiki/deploy',
+    '../products/wiki/Dockerfile',
+    '../products/wiki/.dockerignore',
+  ]) {
+    assert.equal(existsSync(new URL(retiredPath, import.meta.url)), false, `${retiredPath} must remain deleted`)
+  }
 })

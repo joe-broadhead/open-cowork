@@ -38,10 +38,10 @@ evidence for the candidate revision.
 | PR/default-branch gate | `.github/workflows/ci-wiki.yml` (`CI Wiki`) |
 | Tag artifact gate | `.github/workflows/release-wiki.yml` (`Release Wiki`) |
 
-`Release Wiki` runs boundaries, typecheck, tests, CLI packing, and standalone
-install smoke. On a supported tag it
-attaches the tarball and checksum file to a GitHub release. It does not publish
-to npm or build a container.
+`Release Wiki` runs boundaries, Wiki lint, generated-reference drift checks,
+strict docs build, tests, CLI packing, and standalone install smoke. On a
+supported tag it attaches the tarball and checksum file to a GitHub release. It
+does not publish to npm or build a container.
 
 ## Release And Tag Checklist
 
@@ -50,7 +50,7 @@ Before creating a Wiki tag:
 - start from a clean checkout of the exact candidate SHA
 - use the root `.nvmrc` and pnpm `10.32.1`
 - run `pnpm boundaries:check`
-- run Wiki typecheck, tests, docs build, and security tests
+- run Wiki lint, generated-reference drift checks, strict docs build, tests, and security tests
 - run the root production dependency audit
 - build the CLI tarball and run the standalone install smoke
 - verify `CI Wiki` passed on the same SHA
@@ -62,8 +62,8 @@ Before creating a Wiki tag:
 - keep npm-registry, container, hosted-capacity, and external-provider claims absent unless
   independently proven
 
-The workflow's emergency `skip_tests` input weakens evidence. Do not use it for
-a normal candidate or describe a skipped run as release-qualified.
+The release workflow has no test bypass. A candidate is release-qualified only
+when every validation step passes on the tagged commit.
 
 ## Public Announcement Checklist
 

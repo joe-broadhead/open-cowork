@@ -5,12 +5,14 @@ on:
     paths:
       - 'products/wiki/**'
       - '.github/workflows/ci-wiki.yml'
+      - '.github/workflows/release-wiki.yml'
       - 'scripts/check-product-boundaries.mjs'
   push:
     branches: [master]
     paths:
       - 'products/wiki/**'
       - '.github/workflows/ci-wiki.yml'
+      - '.github/workflows/release-wiki.yml'
 
 concurrency:
   group: ci-wiki-${{ github.workflow }}-${{ github.ref }}
@@ -32,22 +34,46 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: products/wiki/docs/requirements.txt
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Wiki docs dependencies
+        run: python -m pip install -r products/wiki/docs/requirements.txt
 
       - name: Product boundaries
         run: pnpm boundaries:check
 
-      - name: Typecheck Wiki workspace
-        run: pnpm --filter cowork-wiki-workspace typecheck
+      - name: Lint Wiki workspace
+        run: pnpm --filter cowork-wiki-workspace lint
 
-      # Unit suite includes hosted-readiness-evidence dry-run contract (JOE-975).
-      # Full dual-replica --enforce is release/operator-gated, not PR CI.
+      - name: Check generated reference docs
+        run: pnpm --filter cowork-wiki-workspace docs:reference -- --check
+
+      - name: Build Wiki docs (strict)
+        run: pnpm --filter cowork-wiki-workspace docs:build
+
       - name: Test Wiki (unit)
         run: pnpm --filter cowork-wiki-workspace test
 
       - name: Build Wiki CLI pack
         run: pnpm --filter cowork-wiki-workspace pack:cli
 
+      - name: Resolve packed CLI
+        id: wiki-pack
+        shell: bash
+        run: |
+          mapfile -t tarballs < <(find products/wiki/artifacts/npm -maxdepth 1 -type f -name '*.tgz' -print)
+          if (( ${#tarballs[@]} != 1 )); then
+            echo "::error::Expected exactly one packed Wiki CLI tarball; found ${#tarballs[@]}."
+            exit 1
+          fi
+          printf 'tarball=%s\n' "${tarballs[0]}" >> "$GITHUB_OUTPUT"
+
       - name: Standalone install smoke
-        run: node products/wiki/scripts/standalone-smoke.mjs
+        run: node products/wiki/scripts/standalone-smoke.mjs "${{ steps.wiki-pack.outputs.tarball }}"

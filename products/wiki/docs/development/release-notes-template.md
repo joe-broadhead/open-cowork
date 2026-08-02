@@ -38,13 +38,13 @@ not part of this release.
 ## Verification Checklist
 
 - [ ] Root `CI Wiki` passed on the candidate commit.
-- [ ] Root `Release Wiki` passed without `skip_tests`.
+- [ ] Root `Release Wiki` passed every validation step on the tagged commit.
 - [ ] The attached tarball and `SHA256SUMS` came from that run.
 - [ ] The checksum verifies after downloading the GitHub release assets.
 - [ ] A clean temporary npm project installed the tarball and passed
       `openwiki --version`, `openwiki self-check`, and the standalone smoke.
-- [ ] Wiki typecheck, tests, docs build, security tests, and the root production
-      dependency audit passed.
+- [ ] Wiki lint, generated-reference drift checks, strict docs build, tests,
+      security tests, and the root production dependency audit passed.
 - [ ] Static export produced HTML plus `openapi.json`, `mcp-manifest.json`,
       `search-index.json`, and JSONL artifacts without private content.
 - [ ] Release copy contains no registry, container, hosted-capacity, or
