@@ -11,6 +11,7 @@ import {
 import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
 import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import { createCloudHttpServer } from '@open-cowork/cloud-server/http-server'
+import { CloudTransportError } from '@open-cowork/cloud-server/transport-adapter'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from '@open-cowork/cloud-server/runtime-adapter'
 import { CloudSessionService } from '@open-cowork/cloud-server/session-service'
 import { CloudWorker } from '@open-cowork/cloud-server/worker'
@@ -22,6 +23,8 @@ function gatewayPolicy() {
     allowRemoteApprovalResponses: true,
   }
 }
+
+const failedGatewayPrompt = 'fail without a false provider acknowledgement'
 
 class FakeRuntime implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
@@ -43,6 +46,9 @@ class FakeRuntime implements CloudRuntimeAdapter {
 
   async promptSession(input: { sessionId: string, parts: CloudRuntimePromptPart[], agent: string }) {
     this.prompts.push({ sessionId: input.sessionId, parts: input.parts, agent: input.agent })
+    if (input.parts.some((part) => part.type === 'text' && part.text === failedGatewayPrompt)) {
+      throw new Error('Simulated terminal runtime failure.')
+    }
     const events: CloudRuntimeEvent[] = [{
       type: 'assistant.message',
       payload: {
@@ -377,7 +383,23 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
         channelBindingId,
       }],
     }, gatewayEnv)
-    const gateway = createGatewayDaemon(daemonGatewayConfig, createCloudGateway(resolveGatewayCloudConnection(gatewayEnv)))
+    const durableCloudGateway = createCloudGateway(resolveGatewayCloudConnection(gatewayEnv))
+    const responseLossPrompt = 'retry without duplicate model work'
+    let losePromptResponse = true
+    const gateway = createGatewayDaemon(daemonGatewayConfig, {
+      ...durableCloudGateway,
+      async prompt(input) {
+        const result = await durableCloudGateway.prompt(input)
+        if (input.text === responseLossPrompt && losePromptResponse) {
+          losePromptResponse = false
+          throw new CloudTransportError({
+            kind: 'network',
+            message: 'Simulated response loss after Cloud committed the prompt.',
+          })
+        }
+        return result
+      },
+    })
     const promptsBeforeDaemon = runtime.prompts.length
     const gatewayUrl = await gateway.start()
     const fakeProvider = gateway.runtime.providers.get('fake')?.provider as {
@@ -423,6 +445,43 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       assert.equal(approval.status, 202)
       await waitUntil(() => runtime.permissions.some((permission) => permission.allowed))
       assert.equal(fakeProvider.answered.at(-1)?.interactionId, 'fake-callback-1')
+
+      const promptsBeforeResponseLoss = runtime.prompts.length
+      const responseLossEvent = {
+        id: 'fake-response-loss-event-1',
+        text: responseLossPrompt,
+        chatId: 'chat-response-loss',
+        userId: 'user-1',
+      }
+      await assert.rejects(
+        () => gateway.runtime.providers.emitFake('fake', responseLossEvent),
+        /Simulated response loss after Cloud committed the prompt/,
+      )
+      assert.equal(runtime.prompts.length, promptsBeforeResponseLoss + 1)
+      await gateway.runtime.providers.emitFake('fake', responseLossEvent)
+      assert.equal(runtime.prompts.length, promptsBeforeResponseLoss + 1)
+
+      const promptsBeforeFailedCommand = runtime.prompts.length
+      const failedCommandEvent = {
+        id: 'fake-failed-command-event-1',
+        text: failedGatewayPrompt,
+        chatId: 'chat-failed-command',
+        userId: 'user-1',
+      }
+      await assert.rejects(
+        () => gateway.runtime.providers.emitFake('fake', failedCommandEvent),
+        /Internal server error/,
+      )
+      assert.equal(runtime.prompts.length, promptsBeforeFailedCommand + 1)
+      await assert.rejects(
+        () => gateway.runtime.providers.emitFake('fake', failedCommandEvent),
+        /failed idempotent command/,
+      )
+      assert.equal(runtime.prompts.length, promptsBeforeFailedCommand + 1)
+      assert.equal(
+        fakeProvider.sent.some((entry) => entry.text === 'Sorry — I could not process that message. Please try again.'),
+        true,
+      )
     } finally {
       await gateway.stop()
     }

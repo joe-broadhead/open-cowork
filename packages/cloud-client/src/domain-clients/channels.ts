@@ -138,6 +138,7 @@ export type CloudChannelsClient = {
     bindingId: string
     text: string
     agent?: string | null
+    idempotencyKey?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
   claimChannelProviderEvent(input: {
     provider: ChannelProviderId

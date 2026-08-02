@@ -207,6 +207,7 @@ export async function enqueueChannelPrompt(
     bindingId: string
     text: string
     agent?: string | null
+    idempotencyKey?: string | null
   },
 ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
   await options.ensurePrincipal(principal)
@@ -242,10 +243,12 @@ export async function enqueueChannelPrompt(
   let command: SessionCommandRecord
   try {
     command = await options.store.enqueueSessionCommand({
-      // Command ids are server-owned. A caller-controlled global id could
-      // otherwise probe whether a command exists in another session through
-      // the store's idempotency mismatch response.
-      commandId: options.ids.randomUUID(),
+      // Keep command ids server-owned and binding-scoped. Gateway retries use
+      // the claimed Cloud event id as a seed without exposing a global command
+      // id that could probe another session's command namespace.
+      commandId: input.idempotencyKey
+        ? options.stableCloudId('channel_command', orgId, binding.bindingId, input.idempotencyKey)
+        : options.ids.randomUUID(),
       tenantId: principal.tenantId,
       userId: session.userId,
       sessionId: binding.sessionId,
@@ -258,6 +261,7 @@ export async function enqueueChannelPrompt(
     options.usageGovernance.translateQuotaError(error, 'Cloud command queue is full.', 'quota.queued_commands_exceeded')
   }
   await options.store.recordAuditEvent({
+    eventId: options.stableCloudId('audit_channel_prompt', orgId, command.commandId),
     orgId,
     accountId: actor.accountId,
     actorType: 'api_token',
@@ -269,6 +273,7 @@ export async function enqueueChannelPrompt(
   })
   for (const eventType of ['work.queued', 'prompt.enqueued']) {
     await options.usageGovernance.recordUsage({
+      eventId: options.stableCloudId('usage_channel_prompt', orgId, command.commandId, eventType),
       orgId,
       accountId: actor.accountId,
       eventType,
@@ -281,6 +286,9 @@ export async function enqueueChannelPrompt(
         provider: actor.provider,
       },
     })
+  }
+  if (command.status === 'failed') {
+    throw new CloudServiceError(409, 'Channel prompt cannot replay a failed idempotent command.')
   }
   return { binding, command, beforeProjectionSequence }
 }

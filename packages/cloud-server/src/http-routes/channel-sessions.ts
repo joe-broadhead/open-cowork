@@ -120,6 +120,7 @@ export async function handleChannelSessionRoutes(input: {
       bindingId,
       text,
       agent: tools.readString(body.agent),
+      idempotencyKey: tools.readString(body.idempotencyKey),
       identityId: tools.readString(body.identityId),
       provider: tools.readChannelProvider(body.provider),
       externalWorkspaceId: tools.readString(body.externalWorkspaceId),

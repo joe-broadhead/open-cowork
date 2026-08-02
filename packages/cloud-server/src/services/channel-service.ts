@@ -116,6 +116,7 @@ export type CloudChannelServiceDelegate = {
     bindingId: string
     text: string
     agent?: string | null
+    idempotencyKey?: string | null
   }): Promise<{
     binding: ChannelSessionBindingRecord
     command: SessionCommandRecord

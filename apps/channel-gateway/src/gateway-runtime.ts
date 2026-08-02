@@ -535,6 +535,7 @@ async function handleMessage(
       bindingId: bound.binding.bindingId,
       text,
       agent: providerConfig.defaultAgent,
+      idempotencyKey: eventClaim.event.eventId,
       identityId: identity.identityId,
       provider,
       externalWorkspaceId,

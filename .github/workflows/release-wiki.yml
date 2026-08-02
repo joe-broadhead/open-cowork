@@ -63,16 +63,15 @@ jobs:
       - name: Pack CLI
         run: pnpm --filter cowork-wiki-workspace pack:cli
 
-      - name: Resolve packed CLI
+      - name: Verify release ref and packed CLI
         id: wiki-pack
         shell: bash
         run: |
-          mapfile -t tarballs < <(find products/wiki/artifacts/npm -maxdepth 1 -type f -name '*.tgz' -print)
-          if (( ${#tarballs[@]} != 1 )); then
-            echo "::error::Expected exactly one packed Wiki CLI tarball; found ${#tarballs[@]}."
-            exit 1
+          release_ref="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            release_ref="manual"
           fi
-          printf 'tarball=%s\n' "${tarballs[0]}" >> "$GITHUB_OUTPUT"
+          node products/wiki/scripts/verify-release-artifact.mjs "$release_ref" products/wiki/artifacts/npm >> "$GITHUB_OUTPUT"
 
       - name: Standalone smoke
         run: node products/wiki/scripts/standalone-smoke.mjs "${{ steps.wiki-pack.outputs.tarball }}"
@@ -95,11 +94,21 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
+          WIKI_PRERELEASE: ${{ steps.wiki-pack.outputs.prerelease }}
         run: |
           tag="${GITHUB_REF_NAME}"
+          prerelease_args=()
+          case "$WIKI_PRERELEASE" in
+            true) prerelease_args=(--prerelease) ;;
+            false) ;;
+            *)
+              echo "::error::Unexpected Wiki prerelease classification: $WIKI_PRERELEASE"
+              exit 1
+              ;;
+          esac
           gh release create "$tag" \
             --title "Wiki ${tag}" \
             --notes "Standalone Wiki CLI pack from monorepo products/wiki. Does not include Desktop." \
             --verify-tag \
-            artifacts/wiki/* || \
-          gh release upload "$tag" artifacts/wiki/* --clobber
+            "${prerelease_args[@]}" \
+            artifacts/wiki/*

@@ -221,6 +221,7 @@ export class CloudChannelDomainService {
       bindingId: string
       text: string
       agent?: string | null
+      idempotencyKey?: string | null
     },
   ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
     return sessionActions.enqueueChannelPrompt(this.options, principal, input)

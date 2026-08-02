@@ -21,6 +21,7 @@ import {
 
 type PackageJson = {
   name?: string
+  version?: string
   dependencies?: Record<string, string>
   devDependencies?: Record<string, string>
   packageManager?: string
@@ -71,6 +72,7 @@ const weeklyGatewayWorkflow = readFileSync(new URL('../.github/workflows/weekly-
 const gatewayWorkflow = readFileSync(new URL('../.github/workflows/ci-gateway.yml', import.meta.url), 'utf8')
 const wikiCiWorkflow = readFileSync(new URL('../.github/workflows/ci-wiki.yml', import.meta.url), 'utf8')
 const wikiReleaseWorkflow = readFileSync(new URL('../.github/workflows/release-wiki.yml', import.meta.url), 'utf8')
+const wikiReleaseVerificationScript = fileURLToPath(new URL('../products/wiki/scripts/verify-release-artifact.mjs', import.meta.url))
 const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', import.meta.url), 'utf8')
 const npmrc = readFileSync(new URL('../.npmrc', import.meta.url), 'utf8')
 const readmeDocs = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
@@ -1248,6 +1250,32 @@ test('Wiki CI and releases prove only the supported source and CLI distribution 
 
   assert.doesNotMatch(wikiReleaseWorkflow, /skip_tests/, 'Wiki releases must not bypass validation')
   assert.doesNotMatch(wikiReleaseWorkflow, /\$\(ls /, 'Wiki releases must resolve the single packed artifact fail-closed')
+  assert.match(
+    wikiReleaseWorkflow,
+    /if \[\[ "\$GITHUB_REF_TYPE" != "tag" \]\]; then\s+release_ref="manual"/,
+    'Manual Wiki dry runs must verify an explicitly untagged artifact rather than treating the branch as a tag',
+  )
+  assert.match(
+    wikiReleaseWorkflow,
+    /node products\/wiki\/scripts\/verify-release-artifact\.mjs "\$release_ref" products\/wiki\/artifacts\/npm >> "\$GITHUB_OUTPUT"/,
+  )
+  assert.ok(
+    wikiReleaseWorkflow.indexOf('node products/wiki/scripts/verify-release-artifact.mjs') < wikiReleaseWorkflow.indexOf('gh release create'),
+    'Wiki release artifact integrity must be verified before release creation',
+  )
+  assert.match(
+    wikiReleaseWorkflow,
+    /WIKI_PRERELEASE: \$\{\{ steps\.wiki-pack\.outputs\.prerelease \}\}/,
+    'Wiki releases must consume the verifier prerelease classification',
+  )
+  assert.match(wikiReleaseWorkflow, /case "\$WIKI_PRERELEASE" in/)
+  assert.match(wikiReleaseWorkflow, /true\) prerelease_args=\(--prerelease\)/)
+  assert.match(wikiReleaseWorkflow, /"\$\{prerelease_args\[@\]\}"/)
+  assert.doesNotMatch(
+    wikiReleaseWorkflow,
+    /gh release upload|--clobber/,
+    'Wiki releases must fail rather than mutate assets attached to an existing release',
+  )
   assert.match(wikiReleaseWorkflow, /shasum -a 256 \.\/\*\.tgz/)
   for (const retiredPath of [
     '../products/wiki/.github',
@@ -1256,5 +1284,160 @@ test('Wiki CI and releases prove only the supported source and CLI distribution 
     '../products/wiki/.dockerignore',
   ]) {
     assert.equal(existsSync(new URL(retiredPath, import.meta.url)), false, `${retiredPath} must remain deleted`)
+  }
+})
+
+test('Wiki release artifact verification accepts matching tag forms and rejects a version mismatch', () => {
+  const wikiVersion = workspacePackageJson('products/wiki').version
+  assert.equal(typeof wikiVersion, 'string')
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'open-cowork-wiki-release-'))
+  const packageRoot = join(fixtureRoot, 'package')
+  const artifactsRoot = join(fixtureRoot, 'artifacts')
+  mkdirSync(packageRoot)
+  mkdirSync(artifactsRoot)
+  writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: '@openwiki/cli', version: wikiVersion }))
+  writeFileSync(join(packageRoot, 'index.js'), 'export {}\n')
+
+  try {
+    const verify = (tag: string, directory: string) => spawnSync(
+      process.execPath,
+      [wikiReleaseVerificationScript, tag, directory],
+      { cwd: fileURLToPath(repoRoot), encoding: 'utf8' },
+    )
+    const packed = spawnSync('npm', ['pack', '--pack-destination', artifactsRoot], {
+      cwd: packageRoot,
+      encoding: 'utf8',
+    })
+    assert.equal(packed.status, 0, packed.stderr)
+
+    for (const tag of [`wiki@v${wikiVersion}`, `wiki-v${wikiVersion}`, 'manual']) {
+      const verified = verify(tag, artifactsRoot)
+      assert.equal(verified.status, 0, `${tag}: ${verified.stderr}`)
+      assert.equal(
+        verified.stdout,
+        `tarball=${join(artifactsRoot, `openwiki-cli-${wikiVersion}.tgz`)}\nprerelease=false\n`,
+      )
+    }
+
+    const mismatched = verify('wiki-v999.999.999', artifactsRoot)
+    assert.notEqual(mismatched.status, 0)
+    assert.equal(
+      mismatched.stderr,
+      `::error::Wiki tag version 999.999.999 does not match Wiki package version ${wikiVersion}\n`,
+    )
+
+    const emptyArtifacts = join(fixtureRoot, 'empty-artifacts')
+    mkdirSync(emptyArtifacts)
+    const empty = verify(`wiki-v${wikiVersion}`, emptyArtifacts)
+    assert.notEqual(empty.status, 0)
+    assert.match(empty.stderr, /Expected exactly one packed Wiki CLI tarball; found 0/)
+
+    const [tarballName] = readdirSync(artifactsRoot)
+    const tarballContents = readFileSync(join(artifactsRoot, tarballName))
+    const multipleArtifacts = join(fixtureRoot, 'multiple-artifacts')
+    mkdirSync(multipleArtifacts)
+    writeFileSync(join(multipleArtifacts, tarballName), tarballContents)
+    writeFileSync(join(multipleArtifacts, 'duplicate.tgz'), tarballContents)
+    const multiple = verify(`wiki-v${wikiVersion}`, multipleArtifacts)
+    assert.notEqual(multiple.status, 0)
+    assert.match(multiple.stderr, /Expected exactly one packed Wiki CLI tarball; found 2/)
+
+    const wrongBasenameArtifacts = join(fixtureRoot, 'wrong-basename-artifacts')
+    mkdirSync(wrongBasenameArtifacts)
+    writeFileSync(join(wrongBasenameArtifacts, `wiki-cli-${wikiVersion}.tgz`), tarballContents)
+    const wrongBasename = verify(`wiki-v${wikiVersion}`, wrongBasenameArtifacts)
+    assert.notEqual(wrongBasename.status, 0)
+    assert.equal(
+      wrongBasename.stderr,
+      `::error::Wiki tarball basename wiki-cli-${wikiVersion}.tgz does not match expected openwiki-cli-${wikiVersion}.tgz\n`,
+    )
+
+    const wrongNamePackageRoot = join(fixtureRoot, 'wrong-name-package')
+    const wrongNameArtifacts = join(fixtureRoot, 'wrong-name-artifacts')
+    mkdirSync(wrongNamePackageRoot)
+    mkdirSync(wrongNameArtifacts)
+    writeFileSync(join(wrongNamePackageRoot, 'package.json'), JSON.stringify({
+      name: 'openwiki-cli',
+      version: wikiVersion,
+      bin: { openwiki: './index.js' },
+    }))
+    writeFileSync(join(wrongNamePackageRoot, 'index.js'), '#!/usr/bin/env node\n')
+    const wrongNamePack = spawnSync('npm', ['pack', '--pack-destination', wrongNameArtifacts], {
+      cwd: wrongNamePackageRoot,
+      encoding: 'utf8',
+    })
+    assert.equal(wrongNamePack.status, 0, wrongNamePack.stderr)
+    const wrongName = verify(`wiki-v${wikiVersion}`, wrongNameArtifacts)
+    assert.notEqual(wrongName.status, 0)
+    assert.equal(
+      wrongName.stderr,
+      '::error::Wiki tarball package name openwiki-cli does not match expected @openwiki/cli\n',
+    )
+
+    const mismatchedPackageRoot = join(fixtureRoot, 'mismatched-package')
+    const mismatchedPackedRoot = join(fixtureRoot, 'mismatched-packed')
+    const mismatchedArtifacts = join(fixtureRoot, 'mismatched-artifacts')
+    mkdirSync(mismatchedPackageRoot)
+    mkdirSync(mismatchedPackedRoot)
+    mkdirSync(mismatchedArtifacts)
+    writeFileSync(join(mismatchedPackageRoot, 'package.json'), JSON.stringify({ name: '@openwiki/cli', version: '999.999.999' }))
+    writeFileSync(join(mismatchedPackageRoot, 'index.js'), 'export {}\n')
+    const mismatchedPack = spawnSync('npm', ['pack', '--pack-destination', mismatchedPackedRoot], {
+      cwd: mismatchedPackageRoot,
+      encoding: 'utf8',
+    })
+    assert.equal(mismatchedPack.status, 0, mismatchedPack.stderr)
+    const [mismatchedTarballName] = readdirSync(mismatchedPackedRoot)
+    writeFileSync(
+      join(mismatchedArtifacts, `openwiki-cli-${wikiVersion}.tgz`),
+      readFileSync(join(mismatchedPackedRoot, mismatchedTarballName)),
+    )
+    const mismatchedInternalVersion = verify(`wiki-v${wikiVersion}`, mismatchedArtifacts)
+    assert.notEqual(mismatchedInternalVersion.status, 0)
+    assert.equal(
+      mismatchedInternalVersion.stderr,
+      `::error::Wiki tarball package version 999.999.999 does not match Wiki package version ${wikiVersion}\n`,
+    )
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true })
+  }
+})
+
+test('Wiki release artifact verification classifies semantic prerelease tags', () => {
+  const version = '1.2.3-rc.1'
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'open-cowork-wiki-prerelease-'))
+  const wikiRoot = join(fixtureRoot, 'wiki')
+  const scriptRoot = join(wikiRoot, 'scripts')
+  const packageRoot = join(fixtureRoot, 'package')
+  const artifactsRoot = join(fixtureRoot, 'artifacts')
+  mkdirSync(scriptRoot, { recursive: true })
+  mkdirSync(packageRoot)
+  mkdirSync(artifactsRoot)
+  writeFileSync(join(wikiRoot, 'package.json'), JSON.stringify({ version }))
+  writeFileSync(
+    join(scriptRoot, 'verify-release-artifact.mjs'),
+    readFileSync(wikiReleaseVerificationScript),
+  )
+  writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({ name: '@openwiki/cli', version }))
+  writeFileSync(join(packageRoot, 'index.js'), 'export {}\n')
+
+  try {
+    const packed = spawnSync('npm', ['pack', '--pack-destination', artifactsRoot], {
+      cwd: packageRoot,
+      encoding: 'utf8',
+    })
+    assert.equal(packed.status, 0, packed.stderr)
+    const verified = spawnSync(
+      process.execPath,
+      [join(scriptRoot, 'verify-release-artifact.mjs'), `wiki-v${version}`, artifactsRoot],
+      { encoding: 'utf8' },
+    )
+    assert.equal(verified.status, 0, verified.stderr)
+    assert.equal(
+      verified.stdout,
+      `tarball=${join(artifactsRoot, `openwiki-cli-${version}.tgz`)}\nprerelease=true\n`,
+    )
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true })
   }
 })

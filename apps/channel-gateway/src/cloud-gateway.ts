@@ -55,6 +55,7 @@ export type CloudGateway = {
     bindingId: string
     text: string
     agent?: string | null
+    idempotencyKey?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
   claimProviderEvent(input: {
     provider: CloudChannelProviderId

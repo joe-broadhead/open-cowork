@@ -834,6 +834,7 @@ export type CloudTransportAdapter = {
     bindingId: string
     text: string
     agent?: string | null
+    idempotencyKey?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
   claimChannelProviderEvent?(input: {
     provider: CloudChannelProviderId
