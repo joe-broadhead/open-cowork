@@ -125,6 +125,36 @@ test('runtime delta coalescer keeps separate sessions independent', async () => 
   assert.equal(routed.at(-1)!.payload.content, 'b')
 })
 
+test('runtime delta coalescer never merges append windows across generation provenance', async () => {
+  const routed: CloudRuntimeEvent[] = []
+  const coalescer = createRuntimeDeltaCoalescer({
+    route: async (event) => { routed.push(event) },
+    setTimer: () => 1 as unknown as ReturnType<typeof setTimeout>,
+    clearTimer: () => {},
+  })
+  const event = (runtimeGeneration: number, content: string): CloudRuntimeEvent => ({
+    ...appendDelta('s1', 'same-retried-message', content),
+    provenance: {
+      scopeId: 'tenant-1',
+      sessionId: 's1',
+      runId: 'same-command',
+      runtimeGeneration,
+      executionGeneration: 1,
+      leaseOwner: 'worker-1',
+      leaseEpoch: 'lease-1',
+    },
+  })
+
+  await coalescer.handle(event(1, 'stale'))
+  await coalescer.handle(event(2, 'current'))
+  await coalescer.flushAll()
+
+  assert.deepEqual(routed.map((entry) => [
+    entry.provenance?.runtimeGeneration,
+    entry.payload.content,
+  ]), [[1, 'stale'], [2, 'current']])
+})
+
 async function streamTokens(
   tokens: string[],
   messageId: string,

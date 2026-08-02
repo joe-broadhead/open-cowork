@@ -1,10 +1,12 @@
 import { createPostgresSchemaManifest } from '@open-cowork/shared/node'
+import { CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_LIFECYCLE_STATEMENTS } from './postgres-migrations/artifact-upload-lifecycle.ts'
 
 export const CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID = '001_cloud_control_plane_baseline'
 export const CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID = '002_cloud_control_plane_concurrent_indexes'
 export const CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID = '003_cloud_workflow_webhook_secrets'
 export const CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_MIGRATION_ID = '004_channel_interaction_binding_scope'
 export const CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID = '005_channel_idempotency_scope'
+export const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_LIFECYCLE_MIGRATION_ID = '006_artifact_upload_lifecycle'
 export const CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS = [720_908_611, 1_762_083_497] as const
 
 export type CloudControlPlaneMigration = {
@@ -1207,14 +1209,28 @@ const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS = [
     session_id text NOT NULL,
     artifact_id text NOT NULL,
     object_key text NOT NULL,
+    staging_object_key text NOT NULL,
+    final_object_key text NOT NULL,
     filename text NOT NULL,
     content_type text,
+    checksum_sha256 text,
+    publication_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+    staging_cleaned_at timestamptz,
     quota_key text,
     quota_window_ms bigint,
     quota_window_started_at_ms bigint,
     reserved_bytes bigint NOT NULL,
-    settled_bytes bigint,
     status text NOT NULL,
+    cleanup_reason text,
+    cleanup_requested_at timestamptz,
+    claim_owner text,
+    claim_token text,
+    claim_expires_at timestamptz,
+    cleanup_attempts integer NOT NULL DEFAULT 0,
+    cleanup_passes integer NOT NULL DEFAULT 0,
+    finalization_attempts integer NOT NULL DEFAULT 0,
+    next_cleanup_attempt_at timestamptz,
+    last_error_code text,
     expires_at timestamptz NOT NULL,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
@@ -1223,8 +1239,17 @@ const CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_RESERVATIONS_STATEMENTS = [
     FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_artifact_upload_reservations_expiry_idx
-    ON cloud_artifact_upload_reservations (org_id, status, expires_at)
-    WHERE status = 'reserved'`,
+    ON cloud_artifact_upload_reservations (expires_at, status)
+    WHERE status IN ('reserved', 'finalizing')
+       OR (status = 'finalized' AND staging_cleaned_at IS NULL)`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_upload_reservations_reconcile_idx
+    ON cloud_artifact_upload_reservations (
+      status, next_cleanup_attempt_at, claim_expires_at, expires_at, cleanup_requested_at
+    )`,
+  `CREATE INDEX IF NOT EXISTS cloud_artifact_upload_reservations_terminal_retention_idx
+    ON cloud_artifact_upload_reservations (updated_at)
+    WHERE status = 'cleaned'
+       OR (status = 'finalized' AND staging_cleaned_at IS NOT NULL)`,
 ] as const
 
 const CLOUD_CONTROL_PLANE_ARTIFACT_TASK_INDEX_STATEMENTS = [
@@ -1330,6 +1355,10 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_LIFECYCLE_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_ARTIFACT_UPLOAD_LIFECYCLE_STATEMENTS,
   },
   {
     id: CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,

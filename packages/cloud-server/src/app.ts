@@ -8,7 +8,7 @@ import {
   type KnowledgeStore,
 } from '@open-cowork/shared'
 import { DEFAULT_CONFIG, type CloudAuthConfig, type OpenCoworkConfig } from '@open-cowork/shared'
-import { CloudArtifactService } from './artifact-service.ts'
+import { createCloudArtifactUploadComposition } from './artifact-upload-composition.ts'
 import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
 import {
   parseCloudDeploymentTier,
@@ -29,10 +29,7 @@ import {
   type CloudHttpServer,
 } from './http-server.ts'
 import { compileCloudRuntimeCapabilityPolicy } from './cloud-runtime-capability-policy.ts'
-import {
-  createCloudStartupCleanupStack,
-  settleCloudCleanups,
-} from './cloud-app-cleanup.ts'
+import { createCloudStartupCleanupStack, settleCloudCleanups } from './cloud-app-cleanup.ts'
 import { CloudSseReplayHub } from './sse-replay.ts'
 import { CloudSsePgNotifyListener } from './sse-pg-notify.ts'
 import {
@@ -42,18 +39,13 @@ import {
   type CloudObservabilityAdapter,
 } from './observability.ts'
 import { createObjectStoreForCloud, instrumentObjectStore, resolveCloudObjectStoreConfig, type ObjectStoreAdapter } from './object-store.ts'
-import {
-  createByokSecretStore,
-  type ByokSecretStore,
-  type ByokSecretStoreOptions,
-} from './byok-secret-store.ts'
-import {
-  createOidcBrowserAuthProvider,
-} from './oidc-auth.ts'
+import { createByokSecretStore, type ByokSecretStore, type ByokSecretStoreOptions } from './byok-secret-store.ts'
+import { createOidcBrowserAuthProvider } from './oidc-auth.ts'
 import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvider } from './path-provider.ts'
 import { loadPgPool } from './postgres-control-plane-store.ts'
 import { createCloudProjectSourceService } from './project-source-service.ts'
 import { createCloudReadinessCheck } from './readiness.ts'
+import { createCloudProgressWatchdogComposition } from './progress-watchdog-composition.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
 import {
   assertCloudSecretKeyMaterialStrong,
@@ -1119,7 +1111,17 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     secretAdapter,
   )
   await service.domains.workflows.migrateLegacyWebhookSecrets()
-  const artifacts = new CloudArtifactService(service, objectStore)
+  const artifactUploads = createCloudArtifactUploadComposition({
+    env,
+    service,
+    store,
+    objectStore,
+    observability,
+    claimOwner: `${cloudWorkerId}:artifact-upload`,
+    schedulerOwner: shouldRunCloudScheduler(policy.role),
+  })
+  await artifactUploads.reconcile()
+  const artifacts = artifactUploads.artifacts
   const sessionCookies = shouldRunCloudWeb(policy.role)
     ? hasSessionCookieOverride
       ? options.sessionCookies || null
@@ -1201,6 +1203,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       await worker.completeShutdown({ drained: false })
     })
   }
+  const progressWatchdog = createCloudProgressWatchdogComposition({ env, observability, worker })
+  startupCleanup.add(() => progressWatchdog.close())
   const retention: CloudRetentionOptions = {
     // Default null (disabled) — retention is opt-in per the operator's compliance policy.
     channelDeliveryMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RETENTION_CHANNEL_DELIVERY_MS'), 0) || null,
@@ -1223,16 +1227,11 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   // is already drift-free for post-migration activity; set this to recompute the gauges on an interval.
   const concurrencyReconcileMs = parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_CONCURRENCY_RECONCILE_MS'), 0) || null
   const scheduler = shouldRunCloudScheduler(policy.role)
-    ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`, observability, retention, concurrencyReconcileMs)
+    ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`, observability, retention, concurrencyReconcileMs, artifactUploads.reconcile)
     : null
 
-  // Coalesce token-granular streaming deltas before materializing (PERF-1): one
-  // materialize+persist per ~flush window instead of one per token.
   const runtimeDeltaCoalescer = worker && runtime.subscribeEvents
     ? createRuntimeDeltaCoalescer({
-        // Serialized per session (issue #855): the coalescer issues route() calls
-        // synchronously in transcript order (flushed delta, then boundary); the wrapper
-        // guarantees those appends persist in exactly that order.
         route: ((serializedRoute) => async (event: CloudRuntimeEvent) => {
           try {
             await serializedRoute(event)
@@ -1272,14 +1271,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           error,
         )
       },
+      ...(progressWatchdog.enabled ? { onProgress: (event) => progressWatchdog.observe(event) } : {}),
     })
     : null
   if (runtimeUnsubscribe) {
     startupCleanup.add(() => runtimeUnsubscribe())
   }
-  // Worker/scheduler roles run no HTTP server, so a liveness heartbeat + a tiny /livez
-  // server lets the orchestrator restart a wedged-event-loop pod. The web (and all-in-one)
-  // role already exposes /livez through its main server, so it needs neither.
   const workerPollMs = options.workerPollMs || envOptions.workerPollMs
   const schedulerPollMs = options.schedulerPollMs || envOptions.schedulerPollMs
   const loopHeartbeat = !shouldRunCloudWeb(policy.role) && (worker || scheduler) ? createLoopHeartbeat() : null
@@ -1303,31 +1300,21 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     )
     : null
   if (stopSchedulerLoop) startupCleanup.add(() => stopSchedulerLoop())
-  // Opt-in via an explicitly-set port (the Helm chart sets it for worker/scheduler).
-  // Unset (local/test runs) ⇒ no server, so the fixed port can't conflict across them.
   const livenessPort = parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_LIVENESS_PORT'), 0)
   const livenessServer = loopHeartbeat && livenessPort > 0
     ? await startCloudLivenessServer(
       livenessPort,
       options.hostname || envOptions.hostname,
       () => loopHeartbeat.ageMs() < Math.max(30_000, Math.max(workerPollMs, schedulerPollMs) * 10),
+      () => progressWatchdog.snapshot(),
     )
     : null
   if (livenessServer) startupCleanup.add(() => livenessServer.close())
 
   const webhookSecurity = isWorkflowWebhookSecurityStore(store) ? store : undefined
-  // Opt-in Postgres LISTEN/NOTIFY accelerator (audit F1b). Default OFF ⇒ sseReplayHub
-  // stays null, the HTTP server makes its own hub exactly as before, and no LISTEN
-  // connection is opened — SSE delivery is byte-for-byte the unchanged poll loop. ON ⇒ a
-  // shared replay hub is threaded into the HTTP server so the dedicated LISTEN connection
-  // below can wake the matching topic early. Requires a Postgres control plane URL and the
-  // web role (NOTIFY is emitted by the worker write path; LISTEN/SSE live on web pods).
   const ssePgNotifyEnabled = envOptions.ssePgNotifyEnabled
     && shouldRunCloudWeb(policy.role)
     && Boolean(knowledgeControlPlaneUrl)
-  // With the accelerator on, wake-addressable topics poll at the long backstop cadence
-  // (NOTIFY delivers low latency; polling only catches missed notifications). Off ⇒ the
-  // HTTP server builds its own default hub and every topic polls at ssePollMs as before.
   const sseReplayHub = ssePgNotifyEnabled
     ? new CloudSseReplayHub({ wakeBackstopPollMs: envOptions.sseNotifyBackstopPollMs })
     : null
@@ -1341,6 +1328,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         worker,
         sessionCookies,
         observability,
+        progress: () => progressWatchdog.snapshot(),
         browserAuth,
         desktopAuth: createCloudDesktopAuthConfig(authConfig),
         auth: options.auth || createCompositeCloudAuthResolver(
@@ -1383,6 +1371,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           executionIsolationPolicy,
           executionIsolationCapability: () => effectiveIsolationProvider.capability(),
           requireSchemaMigrations: envOptions.deploymentTier === 'public_production',
+          artifactDirectUpload: {
+            requested: artifactUploads.config.requested,
+            configStatus: artifactUploads.config.configStatus,
+            durableStore: artifactUploads.durableStore,
+            cleanupOwnerReady: artifactUploads.cleanupOwnerReady,
+          },
         }),
       })
     : null
@@ -1411,6 +1405,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         worker?.beginShutdown()
         let workerLoopDrained = !stopWorkerLoop
         await settleCloudCleanups([
+          () => progressWatchdog.close(),
           async () => {
             workerLoopDrained = await stopWorkerLoop?.() ?? true
           },

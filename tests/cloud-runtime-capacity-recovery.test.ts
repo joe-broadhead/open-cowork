@@ -88,6 +88,7 @@ test('worker durably defers capacity-saturated commands until retryAfter and the
     { name: 'create queue_full', reason: 'queue_full', failureSurface: 'create' },
     { name: 'create queue_timeout', reason: 'queue_timeout', failureSurface: 'create' },
     { name: 'prompt queue_full', reason: 'queue_full', failureSurface: 'prompt' },
+    { name: 'prompt execution_active', reason: 'execution_active', failureSurface: 'prompt' },
     { name: 'scope adapter_closing', reason: 'adapter_closing', failureSurface: 'scope' },
   ] as const) {
     await context.test(scenario.name, async (scenarioContext) => {

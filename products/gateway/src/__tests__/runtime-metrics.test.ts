@@ -6,6 +6,7 @@ import {
   recordAuthFailure,
   recordChannelMessageIn,
   recordChannelOperation,
+  recordProgressWatchdogOutcome,
   recordSchedulerCycle,
   renderPrometheusMetrics,
   sampleRuntimeMetrics,
@@ -56,6 +57,8 @@ describe('runtime-metrics', () => {
     recordChannelOperation('telegram', 'durable-native', 'outbound', 'retry', 40)
     recordChannelOperation('telegram', 'durable-native', 'outbound', 'error', 55)
     recordAuthFailure()
+    recordProgressWatchdogOutcome('suspect')
+    recordProgressWatchdogOutcome('fenced_stale')
 
     const text = renderPrometheusMetrics({
       queueDepth: 3,
@@ -78,6 +81,7 @@ describe('runtime-metrics', () => {
       'gateway_channel_messages_in_total',
       'gateway_scheduler_cycles_total',
       'gateway_auth_failures_total',
+      'gateway_progress_watchdog_outcomes_total',
       'gateway_queue_depth',
       'gateway_active_runs',
       'gateway_leadership_writer',
@@ -99,6 +103,8 @@ describe('runtime-metrics', () => {
     expect(text).toContain('gateway_runs_failed_total 1')
     expect(text).toContain('gateway_queue_depth 3')
     expect(text).toContain('gateway_leadership_writer 1')
+    expect(text).toContain('gateway_progress_watchdog_outcomes_total{outcome="suspect"} 1')
+    expect(text).toContain('gateway_progress_watchdog_outcomes_total{outcome="fenced_stale"} 1')
 
     // Histogram has real observations.
     expect(text).toMatch(/gateway_slo_latency_ms_bucket\{[^}]*le="\+Inf"\} \d+/)

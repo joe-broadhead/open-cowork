@@ -128,12 +128,29 @@ const METRIC_ATTRIBUTE_ENUM_VALUES = new Map<string, ReadonlySet<string>>([
   ['kind', new Set(['metric', 'span'])],
   ['operation', new Set(['put', 'get', 'head', 'delete', 'legacy_migration_batch'])],
   ['provider', new Set(['sandbox'])],
+  ['upload_outcome', new Set([
+    'reserved',
+    'finalized',
+    'aborted',
+    'expired',
+    'rejected',
+    'cleanup_failed',
+  ])],
+  ['watchdog_outcome', new Set([
+    'observed',
+    'enforced',
+    'fenced-stale',
+    'recovered',
+    'failed',
+  ])],
+  ['watchdog_state', new Set(['suspect', 'stalled'])],
   ['reason', new Set([
     'queue_full',
     'queue_timeout',
     'provision_timeout',
     'cleanup_pending',
     'adapter_closing',
+    'execution_active',
     'invalid-envelope',
     'unknown-event-type',
     'no-projected-events',
@@ -765,6 +782,12 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
   }
 }
 
+export function templateCloudHttpPath(path: string) {
+  return path
+    .replace(/(\/sessions)\/[^/]+/g, '$1/:sessionId')
+    .replace(/(\/artifacts)\/[^/]+/g, '$1/:artifactId')
+}
+
 export async function recordCloudHttpRequest(
   observability: CloudObservabilityAdapter | null | undefined,
   input: CloudHttpRequestObservation,
@@ -772,6 +795,7 @@ export async function recordCloudHttpRequest(
   if (!observability) return
   const timestamp = input.timestamp || new Date()
   const status = input.statusCode >= 500 ? 'error' : 'ok'
+  const routePath = templateCloudHttpPath(input.path)
   const metricAttributes = {
     'http.request.method': input.method,
     'http.response.status_code': input.statusCode,
@@ -780,13 +804,13 @@ export async function recordCloudHttpRequest(
   }
   const attributes = {
     request_id: input.requestId,
-    'url.path': input.path,
+    'url.path': routePath,
     ...metricAttributes,
   }
   await recordCloudLog(observability, {
     level: input.statusCode >= 500 ? 'error' : input.statusCode >= 400 ? 'warn' : 'info',
     name: 'cloud.http.request',
-    message: `${input.method} ${input.path} ${input.statusCode}`,
+    message: `${input.method} ${routePath} ${input.statusCode}`,
     attributes: {
       ...attributes,
       duration_ms: input.durationMs,

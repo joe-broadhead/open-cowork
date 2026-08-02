@@ -40,6 +40,14 @@ export interface RuntimeMetricsSnapshot {
   samples: RuntimeSample[]
 }
 
+export type ProgressWatchdogMetricOutcome =
+  | 'suspect'
+  | 'stalled'
+  | 'enforced'
+  | 'fenced_stale'
+  | 'recovered'
+  | 'failed'
+
 const SAMPLE_RING_MAX = 240 // ~2h at a 30s cadence; bounded memory.
 const DEFAULT_SAMPLE_INTERVAL_MS = 30_000
 
@@ -165,6 +173,7 @@ const counters = {
   liveSseSlowConsumers: new Counter('gateway_live_sse_slow_consumers_total', 'Total live SSE clients closed by bounded backpressure policy.'),
   liveUpstreamFramesRejected: new Counter('gateway_live_upstream_frames_rejected_total', 'Total upstream SSE frames rejected before payload processing.'),
   liveSseReplayDropped: new Counter('gateway_live_sse_replay_dropped_total', 'Total live SSE session snapshots omitted from replay by a bounded cache policy.'),
+  progressWatchdog: new Counter('gateway_progress_watchdog_outcomes_total', 'Total bounded progress-watchdog decisions and recovery outcomes.'),
 }
 
 const gauges = {
@@ -232,6 +241,9 @@ export function recordLiveUpstreamFrameRejected(reason: 'buffer_limit' | 'event_
 }
 export function recordLiveSseReplayDropped(reason: 'snapshot_limit' | 'payload_limit' | 'total_bytes_limit'): void {
   counters.liveSseReplayDropped.inc({ reason })
+}
+export function recordProgressWatchdogOutcome(outcome: ProgressWatchdogMetricOutcome): void {
+  counters.progressWatchdog.inc({ outcome })
 }
 export function setLiveSseReplayCache(snapshots: number, bytes: number): void {
   gauges.liveSseReplaySnapshots.set(Math.max(0, snapshots))
@@ -451,6 +463,7 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
     counters.liveSseSlowConsumers.render(),
     counters.liveUpstreamFramesRejected.render(),
     counters.liveSseReplayDropped.render(),
+    counters.progressWatchdog.render(),
     gauges.queueDepth.render(),
     gauges.activeRuns.render(),
     gauges.leadershipWriter.render(),

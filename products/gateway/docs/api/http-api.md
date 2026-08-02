@@ -44,6 +44,7 @@ Routes are currently served unprefixed and are treated as **v1**. A future `/v1`
 | `GET` | `/doctor` | Diagnostic report. |
 | `GET` | `/alpha-health` | Workspace health summary (`alphaHealth`): service health, scheduler recovery, channel delivery, open gates, eval scorecards, backup/restore, and blocker indicators. |
 | `GET` | `/readiness` | Local operating readiness state, checks, and operating mode. |
+| `GET` | `/progressz` | Bounded, privacy-safe progress-watchdog state. Reports mode, aggregate healthy/waiting/suspect/stalled counts, age/source/generation samples, and truncation only; it never returns run, Session, lease, tenant, filename, or payload identifiers. |
 | `GET` | `/operator/status` | Redacted beta operator cockpit with scheduler safety, queue state, attention, channel scope, and deferred release gates. |
 | `GET` | `/operator/hygiene` | Read-only live-state hygiene report for stale claim codes, expired gates, stale OpenCode session links, and stale parent receipts. |
 | `POST` | `/operator/actions` | Apply a supported operator action: `status`, `hygiene`, `pause`, `resume`, `recover`, or `reset-stale`. |
@@ -57,7 +58,7 @@ Routes are currently served unprefixed and are treated as **v1**. A future `/v1`
 | `POST` | `/alerts/evaluate` | Run alert evaluation and persist the resulting alert lifecycle updates. Requires operator capability and daemon writer leadership. |
 | `POST` | `/alerts/:id/action` | Acknowledge, resolve, or suppress an alert. |
 | `GET` | `/observability` | Local metrics, active alerts, redacted trace correlation, and SLO snapshot. |
-| `GET` | `/metrics` | Prometheus-format runtime, scheduler, auth, channel, alert, and bounded live-stream metrics for local scraping. |
+| `GET` | `/metrics` | Prometheus-format runtime, scheduler, auth, channel, alert, bounded live-stream, and progress-watchdog outcome metrics for local scraping. |
 | `GET` | `/incident-report?alertId=...` | Generate a local incident report. |
 | `GET` | `/incident-bundle?alertId=...&format=json\|markdown` | Generate a redacted local incident bundle with manifest, trace correlation, SLO state, alert summaries, and nested evidence export. |
 | `GET` | `/logs?lines=100` | Recent daemon logs. |

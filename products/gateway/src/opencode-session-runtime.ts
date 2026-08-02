@@ -63,7 +63,7 @@ export interface OpenCodeSessionRuntime {
   getSession(sessionId: string, directory?: string): Promise<{ data?: any; missing: boolean }>
   listSessions(directory?: string, options?: { signal?: AbortSignal }): Promise<any[]>
   prompt(input: SessionPromptInput): Promise<unknown>
-  abort(sessionId: string, directory?: string): Promise<void>
+  abort(sessionId: string, directory?: string, options?: { requireConfirmation?: boolean }): Promise<void>
   deleteSession(sessionId: string, directory?: string): Promise<void>
   messages(sessionId: string, directory?: string, limit?: number): Promise<any[]>
 }
@@ -196,19 +196,34 @@ export function createOpenCodeSessionRuntime(client?: DurableOpencodeClient): Op
       return (c as any).session.prompt({ path, query, body, signal })
     },
 
-    async abort(sessionId, directory) {
+    async abort(sessionId, directory, options) {
       const c = clientOrThrow(client)
       const v2 = v2Session(c)
       if (v2?.interrupt) {
+        if (options?.requireConfirmation) {
+          await v2.interrupt({ sessionID: sessionId }, { throwOnError: true })
+          return
+        }
         await v2.interrupt({ sessionID: sessionId }, { throwOnError: false }).catch(() => undefined)
         return
       }
       const abortFn = (c as any).session?.abort as undefined | ((args: any) => Promise<unknown>)
-      if (typeof abortFn !== 'function') return
-      await abortFn.call((c as any).session, {
+      if (typeof abortFn !== 'function') {
+        if (options?.requireConfirmation) throw new Error('OpenCode session interrupt is unavailable.')
+        return
+      }
+      const request = {
         path: { id: sessionId },
         query: directory ? { directory } : undefined,
-      }).catch(() => undefined)
+      }
+      if (options?.requireConfirmation) {
+        // The generated classic SDK defaults to `throwOnError: false`, which
+        // resolves HTTP failures as an error result. Watchdog recovery must not
+        // report success unless OpenCode acknowledged the exact-session abort.
+        await abortFn.call((c as any).session, { ...request, throwOnError: true })
+        return
+      }
+      await abortFn.call((c as any).session, request).catch(() => undefined)
     },
 
     async deleteSession(sessionId, directory) {

@@ -50,6 +50,12 @@ export type CloudReadinessOptions = {
   requireSchemaMigrations?: boolean
   now?: () => Date
   objectStoreCheckTtlMs?: number
+  artifactDirectUpload?: {
+    requested: boolean
+    configStatus: 'valid' | 'invalid'
+    durableStore: boolean
+    cleanupOwnerReady: boolean | (() => boolean | Promise<boolean>)
+  }
 }
 
 type CachedCheck = {
@@ -198,6 +204,73 @@ function checkRoleDependencies(options: CloudReadinessOptions) {
   }
 }
 
+async function checkArtifactDirectUpload(options: CloudReadinessOptions): Promise<CloudReadinessCheckResult | null> {
+  const direct = options.artifactDirectUpload
+  if (!direct) return null
+  if (!direct.requested) {
+    return { name: 'artifact_direct_upload', status: 'ok', detail: 'disabled' }
+  }
+  if (direct.configStatus !== 'valid') {
+    return { name: 'artifact_direct_upload', status: 'error', detail: 'config_invalid' }
+  }
+  const capability = options.objectStore.presignedUpload as unknown as {
+    enforcement?: unknown
+    maxBytes?: unknown
+    origin?: unknown
+    verifyCleanupSafety?: unknown
+    verifyBrowserPostSafety?: unknown
+    presignPost?: unknown
+    inspect?: unknown
+    promote?: unknown
+    delete?: unknown
+  } | undefined
+  if (
+    capability?.enforcement !== 'exact-content-length'
+    || !Number.isSafeInteger(capability.maxBytes)
+    || Number(capability.maxBytes) <= 0
+    || typeof capability.origin !== 'string'
+    || typeof capability.verifyCleanupSafety !== 'function'
+    || typeof capability.verifyBrowserPostSafety !== 'function'
+    || typeof capability.presignPost !== 'function'
+    || typeof capability.inspect !== 'function'
+    || typeof capability.promote !== 'function'
+    || typeof capability.delete !== 'function'
+  ) {
+    return { name: 'artifact_direct_upload', status: 'error', detail: 'provider_unattested' }
+  }
+  let browserOrigin: string | null = null
+  let providerOrigin: string | null = null
+  try {
+    const parsed = new URL(options.publicUrl || '')
+    browserOrigin = parsed.pathname === '/' && !parsed.search && !parsed.hash && !parsed.username && !parsed.password
+      ? parsed.origin
+      : null
+  } catch {
+    // Invalid public URLs remain unattested.
+  }
+  try {
+    const parsed = new URL(String(capability.origin))
+    providerOrigin = parsed.pathname === '/' && !parsed.search && !parsed.hash && !parsed.username && !parsed.password
+      ? parsed.origin
+      : null
+  } catch {
+    // Invalid provider URLs remain unattested.
+  }
+  if (!browserOrigin || !providerOrigin || (browserOrigin.startsWith('https:') && !providerOrigin.startsWith('https:'))) {
+    return { name: 'artifact_direct_upload', status: 'error', detail: 'provider_unattested' }
+  }
+  if (!direct.durableStore) {
+    return { name: 'artifact_direct_upload', status: 'error', detail: 'durable_store_required' }
+  }
+  const cleanupOwnerReady = typeof direct.cleanupOwnerReady === 'function'
+    ? await direct.cleanupOwnerReady()
+    : direct.cleanupOwnerReady
+  if (!cleanupOwnerReady) {
+    return { name: 'artifact_direct_upload', status: 'error', detail: 'cleanup_owner_unavailable' }
+  }
+  return { name: 'artifact_direct_upload', status: 'ok', detail: 'enabled' }
+}
+
 async function checkExecutionIsolation(options: CloudReadinessOptions): Promise<CloudReadinessCheckResult> {
   const policy = options.executionIsolationPolicy
   const capability = typeof options.executionIsolationCapability === 'function'
@@ -261,6 +334,8 @@ export function createCloudReadinessCheck(options: CloudReadinessOptions) {
     checks.push(await check('auth_config', () => checkAuthConfig(options)))
     checks.push(await check('role_dependencies', () => checkRoleDependencies(options)))
     checks.push(await checkExecutionIsolation(options))
+    const directUpload = await checkArtifactDirectUpload(options)
+    if (directUpload) checks.push(directUpload)
 
     return {
       ok: checks.every((entry) => entry.status === 'ok'),

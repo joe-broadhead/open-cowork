@@ -1,6 +1,5 @@
 import type { WorkflowWebhookReplayClaim, WorkflowWebhookSecurityStore } from '@open-cowork/shared/node'
 import { randomBytes } from 'node:crypto'
-import { createRequire } from 'node:module'
 import {
   nowIso,
   stableJson,
@@ -43,9 +42,7 @@ import type {
   ControlPlaneRole,
   ControlPlaneSessionStatus,
   ControlPlaneStore,
-  ArtifactUploadReservationRecord,
   CreateCustomRoleInput,
-  CreateArtifactUploadReservationInput,
   CustomRoleRecord,
   MemberPermissionResolution,
   RevokeApiTokensForAccountInput,
@@ -88,7 +85,6 @@ import type {
   PrincipalMembershipRecord,
   QueryAuditEventsInput,
   QueryAuditEventsResult,
-  QuotaConsumptionRecord,
   RecordManagedWorkerHeartbeatInput,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
@@ -99,7 +95,6 @@ import type {
   ReapedSessionLeaseRecord,
   ReapExpiredWorkflowClaimsInput,
   ReapedWorkflowClaimRecord,
-  ReleaseArtifactUploadReservationInput,
   RevokeApiTokenInput,
   RotateWorkflowWebhookSecretInput,
   RevokeManagedWorkerCredentialInput,
@@ -107,7 +102,6 @@ import type {
   ResolveChannelInteractionInput,
   ResolveChannelInteractionWithCommandInput,
   SessionCommandRecord,
-  SettleArtifactUploadReservationInput,
   ThreadMetadataRecord,
   ThreadTagLinkInput,
   UsageEventRecord,
@@ -138,7 +132,12 @@ import {
   runPostgresControlPlaneMigrations,
 } from './postgres-migrations.ts'
 import { CLOUD_SSE_NOTIFY_CHANNEL, encodeSsePgNotifyPayload } from './sse-pg-notify.ts'
-import { cloudPostgresPoolPlan, type CloudPostgresPoolConfig } from './postgres-pool-options.ts'
+import {
+  loadPgPool,
+  type PostgresClient as PgClient,
+  type PostgresExecutor as PgExecutor,
+  type PostgresPool as PgPool,
+} from './postgres-pool.ts'
 import { normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
 import { usageEventFromRow } from './postgres-domains/billing.ts'
 import { channelInteractionFromRow, channelSessionBindingFromRow } from './postgres-domains/channels.ts'
@@ -151,7 +150,7 @@ import { migrationFromRow } from './postgres-domains/schema.ts'
 import {
   commandFromRow,
 } from './postgres-domains/sessions.ts'
-import { numberValue, type QueryResult, type QueryRow } from './postgres-domains/shared.ts'
+import { numberValue, type QueryRow } from './postgres-domains/shared.ts'
 import { PostgresBillingRepository } from './postgres-store-domains/billing.ts'
 import { PostgresByokSecretsRepository } from './postgres-store-domains/byok.ts'
 import { PostgresApiTokensRepository } from './postgres-store-domains/api-tokens.ts'
@@ -195,12 +194,6 @@ import {
   findPendingPostgresChannelInteractionByToken,
 } from './postgres-store-domains/channel-interactions.ts'
 
-type PgExecutor = {
-  query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
-}
-type PgClient = PgExecutor & { release: () => void }
-type PgPool = PgExecutor & { connect(): Promise<PgClient>; end(): Promise<void> }
-
 export type PostgresControlPlaneStoreOptions = {
   connectionString: string
   runMigrations?: boolean
@@ -211,26 +204,14 @@ export type PostgresControlPlaneStoreOptions = {
   ssePgNotify?: boolean
 }
 
-const require = createRequire(import.meta.url)
-
 const CHANNEL_TEXT_MAX_LENGTH = 256
-export function loadPgPool(connectionString: string): PgPool {
-  type PgPoolClient = { query(text: string): Promise<unknown> }
-  type RealPgPool = PgPool & { on?(event: 'connect', handler: (client: PgPoolClient) => void): void }
-  const pg = require('pg') as { Pool: new (options: CloudPostgresPoolConfig) => RealPgPool }
-  const { config, lockTimeoutMs } = cloudPostgresPoolPlan(connectionString)
-  const pool = new pg.Pool(config)
-  if (lockTimeoutMs > 0 && typeof pool.on === 'function') {
-    // lock_timeout is not a native pool option; set it per connection so a blocked
-    // FOR UPDATE waits at most lockTimeoutMs instead of pinning a pooled connection.
-    pool.on('connect', (client) => {
-      void Promise.resolve(client.query(`SET lock_timeout = ${lockTimeoutMs}`)).catch(() => {})
-    })
-  }
-  return pool
-}
+export { loadPgPool } from './postgres-pool.ts'
 
 export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWebhookSecurityStore {
+  readonly artifactUploadLifecycleCapability = {
+    persistence: 'durable',
+    reconciliation: 'bounded-claims',
+  } as const
   private readonly pool: PgPool
   private readonly ownsPool: boolean
   // Set by connect() from PostgresControlPlaneStoreOptions.ssePgNotify (default off).
@@ -443,9 +424,9 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.identity.ensureUser(input)
   }
 
-  async ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }) {
-    return this.identity.ensureOrgForTenant(input)
-  }
+  async ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }) { return this.identity.ensureOrgForTenant(input) }
+
+  async resolveOrgIdForTenant(tenantId: string) { return this.identity.resolveOrgIdForTenant(tenantId) }
 
   async createAccount(input: CreateAccountInput) {
     return this.identity.createAccount(input)
@@ -724,33 +705,29 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     }))
   }
 
-  async createArtifactUploadReservation(input: CreateArtifactUploadReservationInput): Promise<{
-    reservation: ArtifactUploadReservationRecord | null
-    quota: QuotaConsumptionRecord | null
-  }> {
-    return this.artifactUploadReservations.create(input)
-  }
+  async createArtifactUploadReservation(input: Parameters<PostgresArtifactUploadReservationsRepository['create']>[0]) { return this.artifactUploadReservations.create(input) }
 
-  async getArtifactUploadReservation(input: {
-    orgId: string
-    tenantId: string
-    sessionId: string
-    artifactId: string
-  }): Promise<ArtifactUploadReservationRecord | null> {
-    return this.artifactUploadReservations.get(input)
-  }
+  async getArtifactUploadReservation(input: Parameters<PostgresArtifactUploadReservationsRepository['get']>[0]) { return this.artifactUploadReservations.get(input) }
 
-  async settleArtifactUploadReservation(input: SettleArtifactUploadReservationInput): Promise<{
-    reservation: ArtifactUploadReservationRecord | null
-    quota: QuotaConsumptionRecord | null
-    settled: boolean
-  }> {
-    return this.artifactUploadReservations.settle(input)
-  }
+  async claimArtifactUploadFinalization(input: Parameters<PostgresArtifactUploadReservationsRepository['claimFinalization']>[0]) { return this.artifactUploadReservations.claimFinalization(input) }
 
-  async releaseArtifactUploadReservation(input: ReleaseArtifactUploadReservationInput): Promise<ArtifactUploadReservationRecord | null> {
-    return this.artifactUploadReservations.release(input)
-  }
+  async completeArtifactUploadFinalization(input: Parameters<PostgresArtifactUploadReservationsRepository['completeFinalization']>[0]) { return this.artifactUploadReservations.completeFinalization(input) }
+
+  async releaseArtifactUploadClaim(input: Parameters<PostgresArtifactUploadReservationsRepository['releaseClaim']>[0]) { return this.artifactUploadReservations.releaseClaim(input) }
+
+  async requestArtifactUploadCleanup(input: Parameters<PostgresArtifactUploadReservationsRepository['requestCleanup']>[0]) { return this.artifactUploadReservations.requestCleanup(input) }
+
+  async deferArtifactUploadCleanup(input: Parameters<PostgresArtifactUploadReservationsRepository['deferCleanup']>[0]) { return this.artifactUploadReservations.deferCleanup(input) }
+
+  async completeArtifactUploadCleanup(input: Parameters<PostgresArtifactUploadReservationsRepository['completeCleanup']>[0]) { return this.artifactUploadReservations.completeCleanup(input) }
+
+  async failArtifactUploadCleanup(input: Parameters<PostgresArtifactUploadReservationsRepository['failCleanup']>[0]) { return this.artifactUploadReservations.failCleanup(input) }
+
+  async claimArtifactUploadReconciliation(input: Parameters<PostgresArtifactUploadReservationsRepository['claimReconciliation']>[0]) { return this.artifactUploadReservations.claimReconciliation(input) }
+
+  async getArtifactUploadReconciliationStats(now: Date) { return this.artifactUploadReservations.reconciliationStats(now) }
+
+  async pruneArtifactUploadReservations(input: Parameters<PostgresArtifactUploadReservationsRepository['prune']>[0]) { return this.artifactUploadReservations.prune(input) }
 
   async recordUsageEvent(input: RecordUsageEventInput) {
     return this.recordUsageEventWithExecutor(this.pool, input)

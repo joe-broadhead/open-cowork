@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   createNativeSession,
   findNativePermissionSession,
@@ -11,6 +12,13 @@ import {
 } from '@open-cowork/runtime-host'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { CloudProjectedSessionEventType } from '@open-cowork/shared'
+import type {
+  ProgressWatchdogDisposition,
+  ProgressWatchdogIdentity,
+  ProgressWatchdogObservation,
+  ProgressWatchdogSource,
+  ProgressWatchdogWaitingReason,
+} from '@open-cowork/shared/progress-watchdog'
 export type CloudRuntimeSession = {
   id: string
   title: string
@@ -27,6 +35,8 @@ export type CloudRuntimeEvent = {
   eventId?: string
   type: CloudProjectedSessionEventType
   payload: Record<string, unknown>
+  /** In-memory worker fence; never persisted into the product event payload. */
+  provenance?: ProgressWatchdogIdentity | null
 }
 
 export type CloudRuntimeEventListener = (event: CloudRuntimeEvent) => void | Promise<void>
@@ -36,10 +46,38 @@ export type CloudRuntimeDroppedEvent = {
   reason: 'invalid-envelope' | 'unknown-event-type' | 'no-projected-events'
 }
 
+export type CloudRuntimeLeaseProvenance = {
+  owner: string
+  /** Opaque digest, never the raw control-plane lease token. */
+  epoch: string
+}
+
+export type CloudRuntimeProgressEvent = {
+  source: ProgressWatchdogSource
+  disposition: ProgressWatchdogDisposition
+  waitingReason?: ProgressWatchdogWaitingReason | null
+  resumeAtMs?: number | null
+  sequence?: number | null
+  progressCursor?: number | null
+  semanticKey?: string | null
+  observedAtMs: number
+  runtimeSessionId?: string | null
+  /** Present after a worker-scoped adapter binds the event to its owning run. */
+  provenance?: ProgressWatchdogIdentity | null
+}
+
+export type CloudRuntimeGenerationFence = Pick<
+  ProgressWatchdogIdentity,
+  'runtimeGeneration' | 'executionGeneration' | 'runId'
+>
+
+export type CloudRuntimeRecoveryOutcome = 'recovered' | 'fenced-stale'
+
 export type CloudRuntimeSubscribeOptions = {
   signal?: AbortSignal
   onError?: (error: unknown) => void
   onDroppedEvent?: (event: CloudRuntimeDroppedEvent) => void
+  onProgress?: (event: CloudRuntimeProgressEvent) => void
 }
 
 export type CloudPromptResult = {
@@ -52,6 +90,7 @@ export type CloudRuntimeExecutionContext = {
   tenantId: string
   sessionId: string
   profileName?: string | null
+  lease?: CloudRuntimeLeaseProvenance | null
 }
 
 export type CloudRuntimeAdapter = {
@@ -75,6 +114,23 @@ export type CloudRuntimeAdapter = {
     signal?: AbortSignal
   }): Promise<CloudPromptResult | void>
   abortSession(input: { sessionId: string, context?: CloudRuntimeExecutionContext | null, signal?: AbortSignal }): Promise<void>
+  /**
+   * Abort only an already-existing, exact runtime/run generation. Implementations
+   * must never provision a runtime while evaluating this recovery request.
+   */
+  recoverStalledSession?(input: {
+    sessionId: string
+    context: CloudRuntimeExecutionContext
+    expected: CloudRuntimeGenerationFence
+    /** Last-moment watchdog revision fence; implementations must check before abort. */
+    isDecisionCurrent: () => boolean
+    signal?: AbortSignal
+  }): Promise<CloudRuntimeRecoveryOutcome>
+  /** Pure exact-generation check used to reject delayed runtime stream events. */
+  isRuntimeGenerationCurrent?(input: {
+    context: CloudRuntimeExecutionContext
+    expected: CloudRuntimeGenerationFence
+  }): boolean
   replyToQuestion?(input: { requestId: string, answers: unknown[], context?: CloudRuntimeExecutionContext | null, signal?: AbortSignal }): Promise<void>
   rejectQuestion?(input: { requestId: string, context?: CloudRuntimeExecutionContext | null, signal?: AbortSignal }): Promise<void>
   respondToPermission?(input: { permissionId: string, allowed: boolean, context?: CloudRuntimeExecutionContext | null, signal?: AbortSignal }): Promise<void>
@@ -83,6 +139,27 @@ export type CloudRuntimeAdapter = {
     options?: CloudRuntimeSubscribeOptions,
   ) => Promise<() => void> | (() => void)
   close?: () => Promise<void> | void
+}
+
+export function cloudRuntimeLeaseEpoch(leaseToken: string) {
+  return createHash('sha256').update(leaseToken).digest('hex')
+}
+
+export function toProgressWatchdogObservation(
+  event: CloudRuntimeProgressEvent,
+): ProgressWatchdogObservation | null {
+  if (!event.provenance) return null
+  return {
+    ...event.provenance,
+    source: event.source,
+    disposition: event.disposition,
+    waitingReason: event.waitingReason,
+    resumeAtMs: event.resumeAtMs,
+    sequence: event.sequence,
+    progressCursor: event.progressCursor,
+    semanticKey: event.semanticKey,
+    observedAtMs: event.observedAtMs,
+  }
 }
 
 function toIsoTimestamp(value: unknown) {

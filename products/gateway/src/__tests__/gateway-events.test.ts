@@ -108,6 +108,26 @@ describe('Gateway event taxonomy', () => {
     }
   })
 
+  it('maps progress watchdog decisions into the durable operational evidence taxonomy', () => {
+    const event = gatewayEventFromWorkEvent(workEvent(
+      1,
+      'runtime.progress_watchdog.decision',
+      'run_watchdog',
+      { mode: 'enforce', state: 'stalled', source: 'output_advance', outcome: 'recovered' },
+    ))
+
+    expect(event).toMatchObject({
+      name: 'runtime.progress_watchdog.decision',
+      legacyType: 'runtime.progress_watchdog.decision',
+      source: { kind: 'system', name: 'gateway.system' },
+      visibility: 'evidence',
+      subjectId: 'run_watchdog',
+      destination: { kind: 'work_item', id: 'run_watchdog' },
+      audience: expect.arrayContaining(['dashboard', 'support_bundle', 'evidence_ledger', 'scheduler']),
+      payload: { mode: 'enforce', state: 'stalled', source: 'output_advance', outcome: 'recovered' },
+    })
+  })
+
   it('uses the subscription contract for durable delegated channel progress reads', () => {
     const [progressId] = appendWorkEvents([
       {

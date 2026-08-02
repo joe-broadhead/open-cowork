@@ -268,7 +268,9 @@ Use this when `OpenCoworkWorkerRuntimeNearCapacity` or
    exhausted, `queue_timeout` means capacity did not recover in time, and
    `provision_timeout` means boundary startup exceeded its deadline,
    `cleanup_pending` means a failed boundary is retaining capacity until
-   cleanup is proven, and `adapter_closing` is expected briefly during a drain.
+   cleanup is proven, `adapter_closing` is expected briefly during a drain,
+   and `execution_active` means an earlier admitted run lacks a durable
+   terminal event or confirmed abort, so its retry was safely deferred.
 3. Check runtime creation latency, close-failure metrics, BYOK reveal errors,
    checkpoint/object-store latency, and OpenCode provider errors. A boundary
    that cannot close retains its permit until cleanup succeeds; do not bypass
@@ -289,6 +291,27 @@ Use this when `OpenCoworkWorkerRuntimeNearCapacity` or
    `isolationCpuLimit`, `isolationPidsLimit`, `sessionConcurrency`, or container
    resources only through a reviewed Helm overlay. Drain and roll workers;
    confirm rejection rate returns to zero and capacity stays below 80%.
+
+## Runtime Progress Watchdog
+
+Use this when `/progressz` reports suspect or stalled executions, or
+`open_cowork_cloud_progress_watchdog_decisions_total` increases.
+
+1. Group the counter only by `watchdog_state` and `watchdog_outcome`; neither
+   metric labels nor `/progressz` contain tenant, session, run, or lease IDs.
+2. Query the affected org's audit trail for
+   `runtime.progress_watchdog.decision`. The system event contains only mode,
+   state, outcome, and source; use normal session/worker tooling for authorized
+   investigation rather than adding identifiers to watchdog telemetry.
+3. Roll out in `observe` first. Enable `enforce` only with the required evidence
+   reference, operator owner, and rollback mode. Switch to `observe` or `off`
+   if recovery failures increase or false stalls appear.
+4. Treat `fenced-stale` as a rejected obsolete recovery, not permission to
+   bypass the lease/revision fence. Confirm a replacement execution owns the
+   session before intervening.
+5. Values below the documented `1000` ms suspect, `2000` ms stalled, or `250`
+   ms sweep minima fail closed to `off`; fix configuration instead of weakening
+   those bounds during an incident.
 
 ## Scheduler Stalled
 
@@ -334,7 +357,11 @@ Use this when artifacts, uploads, exports, or checkpoint restore/save fails.
    `open_cowork_cloud_object_store_operation_duration_ms` latency — these cover every durable
    read/write, including the object-store I/O behind checkpoint save/restore.
 1. Check object-store service health and credentials/workload identity.
-2. Verify bucket/container/prefix exists and has versioning enabled.
+2. Verify the bucket/container/prefix exists and matches its retention policy. A bucket used
+   for direct browser uploads must never have had S3 versioning enabled; both `Enabled` and
+   `Suspended` are rejected because key-only cleanup cannot remove retained object versions.
+   Its CORS policy must also allow `POST` from the exact browser origin; wildcard and pattern
+   origins are rejected.
 3. Check checkpoint restore logs before allowing workers to resume failed
    sessions.
 4. For transient object-store failures, keep web reads available and pause

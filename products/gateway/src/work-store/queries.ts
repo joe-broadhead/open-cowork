@@ -20,6 +20,9 @@ import {
   type RunRecord,
 } from '../work-store.js'
 
+const RUN_SESSION_BATCH_LIMIT = 10_000
+const RUN_SESSION_IN_GROUP_SIZE = 500
+
 /**
  * Read-only sibling of `getRun`: a targeted run-detail read by id (or
  * bound session id) over a read-only handle, so a drill-down never creates the
@@ -135,6 +138,54 @@ export function getRunBySessionId(sessionId: string, filePath = workStatePath())
     const row = getRow(db, 'SELECT * FROM runs WHERE session_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 1', sessionId)
     return row ? (rowToRun(row) ?? undefined) : undefined
   })
+}
+
+/**
+ * Active run for each requested OpenCode session, fetched through one read-only
+ * connection and one statement. The status predicate stays on idx_runs_status;
+ * OR-ed, bounded IN groups keep the generated predicate manageable while
+ * remaining below SQLite's parameter ceiling at the watchdog's 10k-entry hard
+ * limit. Missing rows authoritatively mean the tracked run is no longer active.
+ */
+export function getActiveRunsBySessionIdsReadOnly(
+  sessionIds: readonly string[],
+  filePath = workStatePath(),
+): RunRecord[] {
+  const ids: string[] = []
+  const seen = new Set<string>()
+  for (const value of sessionIds) {
+    if (ids.length >= RUN_SESSION_BATCH_LIMIT) break
+    if (typeof value !== 'string' || value.length === 0 || seen.has(value)) continue
+    seen.add(value)
+    ids.push(value)
+  }
+  if (ids.length === 0) return []
+  const clauses: string[] = []
+  for (let offset = 0; offset < ids.length; offset += RUN_SESSION_IN_GROUP_SIZE) {
+    clauses.push(`session_id IN (${ids.slice(offset, offset + RUN_SESSION_IN_GROUP_SIZE).map(() => '?').join(', ')})`)
+  }
+  return withWorkDbReadOnly(filePath, db =>
+    queryRows(db, `
+      WITH requested_runs AS (
+        SELECT runs.*,
+               ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY started_at DESC, rowid DESC) AS requested_rank
+          FROM runs
+         WHERE status = 'running'
+           AND (${clauses.map(clause => `(${clause})`).join(' OR ')})
+      )
+      SELECT * FROM requested_runs WHERE requested_rank = 1
+    `, ...ids)
+      .map(rowToRun)
+      .filter(Boolean) as RunRecord[])
+}
+
+/** Bounded startup seed for recovery owners; periodic polls must not use this as progress. */
+export function listActiveRunsReadOnly(limit = 1000, filePath = workStatePath()): RunRecord[] {
+  const boundedLimit = Math.max(1, Math.min(10_000, Math.floor(limit)))
+  return withWorkDbReadOnly(filePath, db =>
+    queryRows(db, "SELECT * FROM runs WHERE status = 'running' ORDER BY started_at ASC LIMIT ?", boundedLimit)
+      .map(rowToRun)
+      .filter(Boolean) as RunRecord[])
 }
 
 /** True when the task has ever produced a run (EXISTS, no materialization). */

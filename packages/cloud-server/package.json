@@ -52,6 +52,7 @@
     "./cloud-service-error": "./src/cloud-service-error.ts",
     "./billing-adapter": "./src/billing-adapter.ts",
     "./worker-scoped-runtime-adapter": "./src/worker-scoped-runtime-adapter.ts",
+    "./progress-watchdog": "./src/progress-watchdog.ts",
     "./unavailable-runtime-adapter": "./src/unavailable-runtime-adapter.ts",
     "./stripe-billing-adapter": "./src/stripe-billing-adapter.ts",
     "./session-view-contract": "./src/session-view-contract.ts",
@@ -83,7 +84,10 @@
     "./control-plane-domains/channels": "./src/control-plane-domains/channels.ts",
     "./channel-provider-utils": "./src/channel-provider-utils.ts",
     "./browser-renderer-app": "./src/browser-renderer-app.ts",
-    "./artifact-service": "./src/artifact-service.ts"
+    "./artifact-service": "./src/artifact-service.ts",
+    "./artifact-direct-upload-config": "./src/artifact-direct-upload-config.ts",
+    "./artifact-upload-composition": "./src/artifact-upload-composition.ts",
+    "./artifact-upload-lifecycle": "./src/artifact-upload-lifecycle.ts"
   },
   "sideEffects": false,
   "scripts": {

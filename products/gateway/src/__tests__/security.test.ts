@@ -385,6 +385,35 @@ describe('security', () => {
     expect(decision).toMatchObject({ allowed: true, actor: 'http-token' })
   })
 
+  it('passes only bounded watchdog configuration into managed services', () => {
+    const env = gatewayServiceEnvironment({
+      httpPort: 4097,
+      opencodeUrl: 'http://127.0.0.1:4096',
+    }, {
+      sourceEnv: {
+        OPENCODE_GATEWAY_PROGRESS_WATCHDOG_MODE: 'enforce',
+        OPENCODE_GATEWAY_PROGRESS_WATCHDOG_OBSERVE_EVIDENCE_REF: 'evidence:observe-window',
+        OPENCODE_GATEWAY_PROGRESS_WATCHDOG_OPERATOR_OWNER: 'gateway-operations',
+        OPENCODE_GATEWAY_PROGRESS_WATCHDOG_ROLLBACK_MODE: 'observe',
+        OPENCODE_GATEWAY_PROGRESS_WATCHDOG_SWEEP_MS: '10000',
+        OPENCODE_GATEWAY_PROGRESS_WATCHDOG_STALLED_MS: 'bad\nEnvironment=INJECTED',
+        TELEGRAM_BOT_TOKEN: 'must-not-pass',
+      },
+    })
+
+    expect(env).toMatchObject({
+      OPENCODE_GATEWAY_PROGRESS_WATCHDOG_MODE: 'enforce',
+      OPENCODE_GATEWAY_PROGRESS_WATCHDOG_OBSERVE_EVIDENCE_REF: 'evidence:observe-window',
+      OPENCODE_GATEWAY_PROGRESS_WATCHDOG_OPERATOR_OWNER: 'gateway-operations',
+      OPENCODE_GATEWAY_PROGRESS_WATCHDOG_ROLLBACK_MODE: 'observe',
+      OPENCODE_GATEWAY_PROGRESS_WATCHDOG_SWEEP_MS: '10000',
+    })
+    expect(env).not.toHaveProperty('OPENCODE_GATEWAY_PROGRESS_WATCHDOG_STALLED_MS')
+    expect(env).not.toHaveProperty('TELEGRAM_BOT_TOKEN')
+    expect(JSON.stringify(env)).not.toContain('must-not-pass')
+    expect(JSON.stringify(env)).not.toContain('INJECTED')
+  })
+
   it('returns typed errors for invalid or too-large JSON bodies', async () => {
     try {
       __daemonTest.parseJsonBody('{nope')

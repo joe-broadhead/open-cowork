@@ -18,6 +18,24 @@ class RecordingObservability implements CloudObservabilityAdapter {
   async span() {}
 }
 
+test('cloud scheduler runs bounded product maintenance in its owned loop', async () => {
+  const store = new InMemoryControlPlaneStore()
+  const calls: string[] = []
+  const scheduler = new CloudScheduler(
+    store,
+    createSchedulerServiceStub(),
+    'scheduler-1',
+    null,
+    undefined,
+    null,
+    async (now) => { calls.push(now.toISOString()) },
+  )
+
+  await scheduler.processDueWorkflows(new Date('2026-08-02T12:00:00.000Z'))
+
+  assert.deepEqual(calls, ['2026-08-02T12:00:00.000Z'])
+})
+
 function createManualWorkflow(store: InMemoryControlPlaneStore, workflowId: string) {
   store.createWorkflow({
     tenantId: 'tenant-1',

@@ -6,6 +6,7 @@
 // governance sub-service (recordManagedWorkClaimed/recordManagedExecutionEvent) and the
 // read-only summaries (getUsageSummary/listUsageEvents) stay on CloudSessionService.
 import type {
+  ArtifactUploadPublicationMetadata,
   ArtifactUploadReservationRecord,
   ControlPlaneStore,
   SessionEventRecord,
@@ -114,12 +115,17 @@ export class CloudUsageOperationsService {
     sessionId: string
     artifactId: string
     objectKey: string
+    stagingObjectKey: string
+    finalObjectKey: string
     filename: string
     contentType: string | null
+    checksumSha256: string
+    publication: ArtifactUploadPublicationMetadata
     expectedBytes: number
     expiresAt: string
+    createdAt?: Date
   }): Promise<ArtifactUploadReservationRecord> {
-    const now = new Date()
+    const now = input.createdAt || new Date()
     const quota = await this.artifactUploadQuota(principal, input.expectedBytes, now)
     const result = await this.store.createArtifactUploadReservation({
       orgId: this.principalOrgId(principal),
@@ -128,8 +134,12 @@ export class CloudUsageOperationsService {
       sessionId: input.sessionId,
       artifactId: input.artifactId,
       objectKey: input.objectKey,
+      stagingObjectKey: input.stagingObjectKey,
+      finalObjectKey: input.finalObjectKey,
       filename: input.filename,
       contentType: input.contentType,
+      checksumSha256: input.checksumSha256,
+      publication: input.publication,
       reservedBytes: input.expectedBytes,
       expiresAt: input.expiresAt,
       quota,
@@ -155,51 +165,6 @@ export class CloudUsageOperationsService {
       tenantId: principal.tenantId,
       sessionId: input.sessionId,
       artifactId: input.artifactId,
-    })
-  }
-
-  async settleArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
-    sessionId: string
-    artifactId: string
-    actualBytes: number
-  }): Promise<ArtifactUploadReservationRecord> {
-    const now = new Date()
-    const quota = await this.artifactUploadQuota(principal, input.actualBytes, now)
-    const result = await this.store.settleArtifactUploadReservation({
-      orgId: this.principalOrgId(principal),
-      tenantId: principal.tenantId,
-      sessionId: input.sessionId,
-      artifactId: input.artifactId,
-      actualBytes: input.actualBytes,
-      quota,
-      now,
-    })
-    if (result.quota && !result.quota.allowed) {
-      throw this.usageGovernance.quotaError(
-        'Cloud artifact upload quota exceeded.',
-        'quota.artifact_bytes_per_day_exceeded',
-        result.quota.retryAfterMs,
-      )
-    }
-    if (!result.reservation) throw new CloudServiceError(409, 'Cloud artifact upload reservation was not found.')
-    if (!result.settled && result.reservation.status !== 'settled') {
-      throw new CloudServiceError(409, `Cloud artifact upload reservation is ${result.reservation.status}.`)
-    }
-    return result.reservation
-  }
-
-  async releaseArtifactUploadQuotaReservation(principal: CloudPrincipal, input: {
-    sessionId: string
-    artifactId: string
-    status: 'expired' | 'failed'
-  }): Promise<ArtifactUploadReservationRecord | null> {
-    return this.store.releaseArtifactUploadReservation({
-      orgId: this.principalOrgId(principal),
-      tenantId: principal.tenantId,
-      sessionId: input.sessionId,
-      artifactId: input.artifactId,
-      status: input.status,
-      now: new Date(),
     })
   }
 

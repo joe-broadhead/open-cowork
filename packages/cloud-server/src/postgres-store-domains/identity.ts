@@ -105,6 +105,14 @@ export class PostgresIdentityRepository {
     return orgFromRow(result.rows[0]!)
   }
 
+  async resolveOrgIdForTenant(tenantId: string): Promise<string | null> {
+    const row = await this.maybeOne(
+      `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1`,
+      [tenantId],
+    )
+    return row ? String(row.org_id) : null
+  }
+
   async createAccount(input: CreateAccountInput) {
     const now = nowIso(input.createdAt)
     const existing = await this.maybeOne(

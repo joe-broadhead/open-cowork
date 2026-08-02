@@ -3,7 +3,6 @@ import { buildManagedRuntimeEnvironment } from '@open-cowork/runtime-host/runtim
 import {
   createManagedOpencodeServerAuth,
   normalizeMessagePart,
-  normalizeRuntimeEventEnvelope,
   normalizeSessionInfo,
   normalizeToolAttachments,
   type ManagedOpencodeServerAuth,
@@ -40,6 +39,7 @@ import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2
 import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { performance } from 'node:perf_hooks'
 import type { PathProvider } from './path-provider.ts'
 import {
   createSdkCloudRuntimeAdapter,
@@ -51,6 +51,15 @@ import {
   type CloudRuntimeSubscribeOptions,
 } from './runtime-adapter.ts'
 import { CloudExecutionCleanupDebtError } from './execution-isolation.ts'
+import {
+  classifyNativeRuntimeProgress,
+  nativeRuntimeEventIdentity,
+  nativeRuntimeOutputMeasure,
+  nativeRuntimeStatusType,
+  readNativeMessageId as readMessageId,
+  readNativeSessionId as readSessionId,
+  stableProjectedRuntimeEventId,
+} from './opencode-runtime-event-progress.ts'
 
 export type NodeOpencodeCloudRuntimeAdapter = CloudRuntimeAdapter & {
   url: string
@@ -108,24 +117,6 @@ function boundedTextContent(value: unknown) {
 // length; for the SDK event fields read here (ids, roles, tool names) the
 // two are equivalent — neither ever carries a whitespace-only value — so the
 // shared definition is the single source of truth.
-
-function readSessionId(properties: Record<string, unknown>) {
-  const part = asRecord(properties.part)
-  const info = asRecord(properties.info)
-  const status = asRecord(properties.status)
-  return readRecordString(properties, ['sessionID', 'sessionId'])
-    || readRecordString(part, ['sessionID', 'sessionId'])
-    || readRecordString(info, ['sessionID', 'sessionId'])
-    || readRecordString(status, ['sessionID', 'sessionId'])
-}
-
-function readMessageId(properties: Record<string, unknown>) {
-  const part = asRecord(properties.part)
-  const info = asRecord(properties.info)
-  return readRecordString(properties, ['messageID', 'messageId'])
-    || readRecordString(part, ['messageID', 'messageId'])
-    || readRecordString(info, ['id'])
-}
 
 function readErrorMessage(properties: Record<string, unknown>) {
   const error = asRecord(properties.error)
@@ -492,13 +483,11 @@ function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string
     case 'session.next.tool.failed':
       return eventsFromNativeTool(eventType, properties)
     case 'session.error':
-      return [{
-        type: 'runtime.error',
-        payload: {
-          ...(readSessionId(properties) ? { sessionId: readSessionId(properties) } : {}),
-          message: readErrorMessage(properties),
-        },
-      }]
+      // OpenCode also emits this generic signal for recoverable failures (for
+      // example, context overflow immediately before automatic compaction).
+      // Only the durable step-failed event, authoritative idle/abort, or a
+      // process-level runtime error may settle the Cloud execution boundary.
+      return []
     case 'permission.asked':
     case 'permission.updated':
     case 'permission.v2.asked':
@@ -586,18 +575,12 @@ export function translateOpencodeRuntimeEvent(raw: unknown): CloudRuntimeEvent[]
 const OPENCODE_SESSION_ACTIVE_POLL_MS = 250
 const OPENCODE_SESSION_HISTORY_PAGE_SIZE = 100
 
-type NativeRuntimeEventIdentity = {
-  id: string | null
-  sessionId: string | null
-  aggregateId: string | null
-  sequence: number | null
-  type: string | null
-}
-
 type DurableSessionSubscriptionState = {
   sessionId: string
   after: string | undefined
   lastSequence: number
+  admissionBarrier: Promise<void> | null
+  releaseAdmissionBarrier: (() => void) | null
   executionGeneration: number
   settledGeneration: number
   admissionKeys: Map<number, string>
@@ -608,25 +591,8 @@ type DurableSessionSubscriptionState = {
 
 export type OpencodeCloudRuntimeEventSubscription = (() => void) & {
   trackSession(sessionId: string): void
+  beginSessionAdmission(sessionId: string): void
   markSessionAdmitted(sessionId: string, admissionId?: string, admittedSequence?: number): void
-}
-
-function nativeRuntimeEventIdentity(raw: unknown): NativeRuntimeEventIdentity {
-  const envelope = asRecord(raw)
-  const payload = asRecord(envelope.payload)
-  const source = readString(payload.type) ? payload : envelope
-  const durable = asRecord(source.durable)
-  const normalized = normalizeRuntimeEventEnvelope(raw)
-  const sequence = typeof durable.seq === 'number' && Number.isSafeInteger(durable.seq)
-    ? durable.seq
-    : null
-  return {
-    id: readString(source.id) || readString(envelope.id),
-    sessionId: normalized ? readSessionId(normalized.properties || {}) : null,
-    aggregateId: readString(durable.aggregateID),
-    sequence,
-    type: normalized?.type || null,
-  }
 }
 
 function stableAdmissionEventKey(admissionId: string | null | undefined) {
@@ -640,22 +606,6 @@ function isSessionWaitCapabilityUnavailable(error: unknown) {
   const record = readString(body._tag) ? body : direct
   return readString(record._tag) === 'ServiceUnavailableError'
     && readString(record.service) === 'session.wait'
-}
-
-function stableProjectedRuntimeEventId(identity: NativeRuntimeEventIdentity, index: number) {
-  if (identity.aggregateId && identity.sequence !== null) {
-    return `opencode:${identity.aggregateId}:${identity.sequence}:${index}`
-  }
-  if (identity.id) return `opencode:${identity.id}:${index}`
-  return undefined
-}
-
-function nativeRuntimeStatusType(raw: unknown) {
-  const normalized = normalizeRuntimeEventEnvelope(raw)
-  if (normalized?.type !== 'session.status') return null
-  const properties = normalized.properties || {}
-  const status = asRecord(properties.status)
-  return readRecordString(status, ['type']) || readRecordString(properties, ['statusType'])
 }
 
 function reportRuntimeSubscriptionError(options: CloudRuntimeSubscribeOptions, error: unknown) {
@@ -681,6 +631,7 @@ export function subscribeToOpencodeCloudRuntimeEvents(
 ): OpencodeCloudRuntimeEventSubscription {
   const noop = Object.assign(() => undefined, {
     trackSession() {},
+    beginSessionAdmission() {},
     markSessionAdmitted() {},
   })
   if (options.signal?.aborted) return noop
@@ -689,17 +640,61 @@ export function subscribeToOpencodeCloudRuntimeEvents(
   options.signal?.addEventListener('abort', abort, { once: true })
   const durableSessions = new Map<string, DurableSessionSubscriptionState>()
   const rootSessions = new Set<string>()
+  const outputProgress = options.onProgress
+    ? new Map<string, { cursor: number, lengths: Map<string, number> }>()
+    : null
   let waitCapabilityUnavailable = false
   let waitFallbackReported = false
   let descendantDiscoveryTask: Promise<void> | null = null
 
+  const emitProgress = (progress: ReturnType<typeof classifyNativeRuntimeProgress>) => {
+    if (!progress) return
+    try {
+      options.onProgress?.(progress)
+    } catch (error) {
+      reportRuntimeSubscriptionError(options, error)
+    }
+  }
+
+  const nextOutputProgressCursor = (raw: unknown) => {
+    if (!outputProgress) return undefined
+    const identity = nativeRuntimeEventIdentity(raw)
+    const measure = nativeRuntimeOutputMeasure(raw)
+    if (!identity.sessionId || !measure) return undefined
+    const state = outputProgress.get(identity.sessionId) || { cursor: 0, lengths: new Map() }
+    const previousLength = state.lengths.get(measure.streamId) || 0
+    if (measure.length > previousLength) state.cursor += measure.length - previousLength
+    state.lengths.set(measure.streamId, Math.max(previousLength, measure.length))
+    while (state.lengths.size > RUNTIME_EVENT_MAX_COLLECTION_ENTRIES) {
+      state.lengths.delete(state.lengths.keys().next().value as string)
+    }
+    outputProgress.delete(identity.sessionId)
+    outputProgress.set(identity.sessionId, state)
+    while (outputProgress.size > RUNTIME_EVENT_MAX_COLLECTION_ENTRIES) {
+      outputProgress.delete(outputProgress.keys().next().value as string)
+    }
+    return state.cursor
+  }
+
   const deliverRawEvent = async (raw: unknown) => {
     const identity = nativeRuntimeEventIdentity(raw)
+    const progress = options.onProgress
+      ? classifyNativeRuntimeProgress(raw, nextOutputProgressCursor(raw))
+      : null
+    // Preserve the execution provenance needed to remove a tracked run before
+    // the translated terminal event settles the worker-scoped execution state.
+    if (progress?.disposition === 'terminal') emitProgress(progress)
     const translation = translateOpencodeRuntimeEventWithDiagnostics(raw)
     if (translation.dropped) options.onDroppedEvent?.(translation.dropped)
     for (const [index, event] of translation.events.entries()) {
       const eventId = stableProjectedRuntimeEventId(identity, index)
       await listener(eventId ? { ...event, eventId } : event)
+    }
+    // Non-terminal projection delivery retains its existing happens-before
+    // relationship with watchdog observation.
+    if (progress?.disposition !== 'terminal') emitProgress(progress)
+    if (progress?.disposition === 'terminal' && progress.runtimeSessionId) {
+      outputProgress?.delete(progress.runtimeSessionId)
     }
     return identity
   }
@@ -710,6 +705,12 @@ export function subscribeToOpencodeCloudRuntimeEvents(
     fallbackAfter?: string,
   ) => {
     const next = state.ingestTail.then(async () => {
+      // A newly admitted prompt gets a durable aggregate sequence. Hold replay
+      // delivery until that floor is known so history from an earlier run can
+      // never be rebound to the replacement worker execution.
+      const admissionBarrier = state.admissionBarrier
+      if (admissionBarrier) await admissionBarrier
+      if (controller.signal.aborted) return false
       const identity = nativeRuntimeEventIdentity(raw)
       if (identity.sequence !== null && identity.sequence <= state.lastSequence) return false
       await deliverRawEvent(raw)
@@ -792,6 +793,15 @@ export function subscribeToOpencodeCloudRuntimeEvents(
 
   const deliverAuthoritativeIdle = async (state: DurableSessionSubscriptionState, generation: number) => {
     const admissionKey = state.admissionKeys.get(generation) || stableAdmissionEventKey(null)
+    if (options.onProgress) {
+      emitProgress({
+        source: 'terminal',
+        disposition: 'terminal',
+        semanticKey: `session.idle:${admissionKey}`,
+        observedAtMs: performance.now(),
+        runtimeSessionId: state.sessionId,
+      })
+    }
     await listener({
       eventId: `opencode:${state.sessionId}:idle:${admissionKey}`,
       type: 'session.idle',
@@ -887,6 +897,8 @@ export function subscribeToOpencodeCloudRuntimeEvents(
       sessionId: normalized,
       after: undefined,
       lastSequence: -1,
+      admissionBarrier: null,
+      releaseAdmissionBarrier: null,
       executionGeneration: 0,
       settledGeneration: 0,
       admissionKeys: new Map(),
@@ -959,6 +971,16 @@ export function subscribeToOpencodeCloudRuntimeEvents(
     void scheduleDescendantDiscovery()
   }
 
+  const beginSessionAdmission = (sessionId: string) => {
+    const state = ensureSessionTracked(sessionId)
+    if (!state || state.admissionBarrier) return
+    rootSessions.add(state.sessionId)
+    void scheduleDescendantDiscovery()
+    state.admissionBarrier = new Promise<void>((resolve) => {
+      state.releaseAdmissionBarrier = resolve
+    })
+  }
+
   const ensureSessionMonitorTask = (state: DurableSessionSubscriptionState) => {
     if (state.monitorTask || controller.signal.aborted || state.settledGeneration >= state.executionGeneration) return
     state.monitorTask = monitorAdmittedSession(state)
@@ -979,9 +1001,33 @@ export function subscribeToOpencodeCloudRuntimeEvents(
     rootSessions.add(state.sessionId)
     void scheduleDescendantDiscovery()
     state.executionGeneration += 1
+    outputProgress?.delete(state.sessionId)
+    const durableAdmissionSequence = Number.isSafeInteger(admittedSequence) && admittedSequence !== undefined
+      && admittedSequence >= 0
+      ? admittedSequence
+      : null
+    if (durableAdmissionSequence !== null) {
+      state.lastSequence = Math.max(state.lastSequence, durableAdmissionSequence)
+      state.after = String(state.lastSequence)
+    }
     const stableId = admissionId?.trim()
       || (Number.isSafeInteger(admittedSequence) ? `${state.sessionId}:sequence:${admittedSequence}` : null)
-    state.admissionKeys.set(state.executionGeneration, stableAdmissionEventKey(stableId))
+    const admissionKey = stableAdmissionEventKey(stableId)
+    state.admissionKeys.set(state.executionGeneration, admissionKey)
+    if (options.onProgress) {
+      emitProgress({
+        source: 'admission',
+        disposition: 'running',
+        sequence: Number.isSafeInteger(admittedSequence) ? admittedSequence : undefined,
+        semanticKey: `session.next.prompt.admitted:${admissionKey}`,
+        observedAtMs: performance.now(),
+        runtimeSessionId: state.sessionId,
+      })
+    }
+    const releaseAdmissionBarrier = state.releaseAdmissionBarrier
+    state.admissionBarrier = null
+    state.releaseAdmissionBarrier = null
+    releaseAdmissionBarrier?.()
     ensureSessionMonitorTask(state)
   }
 
@@ -1047,8 +1093,14 @@ export function subscribeToOpencodeCloudRuntimeEvents(
   const unsubscribe = () => {
     options.signal?.removeEventListener('abort', abort)
     controller.abort()
+    for (const state of durableSessions.values()) {
+      const releaseAdmissionBarrier = state.releaseAdmissionBarrier
+      state.admissionBarrier = null
+      state.releaseAdmissionBarrier = null
+      releaseAdmissionBarrier?.()
+    }
   }
-  return Object.assign(unsubscribe, { trackSession, markSessionAdmitted })
+  return Object.assign(unsubscribe, { trackSession, beginSessionAdmission, markSessionAdmitted })
 }
 
 export function buildNodeOpencodeCloudRuntimeClientConfig(
@@ -1246,6 +1298,8 @@ export async function createConnectedOpencodeCloudRuntimeAdapter(options: {
     directory: options.directory,
   }, { defaultModel })
   const knownRootSessions = new Set<string>()
+  const rootAdmissions = new Map<string, { admissionId?: string; admittedSequence: number }>()
+  const pendingRootAdmissions = new Set<string>()
   const eventSubscriptions = new Set<OpencodeCloudRuntimeEventSubscription>()
 
   const trackRootSession = (sessionId: string) => {
@@ -1259,9 +1313,22 @@ export async function createConnectedOpencodeCloudRuntimeAdapter(options: {
     admittedSequence?: number,
   ) => {
     trackRootSession(sessionId)
+    pendingRootAdmissions.delete(sessionId)
+    if (Number.isSafeInteger(admittedSequence) && admittedSequence !== undefined && admittedSequence >= 0) {
+      rootAdmissions.set(sessionId, {
+        ...(admissionId ? { admissionId } : {}),
+        admittedSequence,
+      })
+    }
     for (const subscription of eventSubscriptions) {
       subscription.markSessionAdmitted(sessionId, admissionId, admittedSequence)
     }
+  }
+
+  const beginRootSessionAdmission = (sessionId: string) => {
+    trackRootSession(sessionId)
+    pendingRootAdmissions.add(sessionId)
+    for (const subscription of eventSubscriptions) subscription.beginSessionAdmission(sessionId)
   }
 
   let closed = false
@@ -1276,19 +1343,33 @@ export async function createConnectedOpencodeCloudRuntimeAdapter(options: {
       return session
     },
     async promptSession(input) {
-      trackRootSession(input.sessionId)
+      beginRootSessionAdmission(input.sessionId)
       const result = await adapter.promptSession(input)
+      const admittedSequence = result?.admittedSequence
+      if (!Number.isSafeInteger(admittedSequence) || admittedSequence === undefined || admittedSequence < 0) {
+        throw new Error('OpenCode prompt admission did not include a durable aggregate sequence.')
+      }
       markRootSessionAdmitted(
         input.sessionId,
         input.messageId || result?.admissionId,
-        result?.admittedSequence,
+        admittedSequence,
       )
       return result
     },
     subscribeEvents(listener, subscribeOptions) {
       const subscription = subscribeToOpencodeCloudRuntimeEvents(client, listener, subscribeOptions)
       eventSubscriptions.add(subscription)
-      for (const sessionId of knownRootSessions) subscription.trackSession(sessionId)
+      for (const sessionId of knownRootSessions) {
+        subscription.trackSession(sessionId)
+        if (pendingRootAdmissions.has(sessionId)) {
+          subscription.beginSessionAdmission(sessionId)
+          continue
+        }
+        const admission = rootAdmissions.get(sessionId)
+        if (admission) {
+          subscription.markSessionAdmitted(sessionId, admission.admissionId, admission.admittedSequence)
+        }
+      }
       return () => {
         eventSubscriptions.delete(subscription)
         subscription()

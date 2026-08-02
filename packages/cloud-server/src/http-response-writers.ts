@@ -83,13 +83,11 @@ export function writeHtml(res: ServerResponse, status: number, body: string, ori
 // Relaxing style does not weaken script execution — 'unsafe-inline' in
 // style-src cannot run JavaScript.
 //
-// objectStoreOrigin (SEC-2): when the configured object store can presign uploads,
-// the browser shim's F4 path PUTs the artifact bytes DIRECTLY to that cross-origin
+// objectStoreOrigin (SEC-2): when the complete direct-upload readiness contract is
+// attested, the browser sends a signed multipart POST directly to the cross-origin
 // object store (packages/app/src/browser/cowork-api.ts). A bare `connect-src 'self'`
-// silently blocks that PUT, so the shim falls back to the buffered path and direct
-// presigned transfer is dead in the browser. When an object-store origin is plumbed
-// in, allow it in connect-src so the direct PUT/GET is permitted. When none is
-// configured (buffered-only stores), connect-src stays 'self'.
+// would block that POST. When the attested object-store origin is plumbed in, allow
+// direct POST/GET; buffered-only deployments keep connect-src at 'self'.
 const SAFE_CSP_ORIGIN = /^https?:\/\/[^\s'";,]+$/
 
 export function writeBrowserRendererHtml(
@@ -116,7 +114,7 @@ export function writeBrowserRendererHtml(
       // Per-entity inline style attributes (entity-chroma theming).
       "style-src-attr 'unsafe-inline'",
       // Same-origin HTTP (/api, /auth) + SSE (/events), plus the presigned
-      // object-store origin (when configured) for the F4 direct-transfer PUT/GET.
+      // attested object-store origin (when configured) for direct-transfer POST/GET.
       connectSrc,
       "font-src 'self'",
       // SEC img-src: the renderer only needs same-origin assets plus data: URLs.

@@ -141,6 +141,12 @@ export function createFixture(options: {
   emailSender?: CloudEmailSender | null
   knowledgeAgentTokenSecret?: string | null
   objectStore?: ObjectStoreAdapter
+  artifactServiceFactory?: (input: {
+    service: CloudSessionService
+    objectStore: ObjectStoreAdapter
+    store: InMemoryControlPlaneStore
+    ids: { randomUUID: () => string }
+  }) => CloudArtifactService
 } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
@@ -184,9 +190,15 @@ export function createFixture(options: {
     options.observability ?? null,
     createEnvelopeSecretAdapter('cloud-http-workflow-secret-encryption-key'),
   )
-  const artifacts = new CloudArtifactService(service, objectStore, {
+  const artifactIds = {
     randomUUID: () => `artifact-${nextId += 1}`,
-  })
+  }
+  const artifacts = options.artifactServiceFactory?.({
+    service,
+    objectStore,
+    store,
+    ids: artifactIds,
+  }) || new CloudArtifactService(service, objectStore, artifactIds)
   const worker = new CloudWorker(
     store,
     service,

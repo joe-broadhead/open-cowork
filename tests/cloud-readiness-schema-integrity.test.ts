@@ -78,3 +78,70 @@ test('cloud readiness never exposes injected isolation provider or reason detail
   )
   assert.equal(JSON.stringify(report).includes(sentinel), false)
 })
+
+test('direct upload readiness fails closed for every requested missing dependency', async () => {
+  const base = {
+    policy: { role: 'web' } as never,
+    store: new InMemoryControlPlaneStore(),
+    objectStore: createInMemoryObjectStore(),
+    secretAdapter: createPlaintextSecretAdapter(),
+    billingConfig: { enabled: false, provider: 'none' } as never,
+  }
+  for (const [artifactDirectUpload, expectedDetail] of [
+    [{ requested: true, configStatus: 'invalid', durableStore: true, cleanupOwnerReady: true }, 'config_invalid'],
+    [{ requested: true, configStatus: 'valid', durableStore: true, cleanupOwnerReady: true }, 'provider_unattested'],
+    [{ requested: true, configStatus: 'valid', durableStore: false, cleanupOwnerReady: true }, 'provider_unattested'],
+    [{ requested: true, configStatus: 'valid', durableStore: true, cleanupOwnerReady: false }, 'provider_unattested'],
+  ] as const) {
+    const report = await createCloudReadinessCheck({ ...base, artifactDirectUpload })()
+    assert.equal(report.ok, false)
+    assert.deepEqual(report.checks.find((entry) => entry.name === 'artifact_direct_upload'), {
+      name: 'artifact_direct_upload',
+      status: 'error',
+      detail: expectedDetail,
+    })
+  }
+})
+
+test('direct upload readiness requires an attested provider, durable store, and cleanup owner', async () => {
+  const objectStore = {
+    ...createInMemoryObjectStore(),
+    presignedUpload: {
+      enforcement: 'exact-content-length',
+      maxBytes: 1024,
+      origin: 'https://objects.example.test',
+      verifyCleanupSafety: async () => true,
+      verifyBrowserPostSafety: async (origin: string) => origin === 'https://cloud.example.test',
+      presignPost: async () => null,
+      inspect: async () => null,
+      promote: async () => undefined,
+      delete: async () => undefined,
+    },
+  } as never
+  const base = {
+    policy: { role: 'web' } as never,
+    store: new InMemoryControlPlaneStore(),
+    objectStore,
+    secretAdapter: createPlaintextSecretAdapter(),
+    billingConfig: { enabled: false, provider: 'none' } as never,
+    publicUrl: 'https://cloud.example.test',
+  }
+  for (const [durableStore, cleanupOwnerReady, expectedDetail] of [
+    [false, true, 'durable_store_required'],
+    [true, false, 'cleanup_owner_unavailable'],
+    [true, true, 'enabled'],
+  ] as const) {
+    const report = await createCloudReadinessCheck({
+      ...base,
+      artifactDirectUpload: {
+        requested: true,
+        configStatus: 'valid',
+        durableStore,
+        cleanupOwnerReady: async () => cleanupOwnerReady,
+      },
+    })()
+    const directUpload = report.checks.find((entry) => entry.name === 'artifact_direct_upload')
+    assert.equal(directUpload?.detail, expectedDetail)
+    assert.equal(directUpload?.status, expectedDetail === 'enabled' ? 'ok' : 'error')
+  }
+})

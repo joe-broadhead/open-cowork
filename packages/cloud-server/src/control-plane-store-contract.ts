@@ -66,6 +66,9 @@ import type {
 } from './control-plane-scim.ts'
 import type {
   BillingSubscriptionRecord,
+  ArtifactUploadLifecycleCapability,
+  ArtifactUploadReconciliationClaim,
+  ArtifactUploadReconciliationStats,
   ArtifactUploadReservationRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
@@ -148,14 +151,21 @@ import type {
 } from './control-plane-account-inputs.ts'
 import type {
   CheckCloudAuthBackoffInput,
+  ClaimArtifactUploadFinalizationInput,
+  ClaimArtifactUploadReconciliationInput,
+  CompleteArtifactUploadCleanupInput,
+  CompleteArtifactUploadFinalizationInput,
   ClaimRateLimitInput,
   ConsumeUsageQuotaInput,
   CreateArtifactUploadReservationInput,
   CreateSessionInput,
+  DeferArtifactUploadCleanupInput,
+  FailArtifactUploadCleanupInput,
+  PruneArtifactUploadReservationsInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
-  ReleaseArtifactUploadReservationInput,
-  SettleArtifactUploadReservationInput,
+  ReleaseArtifactUploadClaimInput,
+  RequestArtifactUploadCleanupInput,
   UpsertBillingSubscriptionInput,
 } from './control-plane-usage-inputs.ts'
 import type {
@@ -214,6 +224,7 @@ import type {
 export type MaybePromise<T> = T | Promise<T>
 
 export type ControlPlaneStore = {
+  readonly artifactUploadLifecycleCapability: ArtifactUploadLifecycleCapability
   createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }): MaybePromise<TenantRecord>
   ensureUser(input: {
     tenantId: string
@@ -223,6 +234,7 @@ export type ControlPlaneStore = {
     createdAt?: Date
   }): MaybePromise<UserRecord>
   ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }): MaybePromise<OrgRecord>
+  resolveOrgIdForTenant(tenantId: string): MaybePromise<string | null>
   createAccount(input: CreateAccountInput): MaybePromise<AccountRecord>
   findAccountBySubject(idpSubject: string): MaybePromise<AccountRecord | null>
   findAccountByEmail(email: string): MaybePromise<AccountRecord | null>
@@ -305,12 +317,16 @@ export type ControlPlaneStore = {
     sessionId: string
     artifactId: string
   }): MaybePromise<ArtifactUploadReservationRecord | null>
-  settleArtifactUploadReservation(input: SettleArtifactUploadReservationInput): MaybePromise<{
-    reservation: ArtifactUploadReservationRecord | null
-    quota: QuotaConsumptionRecord | null
-    settled: boolean
-  }>
-  releaseArtifactUploadReservation(input: ReleaseArtifactUploadReservationInput): MaybePromise<ArtifactUploadReservationRecord | null>
+  claimArtifactUploadFinalization(input: ClaimArtifactUploadFinalizationInput): MaybePromise<ArtifactUploadReservationRecord | null>
+  completeArtifactUploadFinalization(input: CompleteArtifactUploadFinalizationInput): MaybePromise<ArtifactUploadReservationRecord | null>
+  releaseArtifactUploadClaim(input: ReleaseArtifactUploadClaimInput): MaybePromise<ArtifactUploadReservationRecord | null>
+  requestArtifactUploadCleanup(input: RequestArtifactUploadCleanupInput): MaybePromise<ArtifactUploadReservationRecord | null>
+  deferArtifactUploadCleanup(input: DeferArtifactUploadCleanupInput): MaybePromise<ArtifactUploadReservationRecord | null>
+  completeArtifactUploadCleanup(input: CompleteArtifactUploadCleanupInput): MaybePromise<ArtifactUploadReservationRecord | null>
+  failArtifactUploadCleanup(input: FailArtifactUploadCleanupInput): MaybePromise<ArtifactUploadReservationRecord | null>
+  claimArtifactUploadReconciliation(input: ClaimArtifactUploadReconciliationInput): MaybePromise<ArtifactUploadReconciliationClaim[]>
+  getArtifactUploadReconciliationStats(now: Date): MaybePromise<ArtifactUploadReconciliationStats>
+  pruneArtifactUploadReservations(input: PruneArtifactUploadReservationsInput): MaybePromise<number>
   recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>
   listUsageEvents(orgId: string, limit?: number): MaybePromise<UsageEventRecord[]>
   upsertBillingSubscription(input: UpsertBillingSubscriptionInput): MaybePromise<BillingSubscriptionRecord>

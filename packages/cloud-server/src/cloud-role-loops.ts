@@ -85,12 +85,31 @@ export async function startCloudLivenessServer(
   port: number,
   hostname: string,
   isLive: () => boolean,
+  progress?: () => unknown,
 ): Promise<{ close(): Promise<void> }> {
   const server = createServer((req, res) => {
     if (req.url === '/livez') {
       const live = isLive()
       res.writeHead(live ? 200 : 503, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ ok: live }))
+      return
+    }
+    if (req.url === '/progressz') {
+      try {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify(progress?.() || {
+          mode: 'off',
+          requestedMode: 'off',
+          configStatus: 'valid',
+          configReason: 'default_off',
+          counts: { healthy: 0, waiting: 0, suspect: 0, stalled: 0 },
+          samples: [],
+          truncated: false,
+        }))
+      } catch {
+        res.writeHead(503, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'progress_snapshot_unavailable' }))
+      }
       return
     }
     res.writeHead(404, { 'content-type': 'application/json' })

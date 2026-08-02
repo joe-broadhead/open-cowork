@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
-import { createEnvelopeSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import { createEnvelopeSecretAdapter, createPlaintextSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import type { SecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
 import {
   assertCloudProductionDeploymentSafe,
@@ -16,8 +16,9 @@ import {
   startCloudApp,
 } from '@open-cowork/cloud-server/app'
 import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
-import { createUnavailableObjectStore } from '@open-cowork/cloud-server/object-store'
+import { createInMemoryObjectStore, createUnavailableObjectStore } from '@open-cowork/cloud-server/object-store'
 import { createUnavailableSecretAdapter } from '@open-cowork/cloud-server/secret-adapter'
+import { createCloudReadinessCheck } from '../packages/cloud-server/src/readiness.ts'
 import { FakeRuntime } from './helpers/cloud-app-runtime.ts'
 import {
   asArray,
@@ -96,12 +97,17 @@ test('cloud app exposes separate liveness and dependency readiness endpoints', a
     assert.equal(checks.some((entry) => asRecord(entry).name === 'control_plane'), true)
     assert.equal(checks.some((entry) => asRecord(entry).name === 'object_store'), true)
     assert.equal(checks.some((entry) => asRecord(entry).name === 'secret_adapter'), true)
+    const progressResponse = await fetch(`${app.url}/progressz`)
+    assert.equal(progressResponse.status, 200)
+    const progress = await readJson(progressResponse)
+    assert.equal(progress.mode, 'off')
+    assert.deepEqual(progress.counts, { healthy: 0, waiting: 0, suspect: 0, stalled: 0 })
   } finally {
     await app.close()
   }
 })
 
-test('cloud worker liveness server exposes only the canonical liveness route', async () => {
+test('cloud worker operational server exposes only canonical liveness and privacy-safe progress routes', async () => {
   const livenessPort = await reserveLoopbackPort()
   const app = await startCloudApp({
     store: new InMemoryControlPlaneStore(),
@@ -123,6 +129,12 @@ test('cloud worker liveness server exposes only the canonical liveness route', a
     const live = await waitForResponse(`${baseUrl}/livez`)
     assert.equal(live.status, 200)
     assert.equal((await readJson(live)).ok, true)
+    const progressResponse = await fetch(`${baseUrl}/progressz`)
+    assert.equal(progressResponse.status, 200)
+    const progress = await readJson(progressResponse)
+    assert.equal(progress.mode, 'off')
+    assert.deepEqual(progress.counts, { healthy: 0, waiting: 0, suspect: 0, stalled: 0 })
+    assert.deepEqual(progress.samples, [])
     assert.equal((await fetch(`${baseUrl}/healthz`)).status, 404)
   } finally {
     await app.close()
@@ -153,6 +165,44 @@ test('cloud readiness fails closed when required object storage or secret adapte
   } finally {
     await app.close()
   }
+})
+
+test('cloud readiness rejects an HTTP direct-upload provider for an HTTPS browser deployment', async () => {
+  const objectStore = {
+    ...createInMemoryObjectStore(),
+    presignedUpload: {
+      enforcement: 'exact-content-length',
+      maxBytes: 1024,
+      origin: 'http://objects.example.test',
+      verifyCleanupSafety: async () => true,
+      verifyBrowserPostSafety: async () => true,
+      presignPost: async () => null,
+      inspect: async () => null,
+      promote: async () => undefined,
+      delete: async () => undefined,
+    },
+  } as never
+  const report = await createCloudReadinessCheck({
+    policy: { role: 'web' } as never,
+    store: new InMemoryControlPlaneStore(),
+    objectStore,
+    secretAdapter: createPlaintextSecretAdapter(),
+    billingConfig: { enabled: false, provider: 'none' } as never,
+    publicUrl: 'https://cloud.example.test',
+    artifactDirectUpload: {
+      requested: true,
+      configStatus: 'valid',
+      durableStore: true,
+      cleanupOwnerReady: true,
+    },
+  })()
+
+  assert.deepEqual(report.checks.find((entry) => entry.name === 'artifact_direct_upload'), {
+    name: 'artifact_direct_upload',
+    status: 'error',
+    detail: 'provider_unattested',
+  })
+  assert.equal(report.ok, false)
 })
 
 test('cloud app wires OIDC browser login when session cookies are configured', async () => {

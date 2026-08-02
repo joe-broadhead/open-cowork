@@ -11,6 +11,7 @@ import { createCloudPathProvider } from '@open-cowork/cloud-server/path-provider
 import {
   createSdkCloudRuntimeAdapter,
   type CloudRuntimeEvent,
+  type CloudRuntimeProgressEvent,
 } from '@open-cowork/cloud-server/runtime-adapter'
 import {
   buildNodeOpencodeCloudRuntimeClientConfig,
@@ -110,7 +111,7 @@ test('cloud SDK runtime adapter only forwards native OpenCode message ids', asyn
   assert.deepEqual(admission, { admissionId: 'input-1', admittedSequence: 7 })
 })
 
-test('cloud OpenCode event translator maps SDK message, status, idle, and error events', () => {
+test('cloud OpenCode event translator maps SDK message, status, idle, and authoritative fatal events', () => {
   assert.deepEqual(translateOpencodeRuntimeEvent({
     payload: {
       type: 'message.part.updated.1',
@@ -160,7 +161,7 @@ test('cloud OpenCode event translator maps SDK message, status, idle, and error 
     payload: { sessionId: 'session-1' },
   }])
 
-  assert.deepEqual(translateOpencodeRuntimeEvent({
+  const recoverableError = {
     payload: {
       type: 'session.error',
       properties: {
@@ -168,13 +169,12 @@ test('cloud OpenCode event translator maps SDK message, status, idle, and error 
         error: { message: 'provider failed' },
       },
     },
-  }), [{
-    type: 'runtime.error',
-    payload: {
-      sessionId: 'session-1',
-      message: 'provider failed',
-    },
-  }])
+  }
+  assert.deepEqual(translateOpencodeRuntimeEvent(recoverableError), [])
+  assert.deepEqual(translateOpencodeRuntimeEventWithDiagnostics(recoverableError).dropped, {
+    sdkEventType: 'session.error',
+    reason: 'no-projected-events',
+  })
 
   assert.deepEqual(translateOpencodeRuntimeEvent({
     payload: {
@@ -549,6 +549,170 @@ test('cloud OpenCode runtime subscription translates stream events and reports f
   unsubscribe()
 })
 
+test('cloud OpenCode runtime subscription emits only explicit meaningful progress', async () => {
+  const progress: CloudRuntimeProgressEvent[] = []
+  const client = {
+    v2: {
+      event: {
+        async subscribe({ signal }: { signal?: AbortSignal } = {}) {
+          return {
+            stream: (async function* stream() {
+              yield {
+                payload: {
+                  id: 'event-output-1',
+                  type: 'message.part.updated',
+                  data: {
+                    sessionID: 'session-1',
+                    messageID: 'message-1',
+                    part: { id: 'part-1', type: 'text', text: 'hello' },
+                  },
+                },
+              }
+              yield {
+                payload: {
+                  id: 'event-output-2',
+                  type: 'message.part.updated',
+                  data: {
+                    sessionID: 'session-1',
+                    messageID: 'message-2',
+                    part: { id: 'part-1', type: 'text', text: '!!' },
+                  },
+                },
+              }
+              for (const type of ['health.check', 'session.active.poll', 'session.list']) {
+                yield { payload: { id: `event-${type}`, type, properties: { sessionID: 'session-1' } } }
+              }
+              yield {
+                payload: {
+                  id: 'event-retry-1',
+                  type: 'session.status',
+                  properties: {
+                    sessionID: 'session-1',
+                    status: { type: 'retry', next: Date.now() + 10_000 },
+                  },
+                },
+              }
+              yield* waitForAbortStream(signal)
+            })(),
+          }
+        },
+      },
+    },
+  }
+
+  const unsubscribe = subscribeToOpencodeCloudRuntimeEvents(
+    client as any,
+    () => undefined,
+    { onProgress: (event) => { progress.push(event) } },
+  )
+  for (let attempt = 0; progress.length < 3 && attempt < 20; attempt += 1) await delay(10)
+
+  assert.equal(progress.length, 3, 'poll/read/list/health/unknown events must not emit progress')
+  assert.deepEqual({
+    source: progress[0]?.source,
+    disposition: progress[0]?.disposition,
+    progressCursor: progress[0]?.progressCursor,
+    runtimeSessionId: progress[0]?.runtimeSessionId,
+  }, {
+    source: 'output_advance',
+    disposition: 'running',
+    progressCursor: 5,
+    runtimeSessionId: 'session-1',
+  })
+  assert.equal(progress[1]?.progressCursor, 7, 'output cursor must be monotonic across distinct output streams')
+  assert.equal(progress[2]?.source, 'provider_backoff')
+  assert.equal(progress[2]?.disposition, 'waiting')
+  assert.equal(progress[2]?.waitingReason, 'provider_backoff')
+  assert.ok((progress[2]?.resumeAtMs || 0) > (progress[2]?.observedAtMs || 0))
+  assert.equal(progress.every((event) => event.provenance === undefined), true)
+  unsubscribe()
+})
+
+test('cloud OpenCode runtime delivers terminal progress before settlement and keeps non-terminal ordering', async () => {
+  const order: string[] = []
+  const client = {
+    v2: {
+      event: {
+        async subscribe({ signal }: { signal?: AbortSignal } = {}) {
+          return {
+            stream: (async function* stream() {
+              yield {
+                payload: {
+                  id: 'event-busy-1',
+                  type: 'session.status',
+                  properties: { sessionID: 'session-1', status: { type: 'busy' } },
+                },
+              }
+              yield {
+                payload: {
+                  id: 'event-idle-1',
+                  type: 'session.idle',
+                  properties: { sessionID: 'session-1' },
+                },
+              }
+              yield* waitForAbortStream(signal)
+            })(),
+          }
+        },
+      },
+    },
+  }
+
+  const unsubscribe = subscribeToOpencodeCloudRuntimeEvents(
+    client as any,
+    (event) => { order.push(`listener:${event.type}`) },
+    { onProgress: (event) => { order.push(`progress:${event.source}`) } },
+  )
+  for (let attempt = 0; order.length < 4 && attempt < 20; attempt += 1) await delay(10)
+
+  assert.deepEqual(order, [
+    'listener:session.status',
+    'progress:phase_transition',
+    'progress:terminal',
+    'listener:session.idle',
+  ])
+  unsubscribe()
+})
+
+test('cloud OpenCode runtime skips progress classification when no observer is installed', async () => {
+  let classificationOnlyReads = 0
+  const properties = { sessionID: 'session-1' }
+  Object.defineProperty(properties, 'status', {
+    get() {
+      const stack = new Error().stack || ''
+      if (/classifyNativeRuntimeProgress|nativeRuntimeRetryDeadline|nativeRuntimeStatusType/.test(stack)) {
+        classificationOnlyReads += 1
+      }
+      return { type: 'busy' }
+    },
+  })
+  let delivered = false
+  const client = {
+    v2: {
+      event: {
+        async subscribe({ signal }: { signal?: AbortSignal } = {}) {
+          return {
+            stream: (async function* stream() {
+              yield { payload: { id: 'idle-1', type: 'session.idle', properties } }
+              yield* waitForAbortStream(signal)
+            })(),
+          }
+        },
+      },
+    },
+  }
+
+  const unsubscribe = subscribeToOpencodeCloudRuntimeEvents(
+    client as any,
+    () => { delivered = true },
+  )
+  for (let attempt = 0; !delivered && attempt < 20; attempt += 1) await delay(10)
+
+  assert.equal(delivered, true)
+  assert.equal(classificationOnlyReads, 0)
+  unsubscribe()
+})
+
 test('cloud OpenCode runtime subscription reconnects after transient stream failure', async () => {
   let subscribeCount = 0
   const errors: unknown[] = []
@@ -662,6 +826,86 @@ test('cloud OpenCode runtime subscription replays tracked V2 session events from
     { eventId: 'opencode:session-1:2:0', content: 'replayed after disconnect' },
   ])
   assert.equal(errors.some((error) => String(error).includes('durable stream disconnected')), true)
+  subscription()
+})
+
+test('cloud OpenCode admission floor drops replayed terminals without suppressing a post-admission failure', async () => {
+  const delivered: CloudRuntimeEvent[] = []
+  const progress: CloudRuntimeProgressEvent[] = []
+  const failedStep = (sequence: number, message: string) => ({
+    id: `event-${sequence}`,
+    type: 'session.next.step.failed',
+    durable: { aggregateID: 'session-1', seq: sequence, version: 1 },
+    data: {
+      sessionID: 'session-1',
+      assistantMessageID: `assistant-${sequence}`,
+      timestamp: sequence,
+      error: { type: 'unknown', message },
+    },
+  })
+  const client = {
+    v2: {
+      event: {
+        async subscribe({ signal }: { signal?: AbortSignal } = {}) {
+          return { stream: waitForAbortStream(signal) }
+        },
+      },
+      session: {
+        async events(_parameters: unknown, options: { signal?: AbortSignal }) {
+          return {
+            stream: (async function* stream() {
+              yield failedStep(6, 'failure from the prior run')
+              yield failedStep(8, 'failure after replacement admission')
+              yield* waitForAbortStream(options.signal)
+            })(),
+          }
+        },
+        async wait(_parameters: unknown, options: { signal?: AbortSignal }) {
+          await new Promise<void>((_resolve, reject) => {
+            options.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'))
+            }, { once: true })
+          })
+        },
+      },
+    },
+  }
+
+  const subscription = subscribeToOpencodeCloudRuntimeEvents(
+    client as any,
+    async (event) => { delivered.push(event) },
+    { onProgress: (event) => { progress.push(event) } },
+  )
+  subscription.beginSessionAdmission('session-1')
+
+  await delay(20)
+  assert.deepEqual(delivered, [], 'history must remain behind the admission barrier')
+  assert.deepEqual(progress, [])
+
+  subscription.markSessionAdmitted('session-1', 'replacement-command', 7)
+  for (let attempt = 0; delivered.length === 0 && attempt < 100; attempt += 1) await delay(10)
+
+  assert.deepEqual(delivered, [{
+    eventId: 'opencode:session-1:8:0',
+    type: 'runtime.error',
+    payload: {
+      sessionId: 'session-1',
+      message: 'failure after replacement admission',
+    },
+  }])
+  assert.deepEqual(progress.map((event) => ({
+    source: event.source,
+    disposition: event.disposition,
+    sequence: event.sequence,
+  })), [{
+    source: 'admission',
+    disposition: 'running',
+    sequence: 7,
+  }, {
+    source: 'terminal',
+    disposition: 'terminal',
+    sequence: 8,
+  }])
   subscription()
 })
 
@@ -812,6 +1056,7 @@ test('cloud OpenCode runtime subscription retries transient wait failures then d
 
 test('cloud OpenCode runtime subscription drains active children after a successful root wait', async () => {
   const delivered: CloudRuntimeEvent[] = []
+  const progress: CloudRuntimeProgressEvent[] = []
   let waitCalls = 0
   let activeCalls = 0
   let historyCalls = 0
@@ -849,6 +1094,7 @@ test('cloud OpenCode runtime subscription drains active children after a success
   const subscription = subscribeToOpencodeCloudRuntimeEvents(
     client as any,
     async (event) => { delivered.push(event) },
+    { onProgress: (event) => { progress.push(event) } },
   )
   subscription.markSessionAdmitted('session-1', 'command-1', 7)
 
@@ -861,6 +1107,22 @@ test('cloud OpenCode runtime subscription drains active children after a success
   assert.equal(waitCalls, 2, 'root wait must be repeated while a delegated child remains active')
   assert.equal(activeCalls, 2, 'successful root wait must still verify process-wide quiescence')
   assert.equal(historyCalls, 2, 'root and discovered child histories must reconcile before idle')
+  assert.deepEqual(progress.map((event) => ({
+    source: event.source,
+    disposition: event.disposition,
+    sequence: event.sequence,
+    runtimeSessionId: event.runtimeSessionId,
+  })), [{
+    source: 'admission',
+    disposition: 'running',
+    sequence: 7,
+    runtimeSessionId: 'session-1',
+  }, {
+    source: 'terminal',
+    disposition: 'terminal',
+    sequence: undefined,
+    runtimeSessionId: 'session-1',
+  }])
   subscription()
 })
 

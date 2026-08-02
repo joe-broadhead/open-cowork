@@ -415,6 +415,8 @@ function runControlPlaneDomainContracts(
       await store.createTenant({ tenantId, name: 'Contract tenant' })
       await store.ensureUser({ tenantId, userId, email: `${userId}@example.test`, role: 'owner' })
       const org = await store.ensureOrgForTenant({ tenantId, orgId: `${prefix}-org`, name: 'Contract org' })
+      assert.equal(await store.resolveOrgIdForTenant(tenantId), org.orgId)
+      assert.equal(await store.resolveOrgIdForTenant(`${prefix}-missing-tenant`), null)
       const account = await store.createAccount({
         accountId,
         idpSubject: `${prefix}-subject`,
@@ -656,30 +658,38 @@ function runControlPlaneDomainContracts(
       assert.equal(duplicateReservation.reservation?.status, 'reserved')
       assert.equal(duplicateReservation.quota, null)
       assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 10)
-      const settledReservation = await store.settleArtifactUploadReservation({
+      const finalizationClaim = await store.claimArtifactUploadFinalization({
         orgId: org.orgId,
         tenantId,
         sessionId,
         artifactId: `${prefix}-reserved-artifact`,
-        actualBytes: 6,
-        quota: { ...quotaInput, quantity: 6 },
+        claimOwner: 'contract-worker',
+        claimToken: `${prefix}-finalize-claim`,
+        claimTtlMs: 30_000,
         now: new Date('2026-01-02T00:06:00.000Z'),
       })
-      assert.equal(settledReservation.settled, true)
-      assert.equal(settledReservation.reservation?.status, 'settled')
-      assert.equal(settledReservation.reservation?.settledBytes, 6)
-      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
-      const settledRetry = await store.settleArtifactUploadReservation({
+      assert.equal(finalizationClaim?.status, 'finalizing')
+      const finalizedReservation = await store.completeArtifactUploadFinalization({
         orgId: org.orgId,
         tenantId,
         sessionId,
         artifactId: `${prefix}-reserved-artifact`,
-        actualBytes: 6,
-        quota: { ...quotaInput, quantity: 6 },
+        claimOwner: 'contract-worker',
+        claimToken: `${prefix}-finalize-claim`,
         now: new Date('2026-01-02T00:07:00.000Z'),
       })
-      assert.equal(settledRetry.settled, true)
-      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
+      assert.equal(finalizedReservation?.status, 'finalized')
+      const finalizedRetry = await store.completeArtifactUploadFinalization({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-reserved-artifact`,
+        claimOwner: 'contract-worker',
+        claimToken: `${prefix}-finalize-claim`,
+        now: new Date('2026-01-02T00:07:30.000Z'),
+      })
+      assert.equal(finalizedRetry?.status, 'finalized')
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 10)
       await store.createArtifactUploadReservation({
         orgId: org.orgId,
         tenantId,
@@ -694,17 +704,64 @@ function runControlPlaneDomainContracts(
         quota: { ...quotaInput, quantity: 5 },
         createdAt: quotaNow,
       })
-      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 11)
-      const expiredReservation = await store.releaseArtifactUploadReservation({
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 15)
+      const recoveryClaims = await store.claimArtifactUploadReconciliation({
+        claimOwner: 'contract-reconciler',
+        claimToken: `${prefix}-reconcile-claim`,
+        claimTtlMs: 30_000,
+        limit: 10,
+        now: new Date('2026-01-02T00:06:00.000Z'),
+      })
+      assert.deepEqual(recoveryClaims.map((claim) => claim.action), ['finalize'])
+      const cleanupPending = await store.requestArtifactUploadCleanup({
         orgId: org.orgId,
         tenantId,
         sessionId,
         artifactId: `${prefix}-expired-artifact`,
-        status: 'expired',
+        reason: 'mismatch',
+        claimOwner: 'contract-reconciler',
+        claimToken: `${prefix}-reconcile-claim`,
+        claimTtlMs: 30_000,
+        expectedFinalizationClaimOwner: 'contract-reconciler',
+        expectedFinalizationClaimToken: `${prefix}-reconcile-claim`,
         now: new Date('2026-01-02T00:06:00.000Z'),
       })
-      assert.equal(expiredReservation?.status, 'expired')
-      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 6)
+      assert.equal(cleanupPending?.status, 'cleanup_pending')
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 15)
+      assert.deepEqual(
+        await store.getArtifactUploadReconciliationStats(new Date('2026-01-02T00:06:01.000Z')),
+        { pendingCount: 1, oldestPendingAgeMs: 1_000 },
+      )
+      const cleanupDeferred = await store.deferArtifactUploadCleanup({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-expired-artifact`,
+        claimOwner: 'contract-reconciler',
+        claimToken: `${prefix}-reconcile-claim`,
+        retryAt: new Date('2026-01-02T00:36:00.000Z'),
+        now: new Date('2026-01-02T00:06:01.000Z'),
+      })
+      assert.equal(cleanupDeferred?.cleanupPasses, 1)
+      const cleanupConfirmation = await store.claimArtifactUploadReconciliation({
+        claimOwner: 'contract-reconciler',
+        claimToken: `${prefix}-reconcile-confirmation`,
+        claimTtlMs: 30_000,
+        limit: 1,
+        now: new Date('2026-01-02T00:36:00.000Z'),
+      })
+      assert.deepEqual(cleanupConfirmation.map((claim) => claim.action), ['cleanup'])
+      const cleanedReservation = await store.completeArtifactUploadCleanup({
+        orgId: org.orgId,
+        tenantId,
+        sessionId,
+        artifactId: `${prefix}-expired-artifact`,
+        claimOwner: 'contract-reconciler',
+        claimToken: `${prefix}-reconcile-confirmation`,
+        now: new Date('2026-01-02T00:36:00.000Z'),
+      })
+      assert.equal(cleanedReservation?.status, 'cleaned')
+      assert.equal((await store.listUsageQuotaCounters(org.orgId)).find((counter) => counter.quotaKey === quotaInput.quotaKey)?.quantity, 10)
 
       await store.upsertCloudLaunchpadSessionSummary({
         tenantId,

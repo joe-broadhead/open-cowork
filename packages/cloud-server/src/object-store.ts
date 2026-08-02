@@ -3,7 +3,10 @@ import { createReadStream } from 'node:fs'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
+  GetBucketCorsCommand,
+  GetBucketVersioningCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -57,22 +60,56 @@ export type ObjectStorePresignedRequest = {
   expiresAt: string
 }
 
-export type ObjectStorePresignedPutRequest = Omit<ObjectStorePresignedRequest, 'method'> & {
-  method: 'PUT'
+export type ObjectStorePresignedPostRequest = {
+  method: 'POST'
+  url: string
+  // Every field must be copied verbatim into the multipart form before the file part.
+  fields: Record<string, string>
+  expiresAt: string
+}
+
+export type ObjectStoreDirectUploadObject = {
+  size: number
+  contentType: string | null
+  checksumSha256: string
+  // Opaque provider token used to bind promotion to the object version that was inspected.
+  versionToken: string
 }
 
 // A plain ability to sign PUT requests says nothing about how many bytes the backing
-// store accepts. Adapters may expose direct upload only when the generated request
-// binds the declared content length exactly and independently enforces this maximum.
-export type ObjectStorePresignedUploadCapability = {
+// store accepts. Adapters may expose direct upload only when a provider-enforced POST
+// policy binds the declared content length and SHA-256 checksum exactly.
+export type ObjectStoreDirectUploadLifecycleCapability = {
+  /**
+   * Proves that key-only cleanup removes bytes instead of creating retained delete markers.
+   * Reconciliation must fail closed unless this provider check succeeds.
+   */
+  verifyCleanupSafety(): Promise<boolean>
+  inspect(key: string): Promise<ObjectStoreDirectUploadObject | null>
+  promote(input: {
+    stagingKey: string
+    finalKey: string
+    expected: ObjectStoreDirectUploadObject
+  }): Promise<void>
+  delete(key: string): Promise<void>
+}
+
+export type ObjectStorePresignedUploadCapability = ObjectStoreDirectUploadLifecycleCapability & {
   enforcement: 'exact-content-length'
   maxBytes: number
-  presignPut(input: {
+  /** Serialized provider origin used for CSP without minting throwaway credentials. */
+  origin: string
+  /** Proves that the browser's exact origin may submit POST uploads to the bucket. */
+  verifyBrowserPostSafety(browserOrigin: string): Promise<boolean>
+  presignPost(input: {
     key: string
+    browserOrigin: string
     contentType?: string | null
     expectedSize: number
+    // Lowercase hexadecimal SHA-256 digest of the exact object bytes.
+    checksumSha256: string
     expiresSeconds?: number
-  }): Promise<ObjectStorePresignedPutRequest | null>
+  }): Promise<ObjectStorePresignedPostRequest | null>
 }
 
 export type ObjectStoreAdapter = {
@@ -85,6 +122,9 @@ export type ObjectStoreAdapter = {
   // explicit size enforcement; a plain presigned PUT must never qualify. An absent capability
   // or null request means the caller MUST use the bounded buffered path.
   presignGet?(key: string, options?: { expiresSeconds?: number }): Promise<ObjectStorePresignedRequest | null>
+  // Kept independent from browser issuance so removing static signing credentials or
+  // fail-closing an unsafe browser origin cannot strand already-reserved provider bytes.
+  directUploadLifecycle?: ObjectStoreDirectUploadLifecycleCapability
   presignedUpload?: ObjectStorePresignedUploadCapability
   close?: () => Promise<void> | void
 }
@@ -126,15 +166,40 @@ export function instrumentObjectStore(
     getObject: (key) => instrument('get', () => adapter.getObject(key)),
     headObject: (key) => instrument('head', () => adapter.headObject(key)),
     deleteObject: (key) => instrument('delete', () => adapter.deleteObject(key)),
-    // Presigning is a local URL-signing computation (no I/O round-trip), so it is passed through
-    // transparently rather than wrapped in I/O telemetry. Only present when the inner adapter supports it.
+    // Signing is local and passed through. Provider inspection/promotion/cleanup are I/O and use
+    // fixed operation labels so the direct path stays visible without adding sensitive dimensions.
     ...(adapter.presignGet ? { presignGet: (key, options) => adapter.presignGet!(key, options) } : {}),
+    ...(adapter.directUploadLifecycle
+      ? {
+          directUploadLifecycle: {
+            verifyCleanupSafety: () => instrument(
+              'head',
+              () => adapter.directUploadLifecycle!.verifyCleanupSafety(),
+            ),
+            inspect: (key) => instrument('head', () => adapter.directUploadLifecycle!.inspect(key)),
+            promote: (input) => instrument('put', () => adapter.directUploadLifecycle!.promote(input)),
+            delete: (key) => instrument('delete', () => adapter.directUploadLifecycle!.delete(key)),
+          },
+        }
+      : {}),
     ...(adapter.presignedUpload
       ? {
           presignedUpload: {
             enforcement: adapter.presignedUpload.enforcement,
             maxBytes: adapter.presignedUpload.maxBytes,
-            presignPut: (input) => adapter.presignedUpload!.presignPut(input),
+            origin: adapter.presignedUpload.origin,
+            verifyCleanupSafety: () => instrument(
+              'head',
+              () => adapter.presignedUpload!.verifyCleanupSafety(),
+            ),
+            verifyBrowserPostSafety: (browserOrigin) => instrument(
+              'head',
+              () => adapter.presignedUpload!.verifyBrowserPostSafety(browserOrigin),
+            ),
+            presignPost: (input) => adapter.presignedUpload!.presignPost(input),
+            inspect: (key) => instrument('head', () => adapter.presignedUpload!.inspect(key)),
+            promote: (input) => instrument('put', () => adapter.presignedUpload!.promote(input)),
+            delete: (key) => instrument('delete', () => adapter.presignedUpload!.delete(key)),
           },
         }
       : {}),
@@ -166,6 +231,8 @@ export type S3CompatibleObjectStoreOptions = {
   forcePathStyle?: boolean
   credentials?: S3ObjectStoreCredentials | null
   client?: Pick<S3Client, 'send' | 'destroy'>
+  /** Injectable monotonic-enough wall clock for the bounded provider-safety cache. */
+  safetyNowMs?: () => number
 }
 
 export type ObjectStoreHttpResponse = {
@@ -535,6 +602,79 @@ export type S3PresignInput = {
   now: Date
 }
 
+export type S3PresignedPostInput = {
+  url: string
+  bucket: string
+  key: string
+  region: string
+  accessKeyId: string
+  secretAccessKey: string
+  sessionToken?: string | null
+  contentType?: string | null
+  expectedSize: number
+  checksumSha256: string
+  expiresSeconds: number
+  now: Date
+}
+
+export function signS3PresignedPost(input: S3PresignedPostInput): ObjectStorePresignedPostRequest {
+  const key = assertSafeObjectKey(input.key)
+  if (!Number.isSafeInteger(input.expectedSize) || input.expectedSize <= 0) {
+    throw new Error('S3 presigned POST expectedSize must be a positive safe integer.')
+  }
+  if (!/^[0-9a-f]{64}$/.test(input.checksumSha256)) {
+    throw new Error('S3 presigned POST checksumSha256 must be a lowercase hexadecimal SHA-256 digest.')
+  }
+  const contentType = input.contentType?.trim() || 'application/octet-stream'
+  const service = 's3'
+  const amzDate = input.now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const dateStamp = amzDate.slice(0, 8)
+  const credentialScope = `${dateStamp}/${input.region}/${service}/aws4_request`
+  const credential = `${input.accessKeyId}/${credentialScope}`
+  const expires = Math.max(1, Math.min(604_800, Math.floor(input.expiresSeconds)))
+  const expiresAt = new Date(input.now.getTime() + expires * 1000).toISOString()
+  const checksumBase64 = Buffer.from(input.checksumSha256, 'hex').toString('base64')
+  const fields: Record<string, string> = {
+    key,
+    'Content-Type': contentType,
+    success_action_status: '204',
+    'x-amz-algorithm': 'AWS4-HMAC-SHA256',
+    'x-amz-credential': credential,
+    'x-amz-date': amzDate,
+    'x-amz-checksum-algorithm': 'SHA256',
+    'x-amz-checksum-sha256': checksumBase64,
+  }
+  const conditions: Array<Record<string, string> | ['content-length-range', number, number]> = [
+    { bucket: input.bucket },
+    { key },
+    { 'Content-Type': contentType },
+    { success_action_status: '204' },
+    { 'x-amz-algorithm': fields['x-amz-algorithm']! },
+    { 'x-amz-credential': credential },
+    { 'x-amz-date': amzDate },
+    { 'x-amz-checksum-algorithm': 'SHA256' },
+    { 'x-amz-checksum-sha256': checksumBase64 },
+  ]
+  if (input.sessionToken) {
+    fields['x-amz-security-token'] = input.sessionToken
+    conditions.push({ 'x-amz-security-token': input.sessionToken })
+  }
+  conditions.push(['content-length-range', input.expectedSize, input.expectedSize])
+  const policy = Buffer.from(JSON.stringify({ expiration: expiresAt, conditions }), 'utf8').toString('base64')
+  const signingKey = hmacSha256(
+    hmacSha256(hmacSha256(hmacSha256(`AWS4${input.secretAccessKey}`, dateStamp), input.region), service),
+    'aws4_request',
+  )
+  fields.policy = policy
+  fields['x-amz-signature'] = createHmac('sha256', signingKey).update(policy, 'utf8').digest('hex')
+  return {
+    method: 'POST',
+    url: input.url,
+    fields,
+    expiresAt,
+  }
+}
+
 // Exported for the AWS-vector unit test; not part of the public adapter surface.
 export function signS3PresignedUrl(input: S3PresignInput): ObjectStorePresignedRequest {
   const service = 's3'
@@ -602,17 +742,202 @@ function s3PresignTarget(options: S3CompatibleObjectStoreOptions, key: string) {
     : { protocol: 'https:' as const, host: `${options.bucket}.s3.${region}.amazonaws.com`, canonicalUri: `/${encodedKey}` }
 }
 
+function s3PostTarget(options: S3CompatibleObjectStoreOptions, key: string) {
+  const fullKey = prefixedKey(options.prefix, key)
+  if (options.endpoint) {
+    const endpoint = new URL(options.endpoint)
+    const basePath = endpoint.pathname.replace(/\/+$/, '')
+    return {
+      key: fullKey,
+      url: `${endpoint.protocol}//${options.bucket}.${endpoint.host}${basePath || '/'}`,
+    }
+  }
+  const region = options.region || 'us-east-1'
+  return {
+    key: fullKey,
+    url: `https://${options.bucket}.s3.${region}.amazonaws.com/`,
+  }
+}
+
 const DEFAULT_PRESIGN_EXPIRES_SECONDS = 900
+const DEFAULT_S3_PRESIGNED_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
+const S3_DIRECT_UPLOAD_SAFETY_CACHE_TTL_MS = 30_000
+
+function s3ChecksumSha256Hex(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('S3 direct-upload object is missing its SHA-256 checksum attestation.')
+  }
+  const checksum = Buffer.from(value, 'base64')
+  if (checksum.byteLength !== 32) {
+    throw new Error('S3 direct-upload object has an invalid SHA-256 checksum attestation.')
+  }
+  return checksum.toString('hex')
+}
+
+function directUploadObjectMatches(
+  actual: ObjectStoreDirectUploadObject | null,
+  expected: ObjectStoreDirectUploadObject,
+) {
+  return Boolean(
+    actual
+    && actual.size === expected.size
+    && actual.contentType === expected.contentType
+    && actual.checksumSha256 === expected.checksumSha256
+  )
+}
+
+function exactHttpOrigin(value: string) {
+  try {
+    const parsed = new URL(value)
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:')
+      && parsed.origin === value
+      && !parsed.username
+      && !parsed.password
+  } catch {
+    return false
+  }
+}
 
 export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOptions): ObjectStoreAdapter {
+  const kind = options.kind || 's3'
+  const credentials = options.credentials
+  const forcePathStyle = options.forcePathStyle ?? Boolean(options.endpoint)
+  // A virtual-hosted bucket gives CSP a bucket-specific origin. AWS path-style
+  // addressing uses a region-wide shared origin, and dotted virtual-host names do
+  // not match AWS's wildcard TLS certificate, so both remain on buffered upload.
+  const browserPostAddressingSafe = !forcePathStyle && !options.bucket.includes('.')
+  const safetyNowMs = options.safetyNowMs || Date.now
+  let cleanupSafetyExpiresAtMs = 0
+  let browserPostSafetyCache: { origin: string, expiresAtMs: number } | null = null
   const client = options.client || new S3Client({
     region: options.region || 'us-east-1',
     endpoint: options.endpoint || undefined,
     forcePathStyle: options.forcePathStyle ?? Boolean(options.endpoint),
     credentials: options.credentials || undefined,
   } satisfies S3ClientConfig)
+  const inspectDirectUpload = async (key: string): Promise<ObjectStoreDirectUploadObject | null> => {
+    const safeKey = assertSafeObjectKey(key)
+    try {
+      const result = await client.send(new HeadObjectCommand({
+        Bucket: options.bucket,
+        Key: prefixedKey(options.prefix, safeKey),
+        ChecksumMode: 'ENABLED',
+      }))
+      const versionToken = result.VersionId
+        ? `version:${result.VersionId}`
+        : result.ETag
+          ? `etag:${result.ETag}`
+          : null
+      if (!versionToken) {
+        throw new Error('S3 direct-upload object is missing a version attestation.')
+      }
+      return {
+        size: Number(result.ContentLength || 0),
+        contentType: result.ContentType || null,
+        checksumSha256: s3ChecksumSha256Hex(result.ChecksumSHA256),
+        versionToken,
+      }
+    } catch (error) {
+      const errorName = String((error as { name?: unknown }).name || '')
+      const statusCode = (error as { $metadata?: { httpStatusCode?: unknown } }).$metadata?.httpStatusCode
+      if (statusCode === 404 || errorName.includes('NotFound') || errorName.includes('NoSuchKey')) return null
+      throw error
+    }
+  }
+  const verifyDirectUploadCleanupSafety = async () => {
+    if (cleanupSafetyExpiresAtMs > safetyNowMs()) return true
+    const result = await client.send(new GetBucketVersioningCommand({
+      Bucket: options.bucket,
+    }))
+    // AWS omits Status only when versioning has never been enabled. Both Enabled and
+    // Suspended retain versions behind key-only deletes, so neither is cleanup-safe.
+    const safe = result.Status === undefined
+    if (safe) cleanupSafetyExpiresAtMs = safetyNowMs() + S3_DIRECT_UPLOAD_SAFETY_CACHE_TTL_MS
+    return safe
+  }
+  const verifyDirectUploadBrowserPostSafety = async (browserOrigin: string) => {
+    let parsedOrigin: URL
+    try {
+      parsedOrigin = new URL(browserOrigin)
+    } catch {
+      return false
+    }
+    if (
+      parsedOrigin.origin !== browserOrigin
+      || (parsedOrigin.protocol !== 'https:' && parsedOrigin.protocol !== 'http:')
+    ) return false
+    if (
+      browserPostSafetyCache?.origin === browserOrigin
+      && browserPostSafetyCache.expiresAtMs > safetyNowMs()
+    ) return true
+    // Retain at most one successful exact-origin attestation. A request for a new
+    // canonical origin evicts the previous entry before touching the provider.
+    if (browserPostSafetyCache?.origin !== browserOrigin) browserPostSafetyCache = null
+    const result = await client.send(new GetBucketCorsCommand({
+      Bucket: options.bucket,
+    }))
+    const postRules = (result.CORSRules || []).filter((rule) => rule.AllowedMethods?.includes('POST'))
+    const safe = postRules.some((rule) => rule.AllowedOrigins?.includes(browserOrigin))
+      && postRules.every((rule) => (rule.AllowedOrigins || []).every(exactHttpOrigin))
+    if (safe) {
+      browserPostSafetyCache = {
+        origin: browserOrigin,
+        expiresAtMs: safetyNowMs() + S3_DIRECT_UPLOAD_SAFETY_CACHE_TTL_MS,
+      }
+    }
+    return safe
+  }
+  const promoteDirectUpload = async (input: {
+    stagingKey: string
+    finalKey: string
+    expected: ObjectStoreDirectUploadObject
+  }) => {
+    const stagingKey = assertSafeObjectKey(input.stagingKey)
+    const finalKey = assertSafeObjectKey(input.finalKey)
+    if (stagingKey === finalKey) throw new Error('S3 direct-upload promotion requires distinct keys.')
+    const sourceKey = prefixedKey(options.prefix, stagingKey)
+    const encodedSource = `${encodeURIComponent(options.bucket)}/${encodeObjectPath(sourceKey)}`
+    let copySource = encodedSource
+    let copySourceIfMatch: string | undefined
+    if (input.expected.versionToken.startsWith('version:')) {
+      const versionId = input.expected.versionToken.slice('version:'.length)
+      if (!versionId) throw new Error('S3 direct-upload promotion has an invalid version token.')
+      copySource = `${encodedSource}?versionId=${encodeURIComponent(versionId)}`
+    } else if (input.expected.versionToken.startsWith('etag:')) {
+      copySourceIfMatch = input.expected.versionToken.slice('etag:'.length)
+      if (!copySourceIfMatch) throw new Error('S3 direct-upload promotion has an invalid ETag token.')
+    } else {
+      throw new Error('S3 direct-upload promotion has an unsupported version token.')
+    }
+    await client.send(new CopyObjectCommand({
+      Bucket: options.bucket,
+      Key: prefixedKey(options.prefix, finalKey),
+      CopySource: copySource,
+      CopySourceIfMatch: copySourceIfMatch,
+      ChecksumAlgorithm: 'SHA256',
+      MetadataDirective: 'COPY',
+    }))
+    const promoted = await inspectDirectUpload(finalKey)
+    if (!directUploadObjectMatches(promoted, input.expected)) {
+      throw new Error('S3 direct-upload promotion failed provider attestation.')
+    }
+  }
+  const deleteDirectUpload = async (key: string) => {
+    await client.send(new DeleteObjectCommand({
+      Bucket: options.bucket,
+      Key: prefixedKey(options.prefix, key),
+    }))
+  }
+  const directUploadLifecycle: ObjectStoreDirectUploadLifecycleCapability | null = kind === 's3'
+    ? {
+        verifyCleanupSafety: verifyDirectUploadCleanupSafety,
+        inspect: inspectDirectUpload,
+        promote: promoteDirectUpload,
+        delete: deleteDirectUpload,
+      }
+    : null
   return {
-    kind: options.kind || 's3',
+    kind,
     async putObject(input) {
       const key = prefixedKey(options.prefix, input.key)
       const body = bodyBuffer(input.body)
@@ -620,6 +945,12 @@ export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOp
         Bucket: options.bucket,
         Key: key,
         Body: body,
+        ...(kind === 's3'
+          ? {
+              ChecksumAlgorithm: 'SHA256' as const,
+              ChecksumSHA256: createHash('sha256').update(body).digest('base64'),
+            }
+          : {}),
         ContentType: input.contentType || undefined,
         Metadata: normalizeMetadata(input.metadata),
       }))
@@ -676,6 +1007,43 @@ export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOp
       const signed = presignS3Object('GET', key, undefined, presignOptions?.expiresSeconds)
       return signed
     },
+    ...(directUploadLifecycle ? { directUploadLifecycle } : {}),
+    ...(kind === 's3'
+      && browserPostAddressingSafe
+      && credentials?.accessKeyId
+      && credentials.secretAccessKey
+      ? {
+          presignedUpload: {
+            enforcement: 'exact-content-length' as const,
+            maxBytes: DEFAULT_S3_PRESIGNED_UPLOAD_MAX_BYTES,
+            origin: new URL(s3PostTarget(options, 'origin-probe').url).origin,
+            ...directUploadLifecycle!,
+            verifyBrowserPostSafety: verifyDirectUploadBrowserPostSafety,
+            async presignPost(input) {
+              if (input.expectedSize > DEFAULT_S3_PRESIGNED_UPLOAD_MAX_BYTES) return null
+              // Provider reads are owned by the scheduler/readiness safety lease. Trusted
+              // composition must gate this local signer on that current cross-process proof.
+              const target = s3PostTarget(options, input.key)
+              return signS3PresignedPost({
+                url: target.url,
+                bucket: options.bucket,
+                key: target.key,
+                region: options.region || 'us-east-1',
+                accessKeyId: credentials.accessKeyId,
+                secretAccessKey: credentials.secretAccessKey,
+                sessionToken: credentials.sessionToken,
+                contentType: input.contentType,
+                expectedSize: input.expectedSize,
+                checksumSha256: input.checksumSha256,
+                expiresSeconds: input.expiresSeconds && input.expiresSeconds > 0
+                  ? input.expiresSeconds
+                  : DEFAULT_PRESIGN_EXPIRES_SECONDS,
+                now: new Date(),
+              })
+            },
+          },
+        }
+      : {}),
     close() {
       client.destroy?.()
     },
@@ -690,8 +1058,8 @@ export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOp
     _contentType: string | null | undefined,
     expiresSeconds: number | undefined,
   ): ObjectStorePresignedRequest | null {
-    const credentials = options.credentials
-    if (!credentials?.accessKeyId || !credentials?.secretAccessKey) return null
+    const staticCredentials = options.credentials
+    if (!staticCredentials?.accessKeyId || !staticCredentials?.secretAccessKey) return null
     const target = s3PresignTarget(options, key)
     return signS3PresignedUrl({
       method,
@@ -699,9 +1067,9 @@ export function createS3CompatibleObjectStore(options: S3CompatibleObjectStoreOp
       host: target.host,
       canonicalUri: target.canonicalUri,
       region: options.region || 'us-east-1',
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      sessionToken: credentials.sessionToken,
+      accessKeyId: staticCredentials.accessKeyId,
+      secretAccessKey: staticCredentials.secretAccessKey,
+      sessionToken: staticCredentials.sessionToken,
       expiresSeconds: expiresSeconds && expiresSeconds > 0 ? expiresSeconds : DEFAULT_PRESIGN_EXPIRES_SECONDS,
       now: new Date(),
     })

@@ -33,7 +33,8 @@ import { InMemorySchemaMigrationsDomain } from './in-memory-domains/schema-migra
 import { InMemoryWorkerHeartbeatsDomain } from './in-memory-domains/worker-heartbeats.ts'
 import { InMemoryAuthBackoffDomain } from './in-memory-domains/auth-backoff.ts'
 import { InMemoryRateLimitsDomain } from './in-memory-domains/rate-limits.ts'
-import { InMemoryUsageQuotaDomain, quotaWindowStart } from './in-memory-domains/usage-quota.ts'
+import { InMemoryUsageQuotaDomain } from './in-memory-domains/usage-quota.ts'
+import { InMemoryArtifactUploadReservationsDomain } from './in-memory-domains/artifact-upload-reservations.ts'
 import { InMemoryWorkspaceEventsDomain } from './in-memory-domains/workspace-events.ts'
 import { InMemoryAuditDomain } from './in-memory-domains/audit.ts'
 import { InMemoryChannelBindingsDomain } from './in-memory-domains/channel-bindings.ts'
@@ -100,7 +101,6 @@ import type {
   UserRecord,
 } from './control-plane-records.ts'
 import type {
-  ArtifactUploadReservationRecord,
   BillingSubscriptionRecord,
   CloudAuthBackoffRecord,
   QuotaConsumptionRecord,
@@ -183,12 +183,9 @@ import type {
   CheckCloudAuthBackoffInput,
   ClaimRateLimitInput,
   ConsumeUsageQuotaInput,
-  CreateArtifactUploadReservationInput,
   CreateSessionInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
-  ReleaseArtifactUploadReservationInput,
-  SettleArtifactUploadReservationInput,
   UpsertBillingSubscriptionInput,
 } from './control-plane-usage-inputs.ts'
 import type {
@@ -283,17 +280,16 @@ function normalizeIdList(values: readonly unknown[], label: string, maxLength: n
   return [...new Set(values.map((value) => normalizeText(value, 256, label)))]
 }
 
-function artifactUploadReservationKey(orgId: string, tenantId: string, sessionId: string, artifactId: string) {
-  return key(orgId, tenantId, sessionId, artifactId)
-}
-
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
+  readonly artifactUploadLifecycleCapability = {
+    persistence: 'ephemeral',
+    reconciliation: 'bounded-claims',
+  } as const
   private readonly channelSessionBindings = new Map<string, ChannelSessionBindingRecord>()
   private readonly channelSessionBindingsByThread = new Map<string, string>()
   private readonly channelInteractions = new Map<string, ChannelInteractionRecord>()
   private readonly sessions = new Map<string, SessionState>()
   private readonly artifactIndex = new Map<string, CloudArtifactIndexRecord>()
-  private readonly artifactUploadReservations = new Map<string, ArtifactUploadReservationRecord>()
   private readonly launchpadSessionSummaries = new Map<string, CloudLaunchpadSessionSummaryRecord>()
   private readonly managedWorkersDomain = new InMemoryManagedWorkersDomain({
     orgTenantId: (orgId) => this.orgTenantId(orgId),
@@ -373,6 +369,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly usageQuotaDomain = new InMemoryUsageQuotaDomain({
     orgExists: (orgId) => this.orgExists(orgId),
   })
+  private readonly artifactUploadReservationsDomain = new InMemoryArtifactUploadReservationsDomain({
+    orgExists: (orgId) => this.orgExists(orgId),
+    requireSession: (tenantId, sessionId) => { this.requireSession(tenantId, sessionId) },
+    consumeUsageQuota: (input) => this.consumeUsageQuota(input),
+    adjustUsageQuota: (input) => { this.usageQuotaDomain.adjustUsageQuota(input) },
+  })
   private readonly sessionsDomain: InMemorySessionsDomain = new InMemorySessionsDomain({
     sessions: this.sessions,
     artifactIndex: this.artifactIndex,
@@ -381,7 +383,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     requireTenant: (tenantId) => { this.requireTenant(tenantId) },
     requireTenantUser: (tenantId, userId) => { this.requireTenantUser(tenantId, userId) },
     resolveOrgId: (tenantId) => this.orgIdForTenant(tenantId),
-    resolveOrgIdOrNull: (tenantId) => this.resolveOrgIdOrNull(tenantId),
+    resolveOrgIdOrNull: (tenantId) => this.resolveOrgIdForTenant(tenantId),
     appendWorkspaceEvent: (input) => this.appendWorkspaceEvent(input),
     findWorkspaceEvent: (tenantId, userId, eventId) => this.workspaceEventsDomain.findWorkspaceEvent(tenantId, userId, eventId),
     snapshotWorkspaceEvents: () => this.workspaceEventsDomain.snapshot(),
@@ -598,7 +600,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.identityDomain.orgTenantId(orgId)
   }
 
-  private resolveOrgIdOrNull(tenantId: string): string | null {
+  resolveOrgIdForTenant(tenantId: string): string | null {
     return this.identityDomain.resolveOrgIdOrNull(tenantId)
   }
 
@@ -702,105 +704,52 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return this.usageQuotaDomain.listUsageQuotaCounters(orgId)
   }
 
-  createArtifactUploadReservation(input: CreateArtifactUploadReservationInput): {
-    reservation: ArtifactUploadReservationRecord | null
-    quota: QuotaConsumptionRecord | null
-  } {
-    if (!this.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    this.requireSession(input.tenantId, input.sessionId)
-    const reservationKey = artifactUploadReservationKey(input.orgId, input.tenantId, input.sessionId, input.artifactId)
-    const existing = this.artifactUploadReservations.get(reservationKey)
-    if (existing) return { reservation: clone(existing), quota: null }
-    const quota = input.quota ? this.consumeUsageQuota(input.quota) : null
-    if (quota && !quota.allowed) return { reservation: null, quota }
-    const now = input.createdAt || input.quota?.now || new Date()
-    const expiresAt = input.expiresAt instanceof Date ? input.expiresAt : new Date(input.expiresAt)
-    const quotaWindowMs = input.quota?.windowMs ?? null
-    const quotaWindowStartedAtMs = input.quota ? quotaWindowStart((input.quota.now || now).getTime(), input.quota.windowMs) : null
-    const reservation: ArtifactUploadReservationRecord = {
-      orgId: input.orgId,
-      tenantId: input.tenantId,
-      userId: input.userId,
-      sessionId: input.sessionId,
-      artifactId: input.artifactId,
-      objectKey: input.objectKey,
-      filename: input.filename,
-      contentType: input.contentType || null,
-      quotaKey: input.quota?.quotaKey ?? null,
-      quotaWindowMs,
-      quotaWindowStartedAtMs,
-      reservedBytes: normalizeNonNegativeInteger(input.reservedBytes, 'Reserved artifact bytes'),
-      settledBytes: null,
-      status: 'reserved',
-      expiresAt: nowIso(expiresAt),
-      createdAt: nowIso(now),
-      updatedAt: nowIso(now),
-    }
-    this.artifactUploadReservations.set(reservationKey, reservation)
-    return { reservation: clone(reservation), quota }
+  createArtifactUploadReservation(input: Parameters<InMemoryArtifactUploadReservationsDomain['create']>[0]) {
+    return this.artifactUploadReservationsDomain.create(input)
   }
 
-  getArtifactUploadReservation(input: {
-    orgId: string
-    tenantId: string
-    sessionId: string
-    artifactId: string
-  }): ArtifactUploadReservationRecord | null {
-    const reservation = this.artifactUploadReservations.get(artifactUploadReservationKey(input.orgId, input.tenantId, input.sessionId, input.artifactId))
-    return reservation ? clone(reservation) : null
+  getArtifactUploadReservation(input: Parameters<InMemoryArtifactUploadReservationsDomain['get']>[0]) {
+    return this.artifactUploadReservationsDomain.get(input)
   }
 
-  settleArtifactUploadReservation(input: SettleArtifactUploadReservationInput): {
-    reservation: ArtifactUploadReservationRecord | null
-    quota: QuotaConsumptionRecord | null
-    settled: boolean
-  } {
-    const reservationKey = artifactUploadReservationKey(input.orgId, input.tenantId, input.sessionId, input.artifactId)
-    const reservation = this.artifactUploadReservations.get(reservationKey)
-    if (!reservation) return { reservation: null, quota: null, settled: false }
-    if (reservation.status !== 'reserved') return { reservation: clone(reservation), quota: null, settled: reservation.status === 'settled' }
-    const actualBytes = normalizeNonNegativeInteger(input.actualBytes, 'Artifact upload size')
-    const delta = actualBytes - reservation.reservedBytes
-    const quota = delta > 0 && input.quota ? this.consumeUsageQuota({ ...input.quota, quantity: delta }) : null
-    if (quota && !quota.allowed) return { reservation: clone(reservation), quota, settled: false }
-    if (delta < 0 && reservation.quotaKey && reservation.quotaWindowStartedAtMs !== null) {
-      this.usageQuotaDomain.adjustUsageQuota({
-        orgId: reservation.orgId,
-        quotaKey: reservation.quotaKey,
-        windowStartedAtMs: reservation.quotaWindowStartedAtMs,
-        quantityDelta: delta,
-      })
-    }
-    const now = input.now || new Date()
-    const settled: ArtifactUploadReservationRecord = {
-      ...reservation,
-      settledBytes: actualBytes,
-      status: 'settled',
-      updatedAt: nowIso(now),
-    }
-    this.artifactUploadReservations.set(reservationKey, settled)
-    return { reservation: clone(settled), quota, settled: true }
+  claimArtifactUploadFinalization(input: Parameters<InMemoryArtifactUploadReservationsDomain['claimFinalization']>[0]) {
+    return this.artifactUploadReservationsDomain.claimFinalization(input)
   }
 
-  releaseArtifactUploadReservation(input: ReleaseArtifactUploadReservationInput): ArtifactUploadReservationRecord | null {
-    const reservationKey = artifactUploadReservationKey(input.orgId, input.tenantId, input.sessionId, input.artifactId)
-    const reservation = this.artifactUploadReservations.get(reservationKey)
-    if (!reservation) return null
-    if (reservation.status === 'reserved' && reservation.quotaKey && reservation.quotaWindowStartedAtMs !== null) {
-      this.usageQuotaDomain.adjustUsageQuota({
-        orgId: reservation.orgId,
-        quotaKey: reservation.quotaKey,
-        windowStartedAtMs: reservation.quotaWindowStartedAtMs,
-        quantityDelta: -reservation.reservedBytes,
-      })
-    }
-    const released: ArtifactUploadReservationRecord = {
-      ...reservation,
-      status: reservation.status === 'reserved' ? input.status : reservation.status,
-      updatedAt: nowIso(input.now),
-    }
-    this.artifactUploadReservations.set(reservationKey, released)
-    return clone(released)
+  completeArtifactUploadFinalization(input: Parameters<InMemoryArtifactUploadReservationsDomain['completeFinalization']>[0]) {
+    return this.artifactUploadReservationsDomain.completeFinalization(input)
+  }
+
+  releaseArtifactUploadClaim(input: Parameters<InMemoryArtifactUploadReservationsDomain['releaseClaim']>[0]) {
+    return this.artifactUploadReservationsDomain.releaseClaim(input)
+  }
+
+  requestArtifactUploadCleanup(input: Parameters<InMemoryArtifactUploadReservationsDomain['requestCleanup']>[0]) {
+    return this.artifactUploadReservationsDomain.requestCleanup(input)
+  }
+
+  deferArtifactUploadCleanup(input: Parameters<InMemoryArtifactUploadReservationsDomain['deferCleanup']>[0]) {
+    return this.artifactUploadReservationsDomain.deferCleanup(input)
+  }
+
+  completeArtifactUploadCleanup(input: Parameters<InMemoryArtifactUploadReservationsDomain['completeCleanup']>[0]) {
+    return this.artifactUploadReservationsDomain.completeCleanup(input)
+  }
+
+  failArtifactUploadCleanup(input: Parameters<InMemoryArtifactUploadReservationsDomain['failCleanup']>[0]) {
+    return this.artifactUploadReservationsDomain.failCleanup(input)
+  }
+
+  claimArtifactUploadReconciliation(input: Parameters<InMemoryArtifactUploadReservationsDomain['claimReconciliation']>[0]) {
+    return this.artifactUploadReservationsDomain.claimReconciliation(input)
+  }
+
+  getArtifactUploadReconciliationStats(now: Date) {
+    return this.artifactUploadReservationsDomain.reconciliationStats(now)
+  }
+
+  pruneArtifactUploadReservations(input: Parameters<InMemoryArtifactUploadReservationsDomain['prune']>[0]) {
+    return this.artifactUploadReservationsDomain.prune(input)
   }
 
   recordUsageEvent(input: RecordUsageEventInput): UsageEventRecord {

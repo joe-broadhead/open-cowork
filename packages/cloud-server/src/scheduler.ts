@@ -61,6 +61,7 @@ export class CloudScheduler {
   // Periodic concurrency-gauge reconcile (P2-7). null/0 = disabled; the clamp-on-read trigger is
   // already drift-free for post-migration activity, so this is an opt-in belt-and-suspenders sweep.
   private readonly concurrencyReconcileMs: number | null
+  private readonly maintenance: ((now: Date) => Promise<void>) | null
   private lastConcurrencyReconcileRunMs = 0
   // Throttle for the projection-lag gauge (P1-F): the aggregate scans cloud_sessions, so emit it
   // at most once a minute rather than on every (sub-second) scheduler loop.
@@ -74,6 +75,7 @@ export class CloudScheduler {
     observability: CloudObservabilityAdapter | null = null,
     retention: CloudRetentionOptions = DISABLED_CLOUD_RETENTION,
     concurrencyReconcileMs: number | null = null,
+    maintenance: ((now: Date) => Promise<void>) | null = null,
   ) {
     this.store = store
     this.service = service
@@ -81,6 +83,7 @@ export class CloudScheduler {
     this.observability = observability
     this.retention = retention
     this.concurrencyReconcileMs = concurrencyReconcileMs && concurrencyReconcileMs > 0 ? concurrencyReconcileMs : null
+    this.maintenance = maintenance
   }
 
   async processDueWorkflows(now = new Date()): Promise<number> {
@@ -129,6 +132,7 @@ export class CloudScheduler {
     await this.maybeReconcileConcurrency(now)
     await this.maybeEmitProjectionLag(now)
     await this.maybeDrainScimSyncQueue()
+    await this.maintenance?.(now)
     await recordCloudSchedulerMetric(this.observability, {
       name: 'open_cowork_cloud_scheduler_loop_duration_ms',
       value: Date.now() - startedAt,

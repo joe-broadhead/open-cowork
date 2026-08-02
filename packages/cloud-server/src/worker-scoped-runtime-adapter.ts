@@ -27,7 +27,6 @@ import type { PathProvider } from './path-provider.ts'
 import { createCloudSessionPathProvider } from './path-provider.ts'
 import type {
   CloudRuntimeAdapter,
-  CloudRuntimeDroppedEvent,
   CloudRuntimeEvent,
   CloudRuntimeEventListener,
   CloudRuntimeExecutionContext,
@@ -36,6 +35,19 @@ import {
   CloudRuntimeCapacityError,
   type CloudRuntimeCapacityReason,
 } from './runtime-capacity.ts'
+import {
+  isWorkerRuntimeGenerationCurrent,
+  recoverWorkerRuntimeEntry,
+  settleWorkerRuntimeExecution,
+  type WorkerRuntimeEntry as RuntimeEntry,
+} from './worker-runtime-progress.ts'
+import {
+  dispatchWorkerRuntimeEvent,
+  dispatchWorkerTerminalProgress,
+  runWorkerRuntimePrompt,
+  subscribeWorkerRuntimeEvents,
+  type WorkerRuntimeEventSubscription,
+} from './worker-runtime-event-subscription.ts'
 
 export {
   CloudRuntimeCapacityError,
@@ -70,29 +82,10 @@ export type WorkerScopedRuntimeAdapterOptions = {
   runtimeTeardownTimeoutMs?: number
 }
 
-type RuntimeEntry = {
-  key: string
-  adapter: CloudRuntimeAdapter
-  boundary: CloudExecutionBoundary
-  unsubscribe: (() => void | Promise<void>) | null
-  activeUses: number
-  executionActive: boolean
-  nativeRootSessionId: string | null
-  executionGeneration: number
-  activeExecutionKey: string | null
-  lastUsedAt: number
-  deferredCloseReason: 'unexpected_exit' | null
-  teardownPromise: Promise<boolean> | null
-}
-
-type RuntimeEventSubscription = {
-  onError?: (error: unknown) => void
-  onDroppedEvent?: (event: CloudRuntimeDroppedEvent) => void
-}
-
 type RuntimeExecutionScope = {
   entry: RuntimeEntry | null
   owners: number
+  context: CloudRuntimeExecutionContext
 }
 
 type RuntimeCapacityPermit = {
@@ -140,18 +133,6 @@ function requireContext(context: CloudRuntimeExecutionContext | null | undefined
   return context
 }
 
-function mapRuntimeEventToCoworkSession(context: CloudRuntimeExecutionContext, event: CloudRuntimeEvent): CloudRuntimeEvent {
-  const runtimeSessionId = typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
-  return {
-    ...event,
-    payload: {
-      ...event.payload,
-      ...(runtimeSessionId && runtimeSessionId !== context.sessionId ? { opencodeSessionId: runtimeSessionId } : {}),
-      sessionId: context.sessionId,
-    },
-  }
-}
-
 export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAdapterOptions): CloudRuntimeAdapter {
   const runtimes = new Map<string, RuntimeEntry>()
   const pendingRuntimeEntries = new Map<string, PendingRuntimeProvision>()
@@ -169,7 +150,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
     resolve: () => void
   }>()
   const maintenancePasses = new Set<Promise<void>>()
-  const listeners = new Map<CloudRuntimeEventListener, RuntimeEventSubscription>()
+  const listeners = new Map<CloudRuntimeEventListener, WorkerRuntimeEventSubscription>()
   const isolationProvider = options.isolationProvider
     || createDevelopmentProcessIsolationProvider(options.runtimeFactory)
   const maxRuntimeEntries = Math.max(1, Math.floor(options.maxRuntimeEntries || DEFAULT_MAX_RUNTIME_ENTRIES))
@@ -209,6 +190,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
   let adapterClosing = false
   let capacityInUse = 0
   let cleanupDebtGeneration = 0
+  let runtimeGeneration = 0
   let previousEventLoopUtilization = performance.eventLoopUtilization()
   let runtimeStateObservationScheduled = false
   let activeRuntimeCalls = 0
@@ -291,87 +273,28 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
     closure.resolve()
   }
 
-  function eventStartsExecution(event: CloudRuntimeEvent) {
-    return event.type === 'session.status'
-      && (event.payload.statusType === 'busy' || event.payload.statusType === 'running')
-  }
-
-  function eventSettlesExecution(event: CloudRuntimeEvent) {
-    return event.type === 'session.idle'
-      || event.type === 'session.aborted'
-      || event.type === 'runtime.error'
-      || (event.type === 'session.status' && event.payload.statusType === 'idle')
-  }
-
-  function eventNativeSessionId(event: CloudRuntimeEvent) {
-    return typeof event.payload.sessionId === 'string' ? event.payload.sessionId : null
-  }
-
-  function eventBelongsToNativeRoot(entry: RuntimeEntry, event: CloudRuntimeEvent) {
-    const eventSessionId = eventNativeSessionId(event)
-    return !entry.nativeRootSessionId || !eventSessionId || eventSessionId === entry.nativeRootSessionId
-  }
-
   async function dispatchRuntimeEvent(
     context: CloudRuntimeExecutionContext,
     entry: RuntimeEntry,
     event: CloudRuntimeEvent,
   ) {
-    const belongsToNativeRoot = eventBelongsToNativeRoot(entry, event)
-    const mapped = mapRuntimeEventToCoworkSession(context, event)
-    // OpenCode child sessions share this directory stream, but Cloud's
-    // product session terminal state belongs to the admitted native root.
-    // Projecting a child's idle/error onto the root would complete or fail
-    // the product run while its orchestrator is still working.
-    if (!belongsToNativeRoot && eventSettlesExecution(mapped)) return
-    if (belongsToNativeRoot && eventStartsExecution(mapped)) entry.executionActive = true
-    entry.activeUses += 1
-    entry.lastUsedAt = Date.now()
-    try {
-      // Propagate durable-boundary backpressure and failures all the way into
-      // the SDK stream. Promise.all keeps product listeners concurrent
-      // without allowing the next runtime event to overtake.
-      await Promise.all([...listeners.keys()].map((listener) => listener(mapped)))
-    } finally {
-      // Child sessions share the root runtime's directory-scoped stream. A
-      // delegated child becoming idle must not make the still-running root
-      // eligible for eviction.
-      if (belongsToNativeRoot && eventSettlesExecution(mapped)) {
-        entry.executionActive = false
-        entry.activeExecutionKey = null
-      }
-      entry.activeUses = Math.max(0, entry.activeUses - 1)
-      entry.lastUsedAt = Date.now()
-      // Do not await unsubscribe from inside the callback that the inner
-      // stream itself is awaiting; an async unsubscribe could otherwise
-      // deadlock terminal delivery. Eligibility is already updated.
-      const deferredClose = finishDeferredRuntimeClose(entry)
-      const maintenance = trackMaintenancePass(
-        deferredClose
-          .then(() => evictRuntimes())
-          .then(() => relieveAdmissionPressure()),
-      )
-      observeRuntimeState()
-      notifyRuntimeActivityDrained()
-      void maintenance.finally(() => notifyRuntimeActivityDrained())
-    }
-  }
-
-  async function subscribeRuntimeEvents(context: CloudRuntimeExecutionContext, entry: RuntimeEntry) {
-    const { adapter } = entry
-    if (!adapter.subscribeEvents || listeners.size === 0) return null
-    const unsubscribe = await adapter.subscribeEvents(
-      (event) => dispatchRuntimeEvent(context, entry, event),
-      {
-        onError(error) {
-          for (const subscription of listeners.values()) subscription.onError?.(error)
-        },
-        onDroppedEvent(event) {
-          for (const subscription of listeners.values()) subscription.onDroppedEvent?.(event)
-        },
+    return dispatchWorkerRuntimeEvent({
+      context, entry, event, listeners: listeners.keys(),
+      onReleased() {
+        // Do not await unsubscribe from inside the callback that the inner
+        // stream itself is awaiting; an async unsubscribe could otherwise
+        // deadlock terminal delivery. Eligibility is already updated.
+        const deferredClose = finishDeferredRuntimeClose(entry)
+        const maintenance = trackMaintenancePass(
+          deferredClose
+            .then(() => evictRuntimes())
+            .then(() => relieveAdmissionPressure()),
+        )
+        observeRuntimeState()
+        notifyRuntimeActivityDrained()
+        void maintenance.finally(() => notifyRuntimeActivityDrained())
       },
-    )
-    return unsubscribe
+    })
   }
 
   function unexpectedExitEventId(
@@ -397,6 +320,10 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
     entry: RuntimeEntry,
     executionKey: string,
   ) {
+    dispatchWorkerTerminalProgress(
+      context, entry, listeners, `runtime.error:${entry.runtimeGeneration}:${entry.executionGeneration}`,
+      entry.nativeRootSessionId || context.sessionId,
+    )
     const event: CloudRuntimeEvent = {
       eventId: unexpectedExitEventId(context, entry, executionKey),
       type: 'runtime.error',
@@ -1135,15 +1062,24 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
         activeUses: 0,
         executionActive: false,
         nativeRootSessionId: null,
+        runtimeGeneration: ++runtimeGeneration,
         executionGeneration: 0,
         activeExecutionKey: null,
+        activeLeaseOwner: null,
+        activeLeaseEpoch: null,
         lastUsedAt: Date.now(),
         deferredCloseReason: null,
         teardownPromise: null,
+        recoveryKey: null,
+        recoveryPromise: null,
+        promptAdmissionLock: null,
       }
       generationEntry = entry
       try {
-        entry.unsubscribe = await subscribeRuntimeEvents(context, entry)
+        entry.unsubscribe = await subscribeWorkerRuntimeEvents({
+          context, entry, listeners,
+          dispatchEvent: (event) => dispatchRuntimeEvent(context, entry, event),
+        })
       } catch (error) {
         await closeProvisionedBoundary(boundary)
         throw error
@@ -1369,9 +1305,10 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
           admissionQueueTimeoutMs,
         )
       }
-      scope = { entry: null, owners: 0 }
+      scope = { entry: null, owners: 0, context }
       executionScopes.set(key, scope)
     }
+    scope.context = context
     scope.owners += 1
     try {
       return await callback()
@@ -1513,37 +1450,36 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       return withRuntime(input?.context, (adapter) => adapter.createSession({ profileName: input?.profileName || undefined }))
     },
     async promptSession(input) {
-      return withRuntime(input.context, async (adapter, entry) => {
-        const backgroundExecution = Boolean(adapter.subscribeEvents)
-        if (backgroundExecution) {
-          entry.executionGeneration += 1
-          entry.nativeRootSessionId = input.sessionId
-          entry.activeExecutionKey = input.messageId?.trim()
-            || `${input.sessionId}:${entry.executionGeneration}`
-          entry.executionActive = true
-        }
-        try {
-          const result = await adapter.promptSession(input)
-          // Synchronous/fake adapters own execution for the lifetime of this
-          // call. Native V2 adapters only admit work here and settle through
-          // the subscribed idle/error event.
-          if (!backgroundExecution || result?.events?.some(eventSettlesExecution)) {
-            entry.executionActive = false
-            entry.activeExecutionKey = null
-          }
-          return result
-        } catch (error) {
-          entry.executionActive = false
-          entry.activeExecutionKey = null
-          throw error
-        }
-      }, input.signal)
+      return withRuntime(input.context, (adapter, entry) => runWorkerRuntimePrompt({
+        adapter, entry, listeners, prompt: input,
+        context: requireContext(input.context),
+        lease: input.context?.lease || executionScopes.get(entry.key)?.context.lease,
+        retryAfterMs: admissionQueueTimeoutMs,
+      }), input.signal)
     },
     async abortSession(input) {
-      return withRuntime(input.context, async (adapter, entry) => {
+      const context = requireContext(input.context)
+      return withRuntime(context, async (adapter, entry) => {
         await adapter.abortSession(input)
-        entry.executionActive = false
+        dispatchWorkerTerminalProgress(
+          context, entry, listeners, `session.aborted:${entry.executionGeneration}`,
+          entry.nativeRootSessionId || input.sessionId,
+        )
+        settleWorkerRuntimeExecution(entry)
       }, input.signal)
+    },
+    async recoverStalledSession(input) {
+      const context = requireContext(input.context)
+      const entry = runtimes.get(runtimeKey(context))
+      return entry ? recoverWorkerRuntimeEntry(entry, input) : 'fenced-stale'
+    },
+    isRuntimeGenerationCurrent(input) {
+      const context = requireContext(input.context)
+      const entry = runtimes.get(runtimeKey(context))
+      return Boolean(entry && isWorkerRuntimeGenerationCurrent(entry, {
+        expected: input.expected,
+        lease: context.lease,
+      }))
     },
     async replyToQuestion(input) {
       return withRuntime(input.context, (adapter) => {
@@ -1568,6 +1504,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       listeners.set(listener, {
         onError: subscribeOptions?.onError,
         onDroppedEvent: subscribeOptions?.onDroppedEvent,
+        onProgress: subscribeOptions?.onProgress,
       })
       const unsubscribeListener = () => {
         subscribeOptions?.signal?.removeEventListener('abort', unsubscribeListener)
@@ -1577,7 +1514,11 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       for (const [key, entry] of runtimes.entries()) {
         if (entry.unsubscribe) continue
         const [tenantId, sessionId] = key.split('\0')
-        entry.unsubscribe = await subscribeRuntimeEvents({ tenantId: tenantId!, sessionId: sessionId! }, entry)
+        const context = { tenantId: tenantId!, sessionId: sessionId! }
+        entry.unsubscribe = await subscribeWorkerRuntimeEvents({
+          context, entry, listeners,
+          dispatchEvent: (event) => dispatchRuntimeEvent(context, entry, event),
+        })
       }
       return unsubscribeListener
     },

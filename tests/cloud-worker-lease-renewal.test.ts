@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
+import type { ProgressWatchdogDecision, ProgressWatchdogIdentity } from '@open-cowork/shared/progress-watchdog'
 import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
 import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-control-plane-store'
 import type { CloudMetricRecord, CloudObservabilityAdapter } from '@open-cowork/cloud-server/observability'
@@ -12,6 +13,7 @@ import type {
   CloudRuntimeExecutionContext,
   CloudRuntimePromptPart,
 } from '@open-cowork/cloud-server/runtime-adapter'
+import { cloudRuntimeLeaseEpoch } from '@open-cowork/cloud-server/runtime-adapter'
 
 class AbortAwareRuntime implements CloudRuntimeAdapter {
   readonly promptSignals: AbortSignal[] = []
@@ -133,6 +135,33 @@ class ScopedSuccessfulRuntime extends SlowSuccessfulRuntime {
   ) {
     this.order.push('execute')
     return super.promptSession(input)
+  }
+}
+
+class WatchdogRecoveryRuntime extends SlowSuccessfulRuntime {
+  readonly recoveries: Array<Parameters<NonNullable<CloudRuntimeAdapter['recoverStalledSession']>>[0]> = []
+
+  async recoverStalledSession(
+    input: Parameters<NonNullable<CloudRuntimeAdapter['recoverStalledSession']>>[0],
+  ) {
+    this.recoveries.push(input)
+    return 'recovered' as const
+  }
+}
+
+class GenerationFencedRuntime extends SlowSuccessfulRuntime {
+  readonly requiresWorkerContext = true
+  readonly checks: Array<Parameters<NonNullable<CloudRuntimeAdapter['isRuntimeGenerationCurrent']>>[0]> = []
+
+  isRuntimeGenerationCurrent(
+    input: Parameters<NonNullable<CloudRuntimeAdapter['isRuntimeGenerationCurrent']>>[0],
+  ) {
+    this.checks.push(input)
+    return input.expected.runtimeGeneration === 2
+      && input.expected.executionGeneration === 1
+      && input.expected.runId === 'run-current'
+      && input.context.lease?.owner === 'worker-1'
+      && input.context.lease.epoch === cloudRuntimeLeaseEpoch('tenant-1:session-1:1:worker-1')
   }
 }
 
@@ -630,4 +659,142 @@ test('cloud worker LRU-evicts idle leases so the cache stays bounded (#908)', as
   store.enqueueSessionCommand({ tenantId: 'tenant-1', userId: 'user-1', sessionId: 'session-3', commandId: 'session-3-cmd-2', kind: 'prompt', payload: { text: 'p', agent: 'build' } })
   assert.equal(await worker.processSessionCommands('tenant-1', 'session-3'), 1)
   assert.equal(claimCounts.get('session-3'), 1)
+})
+
+test('cloud worker revalidates lease ownership and decision revision immediately before exact watchdog recovery', async () => {
+  const store = seedStore()
+  const runtime = new WatchdogRecoveryRuntime(0)
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    undefined,
+    { randomUUID: () => 'test-id' },
+  )
+  const worker = new CloudWorker(store, service, 'worker-1', 30_000)
+  assert.equal(await worker.processSessionCommands('tenant-1', 'session-1'), 1)
+
+  const decision: ProgressWatchdogDecision = {
+    scopeId: 'tenant-1',
+    sessionId: 'session-1',
+    runId: 'cmd-1',
+    runtimeGeneration: 4,
+    executionGeneration: 2,
+    leaseOwner: 'worker-1',
+    leaseEpoch: cloudRuntimeLeaseEpoch('tenant-1:session-1:1:worker-1'),
+    source: 'durable_sequence',
+    state: 'stalled',
+    ageMs: 500,
+    revision: 3,
+  }
+
+  const staleLease = await worker.recoverStalledSession({
+    ...decision,
+    leaseEpoch: 'wrong-epoch',
+  }, () => true)
+  assert.equal(staleLease, 'fenced-stale')
+  assert.equal(runtime.recoveries.length, 0)
+
+  let currentChecks = 0
+  const racedProgress = await worker.recoverStalledSession(decision, () => {
+    currentChecks += 1
+    return currentChecks === 1
+  })
+  assert.equal(racedProgress, 'fenced-stale')
+  assert.equal(currentChecks, 2, 'decision must be checked before and after authoritative lease renewal')
+  assert.equal(runtime.recoveries.length, 0)
+
+  const originalGetSessionForTenant = store.getSessionForTenant.bind(store)
+  let releaseSessionLookup!: () => void
+  let reportSessionLookupStarted!: () => void
+  const sessionLookupStarted = new Promise<void>((resolve) => { reportSessionLookupStarted = resolve })
+  const sessionLookupGate = new Promise<void>((resolve) => { releaseSessionLookup = resolve })
+  store.getSessionForTenant = (async (...args: Parameters<typeof store.getSessionForTenant>) => {
+    reportSessionLookupStarted()
+    await sessionLookupGate
+    return originalGetSessionForTenant(...args)
+  }) as unknown as typeof store.getSessionForTenant
+  let decisionStillCurrent = true
+  const lookupRace = worker.recoverStalledSession(decision, () => decisionStillCurrent)
+  await sessionLookupStarted
+  decisionStillCurrent = false
+  releaseSessionLookup()
+  assert.equal(await lookupRace, 'fenced-stale')
+  assert.equal(runtime.recoveries.length, 0, 'progress during the durable lookup must fence the runtime abort')
+  store.getSessionForTenant = originalGetSessionForTenant
+
+  const recovered = await worker.recoverStalledSession(decision, () => true)
+  assert.equal(recovered, 'recovered')
+  assert.equal(runtime.recoveries.length, 1)
+  assert.equal(runtime.recoveries[0]?.sessionId, 'oc-session-1')
+  assert.deepEqual(runtime.recoveries[0]?.expected, {
+    runtimeGeneration: 4,
+    executionGeneration: 2,
+    runId: 'cmd-1',
+  })
+  assert.deepEqual(runtime.recoveries[0]?.context.lease, {
+    owner: 'worker-1',
+    epoch: decision.leaseEpoch,
+  })
+})
+
+test('cloud worker rejects delayed runtime events across generation replacement and lease transfer without claiming', async () => {
+  const store = seedStore()
+  const runtime = new GenerationFencedRuntime(0)
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    undefined,
+    { randomUUID: () => 'test-id' },
+  )
+  const worker = new CloudWorker(store, service, 'worker-1', 30_000)
+  assert.equal(await worker.processSessionCommands('tenant-1', 'session-1'), 1)
+
+  const leaseEpoch = cloudRuntimeLeaseEpoch('tenant-1:session-1:1:worker-1')
+  const event = (eventId: string, overrides: Partial<ProgressWatchdogIdentity> = {}) => ({
+    eventId,
+    type: 'assistant.message' as const,
+    payload: { sessionId: 'session-1', messageId: eventId, content: 'bounded output' },
+    provenance: {
+      scopeId: 'tenant-1',
+      sessionId: 'session-1',
+      runId: 'run-current',
+      runtimeGeneration: 2,
+      executionGeneration: 1,
+      leaseOwner: 'worker-1',
+      leaseEpoch,
+      ...overrides,
+    },
+  })
+
+  assert.equal(await worker.appendRuntimeEvent(
+    'tenant-1',
+    'session-1',
+    event('old-generation', { runtimeGeneration: 1 }),
+  ), false)
+  assert.equal(runtime.checks.length, 1)
+  assert.equal(await worker.appendRuntimeEvent('tenant-1', 'session-1', event('current-generation')), true)
+  assert.equal(runtime.checks.length, 3, 'generation is checked before and after authoritative renewal')
+
+  const transferAt = new Date(Date.now() + 60_000)
+  await store.reapExpiredSessionLeases({ now: transferAt, limit: 10 })
+  assert.ok(await store.claimSessionLease('tenant-1', 'session-1', 'worker-2', transferAt, 30_000))
+  assert.equal(await worker.appendRuntimeEvent('tenant-1', 'session-1', event('old-lease-after-transfer')), false)
+
+  let claimAttempts = 0
+  const claimSessionLease = store.claimSessionLease.bind(store)
+  store.claimSessionLease = ((...args: Parameters<typeof store.claimSessionLease>) => {
+    claimAttempts += 1
+    return claimSessionLease(...args)
+  }) as typeof store.claimSessionLease
+  const coldWorker = new CloudWorker(store, service, 'worker-1', 30_000)
+  assert.equal(await coldWorker.appendRuntimeEvent('tenant-1', 'session-1', event('cold-worker-event')), false)
+  assert.equal(claimAttempts, 0, 'runtime event delivery must never acquire a replacement lease')
+
+  const eventIds = store.listSessionEvents('tenant-1', 'session-1').map((record) => record.eventId)
+  assert.equal(eventIds.includes('current-generation'), true)
+  assert.equal(eventIds.includes('old-generation'), false)
+  assert.equal(eventIds.includes('old-lease-after-transfer'), false)
+  assert.equal(eventIds.includes('cold-worker-event'), false)
 })

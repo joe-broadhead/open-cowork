@@ -19,6 +19,7 @@ export type BrowserCoworkApiBootstrap = {
   api?: Array<{ id: string; path: string }>
   sessionEventTypes?: string[]
   authRequired?: boolean
+  artifactDirectUpload?: boolean
   csrfToken?: string | null
 }
 
@@ -54,6 +55,7 @@ const DEFAULT_ENDPOINTS: Record<string, string> = {
   sessionArtifact: '/api/sessions/:sessionId/artifacts/:artifactId',
   sessionArtifactStatus: '/api/sessions/:sessionId/artifacts/:artifactId/status',
   sessionArtifactFinalize: '/api/sessions/:sessionId/artifacts/:artifactId/finalize',
+  sessionArtifactAbort: '/api/sessions/:sessionId/artifacts/:artifactId/abort',
   artifactsIndex: '/api/artifacts',
   launchpadFeed: '/api/launchpad/feed',
   knowledgeSnapshot: '/api/knowledge',
@@ -119,28 +121,6 @@ const BROWSER_UNAVAILABLE_AUTH_EVENT = 'open-cowork-cloud-auth-required'
 
 export function browserUnavailable(name: string): never {
   throw new Error(`${name} is not available in the browser build.`)
-}
-
-// Decode the renderer's base64 artifact payload into raw bytes for a direct PUT to object
-// storage. The artifact upload API hands us base64 (or base64url); the object store wants the
-// bytes themselves. Used only by the presigned-upload fast path; the buffered path posts the
-// base64 string unchanged through the cloud API.
-export function base64ToBytes(value: string): Uint8Array {
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
-  const binary = atob(normalized)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
-  return bytes
-}
-
-// Shape of the cloud "begin presigned upload" response (POST /artifacts?transfer=presigned).
-export type PresignedUploadBegin = {
-  transfer?: string
-  artifactId?: string
-  uploadUrl?: string
-  uploadMethod?: string
-  uploadHeaders?: Record<string, string>
-  uploadExpiresAt?: string
 }
 
 export function readBootstrapFromWindow(): BrowserCoworkApiBootstrap | null {
@@ -294,7 +274,7 @@ export function createTransport(bootstrap: BrowserCoworkApiBootstrap) {
   }
 }
 
-type Transport = ReturnType<typeof createTransport>
+export type BrowserCoworkApiTransport = ReturnType<typeof createTransport>
 
 // ---------------------------------------------------------------------------
 // SSE event demux
@@ -368,7 +348,7 @@ export class CloudEventHub {
     menuNavigate: new Set<Listener<string>>(),
   }
 
-  constructor(private readonly transport: Transport) {
+  constructor(private readonly transport: BrowserCoworkApiTransport) {
     if (typeof window !== 'undefined') {
       window.addEventListener(BROWSER_UNAVAILABLE_AUTH_EVENT, () => {
         for (const listener of this.listeners.authExpired) listener()

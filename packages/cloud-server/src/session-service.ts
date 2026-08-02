@@ -10,16 +10,13 @@ import {
 } from '@open-cowork/shared'
 import { InvalidSessionPageCursorError } from './control-plane-store.ts'
 import type {
-  CloudArtifactIndexRecord,
   CloudLaunchpadSessionSummaryRecord,
   ControlPlaneStore,
-  ListCloudArtifactIndexInput,
   ListCloudLaunchpadSessionSummariesInput,
   SessionCommandRecord,
   SessionEventRecord,
   SessionRecord,
   UsageQuotaReservation,
-  UpsertCloudArtifactIndexInput,
   ListSessionsPageInput,
   ListSessionsPageRecord,
   WorkerLeaseRecord,
@@ -32,10 +29,7 @@ import {
   type BillingAction,
 } from './billing-adapter.ts'
 import type { ByokSecretStore } from './byok-secret-store.ts'
-import type {
-  CloudRuntimeAdapter,
-  CloudRuntimeEvent,
-} from './runtime-adapter.ts'
+import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import {
   type CloudRuntimePolicy,
@@ -71,6 +65,7 @@ import { CloudCoordinationDispatchService } from './session-coordination-dispatc
 import {
   CloudSessionExecutionService,
   type CloudSessionCommandExecutionOptions,
+  type CloudStalledSessionRecoveryInput,
 } from './session-execution-operations.ts'
 import { CloudCapabilityService } from './services/capability-service.ts'
 import { CloudSettingMetadataService } from './services/setting-metadata-service.ts'
@@ -92,6 +87,7 @@ import {
 import { type CloudIdentityPolicy } from './services/api-token-policy.ts'
 import { CloudManagedWorkerService } from './services/managed-worker-service.ts'
 import { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
+import { CloudArtifactIndexService } from './services/artifact-index-service.ts'
 import { CloudEntitlementService } from './services/entitlement-service.ts'
 import { UnlimitedEntitlementResolver, type EntitlementResolver } from './entitlements/entitlement-resolver.ts'
 import { CloudChannelDomainService } from './services/channel-domain-service.ts'
@@ -182,7 +178,6 @@ export type CloudSessionServiceDomains = {
 export class CloudSessionService {
   readonly domains: CloudSessionServiceDomains
   private readonly store: ControlPlaneStore
-  private readonly runtime: CloudRuntimeAdapter
   private readonly policy: CloudRuntimePolicy
   private readonly events: CloudSessionEventBus
   private readonly workspaceEvents: CloudWorkspaceEventBus
@@ -198,6 +193,7 @@ export class CloudSessionService {
   private readonly overviewService: CloudOverviewService
   private readonly managedWorkerService: CloudManagedWorkerService
   private readonly usageGovernance: CloudUsageGovernanceService
+  private readonly artifactIndexService: CloudArtifactIndexService
   private readonly entitlements: CloudEntitlementService
   private readonly channelDomain: CloudChannelDomainService
   private readonly memberService: CloudMemberService
@@ -253,7 +249,6 @@ export class CloudSessionService {
     ssoVerifiers: Partial<Record<SsoProtocol, SsoAssertionVerifier>> = {},
   ) {
     this.store = store
-    this.runtime = runtime
     this.policy = policy
     this.events = events
     this.workspaceEvents = workspaceEvents
@@ -296,6 +291,16 @@ export class CloudSessionService {
     })
     this.managedWorkerService = new CloudManagedWorkerService(store, (principal) => this.ensurePrincipal(principal))
     this.usageGovernance = new CloudUsageGovernanceService({ store, abuse, billingConfig })
+    this.artifactIndexService = new CloudArtifactIndexService({
+      store,
+      ensurePrincipal: (principal) => this.ensurePrincipal(principal),
+      assertSessionRead: (principal, sessionId) => this.assertGatewayTokenCanReadSession(principal, sessionId),
+      appendProjectedEvent: (input) => this.appendProjectedEvent(input),
+      // Direct-upload publication uses this canonical usage row as one of its
+      // durable commit proofs, so it must not become a no-op when abuse quotas
+      // are disabled. The deterministic id keeps the write idempotent.
+      recordUsage: async (input) => store.recordUsageEvent(input),
+    })
     this.entitlements = new CloudEntitlementService({ resolver: entitlementResolver })
     this.channelDomain = new CloudChannelDomainService({
       store,
@@ -660,42 +665,25 @@ export class CloudSessionService {
     return this.store.listSessionEvents(principal.tenantId, sessionId, afterSequence, limit)
   }
 
-  async upsertCloudArtifactIndex(principal: CloudPrincipal, input: Omit<UpsertCloudArtifactIndexInput, 'tenantId' | 'userId'>): Promise<CloudArtifactIndexRecord> {
-    await this.ensurePrincipal(principal)
-    await this.assertGatewayTokenCanReadSession(principal, input.sessionId)
-    return this.store.upsertCloudArtifactIndex({
-      ...input,
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-    })
-  }
+  async upsertCloudArtifactIndex(principal: CloudPrincipal, input: Parameters<CloudArtifactIndexService['upsert']>[1]) { return this.artifactIndexService.upsert(principal, input) }
+
+  async publishFinalizedArtifactUpload(reservation: Parameters<CloudArtifactIndexService['publishFinalizedUpload']>[0]) { return this.artifactIndexService.publishFinalizedUpload(reservation) }
+
+  async isFinalizedArtifactUploadPublished(reservation: Parameters<CloudArtifactIndexService['isFinalizedUploadPublished']>[0]) { return this.artifactIndexService.isFinalizedUploadPublished(reservation) }
 
   async getCloudArtifactIndexRecord(
     principal: CloudPrincipal,
     sessionId: string,
     artifactId: string,
-  ): Promise<CloudArtifactIndexRecord | null> {
-    await this.ensurePrincipal(principal)
-    await this.assertGatewayTokenCanReadSession(principal, sessionId)
-    return this.store.getCloudArtifactIndexRecord({
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      sessionId,
-      artifactId,
-    })
+  ) {
+    return this.artifactIndexService.get(principal, sessionId, artifactId)
   }
 
   async listCloudArtifactIndex(
     principal: CloudPrincipal,
-    input: Omit<ListCloudArtifactIndexInput, 'tenantId' | 'userId'> = {},
+    input: Parameters<CloudArtifactIndexService['list']>[1] = {},
   ) {
-    await this.ensurePrincipal(principal)
-    if (input.sessionId) await this.assertGatewayTokenCanReadSession(principal, input.sessionId)
-    return this.store.listCloudArtifactIndex({
-      ...input,
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-    })
+    return this.artifactIndexService.list(principal, input)
   }
 
   async listCloudLaunchpadSessionSummaries(
@@ -962,13 +950,14 @@ export class CloudSessionService {
     lease: WorkerLeaseRecord,
     callback: () => Promise<T>,
   ): Promise<T> {
-    if (!this.runtime.withExecutionScope) return callback()
-    return this.runtime.withExecutionScope({
-      tenantId: lease.tenantId,
-      sessionId: lease.sessionId,
-    }, callback)
+    return this.sessionExecution.withRuntimeExecutionScope(lease, callback)
   }
-
+  recoverStalledSession(input: CloudStalledSessionRecoveryInput) {
+    return this.sessionExecution.recoverStalledSession(input)
+  }
+  runtimeEventMatchesLeaseAndGeneration(lease: WorkerLeaseRecord, event: CloudRuntimeEvent) {
+    return this.sessionExecution.runtimeEventMatchesLeaseAndGeneration(lease, event)
+  }
   appendRuntimeEvent(input: {
     tenantId: string
     sessionId: string

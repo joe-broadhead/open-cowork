@@ -2,6 +2,7 @@
 // server from `./app` (via the build-cloud entry scripts) and the desktop's local
 // control plane imports individual modules through the `./*` subpath export.
 export * from './app.ts'
+export * from './progress-watchdog.ts'
 
 // Optional, pluggable monetization SDK (#897). A downstream fork wires its own
 // entitlement resolver with a small module: implement EntitlementResolver, call

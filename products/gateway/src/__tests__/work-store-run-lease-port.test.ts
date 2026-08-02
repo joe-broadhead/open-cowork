@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createHash } from 'node:crypto'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { clearConfigCacheForTest } from '../config.js'
 import type { EnvironmentRunRecord } from '../environments.js'
+import { recoverGatewayStalledRun } from '../progress-watchdog.js'
 import {
   completeWorkTaskRun,
   createRoadmap,
@@ -14,6 +16,7 @@ import {
 import {
   createSqliteWorkStoreRunLeasePort,
 } from '../work-store/run-lease-port.js'
+import { listActiveRunsReadOnly } from '../work-store/queries.js'
 
 describe('work-store run/lease mutation port', () => {
   let testDir = ''
@@ -303,6 +306,119 @@ describe('work-store run/lease mutation port', () => {
 
     // Adoption is idempotent for leases already owned by the current daemon.
     expect(port.adoptActiveRunLeases({ owner: 'daemon-restarted', generation: 'gen-restarted', leaseMs: 60_000 })).toEqual({ adopted: 0, runIds: [] })
+  })
+
+  it('fences and idempotently receipts stalled-run recovery through the lease port', () => {
+    const port = createSqliteWorkStoreRunLeasePort({ filePath: store })
+    const roadmap = createRoadmap({ title: 'Watchdog recovery roadmap' }, store)
+    const task = createWorkTask({ title: 'Recover a fenced stall', roadmapId: roadmap.id, pipeline: ['implement'] }, store)
+    const started = port.startRun(task.id, 'implement', 'ses_watchdog', 'implementer', {
+      owner: 'daemon-current',
+      leaseMs: 60_000,
+      generation: 'generation-current',
+    })!
+    expect(listActiveRunsReadOnly(10, store)).toEqual([
+      expect.objectContaining({ id: started.run.id, sessionId: 'ses_watchdog', status: 'running' }),
+    ])
+
+    expect(port.recoverStalledRun({
+      runId: started.run.id,
+      leaseOwner: 'daemon-stale',
+      schedulerGeneration: 'generation-current',
+    })).toMatchObject({ applied: false, reason: 'lease_owner_mismatch' })
+    expect(port.recoverStalledRun({
+      runId: started.run.id,
+      leaseOwner: 'daemon-current',
+      schedulerGeneration: 'generation-stale',
+    })).toMatchObject({ applied: false, reason: 'scheduler_generation_mismatch' })
+    expect(port.recoverStalledRun({
+      runId: started.run.id,
+      leaseOwner: 'daemon-current',
+      schedulerGeneration: 'generation-current',
+      now: Date.parse(started.run.leaseExpiresAt!) + 1,
+    })).toMatchObject({ applied: false, reason: 'lease_expired' })
+
+    const recovered = port.recoverStalledRun({
+      runId: started.run.id,
+      leaseOwner: 'daemon-current',
+      schedulerGeneration: 'generation-current',
+    })
+    const replay = port.recoverStalledRun({
+      runId: started.run.id,
+      leaseOwner: 'daemon-current',
+      schedulerGeneration: 'generation-current',
+    })
+
+    expect(recovered).toMatchObject({
+      applied: true,
+      abortedSessionId: 'ses_watchdog',
+      restartBehavior: 'new_opencode_session_on_next_scheduler_dispatch',
+    })
+    expect(replay).toMatchObject({ applied: false, outcome: 'no_op', reason: 'run_not_active' })
+    expect(loadWorkState(store)).toMatchObject({
+      tasks: [expect.objectContaining({ id: task.id, status: 'pending', currentRunId: undefined })],
+      runs: [expect.objectContaining({ id: started.run.id, status: 'errored' })],
+    })
+    expect(listActiveRunsReadOnly(10, store)).toEqual([])
+    expect(listWorkEvents(20, store)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'task.run.operator_controlled',
+        payload: expect.objectContaining({
+          runId: started.run.id,
+          source: 'progress-watchdog',
+          outcome: 'applied',
+        }),
+      }),
+    ]))
+  })
+
+  it('keeps durable work active when Session abort fails and safely recovers on retry', async () => {
+    const port = createSqliteWorkStoreRunLeasePort({ filePath: store })
+    const roadmap = createRoadmap({ title: 'Watchdog abort ordering roadmap' }, store)
+    const task = createWorkTask({ title: 'Abort before requeue', roadmapId: roadmap.id, pipeline: ['implement'] }, store)
+    const started = port.startRun(task.id, 'implement', 'ses_abort_first', 'implementer', {
+      owner: 'daemon-current',
+      leaseMs: 60_000,
+      generation: 'generation-current',
+    })!
+    const decision = {
+      scopeId: started.run.id,
+      sessionId: started.run.sessionId,
+      runId: started.run.id,
+      runtimeGeneration: 1,
+      executionGeneration: 1,
+      leaseOwner: started.run.leaseOwner!,
+      leaseEpoch: createHash('sha256').update(started.run.schedulerGeneration!).digest('hex'),
+      state: 'stalled' as const,
+      source: 'output_advance' as const,
+      ageMs: 300_000,
+      revision: 1,
+    }
+    const abortSession = vi.fn()
+      .mockRejectedValueOnce(new Error('OpenCode transport unavailable'))
+      .mockResolvedValueOnce(undefined)
+    const recover = () => recoverGatewayStalledRun(decision, {
+      canWrite: () => true,
+      findRunById: runId => loadWorkState(store).runs.find(run => run.id === runId),
+      recoverStalledRun: input => port.recoverStalledRun(input),
+      abortSession,
+    })
+
+    await expect(recover()).resolves.toBe('failed')
+    expect(loadWorkState(store)).toMatchObject({
+      tasks: [expect.objectContaining({ id: task.id, status: 'running', currentRunId: started.run.id })],
+      runs: [expect.objectContaining({ id: started.run.id, status: 'running', sessionId: 'ses_abort_first' })],
+    })
+    expect(listActiveRunsReadOnly(10, store)).toHaveLength(1)
+    expect(listWorkEvents(20, store).some(event => event.type === 'task.run.operator_controlled')).toBe(false)
+
+    await expect(recover()).resolves.toBe('recovered')
+    expect(abortSession).toHaveBeenCalledTimes(2)
+    expect(loadWorkState(store)).toMatchObject({
+      tasks: [expect.objectContaining({ id: task.id, status: 'pending', currentRunId: undefined })],
+      runs: [expect.objectContaining({ id: started.run.id, status: 'errored' })],
+    })
+    expect(listActiveRunsReadOnly(10, store)).toEqual([])
   })
 
 })

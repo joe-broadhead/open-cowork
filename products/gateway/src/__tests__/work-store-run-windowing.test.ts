@@ -20,7 +20,7 @@ import {
   applyActiveRunControl,
   withWorkDbTransactionForTest,
 } from '../work-store.js'
-import { getRunBySessionId, getRunsForRoadmap, getRunsForTask, taskHasAnyRun } from '../work-store/queries.js'
+import { getActiveRunsBySessionIdsReadOnly, getRunBySessionId, getRunsForRoadmap, getRunsForTask, taskHasAnyRun } from '../work-store/queries.js'
 import { getRunCostTokenTotals } from '../work-store/analytics-queries.js'
 
 // The live mutation window materializes only active + currentRunId + the most
@@ -95,6 +95,22 @@ describe('work-store run windowing', () => {
     expect(getRun(`run_hist_${task.id}_0`, store)?.id).toBe(`run_hist_${task.id}_0`)
     expect(getRunBySessionId(`ses_hist_${task.id}_0`, store)?.id).toBe(`run_hist_${task.id}_0`)
     expect(taskHasAnyRun(task.id, store)).toBe(true)
+  })
+
+  it('batch-reads more than one predicate chunk of active sessions in one query', () => {
+    const task = createWorkTask({ title: 'active batch task', pipeline: ['implement'] }, store)
+    seedTerminalRuns(task.id, HISTORY)
+    closeWorkDb(store)
+    const db = new DatabaseSync(store)
+    db.exec("UPDATE runs SET status = 'running', completed_at = NULL")
+    db.close()
+    disposeWorkStore()
+
+    const sessionIds = Array.from({ length: HISTORY }, (_, index) => `ses_hist_${task.id}_${index}`)
+    const batch = getActiveRunsBySessionIdsReadOnly([...sessionIds, sessionIds[0]!, 'ses_missing'], store)
+
+    expect(batch).toHaveLength(HISTORY)
+    expect(new Set(batch.map(run => run.sessionId))).toEqual(new Set(sessionIds))
   })
 
   it('refuses to replace durable state from a partial live-window snapshot', () => {

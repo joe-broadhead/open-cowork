@@ -1,6 +1,7 @@
 import type { EnvironmentRunRecord } from '../environments.js'
 import {
   adoptActiveWorkRunLeases,
+  applyActiveRunControl,
   attachTaskDispatchEnvironment,
   countActiveTaskDispatchStarts,
   listTaskDispatchReceipts,
@@ -16,6 +17,7 @@ import {
   startWorkTaskRunFromDispatch,
   summarizeWorkLeases,
   type RunResolutionInput,
+  type ActiveRunControlResult,
   type TaskDispatchReceiptRecord,
   type TaskDispatchReceiptStatus,
   type WorkLeaseSummary,
@@ -27,6 +29,7 @@ type WorkStoreRunLeaseOperationGroup =
   | 'reserve_dispatch_start'
   | 'start_run'
   | 'renew_run_lease'
+  | 'recover_stalled_run'
   | 'recover_expired_dispatch_starts'
   | 'recover_expired_or_orphaned_runs'
 
@@ -50,6 +53,7 @@ export interface WorkStoreRunLeasePort {
   startRun(id: string, stage: string, sessionId: string, profile: string, lease?: { owner?: string; leaseMs?: number; generation?: string }, resolution?: RunResolutionInput): WorkTaskRunStartResult | undefined
   startRunFromDispatch(dispatchId: string, id: string, stage: string, sessionId: string, profile: string, lease?: { owner?: string; leaseMs?: number; generation?: string }, resolution?: RunResolutionInput): WorkTaskRunStartResult | undefined
   renewRunLease(runId: string, lease?: { owner?: string; leaseMs?: number; generation?: string }): boolean
+  recoverStalledRun(input: { runId: string; leaseOwner: string; schedulerGeneration: string; now?: number }): ActiveRunControlResult
   adoptActiveRunLeases(lease: { owner: string; generation: string; leaseMs?: number; now?: number }): { adopted: number; runIds: string[] }
   recoverExpiredLeases(retryLimit: number, now?: number): { recovered: number; blocked: number; runIds: string[] }
   recoverOneOrphanedRun(runId: string, retryLimit: number, now?: number): { recovered: number; blocked: number; runIds: string[] }
@@ -60,7 +64,7 @@ const WORK_STORE_RUN_LEASE_PORT_DOMAIN: WorkStoreRunLeasePortDomain = {
   id: 'runs_leases',
   backendMode: 'local_sqlite',
   releaseStatus: 'supported_public_local_beta',
-  operationGroups: ['reserve_dispatch_start', 'start_run', 'renew_run_lease', 'recover_expired_dispatch_starts', 'recover_expired_or_orphaned_runs'],
+  operationGroups: ['reserve_dispatch_start', 'start_run', 'renew_run_lease', 'recover_stalled_run', 'recover_expired_dispatch_starts', 'recover_expired_or_orphaned_runs'],
 }
 
 export function createSqliteWorkStoreRunLeasePort(options: { filePath?: string } = {}): WorkStoreRunLeasePort {
@@ -102,6 +106,18 @@ export function createSqliteWorkStoreRunLeasePort(options: { filePath?: string }
     },
     renewRunLease(runId, lease = {}) {
       return renewWorkTaskRunLease(runId, lease, filePath)
+    },
+    recoverStalledRun(input) {
+      return applyActiveRunControl({
+        runId: input.runId,
+        action: 'restart',
+        actor: 'progress-watchdog',
+        source: 'progress-watchdog',
+        note: 'Progress watchdog confirmed a fenced stalled run; requeue with a fresh OpenCode session.',
+        expectedLeaseOwner: input.leaseOwner,
+        expectedSchedulerGeneration: input.schedulerGeneration,
+        now: input.now,
+      }, filePath)
     },
     adoptActiveRunLeases(lease) {
       return adoptActiveWorkRunLeases(lease, filePath)

@@ -54,6 +54,7 @@ import { withDeadline } from './deadlines.js'
 import { reconcilePendingSessionAdmissions } from './opencode-session-runtime.js'
 import { resolveEnvironmentSpec } from './environments.js'
 import { releaseNotificationSendLease, tryAcquireNotificationSendLease } from './operational-sidecar-store.js'
+import { createGatewayProgressWatchdogRuntime, disabledGatewayProgressWatchdogSnapshot } from './progress-watchdog.js'
 
 const log = createLogger({ component: 'gateway' })
 const PORT = getConfig().httpPort
@@ -133,8 +134,12 @@ export async function serve() {
     discordChannel,
   } = createDaemonChannelComposition()
   syncChannelBindingTelemetry(channelByName)
+  const progressWatchdog = createGatewayProgressWatchdogRuntime({ client })
   let acceptingWork = true
-  const jsonRoutes = createJsonRoutes()
+  const jsonRoutes = createJsonRoutes({
+    progressSnapshot: () => progressWatchdog.controller?.snapshot()
+      || disabledGatewayProgressWatchdogSnapshot(progressWatchdog.config),
+  })
   const syncBridge = startChannelSync(client, channelByName)
   const alertEngineTimer = startAlertEngineLoop(channelByName)
   const notifyProgressOnce = () => trackDaemonOperation(canCurrentDaemonWrite() && acceptingWork
@@ -183,6 +188,7 @@ export async function serve() {
   // Subscribe to OpenCode-native events for live dashboard, scheduler wakeups, and channel surfacing.
   let lastSchedulerWake = 0
   subscribeToOpenCodeEvents(client, (event: any) => {
+    progressWatchdog.controller?.observe(event)
     const now = Date.now()
     const wakeIntervalMs = Math.max(1000, getConfig().scheduler.intervalMs)
     if (acceptingWork && canCurrentDaemonWrite() && getConfig().scheduler.enabled && now - lastSchedulerWake >= wakeIntervalMs) {
@@ -407,6 +413,7 @@ export async function serve() {
     const reconciled = await reconcileWorkersFromOpenCode(opencodeBaseUrl)
     if (reconciled > 0) log.info('Reconciled Gateway sessions after recovery', { reconciled, source })
     await recoverStartupState(client, config.scheduler.retryLimit)
+    progressWatchdog.reseed()
   }
   const leadershipTimer = startDaemonLeadershipHeartbeat(leadership, {
     onStatus: createLeadershipStatusHandler({
@@ -477,6 +484,7 @@ export async function serve() {
       Promise.resolve().then(() => {
         for (const timer of [alertEngineTimer, progressTimer, leadershipTimer, logRotationTimer, retentionTimer]) clearInterval(timer)
         clearTimeout(initialRetentionTimer)
+        progressWatchdog.controller?.stop()
         stopRuntimeMetricsSampler()
       }),
       stopHeartbeat(),
