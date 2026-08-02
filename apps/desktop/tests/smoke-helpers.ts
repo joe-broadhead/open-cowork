@@ -1,5 +1,16 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
@@ -704,14 +715,61 @@ async function quiesceMacCandidateBundle(executablePath: string) {
   }
 }
 
+// Failure diagnostics must not depend on launching another developer tool: on
+// loaded macOS runners, `lipo` can exhaust its budget and hide a valid arch.
 function readMacExecutableArchitectures(executablePath: string) {
-  const result = spawnSync('/usr/bin/lipo', ['-archs', executablePath], {
-    encoding: 'utf8',
-    timeout: 2_000,
-  })
-  if (result.status !== 0) return 'unknown'
-  const architectures = result.stdout.trim().split(/\s+/).filter(Boolean)
-  return architectures.length > 0 ? architectures.join(',') : 'unknown'
+  const maxFatArchitectures = 32
+  const header = Buffer.alloc(8 + (maxFatArchitectures * 32))
+  let descriptor: number | null = null
+  try {
+    descriptor = openSync(executablePath, 'r')
+    const bytesRead = readSync(descriptor, header, 0, header.length, 0)
+    if (bytesRead < 8) return 'unknown'
+
+    const magic = header.readUInt32BE(0)
+    if (magic === 0xfeedface || magic === 0xfeedfacf) {
+      return readMacArchitecture(header, 4, false) ?? 'unknown'
+    }
+    if (magic === 0xcefaedfe || magic === 0xcffaedfe) {
+      return readMacArchitecture(header, 4, true) ?? 'unknown'
+    }
+
+    const fatHeader = magic === 0xcafebabe || magic === 0xcafebabf
+      ? { entrySize: magic === 0xcafebabf ? 32 : 20, littleEndian: false }
+      : magic === 0xbebafeca || magic === 0xbfbafeca
+        ? { entrySize: magic === 0xbfbafeca ? 32 : 20, littleEndian: true }
+        : null
+    if (!fatHeader) return 'unknown'
+
+    const architectureCount = fatHeader.littleEndian
+      ? header.readUInt32LE(4)
+      : header.readUInt32BE(4)
+    if (architectureCount < 1 || architectureCount > maxFatArchitectures) return 'unknown'
+
+    const architectures = new Set<string>()
+    for (let index = 0; index < architectureCount; index += 1) {
+      const offset = 8 + (index * fatHeader.entrySize)
+      if (offset + fatHeader.entrySize > bytesRead) return 'unknown'
+      const architecture = readMacArchitecture(header, offset, fatHeader.littleEndian)
+      if (!architecture) return 'unknown'
+      architectures.add(architecture)
+    }
+    return [...architectures].join(',') || 'unknown'
+  } catch {
+    return 'unknown'
+  } finally {
+    if (descriptor !== null) closeSync(descriptor)
+  }
+}
+
+function readMacArchitecture(header: Buffer, offset: number, littleEndian: boolean) {
+  const cpuType = littleEndian ? header.readUInt32LE(offset) : header.readUInt32BE(offset)
+  const cpuSubtype = (
+    littleEndian ? header.readUInt32LE(offset + 4) : header.readUInt32BE(offset + 4)
+  ) & 0x00ff_ffff
+  if (cpuType === 0x0100_0007) return cpuSubtype === 8 ? 'x86_64h' : 'x86_64'
+  if (cpuType === 0x0100_000c) return cpuSubtype === 2 ? 'arm64e' : 'arm64'
+  return null
 }
 
 function readMacBundleVersion(macAppBundlePath: string) {

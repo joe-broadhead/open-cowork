@@ -63,6 +63,18 @@ export async function runPostgresControlPlaneMigrations(
           + 'This pre-release baseline has no adoption or historical upgrade path. Recreate an empty Cloud schema, or restore a database whose cloud_schema_migrations ledger matches its schema.',
         )
       }
+    } else {
+      const pendingTransactionalMigrations = CLOUD_CONTROL_PLANE_MIGRATIONS.filter((entry) => (
+        entry.transactional !== false && !appliedBeforeMigration.has(entry.id)
+      ))
+      const tablesCreatedByPendingMigrations = createdTableNames(
+        pendingTransactionalMigrations.flatMap((migration) => migration.statements),
+      )
+      await assertRequiredCloudTables(
+        client,
+        tablesBeforeMigration,
+        tablesCreatedByPendingMigrations,
+      )
     }
     // The guard above must run before this first durable mutation. A ledger-only
     // database is allowed to initialize only when it has no product domain tables.
@@ -237,14 +249,29 @@ async function currentProductTables(executor: PgExecutor) {
   return new Set(result.rows.map((row) => String(row.table_name)))
 }
 
-async function assertRequiredCloudTables(executor: PgExecutor, existing?: ReadonlySet<string>) {
+async function assertRequiredCloudTables(
+  executor: PgExecutor,
+  existing?: ReadonlySet<string>,
+  pendingCreates: ReadonlySet<string> = new Set(),
+) {
   const tables = existing || await currentProductTables(executor)
-  const missing = CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES.filter((tableName) => !tables.has(tableName))
+  const missing = CLOUD_CONTROL_PLANE_REQUIRED_TABLE_NAMES.filter((tableName) => (
+    !tables.has(tableName) && !pendingCreates.has(tableName)
+  ))
   if (missing.length === 0) return
   throw new Error(
     `Cloud control-plane schema integrity failed: required production tables are missing (${summarizeNames(missing)}). `
     + 'The clean pre-release baseline does not repair or adopt drifted schemas. Recreate an empty Cloud schema or restore a complete database backup.',
   )
+}
+
+function createdTableNames(statements: readonly string[]) {
+  return new Set(statements.flatMap((statement) => (
+    Array.from(
+      statement.matchAll(/\bCREATE TABLE IF NOT EXISTS\s+([a-z][a-z0-9_]*)\b/g),
+      (match) => match[1]!,
+    )
+  )))
 }
 
 function summarizeNames(names: readonly string[]) {
