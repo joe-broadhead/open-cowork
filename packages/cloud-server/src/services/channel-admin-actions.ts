@@ -1,4 +1,5 @@
 import { CloudServiceError } from '../cloud-service-error.ts'
+import { ControlPlaneIdConflictError } from '../control-plane-errors.ts'
 import type {
   ChannelBindingRecord,
   ChannelIdentityRecord,
@@ -53,16 +54,30 @@ export async function createHeadlessAgent(
     action: 'channel.manage',
     profileName: input.profileName || options.policy.profileName,
   })
-  return options.store.createHeadlessAgent({
-    agentId: input.agentId || options.ids.randomUUID(),
-    orgId: options.principalOrgId(principal),
-    tenantId: principal.tenantId,
-    profileName: input.profileName || options.policy.profileName,
-    name: input.name,
-    status: input.status,
-    managed: input.managed,
-    createdByAccountId: principal.accountId || principal.userId,
-  })
+  const orgId = options.principalOrgId(principal)
+  // Caller ids are idempotency seeds, not global storage authority. Namespace
+  // them by org so probing another tenant's opaque id has identical behavior
+  // to choosing a fresh seed. Calls without a seed receive a random server id.
+  const agentId = input.agentId && principal.authSource !== 'local'
+    ? options.stableCloudId('channel_agent', orgId, input.agentId)
+    : input.agentId || options.ids.randomUUID()
+  try {
+    return await options.store.createHeadlessAgent({
+      agentId,
+      orgId,
+      tenantId: principal.tenantId,
+      profileName: input.profileName || options.policy.profileName,
+      name: input.name,
+      status: input.status,
+      managed: input.managed,
+      createdByAccountId: principal.accountId || principal.userId,
+    })
+  } catch (error) {
+    if (error instanceof ControlPlaneIdConflictError) {
+      throw new CloudServiceError(409, 'Channel resource id is unavailable.')
+    }
+    throw error
+  }
 }
 
 export async function updateHeadlessAgent(
@@ -133,8 +148,11 @@ export async function createChannelBinding(
     'maxGatewayChannelBindingsPerOrg',
   ))
   try {
+    const bindingId = input.bindingId && principal.authSource !== 'local'
+      ? options.stableCloudId('channel_binding', orgId, input.bindingId)
+      : input.bindingId || options.ids.randomUUID()
     const binding = await options.store.createChannelBinding({
-      bindingId: input.bindingId || options.ids.randomUUID(),
+      bindingId,
       orgId,
       agentId: input.agentId,
       provider: input.provider,
@@ -152,6 +170,9 @@ export async function createChannelBinding(
     })
     return publicChannelBinding(binding)
   } catch (error) {
+    if (error instanceof ControlPlaneIdConflictError) {
+      throw new CloudServiceError(409, 'Channel resource id is unavailable.')
+    }
     options.usageGovernance.translateQuotaError(error, 'Gateway channel binding quota exceeded.', 'quota.gateway_channel_bindings_exceeded')
   }
 }
@@ -190,7 +211,6 @@ export async function resolveChannelIdentity(
     channelBindingId?: string | null
     externalWorkspaceId?: string | null
     externalUserId: string
-    identityId?: string | null
     accountId?: string | null
     role?: ChannelIdentityRecord['role']
     status?: ChannelIdentityRecord['status']
@@ -200,6 +220,10 @@ export async function resolveChannelIdentity(
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const orgId = options.principalOrgId(principal)
+  // Identity bootstrap is the sole channel service action that accepts an
+  // explicit admin token scope before a binding exists. Do not infer this
+  // bypass in the shared gateway scope resolver: every session, interaction,
+  // provider-event, artifact, and delivery path must remain grant-bound.
   const setupAllowed = principalCanManageChannels(principal)
   let externalWorkspaceId = input.externalWorkspaceId
   if (!setupAllowed) {
@@ -214,7 +238,7 @@ export async function resolveChannelIdentity(
     externalUserId: input.externalUserId,
   })
   return options.store.upsertChannelIdentity({
-    identityId: existing?.identityId || input.identityId || options.ids.randomUUID(),
+    identityId: existing?.identityId || options.ids.randomUUID(),
     orgId,
     provider: input.provider,
     externalWorkspaceId,

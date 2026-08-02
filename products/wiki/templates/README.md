@@ -2,7 +2,7 @@
 
 Starter templates define common first-workspace shapes for `openwiki init`.
 The runtime template definitions are implemented in `@openwiki/repo` so the CLI,
-tests, Docker image, and source checkout all use the same seed logic. The
+tests, CLI tarball, and source checkout all use the same seed logic. The
 directories here are reference documentation for those code-backed templates,
 not filesystem template sources.
 

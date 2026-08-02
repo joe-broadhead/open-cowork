@@ -697,7 +697,7 @@ test('cloud HTTP browser session cookies refresh membership role before admin au
   const baseUrl = await fixture.server.listen()
 
   try {
-    const beforeDemotion = await fetch(`${baseUrl}/api/admin/members`, { headers })
+    const beforeDemotion = await fetch(`${baseUrl}/api/admin/worker-pools`, { headers })
     assert.equal(beforeDemotion.status, 200)
 
     fixture.store.upsertMembership({
@@ -707,7 +707,7 @@ test('cloud HTTP browser session cookies refresh membership role before admin au
       status: 'active',
     })
 
-    const afterDemotion = await fetch(`${baseUrl}/api/admin/members`, { headers })
+    const afterDemotion = await fetch(`${baseUrl}/api/admin/worker-pools`, { headers })
     assert.equal(afterDemotion.status, 403)
   } finally {
     await fixture.server.close()
@@ -752,6 +752,8 @@ test('cloud HTTP bearer auth remains usable without CSRF when session cookies ar
       tenantName: 'Tenant Bearer',
       userId: 'bearer-user',
       email: 'bearer@example.test',
+      role: 'owner',
+      authSource: 'user',
     }
   }
   const fixture = createFixture({ sessionCookies, auth })

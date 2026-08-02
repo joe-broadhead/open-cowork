@@ -1,4 +1,5 @@
 import { clone, normalizeText, nowIso } from './store-helpers.ts'
+import { ControlPlaneIdConflictError } from '../control-plane-errors.ts'
 import type {
   AuditEventRecord,
   CreateHeadlessAgentInput,
@@ -38,7 +39,10 @@ export class InMemoryHeadlessAgentsDomain {
       throw new Error(`Unknown account ${input.createdByAccountId}.`)
     }
     const existing = this.headlessAgents.get(input.agentId)
-    if (existing) return clone(existing)
+    if (existing) {
+      if (existing.orgId !== input.orgId) throw new ControlPlaneIdConflictError('headless_agent')
+      return clone(existing)
+    }
     const now = nowIso(input.createdAt)
     const record: HeadlessAgentRecord = {
       agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),

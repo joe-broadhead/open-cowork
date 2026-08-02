@@ -64,6 +64,8 @@ export type ChannelInteractionRecord = {
   interactionId: string
   orgId: string
   agentId: string
+  channelBindingId: string | null
+  sessionBindingId: string | null
   sessionId: string
   provider: ChannelProviderId
   externalInteractionId: string | null

@@ -59,7 +59,7 @@ export function createBrowserChannelsApi(transport: ChannelsTransport): ChannelA
         channelBindingId: options?.channelBindingId,
         limit: options?.limit ?? 50,
       })), 'deliveries', []),
-    retryDelivery: async (deliveryId) => unwrap(await request(endpoint('channelDeliveryRetry', { deliveryId }), { method: 'POST' }), 'delivery', null),
+    retryDelivery: async (deliveryId, input) => unwrap(await request(endpoint('channelDeliveryRetry', { deliveryId }), { method: 'POST', body: input || {} }), 'delivery', null),
     deadLetterDelivery: async (deliveryId, input) =>
       unwrap(await request(endpoint('channelDeliveryDeadLetter', { deliveryId }), { method: 'POST', body: input || {} }), 'delivery', null),
     watches: (options) =>

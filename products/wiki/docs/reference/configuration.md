@@ -56,16 +56,16 @@ Hosted deployments also depend on process environment:
 
 ## Runtime Modes
 
-`runtime.profile` describes how a workspace was initialized or packaged:
-`local`, `team`, `hosted`, `static`, `compose`, `umbrel`, `cloud`, or
-`enterprise`. `OPENWIKI_RUNTIME_MODE` is the deploy-time override and accepts
+`runtime.profile` describes a workspace's runtime safety posture:
+`local`, `team`, `hosted`, `static`, or `enterprise`.
+`OPENWIKI_RUNTIME_MODE` is the runtime override and accepts
 `local`, `team`, `hosted`, or `enterprise`.
 
 OpenWiki maps profiles to runtime modes before applying safety defaults:
 
 - `local` and `static` use `local` mode.
-- `team`, `compose`, and `umbrel` use `team` mode.
-- `hosted` and `cloud` use `hosted` mode.
+- `team` uses `team` mode.
+- `hosted` uses `hosted` mode.
 - `enterprise` uses `enterprise` mode.
 
 `local` and `team` modes keep the personal/team ergonomics: SQLite indexes may

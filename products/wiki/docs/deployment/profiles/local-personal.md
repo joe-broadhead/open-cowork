@@ -17,12 +17,6 @@ Run the web UI only on loopback:
 openwiki serve ~/openwiki-personal --host 127.0.0.1 --port 3030
 ```
 
-## Preflight
-
-```sh
-openwiki --root ~/openwiki-personal deploy preflight --deploy-profile local-personal
-```
-
 ## Security Notes
 
 - Keep the HTTP server on `127.0.0.1`; do not bind a write-capable personal wiki

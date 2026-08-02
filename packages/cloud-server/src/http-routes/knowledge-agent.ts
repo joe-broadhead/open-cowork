@@ -1,4 +1,8 @@
-import { normalizeKnowledgeProposalContent, sanitizeLogMessage } from '@open-cowork/shared'
+import {
+  evaluateWorkspaceCapabilityPolicy,
+  normalizeKnowledgeProposalContent,
+  sanitizeLogMessage,
+} from '@open-cowork/shared'
 import type { KnowledgeStore } from '@open-cowork/shared'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
@@ -7,6 +11,10 @@ import {
 } from '../cloud-runtime-capability-policy.ts'
 import { verifyKnowledgeAgentToken } from '../knowledge-agent-token.ts'
 import { KNOWLEDGE_CLOUD_CAPABILITY } from '../knowledge-agent-runtime.ts'
+import {
+  recordCloudWorkspacePolicyDecision,
+  type CloudObservabilityAdapter,
+} from '../observability.ts'
 
 // Cloud agent-propose route. A coworker (agent) running in a CLOUD session
 // proposes a knowledge-wiki edit via the knowledge MCP, which POSTs here with a
@@ -38,6 +46,7 @@ export type KnowledgeAgentProposeRouteInput = {
   /** Product feature gate, combined here with the compiled tool/MCP ceiling. */
   knowledgeEnabled: boolean
   runtimeCapabilityPolicy?: CompiledCloudRuntimeCapabilityPolicy | null
+  observability?: CloudObservabilityAdapter | null
   maxBodyBytes: number
   corsOrigin?: string | null
   now?: () => number
@@ -78,21 +87,6 @@ export async function handleKnowledgeAgentProposeRoute(input: KnowledgeAgentProp
     return
   }
 
-  // Re-check the current runtime ceiling independently of the token so a
-  // previously issued credential cannot outlive a feature or allowlist denial.
-  const knowledgeAllowed = input.knowledgeEnabled
-    && Boolean(
-      input.runtimeCapabilityPolicy
-      && isCloudRuntimeCapabilityAllowed(
-        input.runtimeCapabilityPolicy,
-        KNOWLEDGE_CLOUD_CAPABILITY,
-      ),
-    )
-  if (!knowledgeAllowed) {
-    tools.writePolicyError(res, 403, 'Knowledge is disabled for this cloud profile.', 'knowledge.disabled', corsOrigin)
-    return
-  }
-
   // Fail closed: with no signing secret configured the agent path is not
   // available, so we reject rather than verify against an empty secret (which an
   // attacker could otherwise sign their own token against). The spawn wiring
@@ -114,6 +108,31 @@ export async function handleKnowledgeAgentProposeRoute(input: KnowledgeAgentProp
   const payload = verifyKnowledgeAgentToken(input.secret, token, nowMs)
   if (!payload) {
     tools.writeError(res, 401, 'The knowledge agent token is invalid or expired.', corsOrigin)
+    return
+  }
+
+  const authorization = evaluateWorkspaceCapabilityPolicy({
+    action: 'knowledge.agentPropose',
+    principal: { authSource: 'signed_knowledge_agent' },
+    features: { knowledge: input.knowledgeEnabled },
+  })
+  await recordCloudWorkspacePolicyDecision(input.observability, authorization)
+  if (authorization.outcome === 'deny') {
+    tools.writePolicyError(res, 403, authorization.message, authorization.code, corsOrigin)
+    return
+  }
+
+  // Re-check the current tool/MCP ceiling independently of the token so a
+  // previously issued credential cannot outlive an allowlist denial.
+  const runtimeAllowed = Boolean(
+    input.runtimeCapabilityPolicy
+    && isCloudRuntimeCapabilityAllowed(
+      input.runtimeCapabilityPolicy,
+      KNOWLEDGE_CLOUD_CAPABILITY,
+    )
+  )
+  if (!runtimeAllowed) {
+    tools.writePolicyError(res, 403, 'Knowledge is disabled for this cloud profile.', 'knowledge.disabled', corsOrigin)
     return
   }
 

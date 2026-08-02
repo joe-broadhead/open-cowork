@@ -2,9 +2,10 @@
 
 # Compatibility Guarantees
 
-OpenWiki is in public preview. The project keeps human and agent-facing
-contracts stable enough for real deployments while reserving internal package
-changes until library packages are explicitly released.
+OpenWiki is pre-release. The project keeps human and agent-facing contracts
+coherent across source checkouts, GitHub release tarballs, and static exports
+while reserving internal package changes until library packages are explicitly
+released.
 
 | Channel | Compatibility guarantee |
 | --- | --- |
@@ -13,7 +14,7 @@ changes until library packages are explicitly released.
 | MCP | Tool names, mode tiers, and required inputs in [MCP Tools](mcp-tools.md) are preview-stable within `0.1.x`. |
 | Repository records | `schemas/openwiki/v0/*.schema.json` and the Git layout remain the canonical compatibility contract. |
 | Static export | Machine artifacts documented in [Schemas And Static Artifacts](schemas.md) remain preview-stable. |
-| Docker and deployment manifests | Supported for preview deployments; operators should pin image digests and read release notes before upgrading. |
+| Distribution | Source checkout, generated GitHub release tarballs, and static export are the active channels. npm-registry packages and container images are not published. |
 | Workspace packages | Private internal APIs. They may change between commits and are not covered by semantic-versioning guarantees. |
 
 ## Release Channels

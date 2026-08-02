@@ -3,6 +3,8 @@ import { createPostgresSchemaManifest } from '@open-cowork/shared/node'
 export const CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID = '001_cloud_control_plane_baseline'
 export const CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID = '002_cloud_control_plane_concurrent_indexes'
 export const CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID = '003_cloud_workflow_webhook_secrets'
+export const CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_MIGRATION_ID = '004_channel_interaction_binding_scope'
+export const CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID = '005_channel_idempotency_scope'
 export const CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS = [720_908_611, 1_762_083_497] as const
 
 export type CloudControlPlaneMigration = {
@@ -25,6 +27,62 @@ const CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_STATEMENTS = [
     PRIMARY KEY (tenant_id, workflow_id, trigger_id),
     FOREIGN KEY (tenant_id, workflow_id) REFERENCES cloud_workflows(tenant_id, workflow_id) ON DELETE CASCADE
   )`,
+] as const
+
+const CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_STATEMENTS = [
+  `ALTER TABLE cloud_channel_interactions
+    ADD COLUMN IF NOT EXISTS channel_binding_id text REFERENCES cloud_channel_bindings(binding_id) ON DELETE CASCADE`,
+  `ALTER TABLE cloud_channel_interactions
+    ADD COLUMN IF NOT EXISTS session_binding_id text REFERENCES cloud_channel_session_bindings(binding_id) ON DELETE CASCADE`,
+] as const
+
+// Provider event ids and outbound delivery ids originate outside the control
+// plane. They are idempotency keys, not globally authoritative row ids. Scope
+// both to the authenticated channel binding so a collision cannot return,
+// suppress, or mutate another binding's work.
+const CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_STATEMENTS = [
+  `ALTER TABLE cloud_channel_deliveries
+    ADD COLUMN IF NOT EXISTS public_delivery_id text`,
+  `UPDATE cloud_channel_deliveries
+    SET public_delivery_id = delivery_id
+    WHERE public_delivery_id IS NULL`,
+  `ALTER TABLE cloud_channel_deliveries
+    ALTER COLUMN public_delivery_id SET NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_deliveries_scope_idempotency_idx
+    ON cloud_channel_deliveries (org_id, channel_binding_id, public_delivery_id)`,
+  `DROP INDEX IF EXISTS cloud_channel_interactions_external_idx`,
+  `CREATE UNIQUE INDEX cloud_channel_interactions_external_idx
+    ON cloud_channel_interactions (
+      org_id,
+      COALESCE(channel_binding_id, '__open_cowork_unscoped__'),
+      provider,
+      external_interaction_id
+    )
+    WHERE external_interaction_id IS NOT NULL`,
+  `ALTER TABLE cloud_channel_provider_events
+    ADD COLUMN IF NOT EXISTS channel_binding_id text`,
+  `UPDATE cloud_channel_provider_events
+    SET channel_binding_id = COALESCE(
+      NULLIF(metadata ->> 'channelBindingId', ''),
+      '__open_cowork_unscoped__'
+    )
+    WHERE channel_binding_id IS NULL`,
+  // Legacy unscoped records retain an isolated sentinel authority. Gateway
+  // completion always supplies real binding ids, so those rows cannot be
+  // confused with or reached through a scoped channel principal.
+  `ALTER TABLE cloud_channel_provider_events
+    ALTER COLUMN channel_binding_id SET NOT NULL`,
+  `DROP INDEX IF EXISTS cloud_channel_provider_events_dedupe_idx`,
+  `CREATE UNIQUE INDEX cloud_channel_provider_events_dedupe_idx
+    ON cloud_channel_provider_events (
+      org_id,
+      channel_binding_id,
+      provider,
+      provider_instance_id,
+      COALESCE(external_workspace_id, ''),
+      event_type,
+      provider_event_id
+    )`,
 ] as const
 
 export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
@@ -444,6 +502,8 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
     interaction_id text PRIMARY KEY,
     org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
     agent_id text NOT NULL REFERENCES headless_agents(agent_id) ON DELETE CASCADE,
+    channel_binding_id text REFERENCES cloud_channel_bindings(binding_id) ON DELETE CASCADE,
+    session_binding_id text REFERENCES cloud_channel_session_bindings(binding_id) ON DELETE CASCADE,
     session_id text NOT NULL,
     provider text NOT NULL,
     external_interaction_id text,
@@ -458,12 +518,18 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
     updated_at timestamptz NOT NULL
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_interactions_external_idx
-    ON cloud_channel_interactions (org_id, provider, external_interaction_id)
+    ON cloud_channel_interactions (
+      org_id,
+      COALESCE(channel_binding_id, '__open_cowork_unscoped__'),
+      provider,
+      external_interaction_id
+    )
     WHERE external_interaction_id IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS cloud_channel_interactions_session_idx
     ON cloud_channel_interactions (org_id, session_id, status)`,
   `CREATE TABLE IF NOT EXISTS cloud_channel_deliveries (
     delivery_id text PRIMARY KEY,
+    public_delivery_id text NOT NULL,
     org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
     agent_id text NOT NULL REFERENCES headless_agents(agent_id) ON DELETE CASCADE,
     channel_binding_id text NOT NULL REFERENCES cloud_channel_bindings(binding_id) ON DELETE CASCADE,
@@ -484,9 +550,12 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_channel_deliveries_claim_idx
     ON cloud_channel_deliveries (org_id, status, next_attempt_at, created_at)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_deliveries_scope_idempotency_idx
+    ON cloud_channel_deliveries (org_id, channel_binding_id, public_delivery_id)`,
   `CREATE TABLE IF NOT EXISTS cloud_channel_provider_events (
     event_id text PRIMARY KEY,
     org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    channel_binding_id text NOT NULL,
     provider text NOT NULL,
     provider_instance_id text NOT NULL,
     external_workspace_id text,
@@ -504,7 +573,7 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
     updated_at timestamptz NOT NULL
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_provider_events_dedupe_idx
-    ON cloud_channel_provider_events (org_id, provider, provider_instance_id, COALESCE(external_workspace_id, ''), event_type, provider_event_id)`,
+    ON cloud_channel_provider_events (org_id, channel_binding_id, provider, provider_instance_id, COALESCE(external_workspace_id, ''), event_type, provider_event_id)`,
   `CREATE INDEX IF NOT EXISTS cloud_channel_provider_events_claim_idx
     ON cloud_channel_provider_events (org_id, status, retryable, claim_expires_at, updated_at)`,
 ] as const
@@ -1253,6 +1322,14 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_STATEMENTS,
   },
   {
     id: CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,

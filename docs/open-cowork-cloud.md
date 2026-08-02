@@ -831,6 +831,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
 | `OPEN_COWORK_CLOUD_PUBLIC_URL` | Canonical public origin used for OIDC callback redirects and workflow webhook URLs behind proxies or ingress. Must be set to the canonical `https://` origin for any HTTPS-fronted deployment so HSTS is emitted (see Cloud advanced / tuning). |
 | `OPEN_COWORK_CLOUD_PUBLISHED_ADDR` | Docker compose host-side bind address for local/demo references. Defaults to `127.0.0.1`; when `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH=true`, non-loopback values fail startup. |
+| `OPEN_COWORK_CLOUD_PUBLISHED_PORT` | Docker compose host-side Cloud port. Defaults to `8787`; use a free loopback port when another local runtime already owns that port. For interactive or OIDC use, keep `OPEN_COWORK_CLOUD_PUBLIC_URL` aligned with the externally visible port; the smoke URL override does not change callbacks or public-origin policy. |
 | `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` | JSON object matching `cloud.publicBranding`; Helm renders this from `cloud.branding`. |
 | `OPEN_COWORK_CLOUD_BRAND_NAME` / `OPEN_COWORK_CLOUD_BRAND_SHORT_NAME` | Simple env overrides for the dashboard product name and short mark. |
 | `OPEN_COWORK_CLOUD_BRAND_LOGO_URL` | HTTPS logo URL for the browser dashboard. |

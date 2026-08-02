@@ -458,7 +458,7 @@ function hostedControlsDefault(profile: string | undefined): boolean {
   if (process.env.OPENWIKI_PUBLIC_ORIGIN !== undefined && process.env.OPENWIKI_PUBLIC_ORIGIN.trim() !== "") {
     return true;
   }
-  return profile === "team" || profile === "hosted" || profile === "compose" || profile === "umbrel" || profile === "cloud" || profile === "enterprise";
+  return profile === "team" || profile === "hosted" || profile === "enterprise";
 }
 
 function limitFor(envName: string, configured: number | undefined, fallback: number, defaultLimit: number): number {

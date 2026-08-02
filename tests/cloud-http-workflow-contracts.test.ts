@@ -3,6 +3,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DEFAULT_CONFIG } from '@open-cowork/shared'
 import { resolveCloudRuntimePolicy } from '@open-cowork/cloud-server/cloud-config'
+import type {
+  CloudMetricRecord,
+  CloudObservabilityAdapter,
+} from '@open-cowork/cloud-server/observability'
 import { createFixture } from './helpers/cloud-http-fixture.ts'
 import {
   readJson,
@@ -76,6 +80,60 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
       'Load daily revenue',
       'Summarize variance',
     ])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP permits manual workflows but rejects webhook creation and secret rotation when webhooks are disabled', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: { ...basePolicy.features, workflows: true, webhooks: false },
+    },
+  })
+  let createWorkflowCalls = 0
+  const createWorkflow = fixture.service.domains.workflows.createWorkflow
+    .bind(fixture.service.domains.workflows)
+  fixture.service.domains.workflows.createWorkflow = async (principal, draft) => {
+    createWorkflowCalls += 1
+    return createWorkflow(principal, draft)
+  }
+  const baseUrl = await fixture.server.listen()
+  try {
+    const manualResponse = await fetch(`${baseUrl}/api/workflows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Manual only',
+        instructions: 'Run manually.',
+        agentName: 'data-analyst',
+        triggers: [{ id: 'manual-only', type: 'manual', enabled: true }],
+      }),
+    })
+    assert.equal(manualResponse.status, 201)
+    assert.equal(createWorkflowCalls, 1)
+
+    const webhookResponse = await fetch(`${baseUrl}/api/workflows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Webhook denied',
+        instructions: 'Must not reveal a secret.',
+        agentName: 'data-analyst',
+        triggers: [{ id: 'webhook-denied', type: 'webhook', enabled: true }],
+      }),
+    })
+    assert.equal(webhookResponse.status, 403)
+    assert.match(JSON.stringify(await readJson(webhookResponse)), /webhooks\.disabled/)
+    assert.equal(createWorkflowCalls, 1, 'central policy must deny before the workflow domain')
+
+    const rotationResponse = await fetch(`${baseUrl}/api/workflows/absent/rotate-webhook-secret`, {
+      method: 'POST',
+    })
+    assert.equal(rotationResponse.status, 403)
+    assert.match(JSON.stringify(await readJson(rotationResponse)), /webhooks\.disabled/)
   } finally {
     await fixture.server.close()
   }
@@ -524,6 +582,59 @@ test('cloud HTTP public workflow webhooks require HMAC signatures and reject rep
       body: rawBody,
     })
     assert.equal(replay.status, 401)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('signed workflow webhooks pass the current workspace matrix exactly once before run mutation', async () => {
+  const metrics: CloudMetricRecord[] = []
+  const observability: CloudObservabilityAdapter = {
+    log() {},
+    metric(record) { metrics.push(record) },
+    span() {},
+  }
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const policy = {
+    ...basePolicy,
+    features: { ...basePolicy.features, workflows: true, webhooks: true },
+  }
+  const fixture = createFixture({ policy, observability })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/workflows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Policy-gated webhook',
+        instructions: 'Must not run after revocation.',
+        agentName: 'data-analyst',
+        triggers: [{ id: 'webhook-policy', type: 'webhook', enabled: true }],
+      }),
+    }))
+    const workflowId = String(asRecord(created.workflow).id)
+    const secret = String(asRecord(created.webhookSecretReveal).secret)
+    policy.features.webhooks = false
+    const rawBody = JSON.stringify({ source: 'revoked-policy' })
+    const timestamp = new Date().toISOString()
+    const response = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-timestamp': timestamp,
+        'x-open-cowork-signature': signWorkflowWebhookPayload(secret, rawBody, timestamp),
+      },
+      body: rawBody,
+    })
+    assert.equal(response.status, 403)
+    assert.equal(asRecord(asRecord(await readJson(response)).verdict).policyCode, 'webhooks.disabled')
+    assert.equal(fixture.runtime.prompts.length, 0)
+    const decisions = metrics.filter((record) => (
+      record.name === 'open_cowork_cloud_workspace_policy_decisions_total'
+      && record.attributes?.workspace_policy_action === 'workflows.webhookinvoke'
+    ))
+    assert.equal(decisions.length, 1, JSON.stringify(metrics))
+    assert.equal(decisions[0]?.attributes?.workspace_policy_outcome, 'deny')
   } finally {
     await fixture.server.close()
   }

@@ -1,10 +1,9 @@
-import path from "node:path";
 import type { CliOptions } from "./args.ts";
-import type { DeploymentProfileDefinition, DeploymentProfileRequirement } from "./deployment-profiles.ts";
 import { printJson } from "./output.ts";
-import { exists, resolveRoot } from "./utils.ts";
+import { resolveRoot } from "./utils.ts";
 
 export type DiagnosticStatus = "pass" | "warn" | "fail" | "skip";
+export type DiagnosticRequirement = "skip" | "warn" | "required";
 
 export interface DiagnosticCheck {
   name: string;
@@ -14,21 +13,13 @@ export interface DiagnosticCheck {
 }
 
 interface DiagnosticReport {
-  command: "doctor" | "deploy-preflight";
+  command: "doctor";
   status: "pass" | "warn" | "fail";
   profile?: string;
-  deployment_profile?: {
-    name: string;
-    status: string;
-    trust_boundary: string;
-    persistence_model: string;
-    backup_model: string;
-    scaling_path: string;
-  };
   checks: DiagnosticCheck[];
 }
 
-export function publicOriginDiagnostic(origin: string | undefined, required: DeploymentProfileRequirement | boolean): DiagnosticCheck {
+export function publicOriginDiagnostic(origin: string | undefined, required: DiagnosticRequirement | boolean): DiagnosticCheck {
   const requirement = requirementFrom(required);
   if (origin === undefined || origin.trim() === "") {
     return {
@@ -36,9 +27,9 @@ export function publicOriginDiagnostic(origin: string | undefined, required: Dep
       status: requirementStatus(requirement),
       message:
         requirement === "required"
-          ? "This deployment profile requires OPENWIKI_PUBLIC_ORIGIN or --public-origin."
+          ? "This runtime profile requires OPENWIKI_PUBLIC_ORIGIN or --public-origin."
           : requirement === "warn"
-            ? "Configure OPENWIKI_PUBLIC_ORIGIN before exposing this deployment through a browser hostname."
+            ? "Configure OPENWIKI_PUBLIC_ORIGIN before exposing this runtime through a browser hostname."
             : "No public origin configured for this local profile.",
     };
   }
@@ -82,7 +73,7 @@ export function trustedHeaderDiagnostic(options: CliOptions): DiagnosticCheck {
   return { name: "trusted-headers", status: "pass", message: "Trusted auth headers have a shared proxy secret configured." };
 }
 
-export function rateLimitDiagnostic(required: DeploymentProfileRequirement | boolean): DiagnosticCheck {
+export function rateLimitDiagnostic(required: DiagnosticRequirement | boolean): DiagnosticCheck {
   const requirement = requirementFrom(required);
   const configured = process.env.OPENWIKI_RATE_LIMIT_ENABLED?.trim();
   if (configured === "0" && requirement !== "skip") {
@@ -95,32 +86,12 @@ export function rateLimitDiagnostic(required: DeploymentProfileRequirement | boo
     return { name: "rate-limits", status: "pass", message: "Hosted defaults enable rate limits when runtime profile or public origin is configured." };
   }
   if (requirement === "warn") {
-    return { name: "rate-limits", status: "warn", message: "Enable HTTP/MCP rate limits before exposing this private deployment to untrusted networks." };
+    return { name: "rate-limits", status: "warn", message: "Enable HTTP/MCP rate limits before exposing this runtime to untrusted networks." };
   }
   return { name: "rate-limits", status: "skip", message: "Rate limits are optional for local personal profiles." };
 }
 
-export function imageDigestDiagnostic(image: string | undefined, required: DeploymentProfileRequirement | boolean): DiagnosticCheck {
-  const requirement = requirementFrom(required);
-  if (image === undefined || image.trim() === "") {
-    return {
-      name: "image-digest",
-      status: requirementStatus(requirement),
-      message:
-        requirement === "required"
-          ? "This deployment profile should pin an immutable image digest."
-          : requirement === "warn"
-            ? "Pin an immutable image digest before treating this deployment as production."
-            : "No image configured for this local profile.",
-    };
-  }
-  if (!image.includes("@sha256:")) {
-    return { name: "image-digest", status: requirementStatus(requirement === "skip" ? "warn" : requirement), message: `Image is not digest-pinned: ${image}` };
-  }
-  return { name: "image-digest", status: "pass", message: "Container image is pinned by digest." };
-}
-
-export function writeCoordinatorDiagnostic(required: DeploymentProfileRequirement | boolean): DiagnosticCheck {
+export function writeCoordinatorDiagnostic(required: DiagnosticRequirement | boolean): DiagnosticCheck {
   const requirement = requirementFrom(required);
   const coordinator = process.env.OPENWIKI_WRITE_COORDINATOR_BACKEND?.trim();
   const queue = process.env.OPENWIKI_QUEUE_BACKEND?.trim();
@@ -132,7 +103,7 @@ export function writeCoordinatorDiagnostic(required: DeploymentProfileRequiremen
     return { name: "write-coordinator", status: "pass", message: "Postgres write coordinator is auto-selected by queue/runtime backend." };
   }
   if (requirement === "required") {
-    return { name: "write-coordinator", status: "fail", message: "This deployment profile requires OPENWIKI_WRITE_COORDINATOR_BACKEND=postgres or a Postgres queue/runtime backend." };
+    return { name: "write-coordinator", status: "fail", message: "This runtime profile requires OPENWIKI_WRITE_COORDINATOR_BACKEND=postgres or a Postgres queue/runtime backend." };
   }
   if (requirement === "warn") {
     return { name: "write-coordinator", status: "warn", message: "Use the Postgres write coordinator before running multiple web or worker writers." };
@@ -140,51 +111,7 @@ export function writeCoordinatorDiagnostic(required: DeploymentProfileRequiremen
   return { name: "write-coordinator", status: "skip", message: "Local file lock coordinator is acceptable for a single local process." };
 }
 
-export async function staticExportArtifactsDiagnostic(root: string, outDir: string | undefined): Promise<DiagnosticCheck> {
-  if (outDir !== undefined && path.isAbsolute(outDir)) {
-    return {
-      name: "static-artifacts",
-      status: "fail",
-      message: "Static export out-dir must be relative to the OpenWiki workspace.",
-      details: { out_dir: outDir },
-    };
-  }
-  const target = path.resolve(root, outDir ?? "public");
-  const requiredFiles = ["index.html", "search-index.json", "graph.json", "graph-report.json", "agents/index.md", "static-export-report.json"];
-  const missing: string[] = [];
-  for (const file of requiredFiles) {
-    if (!(await exists(path.join(target, file)))) {
-      missing.push(file);
-    }
-  }
-  if (missing.length > 0) {
-    return {
-      name: "static-artifacts",
-      status: "fail",
-      message: `Static export artifacts are missing in ${target}: ${missing.join(", ")}`,
-      details: { out_dir: target, missing },
-    };
-  }
-  return { name: "static-artifacts", status: "pass", message: `Static export artifacts are present in ${target}.`, details: { out_dir: target } };
-}
-
-export function deploymentProfileDiagnostic(profile: DeploymentProfileDefinition): DiagnosticCheck {
-  return {
-    name: "deployment-profile",
-    status: "pass",
-    message: `${profile.name} is ${profile.status}; trust boundary: ${profile.trustBoundary}.`,
-    details: {
-      profile: profile.name,
-      status: profile.status,
-      trust_boundary: profile.trustBoundary,
-      persistence_model: profile.persistenceModel,
-      backup_model: profile.backupModel,
-      scaling_path: profile.scalingPath,
-    },
-  };
-}
-
-export function requirementFrom(value: DeploymentProfileRequirement | boolean): DeploymentProfileRequirement {
+export function requirementFrom(value: DiagnosticRequirement | boolean): DiagnosticRequirement {
   if (value === true) {
     return "required";
   }
@@ -194,7 +121,7 @@ export function requirementFrom(value: DeploymentProfileRequirement | boolean): 
   return value;
 }
 
-export function requirementStatus(requirement: DeploymentProfileRequirement): DiagnosticStatus {
+export function requirementStatus(requirement: DiagnosticRequirement): DiagnosticStatus {
   if (requirement === "required") {
     return "fail";
   }

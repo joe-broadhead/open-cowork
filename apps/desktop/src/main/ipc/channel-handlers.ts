@@ -13,6 +13,7 @@ import {
   type ChannelBindingUpdateInput,
   type ChannelDeliveryDeadLetterInput,
   type ChannelDeliveryListOptions,
+  type ChannelDeliveryMutationInput,
   type ChannelPeopleListOptions,
   type ChannelPersonResolveInput,
   type ChannelWatchListOptions,
@@ -39,7 +40,6 @@ import {
   optionalObjectArg,
   stringAndObjectArgs,
   stringAndOptionalObjectArgs,
-  stringArg,
   registerIpcInvoke,
 } from './schema.ts'
 
@@ -291,7 +291,6 @@ function normalizePeopleListOptions(value: Record<string, unknown> = {}): Channe
 
 function normalizePersonResolveInput(value: Record<string, unknown>): ChannelPersonResolveInput {
   return {
-    identityId: readString(value.identityId, 'Channel identity id') || undefined,
     provider: requireProvider(value.provider),
     channelBindingId: readString(value.channelBindingId, 'Channel binding id'),
     externalWorkspaceId: value.externalWorkspaceId === undefined ? undefined : readString(value.externalWorkspaceId, 'External workspace id'),
@@ -315,7 +314,14 @@ function normalizeDeliveryListOptions(value: Record<string, unknown> = {}): Chan
 
 function normalizeDeadLetterInput(value: Record<string, unknown> = {}): ChannelDeliveryDeadLetterInput {
   return {
+    channelBindingId: readString(value.channelBindingId, 'Channel binding id'),
     lastError: readString(value.lastError, 'Delivery error'),
+  }
+}
+
+function normalizeDeliveryMutationInput(value: Record<string, unknown> = {}): ChannelDeliveryMutationInput {
+  return {
+    channelBindingId: readString(value.channelBindingId, 'Channel binding id'),
   }
 }
 
@@ -428,16 +434,23 @@ export function registerChannelHandlers(context: IpcHandlerContext) {
     return getDesktopChannelService().domains.channels.listChannelDeliveries(localPrincipal(), options)
   })
 
-  registerIpcInvoke(context, 'channels:deliveries:retry', stringArg('channel delivery id'), async (event, deliveryId) => {
-    assertLocalWorkspace(context, event)
-    const delivery = await getDesktopChannelService().domains.channels.retryChannelDelivery(localPrincipal(), deliveryId)
+  registerIpcInvoke(context, 'channels:deliveries:retry', stringAndOptionalObjectArgs<ChannelDeliveryMutationInput>('channel delivery id', 'channel delivery retry input', {}, normalizeDeliveryMutationInput), async (event, deliveryId, input) => {
+    assertLocalWorkspace(context, event, input)
+    const delivery = await getDesktopChannelService().domains.channels.retryChannelDelivery(localPrincipal(), {
+      deliveryId,
+      channelBindingId: input?.channelBindingId,
+    })
     persistDesktopChannelSnapshot()
     return delivery
   })
 
   registerIpcInvoke(context, 'channels:deliveries:dead-letter', stringAndOptionalObjectArgs<ChannelDeliveryDeadLetterInput>('channel delivery id', 'channel delivery dead-letter input', {}, normalizeDeadLetterInput), async (event, deliveryId, input) => {
     assertLocalWorkspace(context, event, input)
-    const delivery = await getDesktopChannelService().domains.channels.deadLetterChannelDelivery(localPrincipal(), { deliveryId, lastError: input?.lastError })
+    const delivery = await getDesktopChannelService().domains.channels.deadLetterChannelDelivery(localPrincipal(), {
+      deliveryId,
+      channelBindingId: input?.channelBindingId,
+      lastError: input?.lastError,
+    })
     persistDesktopChannelSnapshot()
     return delivery
   })

@@ -53,12 +53,21 @@ import type {
   AdminUpdateRoleInput,
   AdminUsageSummary,
   ControlPlanePermission,
+  CloudFeatureConfig,
+  WorkspaceAction,
+} from '@open-cowork/shared'
+import {
+  evaluateWorkspaceCapabilityPolicy,
+  WORKSPACE_ACTION_DEFINITIONS,
+  WORKSPACE_PROVIDER_KEY_ACTIONS,
 } from '@open-cowork/shared'
 import { setActiveManagedPolicy } from '@open-cowork/runtime-host/managed-policy'
 import type { SessionRecord } from '@open-cowork/cloud-server/control-plane-store'
 import { cloudSessionViewToSessionView } from '@open-cowork/cloud-server/session-view-contract'
 import {
+  CloudTransportError,
   createHttpSseCloudTransportAdapter,
+  isCloudTransportError,
   type CloudTransportAdapter,
   type CloudTransportConfig,
   type CloudTransportSettingMetadata,
@@ -252,10 +261,19 @@ async function settleWithConcurrency<T>(
 async function retrySyncRefresh(task: () => Promise<unknown>) {
   try {
     await task()
-  } catch {
+  } catch (error) {
+    if (!canUseReadOnlyCacheFallback(error)) throw error
     await new Promise((resolve) => setTimeout(resolve, CLOUD_SYNC_RETRY_BACKOFF_MS))
     await task()
   }
+}
+
+function canUseReadOnlyCacheFallback(error: unknown): boolean {
+  if (!isCloudTransportError(error)) return true
+  return error.kind !== 'unauthorized'
+    && error.kind !== 'forbidden'
+    && error.status !== 401
+    && error.status !== 403
 }
 
 export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, WorkspaceSessionPort {
@@ -264,6 +282,10 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   private readonly cache: CloudWorkspaceCache | null
   private readonly inFlightSessionViews = new Map<string, Promise<SessionView>>()
   private readonly inFlightArtifactLists = new Map<string, Promise<SessionArtifact[]>>()
+  private featureSnapshot: Partial<CloudFeatureConfig> | null
+  private featureSnapshotLoad: Promise<void> | null = null
+  private accessSnapshot: Pick<AdminAccess, 'role' | 'customRoleKey' | 'permissions'> | null = null
+  private accessSnapshotLoad: Promise<void> | null = null
   private syncGeneration = 0
 
   constructor(options: CloudWorkspaceAdapterOptions) {
@@ -280,9 +302,11 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
         ? { authorization: `Bearer ${options.accessToken}` }
         : undefined,
     })
+    this.featureSnapshot = this.cache?.getFeatureSnapshot(cloudWorkspaceCacheKey(this.connection)) || null
   }
 
   async policy(): Promise<WorkspacePolicy> {
+    this.assertCapability('workspace.read', this.featureSnapshot)
     const config = await this.transport.getConfig()
     // Push the org-managed policy (#898) into the runtime-host enforcement singleton so
     // the local runtime clamps its permission maxima and scopes providers/models to it.
@@ -290,10 +314,94 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
     // safe) policy in place rather than clearing enforcement. When offline this call
     // never runs (getConfig throws), so the persisted policy keeps enforcing.
     if (config.managedPolicy) applyManagedPolicyFromConfig(config.managedPolicy)
-    return policyFromConfig(config)
+    const policy = policyFromConfig(config)
+    this.featureSnapshot = policy.features as Partial<CloudFeatureConfig>
+    this.cache?.upsertFeatureSnapshot(cloudWorkspaceCacheKey(this.connection), this.featureSnapshot)
+    return policy
+  }
+
+  private assertCapability(
+    action: WorkspaceAction,
+    features: Partial<CloudFeatureConfig> | null = this.featureSnapshot,
+  ): void {
+    const decision = evaluateWorkspaceCapabilityPolicy({
+      action,
+      principal: {
+        authSource: 'user',
+        role: this.accessSnapshot?.role,
+        customRoleKey: this.accessSnapshot?.customRoleKey,
+        permissions: this.accessSnapshot?.permissions,
+      },
+      features,
+    })
+    if (decision.outcome === 'deny') {
+      throw new CloudTransportError({
+        kind: 'forbidden',
+        status: 403,
+        code: decision.code,
+        message: decision.message,
+      })
+    }
+  }
+
+  private async authorize(action: WorkspaceAction): Promise<void> {
+    const definition = WORKSPACE_ACTION_DEFINITIONS[action]
+    if (
+      ('feature' in definition || 'additionalFeatures' in definition || 'anyFeatures' in definition)
+      && !this.featureSnapshot
+    ) {
+      try {
+        await this.loadFeatureSnapshot()
+      } catch {
+        // The action is still evaluated exactly once below. An unavailable
+        // policy source stays fail-closed because a missing feature is denied.
+      }
+    }
+    if (
+      ('humanPermissions' in definition || 'humanRoles' in definition)
+      && !this.accessSnapshot
+    ) {
+      await this.loadAccessSnapshot()
+    }
+    this.assertCapability(action)
+  }
+
+  private loadAccessSnapshot(): Promise<void> {
+    if (this.accessSnapshot) return Promise.resolve()
+    if (this.accessSnapshotLoad) return this.accessSnapshotLoad
+    this.assertCapability('admin.read')
+    this.accessSnapshotLoad = (async () => {
+      if (!this.transport.getAdminAccess) {
+        throw new Error('Cloud authorization context is not supported by this workspace.')
+      }
+      const access = await this.transport.getAdminAccess()
+      this.accessSnapshot = {
+        role: access.role,
+        customRoleKey: access.customRoleKey,
+        permissions: [...access.permissions],
+      }
+    })()
+    return this.accessSnapshotLoad.finally(() => {
+      this.accessSnapshotLoad = null
+    })
+  }
+
+  private loadFeatureSnapshot(): Promise<void> {
+    if (this.featureSnapshot) return Promise.resolve()
+    if (this.featureSnapshotLoad) return this.featureSnapshotLoad
+    this.assertCapability('workspace.read', null)
+    this.featureSnapshotLoad = (async () => {
+      const config = await this.transport.getConfig()
+      if (config.managedPolicy) applyManagedPolicyFromConfig(config.managedPolicy)
+      const policy = policyFromConfig(config)
+      this.featureSnapshot = policy.features as Partial<CloudFeatureConfig>
+      this.cache?.upsertFeatureSnapshot(cloudWorkspaceCacheKey(this.connection), this.featureSnapshot)
+    })()
+    return this.featureSnapshotLoad
   }
 
   async listSessions(): Promise<SessionInfo[]> {
+    await this.authorize('sessions.list')
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     try {
       const records: SessionRecord[] = []
@@ -312,6 +420,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
       this.cache?.upsertSessionList(cacheKey, sessions)
       return sessions
     } catch (error) {
+      if (!canUseReadOnlyCacheFallback(error)) throw error
       const cached = this.cache?.listSessions(cacheKey)
       if (cached) return cached
       throw error
@@ -368,21 +477,25 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async createSession(input: { projectSource?: CloudProjectSourceInput | null } = {}): Promise<SessionInfo> {
+    await this.authorize('sessions.create')
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     const session = toSessionInfo((await this.transport.createSession(input)).session)
     this.cache?.upsertSessionInfo(cacheKey, session)
     return session
   }
 
-  validateProjectSource(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict> {
+  async validateProjectSource(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict> {
+    await this.authorize('projectSources.validate')
     return this.transport.validateProjectSource(input)
   }
 
-  uploadProjectSnapshot(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult> {
+  async uploadProjectSnapshot(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult> {
+    await this.authorize('projectSources.upload')
     return this.transport.uploadProjectSnapshot(input)
   }
 
   async importSession(input: SessionImportRequest): Promise<{ session: SessionInfo, view: SessionView }> {
+    await this.authorize('sessions.import')
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     const imported = await this.transport.importSession(input)
     const session = toSessionInfo(imported.session)
@@ -400,12 +513,14 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async getSessionInfo(sessionId: string): Promise<SessionInfo | null> {
+    await this.authorize('sessions.get')
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     try {
       const session = toSessionInfo((await this.transport.getSession(sessionId)).session)
       this.cache?.upsertSessionInfo(cacheKey, session)
       return session
     } catch (error) {
+      if (!canUseReadOnlyCacheFallback(error)) throw error
       const cached = this.cache?.getSessionInfo(cacheKey, sessionId)
       if (cached) return cached
       throw error
@@ -413,6 +528,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async getSessionView(sessionId: string): Promise<SessionView> {
+    await this.authorize('sessions.view')
     const inFlight = this.inFlightSessionViews.get(sessionId)
     if (inFlight) return inFlight
     const fetch = this.fetchSessionView(sessionId)
@@ -434,6 +550,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
       this.cache?.upsertSessionView(cacheKey, sessionId, view)
       return view
     } catch (error) {
+      if (!canUseReadOnlyCacheFallback(error)) throw error
       const cached = this.cache?.getSessionView(cacheKey, sessionId)
       if (cached) return cached
       throw error
@@ -441,6 +558,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async promptSession(sessionId: string, input: WorkspaceSessionPromptInput): Promise<void> {
+    await this.authorize('sessions.prompt')
     if (input.attachments && input.attachments.length > 0) {
       throw new Error('Cloud workspace prompts do not support local attachments yet.')
     }
@@ -451,18 +569,22 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async abortSession(sessionId: string): Promise<void> {
+    await this.authorize('sessions.abort')
     await this.transport.abortSession(sessionId)
   }
 
   async replyToQuestion(sessionId: string, requestId: string, answers: unknown[]): Promise<void> {
+    await this.authorize('sessions.questionReply')
     await this.transport.replyToQuestion(sessionId, { requestId, answers })
   }
 
   async rejectQuestion(sessionId: string, requestId: string): Promise<void> {
+    await this.authorize('sessions.questionReject')
     await this.transport.rejectQuestion(sessionId, { requestId })
   }
 
   async respondToPermission(sessionId: string, permissionId: string, allowed: boolean): Promise<void> {
+    await this.authorize('sessions.permissionRespond')
     await this.transport.respondToPermission(sessionId, {
       permissionId,
       response: { allowed },
@@ -470,6 +592,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async listWorkflows(): Promise<WorkflowListPayload> {
+    await this.authorize('workflows.list')
     if (!this.transport.listWorkflows) throw new Error('Cloud workflows are not supported by this workspace.')
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     try {
@@ -477,6 +600,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
       this.cache?.upsertWorkflowList(cacheKey, workflows)
       return workflows
     } catch (error) {
+      if (!canUseReadOnlyCacheFallback(error)) throw error
       const cached = this.cache?.getWorkflowList(cacheKey)
       if (cached) return cached
       throw error
@@ -484,11 +608,13 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async getWorkflow(workflowId: string): Promise<WorkflowDetail | null> {
+    await this.authorize('workflows.get')
     if (!this.transport.getWorkflow) throw new Error('Cloud workflows are not supported by this workspace.')
     return this.transport.getWorkflow(workflowId)
   }
 
   async runWorkflow(workflowId: string): Promise<WorkflowRun | null> {
+    await this.authorize('workflows.run')
     if (!this.transport.runWorkflow) throw new Error('Cloud workflow runs are not supported by this workspace.')
     return this.transport.runWorkflow(workflowId, {
       triggerType: 'manual',
@@ -500,21 +626,25 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async pauseWorkflow(workflowId: string): Promise<WorkflowDetail | null> {
+    await this.authorize('workflows.pause')
     if (!this.transport.pauseWorkflow) throw new Error('Cloud workflow pause is not supported by this workspace.')
     return this.transport.pauseWorkflow(workflowId)
   }
 
   async resumeWorkflow(workflowId: string): Promise<WorkflowDetail | null> {
+    await this.authorize('workflows.resume')
     if (!this.transport.resumeWorkflow) throw new Error('Cloud workflow resume is not supported by this workspace.')
     return this.transport.resumeWorkflow(workflowId)
   }
 
   async archiveWorkflow(workflowId: string): Promise<WorkflowDetail | null> {
+    await this.authorize('workflows.archive')
     if (!this.transport.archiveWorkflow) throw new Error('Cloud workflow archive is not supported by this workspace.')
     return this.transport.archiveWorkflow(workflowId)
   }
 
   async rotateWorkflowWebhookSecret(workflowId: string): Promise<WorkflowWebhookSecretMutationResult | null> {
+    await this.authorize('workflows.rotateWebhookSecret')
     if (!this.transport.rotateWorkflowWebhookSecret) {
       throw new Error('Cloud workflow webhook rotation is not supported by this workspace.')
     }
@@ -525,171 +655,211 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   // Each delegates to the cloud transport, surfacing a clear error when the
   // connected workspace's transport does not implement the admin surface.
   async getAdminAccess(): Promise<AdminAccess> {
+    await this.authorize('admin.read')
     if (!this.transport.getAdminAccess) throw new Error('Cloud admin access is not supported by this workspace.')
-    return this.transport.getAdminAccess()
+    const access = await this.transport.getAdminAccess()
+    this.accessSnapshot = {
+      role: access.role,
+      customRoleKey: access.customRoleKey,
+      permissions: [...access.permissions],
+    }
+    return access
   }
 
   async getEntitlements(): Promise<AdminEntitlements> {
+    await this.authorize('billing.read')
     if (!this.transport.getEntitlements) throw new Error('Cloud entitlements are not supported by this workspace.')
     return this.transport.getEntitlements()
   }
 
   async getAdminOverview(): Promise<AdminOverview> {
+    await this.authorize('admin.read')
     if (!this.transport.getAdminOverview) throw new Error('Cloud admin overview is not supported by this workspace.')
     return this.transport.getAdminOverview()
   }
 
   async listAdminMembers(input?: AdminMemberListInput): Promise<AdminMember[]> {
+    await this.authorize('admin.members.read')
     if (!this.transport.listAdminMembers) throw new Error('Cloud member administration is not supported by this workspace.')
     return this.transport.listAdminMembers(input)
   }
 
   async inviteAdminMember(input: AdminMemberInviteInput): Promise<AdminMemberInviteResult> {
+    await this.authorize('admin.members.write')
     if (!this.transport.inviteAdminMember) throw new Error('Cloud member administration is not supported by this workspace.')
     return this.transport.inviteAdminMember(input)
   }
 
   async updateAdminMember(accountId: string, input: AdminMemberUpdateInput): Promise<AdminMember> {
+    await this.authorize('admin.members.write')
     if (!this.transport.updateAdminMember) throw new Error('Cloud member administration is not supported by this workspace.')
     return this.transport.updateAdminMember(accountId, input)
   }
 
   async assignAdminMemberRole(accountId: string, roleKey: string | null): Promise<AdminMember> {
+    await this.authorize('admin.members.write')
     if (!this.transport.assignAdminMemberRole) throw new Error('Cloud role assignment is not supported by this workspace.')
     return this.transport.assignAdminMemberRole(accountId, roleKey)
   }
 
   async listPermissionCatalog(): Promise<ControlPlanePermission[]> {
+    await this.authorize('admin.read')
     if (!this.transport.listPermissionCatalog) throw new Error('Cloud role administration is not supported by this workspace.')
     return this.transport.listPermissionCatalog()
   }
 
   async listCustomRoles(): Promise<AdminCustomRole[]> {
+    await this.authorize('admin.roles.read')
     if (!this.transport.listCustomRoles) throw new Error('Cloud role administration is not supported by this workspace.')
     return this.transport.listCustomRoles()
   }
 
   async createCustomRole(input: AdminCreateRoleInput): Promise<AdminCustomRole> {
+    await this.authorize('admin.roles.write')
     if (!this.transport.createCustomRole) throw new Error('Cloud role administration is not supported by this workspace.')
     return this.transport.createCustomRole(input)
   }
 
   async updateCustomRole(roleKey: string, input: AdminUpdateRoleInput): Promise<AdminCustomRole> {
+    await this.authorize('admin.roles.write')
     if (!this.transport.updateCustomRole) throw new Error('Cloud role administration is not supported by this workspace.')
     return this.transport.updateCustomRole(roleKey, input)
   }
 
   async deleteCustomRole(roleKey: string): Promise<boolean> {
+    await this.authorize('admin.roles.write')
     if (!this.transport.deleteCustomRole) throw new Error('Cloud role administration is not supported by this workspace.')
     return this.transport.deleteCustomRole(roleKey)
   }
 
   async getManagedPolicy(): Promise<AdminManagedPolicyResult> {
+    await this.authorize('policy.read')
     if (!this.transport.getManagedPolicy) throw new Error('Cloud managed policy is not supported by this workspace.')
     return this.transport.getManagedPolicy()
   }
 
   async setManagedPolicy(input: AdminSetPolicyInput): Promise<AdminManagedPolicyResult> {
+    await this.authorize('policy.write')
     if (!this.transport.setManagedPolicy) throw new Error('Cloud managed policy is not supported by this workspace.')
     return this.transport.setManagedPolicy(input)
   }
 
   async listProviderKeys(): Promise<AdminProviderKeySecret[]> {
+    await this.authorize(WORKSPACE_PROVIDER_KEY_ACTIONS.read)
     if (!this.transport.listProviderKeys) throw new Error('Cloud provider-key administration is not supported by this workspace.')
     return this.transport.listProviderKeys()
   }
 
   async setProviderKey(providerId: string, input: AdminSetProviderKeyInput): Promise<AdminProviderKeySecret> {
+    await this.authorize(WORKSPACE_PROVIDER_KEY_ACTIONS.write)
     if (!this.transport.setProviderKey) throw new Error('Cloud provider-key administration is not supported by this workspace.')
     return this.transport.setProviderKey(providerId, input)
   }
 
   async deleteProviderKey(providerId: string): Promise<boolean> {
+    await this.authorize(WORKSPACE_PROVIDER_KEY_ACTIONS.write)
     if (!this.transport.deleteProviderKey) throw new Error('Cloud provider-key administration is not supported by this workspace.')
     return this.transport.deleteProviderKey(providerId)
   }
 
   async getSsoConfig(): Promise<AdminSsoConfig | null> {
+    await this.authorize('admin.sso.read')
     if (!this.transport.getSsoConfig) throw new Error('Cloud SSO administration is not supported by this workspace.')
     return this.transport.getSsoConfig()
   }
 
   async getAdminUsageSummary(limit?: number): Promise<AdminUsageSummary> {
+    await this.authorize('usage.read')
     if (!this.transport.getAdminUsageSummary) throw new Error('Cloud usage analytics are not supported by this workspace.')
     return this.transport.getAdminUsageSummary(limit)
   }
 
   async queryAudit(filters?: AdminAuditQuery): Promise<AdminAuditPage> {
+    await this.authorize('admin.audit.read')
     if (!this.transport.queryAudit) throw new Error('Cloud audit log is not supported by this workspace.')
     return this.transport.queryAudit(filters)
   }
 
   async exportAudit(input?: AdminAuditExportInput): Promise<AdminAuditExport> {
+    await this.authorize('admin.audit.read')
     if (!this.transport.exportAudit) throw new Error('Cloud audit export is not supported by this workspace.')
     return this.transport.exportAudit(input)
   }
 
   async searchThreads(query?: ThreadSearchQuery): Promise<ThreadSearchResult> {
+    await this.authorize('threads.read')
     if (!this.transport.searchThreads) throw new Error('Cloud thread search is not supported by this workspace.')
     return this.transport.searchThreads(query)
   }
 
   async threadFacets(query?: ThreadSearchQuery): Promise<ThreadFacetSummary> {
+    await this.authorize('threads.read')
     if (!this.transport.threadFacets) throw new Error('Cloud thread facets are not supported by this workspace.')
     return this.transport.threadFacets(query)
   }
 
   async listThreadTags(): Promise<ThreadTag[]> {
+    await this.authorize('threads.read')
     if (!this.transport.listThreadTags) throw new Error('Cloud thread tags are not supported by this workspace.')
     return this.transport.listThreadTags()
   }
 
   async createThreadTag(input: ThreadTagInput): Promise<ThreadTag> {
+    await this.authorize('threads.write')
     if (!this.transport.createThreadTag) throw new Error('Cloud thread tags are not supported by this workspace.')
     return this.transport.createThreadTag(input)
   }
 
   async updateThreadTag(tagId: string, input: ThreadTagInput): Promise<ThreadTag | null> {
+    await this.authorize('threads.write')
     if (!this.transport.updateThreadTag) throw new Error('Cloud thread tags are not supported by this workspace.')
     return this.transport.updateThreadTag(tagId, input)
   }
 
   async deleteThreadTag(tagId: string): Promise<boolean> {
+    await this.authorize('threads.write')
     if (!this.transport.deleteThreadTag) throw new Error('Cloud thread tags are not supported by this workspace.')
     return this.transport.deleteThreadTag(tagId)
   }
 
   async applyThreadTags(sessionIds: string[], tagIds: string[]): Promise<boolean> {
+    await this.authorize('threads.write')
     if (!this.transport.applyThreadTags) throw new Error('Cloud thread tags are not supported by this workspace.')
     return this.transport.applyThreadTags(sessionIds, tagIds)
   }
 
   async removeThreadTags(sessionIds: string[], tagIds: string[]): Promise<boolean> {
+    await this.authorize('threads.write')
     if (!this.transport.removeThreadTags) throw new Error('Cloud thread tags are not supported by this workspace.')
     return this.transport.removeThreadTags(sessionIds, tagIds)
   }
 
   async listThreadSmartFilters(): Promise<ThreadSmartFilter[]> {
+    await this.authorize('threads.read')
     if (!this.transport.listThreadSmartFilters) throw new Error('Cloud smart filters are not supported by this workspace.')
     return this.transport.listThreadSmartFilters()
   }
 
   async createThreadSmartFilter(input: ThreadSmartFilterInput): Promise<ThreadSmartFilter> {
+    await this.authorize('threads.write')
     if (!this.transport.createThreadSmartFilter) throw new Error('Cloud smart filters are not supported by this workspace.')
     return this.transport.createThreadSmartFilter(input)
   }
 
   async updateThreadSmartFilter(filterId: string, input: ThreadSmartFilterInput): Promise<ThreadSmartFilter | null> {
+    await this.authorize('threads.write')
     if (!this.transport.updateThreadSmartFilter) throw new Error('Cloud smart filters are not supported by this workspace.')
     return this.transport.updateThreadSmartFilter(filterId, input)
   }
 
   async deleteThreadSmartFilter(filterId: string): Promise<boolean> {
+    await this.authorize('threads.write')
     if (!this.transport.deleteThreadSmartFilter) throw new Error('Cloud smart filters are not supported by this workspace.')
     return this.transport.deleteThreadSmartFilter(filterId)
   }
 
   async listArtifacts(sessionId: string): Promise<SessionArtifact[]> {
+    await this.authorize('artifacts.list')
     if (!this.transport.listArtifacts) throw new Error('Cloud artifacts are not supported by this workspace.')
     const inFlight = this.inFlightArtifactLists.get(sessionId)
     if (inFlight) return inFlight
@@ -711,6 +881,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
       this.cache?.upsertArtifactList(cacheKey, sessionId, artifacts)
       return artifacts
     } catch (error) {
+      if (!canUseReadOnlyCacheFallback(error)) throw error
       const cached = this.cache?.listArtifacts(cacheKey, sessionId)
       if (cached) return cached
       throw error
@@ -718,6 +889,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async indexArtifacts(request: ArtifactIndexRequest = {}): Promise<ArtifactIndexPayload> {
+    await this.authorize('artifacts.index')
     if (!this.transport.indexArtifacts) throw new Error('Cloud artifact index is not supported by this workspace.')
     const payload = await this.transport.indexArtifacts(request)
     return {
@@ -730,11 +902,13 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async launchpadFeed(request: LaunchpadFeedRequest = {}): Promise<LaunchpadFeedPayload> {
+    await this.authorize('launchpad.read')
     if (!this.transport.launchpadFeed) throw new Error('Cloud launchpad feed is not supported by this workspace.')
     return this.transport.launchpadFeed(request)
   }
 
   async updateArtifactStatus(request: ArtifactStatusUpdateRequest): Promise<SessionArtifact> {
+    await this.authorize('artifacts.update')
     if (!this.transport.updateArtifactStatus) throw new Error('Cloud artifact status updates are not supported by this workspace.')
     const artifact = await this.transport.updateArtifactStatus(request)
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
@@ -749,6 +923,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async uploadArtifact(input: SessionArtifactUploadRequest): Promise<SessionArtifact> {
+    await this.authorize('artifacts.upload')
     if (!this.transport.uploadArtifact) throw new Error('Cloud artifact uploads are not supported by this workspace.')
     const artifact = await this.transport.uploadArtifact(input.sessionId, {
       filename: input.filename,
@@ -772,36 +947,43 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async readArtifactAttachment(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment> {
+    await this.authorize('artifacts.read')
     if (!this.transport.readArtifactAttachment) throw new Error('Cloud artifact downloads are not supported by this workspace.')
     return this.transport.readArtifactAttachment(sessionId, filePathOrArtifactId)
   }
 
   async listCapabilityTools(): Promise<CapabilityTool[]> {
+    await this.authorize('capabilities.read')
     if (!this.transport.listCapabilityTools) throw new Error('Cloud capabilities are not supported by this workspace.')
     return this.transport.listCapabilityTools()
   }
 
   async getCapabilityTool(toolId: string): Promise<CapabilityTool | null> {
+    await this.authorize('capabilities.read')
     if (!this.transport.getCapabilityTool) throw new Error('Cloud capabilities are not supported by this workspace.')
     return this.transport.getCapabilityTool(toolId)
   }
 
   async listCapabilitySkills(): Promise<CapabilitySkill[]> {
+    await this.authorize('capabilities.read')
     if (!this.transport.listCapabilitySkills) throw new Error('Cloud capabilities are not supported by this workspace.')
     return this.transport.listCapabilitySkills()
   }
 
   async getCapabilitySkillBundle(skillName: string): Promise<CapabilitySkillBundle | null> {
+    await this.authorize('capabilities.read')
     if (!this.transport.getCapabilitySkillBundle) throw new Error('Cloud capabilities are not supported by this workspace.')
     return this.transport.getCapabilitySkillBundle(skillName)
   }
 
   async readCapabilitySkillBundleFile(skillName: string, filePath: string): Promise<string | null> {
+    await this.authorize('capabilities.read')
     if (!this.transport.readCapabilitySkillBundleFile) throw new Error('Cloud capability bundle files are not supported by this workspace.')
     return this.transport.readCapabilitySkillBundleFile(skillName, filePath)
   }
 
   async listSettings(): Promise<CloudTransportSettingMetadata[]> {
+    await this.authorize('settings.read')
     if (!this.transport.listSettings) throw new Error('Cloud settings are not supported by this workspace.')
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     try {
@@ -809,6 +991,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
       this.cache?.upsertSettings(cacheKey, settings)
       return settings
     } catch (error) {
+      if (!canUseReadOnlyCacheFallback(error)) throw error
       const cached = this.cache?.listSettings(cacheKey)
       if (cached) return cached
       throw error
@@ -816,6 +999,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async getSetting(key: string): Promise<CloudTransportSettingMetadata | null> {
+    await this.authorize('settings.read')
     if (!this.transport.getSetting) throw new Error('Cloud settings are not supported by this workspace.')
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     try {
@@ -823,6 +1007,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
       if (setting) this.cache?.upsertSetting(cacheKey, setting)
       return setting
     } catch (error) {
+      if (!canUseReadOnlyCacheFallback(error)) throw error
       const cached = this.cache?.getSetting(cacheKey, key)
       if (cached) return cached
       throw error
@@ -830,6 +1015,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async setSetting(key: string, value: Record<string, unknown>): Promise<CloudTransportSettingMetadata> {
+    await this.authorize('settings.write')
     if (!this.transport.setSetting) throw new Error('Cloud settings are not supported by this workspace.')
     const setting = await this.transport.setSetting(key, value)
     this.cache?.upsertSetting(cloudWorkspaceCacheKey(this.connection), setting)
@@ -837,6 +1023,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   async sync(): Promise<void> {
+    await this.authorize('sessions.list')
     const generation = ++this.syncGeneration
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     const plan = await this.listSessionsForSync(cacheKey, generation)
@@ -870,7 +1057,45 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
     }
   }
 
+  private deferAuthorizedSubscription(
+    action: WorkspaceAction,
+    start: () => CloudTransportSubscription,
+    onError: ((error: unknown) => void) | undefined,
+  ): CloudTransportSubscription {
+    let closed = false
+    let active: CloudTransportSubscription | null = null
+    void this.authorize(action).then(() => {
+      if (!closed) active = start()
+    }).catch((error) => {
+      if (!closed) onError?.(error)
+    })
+    return {
+      close() {
+        closed = true
+        active?.close()
+      },
+    }
+  }
+
   subscribeWorkspaceEvents(
+    input: {
+      afterSequence?: number
+      onEvent: (event: CloudTransportWorkspaceEvent) => void
+      onError?: (error: unknown) => void
+    },
+  ): CloudTransportSubscription {
+    if (!this.featureSnapshot) {
+      return this.deferAuthorizedSubscription(
+        'workspace.events',
+        () => this.openWorkspaceEventSubscription(input),
+        input.onError,
+      )
+    }
+    this.assertCapability('workspace.events')
+    return this.openWorkspaceEventSubscription(input)
+  }
+
+  private openWorkspaceEventSubscription(
     input: {
       afterSequence?: number
       onEvent: (event: CloudTransportWorkspaceEvent) => void
@@ -907,6 +1132,25 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter, Work
   }
 
   subscribeSessionEvents(
+    sessionId: string,
+    input: {
+      afterSequence?: number
+      onEvent: (event: CloudTransportSessionEvent) => void
+      onError?: (error: unknown) => void
+    },
+  ): CloudTransportSubscription {
+    if (!this.featureSnapshot) {
+      return this.deferAuthorizedSubscription(
+        'sessions.events',
+        () => this.openSessionEventSubscription(sessionId, input),
+        input.onError,
+      )
+    }
+    this.assertCapability('sessions.events')
+    return this.openSessionEventSubscription(sessionId, input)
+  }
+
+  private openSessionEventSubscription(
     sessionId: string,
     input: {
       afterSequence?: number

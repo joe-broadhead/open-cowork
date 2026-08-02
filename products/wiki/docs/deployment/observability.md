@@ -7,7 +7,7 @@ OpenWiki exposes three production diagnostic surfaces:
 - Prometheus metrics at `/metrics`
 - readiness component details at `/readyz`
 
-Enable structured logs in hosted deployments:
+Enable structured logs in source-hosted runtimes:
 
 ```sh
 OPENWIKI_STRUCTURED_LOGS=1
@@ -47,9 +47,9 @@ Scrape `/metrics` with an admin-scoped service token, or set
 `OPENWIKI_PUBLIC_METRICS=1` only when an internal network path, service mesh, or
 scrape proxy already protects the endpoint.
 
-Metrics are intentionally process-local and bounded. In multi-replica
-deployments, scrape each replica and aggregate in Prometheus; do not expect one
-OpenWiki process to report another process's counters. The series cap is
+Metrics are intentionally process-local and bounded. When operators run
+multiple processes, scrape each process and aggregate in Prometheus; do not
+expect one OpenWiki process to report another process's counters. The series cap is
 controlled by `OPENWIKI_OPERATIONAL_METRIC_MAX_SERIES`, and labels are limited
 to workspace, normalized route, operation, status, MCP tool, MCP mode, search
 backend/mode, connector kind, write-lock backend/operation, and job/proposal
@@ -74,17 +74,6 @@ Core series:
 | `openwiki_write_lock_acquisitions_total` | Write lock acquisitions, busy responses, and errors. |
 | `openwiki_proposal_lifecycle_events_total` | Proposal lifecycle event counts from the canonical event log. |
 
-Sample artifacts:
-
-- Prometheus alerts: `deploy/observability/prometheus-rules.yaml`
-- Grafana dashboard: `deploy/observability/grafana-dashboard.json`
-
-Validate the dashboard JSON before importing:
-
-```sh
-python3 -m json.tool deploy/observability/grafana-dashboard.json >/dev/null
-```
-
 ## Readiness Details
 
 `/readyz` embeds `/healthz` component details:
@@ -98,4 +87,4 @@ python3 -m json.tool deploy/observability/grafana-dashboard.json >/dev/null
 - `search_index`: local SQLite search index presence
 - `config_safety`: public origin, trusted headers/proxy, and rate-limit posture
 
-Traffic should only be sent to pods whose `/readyz` returns `ready`.
+Traffic should only be sent to processes whose `/readyz` returns `ready`.

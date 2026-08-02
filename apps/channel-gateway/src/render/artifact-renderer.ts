@@ -42,7 +42,7 @@ export async function renderArtifactCreated(input: RenderArtifactInput): Promise
 
   const capabilities = normalizeChannelCapabilities(input.provider.capabilities)
   if (capabilities.fileDownloads && artifact.size <= capabilities.maxFileBytes && input.cloud.readArtifactAttachment) {
-    const attachment = await input.cloud.readArtifactAttachment(input.binding.sessionId, artifact.artifactId)
+    const attachment = await input.cloud.readArtifactAttachment(input.binding.bindingId, artifact.artifactId)
     const file = dataUrlToFile(attachment.url, attachment.filename || artifact.filename, attachment.mime || artifact.mime)
     if (file.data.byteLength <= capabilities.maxFileBytes) {
       const result = await executeRenderOperation(input.provider, {
@@ -66,7 +66,7 @@ export async function renderArtifactCreated(input: RenderArtifactInput): Promise
     artifact: {
       filename: artifact.filename,
       label: artifact.label,
-      url: input.cloud.artifactUrl(input.binding.sessionId, artifact.artifactId),
+      url: input.cloud.artifactUrl(input.binding.bindingId, artifact.artifactId),
     },
   })
   const providerMessageId = result.sentMessage?.messageId ?? existing?.providerMessageId ?? null
@@ -93,7 +93,7 @@ export async function renderArtifactUpdated(input: RenderArtifactInput): Promise
     artifact: {
       filename: artifact.filename,
       label: artifactUpdateLabel(artifact),
-      url: input.cloud.artifactUrl(input.binding.sessionId, artifact.artifactId),
+      url: input.cloud.artifactUrl(input.binding.bindingId, artifact.artifactId),
     },
   })
   const providerMessageId = result.sentMessage?.messageId ?? existing?.providerMessageId ?? null

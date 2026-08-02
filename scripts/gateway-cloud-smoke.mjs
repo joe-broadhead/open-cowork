@@ -335,27 +335,35 @@ async function setupCloudChannelState({ baseUrl, adminToken, adminClient, servic
   const createChannelBinding = requireMethod(adminClient, 'createChannelBinding')
   const resolveChannelIdentity = requireMethod(adminClient, 'resolveChannelIdentity')
 
-  const agentId = `gw-smoke-agent-${runId}`
-  const bindingId = `gw-smoke-binding-${runId}`
+  const requestedAgentId = `gw-smoke-agent-${runId}`
+  const requestedBindingId = `gw-smoke-binding-${runId}`
   const externalUserId = `gw-smoke-user-${runId}`
   const externalChatId = `gw-smoke-chat-${runId}`
   const externalThreadId = `gw-smoke-thread-${runId}`
 
   const agent = await createHeadlessAgent({
-    agentId,
+    agentId: requestedAgentId,
     name: `Gateway deployment smoke ${runId}`,
     profileName: argOrEnv('profile', 'OPEN_COWORK_GATEWAY_SMOKE_PROFILE', 'full'),
     status: 'active',
     managed: false,
   })
+  const agentId = agent?.agentId
+  if (typeof agentId !== 'string' || !agentId) {
+    throw new Error('Cloud did not return the created headless agent id.')
+  }
   const binding = await createChannelBinding({
-    bindingId,
+    bindingId: requestedBindingId,
     agentId,
     provider: 'cli',
     displayName: `Gateway smoke CLI ${runId}`,
     status: 'active',
     settings: { smoke: true },
   })
+  const bindingId = binding?.bindingId
+  if (typeof bindingId !== 'string' || !bindingId) {
+    throw new Error('Cloud did not return the created channel binding id.')
+  }
   const listed = await listChannelBindings(agentId)
   if (!listed.some((entry) => entry.bindingId === bindingId)) {
     throw new Error('Cloud channel binding list did not include the smoke binding.')
@@ -416,8 +424,9 @@ async function grantGatewayTokenChannelBinding(adminClient, issuedToken, channel
   return result
 }
 
-async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, adminClient, setup, timeoutMs, runId }) {
+async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, setup, timeoutMs, runId }) {
   const gatewayAdminToken = `gateway-admin-${runId}`
+  const serviceClient = transport(baseUrl, serviceToken)
   const gatewayEnv = {
     OPEN_COWORK_CLOUD_BASE_URL: baseUrl,
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: serviceToken,
@@ -489,8 +498,8 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
       throw new Error(`Gateway fake webhook prompt returned ${promptResponse.status}: ${String(promptResponse.text).slice(0, 240)}`)
     }
 
-    const getChannelSessionByThread = requireMethod(adminClient, 'getChannelSessionByThread')
-    const getSession = requireMethod(adminClient, 'getSession')
+    const getChannelSessionByThread = requireMethod(serviceClient, 'getChannelSessionByThread')
+    const getChannelSessionSnapshot = requireMethod(serviceClient, 'getChannelSessionSnapshot')
     const bound = await waitFor(
       () => getChannelSessionByThread({
         provider: 'cli',
@@ -504,7 +513,7 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
     const sessionId = cloudSessionId(bound.session)
     const promptView = await waitFor(
       async () => {
-        const view = await getSession(sessionId)
+        const view = await getChannelSessionSnapshot(bound.binding.bindingId)
         const shape = projectionShape(view)
         if (shape.errors > 0 || shape.lastError) {
           throw new Error(`Gateway prompt produced cloud session errors: ${shape.lastError || 'projection errors'}`)
@@ -523,15 +532,15 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
       timeoutMs,
     )
 
-    const createChannelInteraction = requireMethod(adminClient, 'createChannelInteraction')
+    const createChannelInteraction = requireMethod(serviceClient, 'createChannelInteraction')
     const interaction = await createChannelInteraction({
       agentId: setup.ids.agentId,
+      sessionBindingId: bound.binding.bindingId,
       sessionId,
       provider: 'cli',
       kind: 'permission',
       targetId: `gw-smoke-permission-${runId}`,
       externalInteractionId: `gw-smoke-interaction-${runId}`,
-      createdByIdentityId: setup.identity.identityId,
     })
     const approvalToken = `apv:${interaction.plaintextToken}`
     const approvalResponse = await requestJson(`${gatewayUrl}/webhooks/fake`, {
@@ -559,7 +568,7 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
     )
 
     const deliveryId = `gw-smoke-delivery-${runId}`
-    await createDelivery(baseUrl, adminToken, {
+    await createDelivery(baseUrl, serviceToken, {
       deliveryId,
       agentId: setup.ids.agentId,
       channelBindingId: setup.ids.bindingId,
@@ -578,7 +587,7 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
       'async/proactive channel delivery rendering',
       timeoutMs,
     )
-    const listChannelDeliveries = requireMethod(adminClient, 'listChannelDeliveries')
+    const listChannelDeliveries = requireMethod(serviceClient, 'listChannelDeliveries')
     const sentDelivery = await waitFor(
       async () => (await listChannelDeliveries({ channelBindingId: setup.ids.bindingId, limit: 50 }))
         .find((delivery) => delivery.deliveryId === deliveryId),
@@ -589,7 +598,7 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
 
     const failedRetryId = `gw-smoke-retry-${runId}`
     forcedDeliveryFailures.set(failedRetryId, 60_000)
-    await createDelivery(baseUrl, adminToken, {
+    await createDelivery(baseUrl, serviceToken, {
       deliveryId: failedRetryId,
       agentId: setup.ids.agentId,
       channelBindingId: setup.ids.bindingId,
@@ -631,7 +640,7 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
 
     const failedDeadId = `gw-smoke-dead-${runId}`
     forcedDeliveryFailures.set(failedDeadId, 60_000)
-    await createDelivery(baseUrl, adminToken, {
+    await createDelivery(baseUrl, serviceToken, {
       deliveryId: failedDeadId,
       agentId: setup.ids.agentId,
       channelBindingId: setup.ids.bindingId,
@@ -714,8 +723,6 @@ async function runSmoke() {
     const selfHost = await runSelfHostGatewaySmoke({
       baseUrl,
       serviceToken: tokenState.serviceToken,
-      adminToken: tokenState.adminToken,
-      adminClient: tokenState.adminClient,
       setup,
       timeoutMs,
       runId,

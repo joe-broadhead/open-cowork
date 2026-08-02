@@ -97,7 +97,7 @@ export interface OpenWikiRuntimeConfig {
   schema_pack?: OpenWikiSchemaPackConfig;
 }
 
-export type OpenWikiRuntimeProfile = "local" | "team" | "hosted" | "static" | "compose" | "umbrel" | "cloud" | "enterprise";
+export type OpenWikiRuntimeProfile = "local" | "team" | "hosted" | "static" | "enterprise";
 export type OpenWikiRuntimeMode = "local" | "team" | "hosted" | "enterprise";
 
 export function openWikiRuntimeModeFromProfile(profile: string | undefined): OpenWikiRuntimeMode {
@@ -107,10 +107,10 @@ export function openWikiRuntimeModeFromProfile(profile: string | undefined): Ope
   if (profile === "enterprise") {
     return "enterprise";
   }
-  if (profile === "hosted" || profile === "cloud") {
+  if (profile === "hosted") {
     return "hosted";
   }
-  if (profile === "team" || profile === "compose" || profile === "umbrel") {
+  if (profile === "team") {
     return "team";
   }
   throw new Error(`Invalid OpenWiki runtime profile '${profile}'`);

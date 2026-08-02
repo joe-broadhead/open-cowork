@@ -3,7 +3,7 @@
 ## 21. v0.1 Reference Implementation Status
 
 The v0.1 reference implementation includes the original MVP plus the first
-protocol adapters and deployment packs:
+protocol adapters and product surfaces:
 
 - protocol spec, language ADR, and JSON Schemas for core records and search responses
 - TypeScript pnpm workspace with core, repo, search, policy, validation, workflows, jobs, storage, connectors, MCP, HTTP, CLI, static export, Git, and OpenCode harness packages
@@ -15,7 +15,8 @@ protocol adapters and deployment packs:
 - source ingestion hardening, bounded fetches, connector/credential references, and local object storage for large captures
 - server-rendered human views for dashboard, records, governance artifacts, proposals, and source content
 - Open Cowork and OpenCode integration packs
-- Docker, Docker Compose, Umbrel, Kubernetes, Helm, Terraform, and GitHub Pages workflow packaging
+- source checkout, generated CLI tarball, static export, and source-operated
+  HTTP/MCP runtime
 
 Remaining v0.x follow-up areas are semantic embeddings, optional cross-encoder
 reranking, Redis or managed queue adapters, hosted object-store adapters, and

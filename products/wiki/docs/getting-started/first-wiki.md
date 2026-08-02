@@ -28,5 +28,5 @@ openwiki --root /tmp/openwiki-demo questions --json
 ```
 
 `index` builds the local search index. `db rebuild` builds the local index-store
-used by readiness, graph, and record-browsing paths. Docker runs both on boot;
-source-checkout users should run both before serving a new wiki.
+used by readiness, graph, and record-browsing paths. Source-checkout and CLI
+tarball users should run both before serving a new wiki.

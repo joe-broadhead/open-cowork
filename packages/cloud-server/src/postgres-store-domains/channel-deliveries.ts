@@ -1,4 +1,5 @@
 import { redactOperationalText } from '../operational-text-redaction.ts'
+import { createHash } from 'node:crypto'
 import {
   ControlPlaneQuotaExceededError,
   type AckChannelDeliveryInput,
@@ -9,6 +10,7 @@ import {
   type QuotaConsumptionRecord,
 } from '../control-plane-store.ts'
 import { normalizeChannelProviderId as normalizeProvider } from '../channel-provider-utils.ts'
+import { encodeChannelDeliveryIdentity } from '../channel-delivery-identity.ts'
 import { channelDeliveryFromRow } from '../postgres-domains/channels.ts'
 import { jsonRecord, type QueryResult, type QueryRow } from '../postgres-domains/shared.ts'
 
@@ -37,6 +39,8 @@ export class PostgresChannelDeliveriesRepository {
   async create(input: CreateChannelDeliveryInput) {
     const now = nowIso(input.createdAt)
     const provider = normalizeProvider(input.provider)
+    const publicDeliveryId = normalizeText(input.deliveryId, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery id')
+    const storageDeliveryId = channelDeliveryStorageId(input.orgId, input.channelBindingId, publicDeliveryId)
     const relationship = await maybeOne(
       this.options.pool,
       `SELECT b.binding_id
@@ -61,15 +65,16 @@ export class PostgresChannelDeliveriesRepository {
     if (!relationship) throw new Error('Channel delivery references must belong to the same org, agent, provider, binding, and session binding.')
     const result = await this.options.pool.query(
       `INSERT INTO cloud_channel_deliveries (
-        delivery_id, org_id, agent_id, channel_binding_id, session_binding_id,
+        delivery_id, public_delivery_id, org_id, agent_id, channel_binding_id, session_binding_id,
         provider, target, event_type, payload, status, attempt_count,
         claimed_by, last_claimed_by, claim_expires_at, next_attempt_at, last_error, created_at, updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, 0, NULL, NULL, NULL, $11, NULL, $12, $12)
-       ON CONFLICT (delivery_id) DO NOTHING
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, 0, NULL, NULL, NULL, $12, NULL, $13, $13)
+       ON CONFLICT (org_id, channel_binding_id, public_delivery_id) DO NOTHING
        RETURNING *`,
       [
-        input.deliveryId,
+        storageDeliveryId,
+        publicDeliveryId,
         input.orgId,
         input.agentId,
         input.channelBindingId,
@@ -85,8 +90,9 @@ export class PostgresChannelDeliveriesRepository {
     )
     const row = result.rows[0] || await one(
       this.options.pool,
-      `SELECT * FROM cloud_channel_deliveries WHERE org_id = $1 AND delivery_id = $2`,
-      [input.orgId, input.deliveryId],
+      `SELECT * FROM cloud_channel_deliveries
+       WHERE org_id = $1 AND channel_binding_id = $2 AND public_delivery_id = $3`,
+      [input.orgId, input.channelBindingId, publicDeliveryId],
     )
     return channelDeliveryFromRow(row)
   }
@@ -97,7 +103,7 @@ export class PostgresChannelDeliveriesRepository {
     const values: unknown[] = [input.orgId]
     if (input.deliveryId) {
       values.push(input.deliveryId)
-      conditions.push(`delivery_id = $${values.length}`)
+      conditions.push(`public_delivery_id = $${values.length}`)
     }
     if (input.status) {
       values.push(input.status)
@@ -189,7 +195,22 @@ export class PostgresChannelDeliveriesRepository {
   async ack(input: AckChannelDeliveryInput) {
     if (input.channelBindingIds?.length === 0) return null
     const result = await this.options.pool.query(
-      `UPDATE cloud_channel_deliveries
+      `WITH candidates AS (
+         SELECT delivery_id
+         FROM cloud_channel_deliveries
+         WHERE org_id = $1
+           AND public_delivery_id = $2
+           AND ($9::text[] IS NULL OR channel_binding_id = ANY($9::text[]))
+           AND ($10::text IS NULL OR channel_binding_id = $10)
+           AND ($7::text IS NULL OR claimed_by = $7)
+           AND ($8::text IS NULL OR last_claimed_by = $8)
+         LIMIT 2
+       ), singleton AS (
+         SELECT min(delivery_id) AS delivery_id
+         FROM candidates
+         HAVING count(*) = 1
+       )
+       UPDATE cloud_channel_deliveries AS delivery
        SET status = $3,
            claimed_by = NULL,
            last_claimed_by = COALESCE($8, last_claimed_by),
@@ -197,14 +218,8 @@ export class PostgresChannelDeliveriesRepository {
            last_error = $4,
            next_attempt_at = $5,
            updated_at = $6
-       WHERE org_id = $1
-         AND delivery_id = $2
-         AND ($9::text[] IS NULL OR channel_binding_id = ANY($9::text[]))
-         AND ($7::text IS NULL OR claimed_by = $7)
-         AND (
-           $8::text IS NULL
-           OR last_claimed_by = $8
-         )
+       FROM singleton
+       WHERE delivery.delivery_id = singleton.delivery_id
        RETURNING *`,
       [
         input.orgId,
@@ -216,6 +231,7 @@ export class PostgresChannelDeliveriesRepository {
         input.claimedBy || null,
         input.lastClaimedBy || null,
         input.channelBindingIds?.length ? [...input.channelBindingIds] : null,
+        input.channelBindingId || null,
       ],
     )
     return result.rows[0] ? channelDeliveryFromRow(result.rows[0]) : null
@@ -240,6 +256,13 @@ export class PostgresChannelDeliveriesRepository {
     )
     return result.rows.length
   }
+}
+
+function channelDeliveryStorageId(orgId: string, channelBindingId: string, deliveryId: string) {
+  return `channel_delivery_${createHash('sha256')
+    .update(encodeChannelDeliveryIdentity(orgId, channelBindingId, deliveryId))
+    .digest('hex')
+    .slice(0, 40)}`
 }
 
 async function one<Row extends QueryRow = QueryRow>(executor: PgExecutor, text: string, values?: unknown[]) {

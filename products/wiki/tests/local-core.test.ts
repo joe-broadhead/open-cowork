@@ -61,17 +61,16 @@ function restoreOptionalEnv(name: string, value: string | undefined): void {
   process.env[name] = value;
 }
 
-test("runtime profiles resolve to deployment runtime modes", () => {
+test("runtime profiles resolve to runtime modes and reject retired aliases", () => {
   assert.equal(openWikiRuntimeModeFromProfile(undefined), "local");
   assert.equal(openWikiRuntimeModeFromProfile("local"), "local");
   assert.equal(openWikiRuntimeModeFromProfile("static"), "local");
   assert.equal(openWikiRuntimeModeFromProfile("team"), "team");
-  assert.equal(openWikiRuntimeModeFromProfile("compose"), "team");
-  assert.equal(openWikiRuntimeModeFromProfile("umbrel"), "team");
   assert.equal(openWikiRuntimeModeFromProfile("hosted"), "hosted");
-  assert.equal(openWikiRuntimeModeFromProfile("cloud"), "hosted");
   assert.equal(openWikiRuntimeModeFromProfile("enterprise"), "enterprise");
-  assert.throws(() => openWikiRuntimeModeFromProfile("hosted-postgres"), /Invalid OpenWiki runtime profile/);
+  for (const invalid of ["compose", "umbrel", "cloud", "hosted-postgres"]) {
+    assert.throws(() => openWikiRuntimeModeFromProfile(invalid), /Invalid OpenWiki runtime profile/);
+  }
   assert.equal(openWikiRuntimeModeFromEnvOrProfile({ OPENWIKI_RUNTIME_MODE: "hosted" }, "local"), "hosted");
   assert.equal(openWikiRuntimeModeFromEnvOrProfile({ OPENWIKI_RUNTIME_MODE: " enterprise " }, "local"), "enterprise");
   assert.throws(

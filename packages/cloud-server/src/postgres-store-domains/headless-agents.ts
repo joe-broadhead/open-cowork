@@ -1,6 +1,7 @@
 import { nowIso } from '../postgres-store-id-helpers.ts'
 import { normalizeText } from '../postgres-store-normalizers.ts'
 import { headlessAgentFromRow } from '../postgres-domains/channels.ts'
+import { ControlPlaneIdConflictError } from '../control-plane-errors.ts'
 import type { QueryResult, QueryRow } from '../postgres-domains/shared.ts'
 import type {
   CreateHeadlessAgentInput,
@@ -57,11 +58,12 @@ export class PostgresHeadlessAgentsRepository {
           now,
         ],
       )
-      const row = result.rows[0] || await this.one(
+      const row = result.rows[0] || await this.maybeOne(
         `SELECT * FROM headless_agents WHERE agent_id = $1 AND org_id = $2`,
         [input.agentId, input.orgId],
         client,
       )
+      if (!row) throw new ControlPlaneIdConflictError('headless_agent')
       const agent = headlessAgentFromRow(row)
       if (result.rows[0]) {
         await this.options.recordAuditEvent(client, {
@@ -149,8 +151,12 @@ export class PostgresHeadlessAgentsRepository {
     return result.rows[0]
   }
 
-  private async maybeOne<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]) {
-    const result = await this.options.pool.query<Row>(text, values)
+  private async maybeOne<Row extends QueryRow = QueryRow>(
+    text: string,
+    values?: unknown[],
+    executor: PgExecutor = this.options.pool,
+  ) {
+    const result = await executor.query<Row>(text, values)
     return result.rows[0] || null
   }
 }

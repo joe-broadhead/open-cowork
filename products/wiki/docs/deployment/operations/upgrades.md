@@ -1,41 +1,32 @@
 # Upgrades
 
-## Upgrades And Rollback
+OpenWiki upgrades are explicit source commits or GitHub release tarballs. The
+CLI does not query or install from the npm registry.
 
-For personal or local CLI installs, back up the workspace before changing the
-installed package:
-
-```sh
-openwiki backup create --verify
-npm install -g @openwiki/cli@latest
-openwiki self-check
-openwiki doctor --profile personal
-```
-
-If the post-upgrade checks fail, reinstall the previous known-good CLI version
-and keep the verified backup until the workspace has passed smoke checks:
+## Before Upgrade
 
 ```sh
-npm install -g @openwiki/cli@0.0.0
-openwiki self-check
-openwiki doctor --profile personal
+openwiki --root <wiki> doctor --profile personal --json
+openwiki --root <wiki> backup create --verify --json
+openwiki --root <wiki> backup rehearse --target-root <disposable-path> --json
 ```
 
-Upgrade sequence:
+Stop writers before changing the runtime. Record the source commit or tarball
+checksum currently in service.
 
-1. Read the changelog and release notes.
-2. Back up Git, Postgres, object storage, and secrets.
-3. Deploy the digest-pinned image to a staging workspace clone.
-4. Run migrations, full Postgres sync, lint, and smoke checks.
-5. Deploy production with the same digest.
-6. Watch `/readyz`, `/metrics`, recent events, and run failures.
+## Tarball Upgrade
 
-Rollback sequence:
+```sh
+npm install -g ./openwiki-cli-<new-version>.tgz
+openwiki self-check
+openwiki --root <wiki> doctor --profile personal --json
+```
 
-1. Stop workers first.
-2. Roll the web deployment back to the previous digest.
-3. Restore Postgres only if the migration is not backward-compatible.
-4. Rebuild derived stores from Git.
-5. Resume workers after queue and Git state are understood.
+## Rollback
 
-Do not roll back by editing generated static artifacts or derived database rows.
+Stop writers, reinstall the previous known-good tarball (or check out the
+previous source commit), restore only if a migration or write corrupted state,
+then rebuild derived indexes and run doctor again.
+
+Do not edit generated indexes or static output as rollback state; Git and
+verified backups are canonical.

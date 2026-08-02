@@ -272,7 +272,7 @@ test('cloud HTTP rejects channel APIs when the cloud profile disables them', asy
   })
   const baseUrl = await fixture.server.listen()
   try {
-    const response = await fetch(`${baseUrl}/api/channels`)
+    const response = await fetch(`${baseUrl}/api/channels/providers`)
     assert.equal(response.status, 403)
     const body = await readJson(response)
     assert.match(String(body.error), /Channels are disabled/)

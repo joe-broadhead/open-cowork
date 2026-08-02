@@ -74,7 +74,11 @@ function portTransport(): CloudTransportAdapter {
     getConfig: async () => ({
       role: 'web',
       profileName: 'default',
-      features: { sessions: true },
+      features: {
+        chat: true,
+        artifacts: true,
+        workflows: true,
+      },
       allowedAgents: ['data-analyst'],
       allowedTools: ['read'],
       allowedMcps: [],
@@ -272,6 +276,7 @@ test('workspace-gateway cloudSessionPort returns WorkspaceSessionPort from facto
     transport: portTransport(),
     cache: null,
   })
+  await adapter.policy()
   assertWorkspaceSessionPort(adapter)
 
   const credentials = {

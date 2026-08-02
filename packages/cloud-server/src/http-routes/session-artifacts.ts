@@ -5,10 +5,6 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
   const { req, res, options, context, resource, itemId: sessionId, action, artifactId, tools } = input
   if (resource !== 'sessions' || action !== 'artifacts' || !sessionId) return false
 
-  if (!options.policy.features.artifacts) {
-    tools.writePolicyError(res, 403, 'Artifacts are disabled for this cloud profile.', 'artifacts.disabled', options.corsOrigin)
-    return true
-  }
   if (req.method === 'GET') {
     await options.service.getSessionView(context.principal, sessionId)
   }

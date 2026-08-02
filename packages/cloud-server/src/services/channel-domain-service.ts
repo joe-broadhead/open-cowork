@@ -32,6 +32,12 @@ import * as deliveryActions from './channel-delivery-actions.ts'
 import * as interactionActions from './channel-interaction-actions.ts'
 import * as providerEventActions from './channel-provider-event-actions.ts'
 import * as sessionActions from './channel-session-actions.ts'
+import {
+  type GatewayChannelBindingTarget,
+  hasActiveGatewayChannelBindingScope,
+  resolveGatewayChannelBindingScope,
+  resolveGatewayChannelSessionBinding,
+} from './channel-binding-scope.ts'
 
 export type {
   ChannelActorInput,
@@ -120,7 +126,6 @@ export class CloudChannelDomainService {
       channelBindingId?: string | null
       externalWorkspaceId?: string | null
       externalUserId: string
-      identityId?: string | null
       accountId?: string | null
       role?: ChannelIdentityRecord['role']
       status?: ChannelIdentityRecord['status']
@@ -172,6 +177,32 @@ export class CloudChannelDomainService {
     return sessionActions.getChannelSessionByThread(this.options, principal, input)
   }
 
+  async getAuthorizedChannelSessionBinding(
+    principal: CloudPrincipal,
+    sessionBindingId: string,
+  ): Promise<ChannelSessionBindingRecord> {
+    await this.options.ensurePrincipal(principal)
+    return resolveGatewayChannelSessionBinding(this.options, principal, sessionBindingId)
+  }
+
+  async assertGatewayChannelBindingScope(
+    principal: CloudPrincipal,
+    channelBindingIds?: readonly string[] | null,
+  ): Promise<void> {
+    await this.options.ensurePrincipal(principal)
+    await resolveGatewayChannelBindingScope(this.options, principal, channelBindingIds)
+  }
+
+  async hasActiveGatewayChannelBindingScope(
+    principal: CloudPrincipal,
+    target: GatewayChannelBindingTarget = {},
+  ): Promise<boolean> {
+    // Central authorization calls this before domain handlers. Authentication
+    // already resolved the token membership; keep this proof read-only so a
+    // denied route cannot trigger principal bootstrap writes.
+    return hasActiveGatewayChannelBindingScope(this.options, principal, target)
+  }
+
   updateChannelCursor(
     principal: CloudPrincipal,
     input: {
@@ -190,7 +221,6 @@ export class CloudChannelDomainService {
       bindingId: string
       text: string
       agent?: string | null
-      commandId?: string | null
     },
   ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
     return sessionActions.enqueueChannelPrompt(this.options, principal, input)
@@ -200,12 +230,12 @@ export class CloudChannelDomainService {
     principal: CloudPrincipal,
     input: {
       agentId: string
+      sessionBindingId?: string | null
       sessionId: string
       provider: ChannelProviderId
       kind: ChannelInteractionRecord['kind']
       targetId: string
       externalInteractionId?: string | null
-      createdByIdentityId?: string | null
       expiresAt?: Date | null
       interactionId?: string | null
       tokenSecret?: string | null
@@ -263,13 +293,16 @@ export class CloudChannelDomainService {
     return deliveryActions.listChannelDeliveries(this.options, principal, input)
   }
 
-  retryChannelDelivery(principal: CloudPrincipal, deliveryId: string): Promise<PublicChannelDeliveryRecord | null> {
-    return deliveryActions.retryChannelDelivery(this.options, principal, deliveryId)
+  retryChannelDelivery(
+    principal: CloudPrincipal,
+    input: { deliveryId: string, channelBindingId?: string | null },
+  ): Promise<PublicChannelDeliveryRecord | null> {
+    return deliveryActions.retryChannelDelivery(this.options, principal, input)
   }
 
   deadLetterChannelDelivery(
     principal: CloudPrincipal,
-    input: { deliveryId: string, lastError?: string | null },
+    input: { deliveryId: string, channelBindingId?: string | null, lastError?: string | null },
   ): Promise<PublicChannelDeliveryRecord | null> {
     return deliveryActions.deadLetterChannelDelivery(this.options, principal, input)
   }
@@ -285,6 +318,7 @@ export class CloudChannelDomainService {
     principal: CloudPrincipal,
     input: {
       deliveryId: string
+      channelBindingId?: string | null
       claimedBy?: string | null
       status: Extract<ChannelDeliveryRecord['status'], 'sent' | 'failed' | 'dead'>
       lastError?: string | null

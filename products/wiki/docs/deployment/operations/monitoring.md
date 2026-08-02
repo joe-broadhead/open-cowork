@@ -3,8 +3,8 @@
 ## Abuse Controls
 
 Hosted OpenWiki applies route-specific rate limits when explicitly enabled,
-when the workspace runtime profile is `compose`, `umbrel`, `cloud`, or
-`enterprise`, or when `OPENWIKI_PUBLIC_ORIGIN` is set. Local workspaces stay
+when the workspace runtime profile is `hosted` or `enterprise`, or when
+`OPENWIKI_PUBLIC_ORIGIN` is set. Local workspaces stay
 permissive by default so a developer can run evals, imports, and MCP smoke tests
 without tripping production controls.
 
@@ -14,24 +14,24 @@ any visible dimension exceeds the route bucket. Tokens and IPs are hashed before
 they appear in logs or metric labels.
 
 By default, MCP HTTP sessions, rate-limit windows, and Prometheus counters live
-inside one web process. This is correct for local and single-node deployments
+inside one web process. This is correct for local and single-process runtimes
 and remains bounded by `OPENWIKI_RATE_LIMIT_MAX_KEYS` and
 `OPENWIKI_OPERATIONAL_METRIC_MAX_SERIES`.
 
-Set `OPENWIKI_OPERATIONAL_STATE_BACKEND=postgres` for horizontally scaled HTTP
-deployments. The Postgres backend stores Streamable HTTP MCP sessions and
-rate-limit windows by workspace so a session created by one replica can be used
-by another, and excessive requests are rejected consistently across replicas.
-Prometheus metrics stay process-local by design; scrape every replica and let
+Set `OPENWIKI_OPERATIONAL_STATE_BACKEND=postgres` when operating multiple HTTP
+processes. The Postgres backend stores Streamable HTTP MCP sessions and
+rate-limit windows by workspace so a session created by one process can be used
+by another, and excessive requests are rejected consistently across processes.
+Prometheus metrics stay process-local by design; scrape every process and let
 Prometheus aggregate bounded labels.
 
 Recommended starting points:
 
-| Deployment | Setting |
+| Runtime | Setting |
 | --- | --- |
 | Local personal wiki | Leave rate limits disabled, or set `OPENWIKI_RATE_LIMIT_ENABLED=0`. |
 | Private team behind SSO, one web process | Enable limits with the defaults and keep `OPENWIKI_OPERATIONAL_STATE_BACKEND=memory`. |
-| Enterprise/shared HTTP MCP, multiple web replicas | Set `OPENWIKI_OPERATIONAL_STATE_BACKEND=postgres`, enable limits, keep source/auth buckets low, and allocate service-account tokens per integration so token-level isolation is useful. |
+| Enterprise/shared HTTP MCP, multiple web processes | Set `OPENWIKI_OPERATIONAL_STATE_BACKEND=postgres`, enable limits, keep source/auth buckets low, and allocate service-account tokens per integration so token-level isolation is useful. |
 
 The same values can be stored in `openwiki.json` under
 `runtime.controls.rate_limits`; environment variables override config values for
@@ -40,7 +40,7 @@ operational changes during an incident.
 ```json
 {
   "runtime": {
-    "profile": "cloud",
+    "profile": "hosted",
     "controls": {
       "rate_limits": {
         "enabled": true,
@@ -116,7 +116,7 @@ curl --fail -H "Authorization: Bearer $OPENWIKI_ADMIN_TOKEN" http://127.0.0.1:30
 ```
 
 Readiness failures should block traffic. Liveness failures should restart the
-container. Metrics should be protected by network policy or an internal scrape
+process. Metrics should be protected by a network policy or an internal scrape
 path.
 `openwiki serve` handles SIGTERM and SIGINT by closing the listener, rejecting
 new requests, draining existing connections, and force-closing remaining
@@ -129,7 +129,7 @@ scrape_configs:
   - job_name: openwiki
     metrics_path: /metrics
     static_configs:
-      - targets: ["openwiki.default.svc.cluster.local:3030"]
+      - targets: ["127.0.0.1:3030"]
 ```
 
 Key operational metrics:
@@ -151,6 +151,6 @@ Key operational metrics:
 | `openwiki_source_fetch_attempts_total` | Source fetch successes, failures, and timeouts by connector kind. |
 | `openwiki_source_fetch_duration_seconds_total` and `openwiki_source_fetch_duration_seconds_count` | Source fetch duration by connector kind and status. |
 
-Sample Prometheus alerts and a Grafana dashboard live in
-`deploy/observability/`. See the Observability guide for import and scrape
-details.
+Define alerts and dashboards in operator-owned monitoring infrastructure. The
+[Observability guide](../observability.md) documents the stable metrics and
+scrape boundary.

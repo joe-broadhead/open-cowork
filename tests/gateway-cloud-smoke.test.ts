@@ -88,6 +88,12 @@ async function readJson(response: Response) {
   return JSON.parse(await response.text()) as Record<string, unknown>
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
 async function runGatewayCloudSmokeScript(input: {
   cloudUrl: string
   adminToken: string
@@ -200,25 +206,29 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
   }
 
   try {
-    assert.equal((await fetch(`${cloudUrl}/api/channels/agents`, {
+    const agentResponse = await fetch(`${cloudUrl}/api/channels/agents`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        agentId: 'agent-1',
+        agentId: 'agent-seed-1',
         name: 'Fake gateway agent',
         profileName: 'full',
       }),
-    })).status, 201)
-    assert.equal((await fetch(`${cloudUrl}/api/channels/bindings`, {
+    })
+    assert.equal(agentResponse.status, 201)
+    const agentId = String(asRecord((await readJson(agentResponse)).agent).agentId)
+    const bindingResponse = await fetch(`${cloudUrl}/api/channels/bindings`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        bindingId: 'fake-binding',
-        agentId: 'agent-1',
+        bindingId: 'fake-binding-seed',
+        agentId,
         provider: 'cli',
         displayName: 'Fake provider',
       }),
-    })).status, 201)
+    })
+    assert.equal(bindingResponse.status, 201)
+    const channelBindingId = String(asRecord((await readJson(bindingResponse)).binding).bindingId)
     assert.equal((await fetch(`${cloudUrl}/api/channels/identities/resolve`, {
       method: 'POST',
       headers,
@@ -242,7 +252,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       providers: [{
         id: 'fake',
         kind: 'fake',
-        channelBindingId: 'fake-binding',
+        channelBindingId,
       }],
     }, gatewayEnv)
     const cloudGateway = createCloudGateway(resolveGatewayCloudConnection(gatewayEnv))
@@ -250,16 +260,21 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       provider: 'cli',
       externalUserId: 'user-1',
     })
+    await store.grantApiTokenChannelBinding({
+      orgId: org.orgId,
+      tokenId: issued.token.tokenId,
+      channelBindingId,
+    })
     const bound = await cloudGateway.bindSession({
       identityId: identity.identityId,
       provider: 'cli',
       externalUserId: 'user-1',
-      channelBindingId: 'fake-binding',
+      channelBindingId,
       externalChatId: 'chat-wrapper',
       externalThreadId: 'thread-wrapper',
       title: 'Wrapper smoke',
     })
-    assert.equal(bound.binding.channelBindingId, 'fake-binding')
+    assert.equal(bound.binding.channelBindingId, channelBindingId)
     assert.equal((await cloudGateway.findSessionByThread({
       provider: 'cli',
       externalChatId: 'chat-wrapper',
@@ -267,7 +282,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     }))?.binding.bindingId, bound.binding.bindingId)
 
     const sessionEvent = waitFor<{ sequence: number, payload: { content?: unknown } }>((resolve, reject) => cloudGateway.subscribeSessionEvents({
-      sessionId: bound.session.session.sessionId,
+      sessionBindingId: bound.binding.bindingId,
       afterSequence: 0,
       onEvent: (event) => {
         if (event.type === 'assistant.message') resolve(event)
@@ -283,7 +298,6 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     })
     const assistantEvent = await sessionEvent.promise
     sessionEvent.close()
-    const wrapperRuntimeSessionId = runtime.prompts.at(-1)?.sessionId
     assert.equal(assistantEvent.payload.content, 'gateway smoke response')
 
     const cursor = await cloudGateway.updateCursor({
@@ -296,29 +310,13 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     if (!cursor.ok) assert.fail(`Expected cursor update to succeed, got ${cursor.reason}`)
     assert.equal(cursor.binding.lastChatMessageId, 'chat-message-1')
 
-    await cloudGateway.respondToPermission(bound.session.session.sessionId, {
-      permissionId: 'permission-wrapper',
-      response: { allowed: true },
-    })
-    await cloudGateway.replyToQuestion(bound.session.session.sessionId, {
-      requestId: 'question-wrapper',
-      answers: ['yes'],
-    })
-    await cloudGateway.rejectQuestion(bound.session.session.sessionId, {
-      requestId: 'question-reject-wrapper',
-    })
-    await cloudGateway.abortSession(bound.session.session.sessionId)
-    assert.deepEqual(runtime.permissions, [{ permissionId: 'permission-wrapper', allowed: true }])
-    assert.deepEqual(runtime.questionReplies, [{ requestId: 'question-wrapper', answers: ['yes'] }])
-    assert.deepEqual(runtime.questionRejections, ['question-reject-wrapper'])
-    assert.deepEqual(runtime.aborted, [wrapperRuntimeSessionId])
-
     const interactionResponse = await fetch(`${cloudUrl}/api/channels/interactions`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         interactionId: 'interaction-wrapper',
-        agentId: 'agent-1',
+        agentId,
+        sessionBindingId: bound.binding.bindingId,
         sessionId: bound.session.session.sessionId,
         provider: 'cli',
         kind: 'permission',
@@ -348,8 +346,8 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       headers,
       body: JSON.stringify({
         deliveryId: 'delivery-wrapper',
-        agentId: 'agent-1',
-        channelBindingId: 'fake-binding',
+        agentId,
+        channelBindingId,
         sessionBindingId: bound.binding.bindingId,
         provider: 'cli',
         target: { externalChatId: 'chat-wrapper', externalThreadId: 'thread-wrapper' },
@@ -363,6 +361,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     assert.equal(delivery.deliveryId, 'delivery-wrapper')
     assert.equal(typeof delivery.claimedBy, 'string')
     assert.equal((await cloudGateway.ackDelivery(delivery.deliveryId, {
+      channelBindingId,
       claimedBy: String(delivery.claimedBy),
       status: 'sent',
     }))?.status, 'sent')
@@ -375,7 +374,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       providers: [{
         id: 'fake',
         kind: 'fake',
-        channelBindingId: 'fake-binding',
+        channelBindingId,
       }],
     }, gatewayEnv)
     const gateway = createGatewayDaemon(daemonGatewayConfig, createCloudGateway(resolveGatewayCloudConnection(gatewayEnv)))

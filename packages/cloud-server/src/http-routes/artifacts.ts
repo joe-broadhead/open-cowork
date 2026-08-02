@@ -47,10 +47,6 @@ function artifactQuery(input: CloudApiRouteInput): ArtifactIndexRequest | null {
 export async function handleArtifactsApiRoute(input: CloudApiRouteInput): Promise<boolean> {
   const { req, res, options, itemId, action, tools } = input
   if (input.resource !== 'artifacts') return false
-  if (!options.policy.features.artifacts) {
-    tools.writePolicyError(res, 403, 'Artifacts are disabled for this cloud profile.', 'artifacts.disabled', options.corsOrigin)
-    return true
-  }
   if (!options.artifacts) {
     tools.writeError(res, 503, 'Cloud artifact storage is not configured.', options.corsOrigin)
     return true

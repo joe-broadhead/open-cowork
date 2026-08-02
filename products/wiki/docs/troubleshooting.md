@@ -101,12 +101,3 @@ openwiki --root ./wiki db rebuild
 For hosted deployments, set `OPENWIKI_PUBLIC_ORIGIN` to the external origin and
 ensure browser POSTs include a matching `Origin` header. For local development,
 use the same host and port in the browser that the server is listening on.
-
-## Docker Cannot Write
-
-The image supports read-only root filesystems, but `/tmp` and `/data/wiki` must
-be writable volumes or tmpfs mounts.
-
-See the [Docker private profile](deployment/profiles/docker-compose.md) and the
-[release validation notes](development/release.md#release-validation-matrix) for
-the exact probes used in CI.

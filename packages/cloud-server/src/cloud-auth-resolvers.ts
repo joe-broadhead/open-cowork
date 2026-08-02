@@ -150,6 +150,13 @@ export function createApiTokenCloudAuthResolver(store: ControlPlaneStore): Cloud
     if (!membership || membership.membership.status !== 'active') {
       throw new CloudHttpError(401, 'Cloud API token membership is not active.')
     }
+    const permissionResolution = await store.resolveMemberPermissions(
+      membership.org.orgId,
+      membership.account.accountId,
+    )
+    if (!permissionResolution) {
+      throw new CloudHttpError(401, 'Cloud API token membership permissions could not be resolved.')
+    }
     return {
       tenantId: membership.org.tenantId,
       orgId: membership.org.orgId,
@@ -157,7 +164,9 @@ export function createApiTokenCloudAuthResolver(store: ControlPlaneStore): Cloud
       userId: membership.account.accountId,
       accountId: membership.account.accountId,
       email: membership.account.email,
-      role: membership.membership.role,
+      role: permissionResolution.role,
+      customRoleKey: permissionResolution.customRoleKey,
+      permissions: permissionResolution.permissions,
       authSource: 'api_token',
       tokenId: record.tokenId,
       tokenScopes: record.scopes,

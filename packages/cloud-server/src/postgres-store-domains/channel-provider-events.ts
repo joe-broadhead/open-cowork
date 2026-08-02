@@ -21,6 +21,7 @@ type PostgresChannelProviderEventsRepositoryOptions = {
 const CHANNEL_TEXT_MAX_LENGTH = 256
 const CHANNEL_METADATA_MAX_BYTES = 16_384
 const CHANNEL_PROVIDER_EVENT_ERROR_MAX_LENGTH = 1024
+const UNSCOPED_CHANNEL_BINDING_ID = '__open_cowork_unscoped__'
 
 export class PostgresChannelProviderEventsRepository {
   private readonly options: PostgresChannelProviderEventsRepositoryOptions
@@ -35,29 +36,41 @@ export class PostgresChannelProviderEventsRepository {
       const nowIsoValue = now.toISOString()
       const ttlMs = Math.max(1, Math.min(input.ttlMs || 5 * 60_000, 60 * 60_000))
       const provider = normalizeChannelProviderId(input.provider)
+      const channelBindingId = normalizeNullableText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id')
+      const storedChannelBindingId = channelBindingId || UNSCOPED_CHANNEL_BINDING_ID
       const providerInstanceId = normalizeText(input.providerInstanceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel provider instance id')
       const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'Channel external workspace id')
       const providerEventId = normalizeText(input.providerEventId, CHANNEL_TEXT_MAX_LENGTH, 'Provider event id')
       const eventType = normalizeText(input.eventType, CHANNEL_TEXT_MAX_LENGTH, 'Channel provider event type')
       if (!['message', 'command', 'interaction'].includes(eventType)) throw new Error(`Unsupported channel provider event type ${eventType}.`)
       const eventId = normalizeText(
-        input.eventId || stableId('channel_provider_event', input.orgId, provider, providerInstanceId, externalWorkspaceId || '', eventType, providerEventId),
+        input.eventId || stableId(
+          'channel_provider_event',
+          input.orgId,
+          channelBindingId || '',
+          provider,
+          providerInstanceId,
+          externalWorkspaceId || '',
+          eventType,
+          providerEventId,
+        ),
         CHANNEL_TEXT_MAX_LENGTH,
         'Channel provider event id',
       )
       const metadata = JSON.stringify(normalizeRecord(input.metadata || {}, 'Channel provider event metadata'))
       const insert = await client.query(
         `INSERT INTO cloud_channel_provider_events (
-          event_id, org_id, provider, provider_instance_id, external_workspace_id,
+          event_id, org_id, channel_binding_id, provider, provider_instance_id, external_workspace_id,
           provider_event_id, event_type, status, claimed_by, claim_expires_at,
           attempt_count, retryable, last_error, metadata, processed_at, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing', $8, $9, 1, true, NULL, $10::jsonb, NULL, $11, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'processing', $9, $10, 1, true, NULL, $11::jsonb, NULL, $12, $12)
         ON CONFLICT DO NOTHING
         RETURNING *`,
         [
           eventId,
           input.orgId,
+          storedChannelBindingId,
           provider,
           providerInstanceId,
           externalWorkspaceId,
@@ -78,13 +91,14 @@ export class PostgresChannelProviderEventsRepository {
         `SELECT *
          FROM cloud_channel_provider_events
          WHERE org_id = $1
-           AND provider = $2
-           AND provider_instance_id = $3
-           AND COALESCE(external_workspace_id, '') = COALESCE($4::text, '')
-           AND event_type = $5
-           AND provider_event_id = $6
+           AND COALESCE(channel_binding_id, '') = COALESCE($2::text, '')
+           AND provider = $3
+           AND provider_instance_id = $4
+           AND COALESCE(external_workspace_id, '') = COALESCE($5::text, '')
+           AND event_type = $6
+           AND provider_event_id = $7
          FOR UPDATE`,
-        [input.orgId, provider, providerInstanceId, externalWorkspaceId, eventType, providerEventId],
+        [input.orgId, storedChannelBindingId, provider, providerInstanceId, externalWorkspaceId, eventType, providerEventId],
       )
       const current = channelProviderEventFromRow(existing)
       const claimExpired = current.status === 'processing'
@@ -107,15 +121,16 @@ export class PostgresChannelProviderEventsRepository {
       const reclaimed = await client.query(
         `UPDATE cloud_channel_provider_events
          SET provider = $3,
+             channel_binding_id = $4,
              status = 'processing',
-             claimed_by = $4,
-             claim_expires_at = $5,
+             claimed_by = $5,
+             claim_expires_at = $6,
              attempt_count = attempt_count + 1,
              retryable = true,
              last_error = NULL,
-             metadata = $6::jsonb,
+             metadata = $7::jsonb,
              processed_at = NULL,
-             updated_at = $7
+             updated_at = $8
          WHERE event_id = $1
            AND org_id = $2
          RETURNING *`,
@@ -123,6 +138,7 @@ export class PostgresChannelProviderEventsRepository {
           current.eventId,
           input.orgId,
           provider,
+          storedChannelBindingId,
           normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Provider event claimant'),
           new Date(now.getTime() + ttlMs).toISOString(),
           metadata,
@@ -147,7 +163,7 @@ export class PostgresChannelProviderEventsRepository {
        WHERE org_id = $1
          AND event_id = $2
          AND claimed_by = $7
-         AND ($8::text[] IS NULL OR metadata ->> 'channelBindingId' = ANY($8::text[]))
+         AND ($8::text[] IS NULL OR channel_binding_id = ANY($8::text[]))
        RETURNING *`,
       [
         input.orgId,

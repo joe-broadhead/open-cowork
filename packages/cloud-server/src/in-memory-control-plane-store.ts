@@ -1,5 +1,5 @@
 import type { CoordinationWatch } from '@open-cowork/shared'
-import type { QuotaPolicyCode } from './control-plane-errors.ts'
+import { ControlPlaneIdConflictError, type QuotaPolicyCode } from './control-plane-errors.ts'
 import type {
   CreateManagedWorkerPoolInput,
   IssueManagedWorkerCredentialInput,
@@ -79,9 +79,8 @@ import {
 import {
   generateChannelInteractionToken,
   hashChannelInteractionToken,
-  plaintextMatchesChannelInteractionId,
-  verifyChannelInteractionTokenHash,
 } from './control-plane-tokens.ts'
+import { findMutableChannelInteraction } from './in-memory-domains/channel-interactions.ts'
 import type { WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
 import { channelThreadKey, normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
 import type { ChannelProviderEventClaimResult, ChannelProviderEventRecord, ChannelProviderId, ClaimChannelProviderEventInput, CompleteChannelProviderEventInput } from './channel-provider-types.ts'
@@ -292,7 +291,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly channelSessionBindings = new Map<string, ChannelSessionBindingRecord>()
   private readonly channelSessionBindingsByThread = new Map<string, string>()
   private readonly channelInteractions = new Map<string, ChannelInteractionRecord>()
-  private readonly channelInteractionsByExternal = new Map<string, string>()
   private readonly sessions = new Map<string, SessionState>()
   private readonly artifactIndex = new Map<string, CloudArtifactIndexRecord>()
   private readonly artifactUploadReservations = new Map<string, ArtifactUploadReservationRecord>()
@@ -1001,69 +999,53 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     if (!this.orgExists(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
     const agent = this.getHeadlessAgent(input.orgId, input.agentId)
     if (!agent) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    const sessionBinding = this.getChannelSessionBinding(input.orgId, input.sessionBindingId)
+    if (!sessionBinding || sessionBinding.channelBindingId !== input.channelBindingId || sessionBinding.agentId !== input.agentId || sessionBinding.sessionId !== input.sessionId || sessionBinding.provider !== input.provider) throw new Error('Channel interaction binding references must match the same agent, provider, and session.')
     const session = this.getSessionForTenant(this.orgTenantId(input.orgId) || input.orgId, input.sessionId)
     if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
-    if (input.createdByIdentityId) {
-      const identity = this.channelIdentitiesDomain.get(input.orgId, input.createdByIdentityId)
-      if (!identity || identity.orgId !== input.orgId) throw new Error(`Unknown channel identity ${input.createdByIdentityId}.`)
-    }
-    const plaintextToken = generateChannelInteractionToken({ interactionId: input.interactionId, secret: input.tokenSecret })
+    const interactionId = normalizeText(input.interactionId, CHANNEL_TEXT_MAX_LENGTH, 'Channel interaction id')
+    const plaintextToken = generateChannelInteractionToken({ interactionId, secret: input.tokenSecret })
     const tokenHash = await hashChannelInteractionToken(plaintextToken)
-    const existing = this.channelInteractions.get(input.interactionId)
-    if (existing) throw new Error(`Channel interaction ${input.interactionId} already exists.`)
+    const existing = this.channelInteractions.get(interactionId)
+    if (existing && existing.orgId !== input.orgId) {
+      throw new ControlPlaneIdConflictError('channel_interaction')
+    }
+    if (existing) throw new Error(`Channel interaction ${interactionId} already exists.`)
+    const externalInteractionId = normalizeNullableText(input.externalInteractionId, CHANNEL_TEXT_MAX_LENGTH, 'External interaction id')
+    if (externalInteractionId && Array.from(this.channelInteractions.values()).some((interaction) => (
+      interaction.orgId === input.orgId
+      && interaction.channelBindingId === input.channelBindingId
+      && interaction.provider === normalizeProvider(input.provider)
+      && interaction.externalInteractionId === externalInteractionId
+    ))) {
+      throw new Error('Channel interaction already exists for this binding and external interaction id.')
+    }
     const now = nowIso(input.createdAt)
     const record: ChannelInteractionRecord = {
-      interactionId: normalizeText(input.interactionId, CHANNEL_TEXT_MAX_LENGTH, 'Channel interaction id'),
+      interactionId,
       orgId: input.orgId,
       agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
+      channelBindingId: normalizeText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
+      sessionBindingId: normalizeText(input.sessionBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel session binding id'),
       sessionId: normalizeText(input.sessionId, CHANNEL_TEXT_MAX_LENGTH, 'Session id'),
       provider: normalizeProvider(input.provider),
-      externalInteractionId: normalizeNullableText(input.externalInteractionId, CHANNEL_TEXT_MAX_LENGTH, 'External interaction id'),
+      externalInteractionId,
       tokenHash,
       kind: input.kind,
       targetId: normalizeText(input.targetId, CHANNEL_TEXT_MAX_LENGTH, 'Interaction target id'),
       status: 'pending',
-      createdByIdentityId: input.createdByIdentityId || null,
+      createdByIdentityId: null,
       expiresAt: input.expiresAt.toISOString(),
       usedAt: null,
       createdAt: now,
       updatedAt: now,
     }
     this.channelInteractions.set(record.interactionId, record)
-    if (record.externalInteractionId) {
-      this.channelInteractionsByExternal.set(key(record.orgId, record.provider, record.externalInteractionId), record.interactionId)
-    }
     return { interaction: clone(record), plaintextToken }
   }
 
-  private async findChannelInteractionByToken(token: string, orgId: string): Promise<ChannelInteractionRecord | null> {
-    // Pre-filter by the interaction id embedded in the presented token
-    // (`occi_<interactionId>_<secret>`), then verify the per-interaction salted hash.
-    for (const interaction of this.channelInteractions.values()) {
-      if (interaction.orgId !== orgId) continue
-      if (!plaintextMatchesChannelInteractionId(token, interaction.interactionId)) continue
-      if (await verifyChannelInteractionTokenHash(token, interaction.tokenHash)) return interaction
-    }
-    return null
-  }
-
   private async findChannelInteractionMutable(input: FindChannelInteractionInput): Promise<ChannelInteractionRecord | null> {
-    let interaction: ChannelInteractionRecord | null = null
-    if (input.token) {
-      interaction = await this.findChannelInteractionByToken(input.token, input.orgId)
-    } else if (input.externalInteractionId && input.provider) {
-      const interactionId = this.channelInteractionsByExternal.get(key(input.orgId, input.provider, input.externalInteractionId))
-      interaction = interactionId ? this.channelInteractions.get(interactionId) ?? null : null
-    }
-    if (!interaction || interaction.orgId !== input.orgId) return null
-    const now = input.now || new Date()
-    if (interaction.status !== 'pending') return null
-    if (new Date(interaction.expiresAt).getTime() <= now.getTime()) {
-      interaction.status = 'expired'
-      interaction.updatedAt = now.toISOString()
-      return null
-    }
-    return interaction
+    return findMutableChannelInteraction(input, this.channelInteractions.values())
   }
 
   async findChannelInteraction(input: FindChannelInteractionInput): Promise<ChannelInteractionRecord | null> {
@@ -1085,7 +1067,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       eventType: 'channel_interaction.used',
       targetType: 'channel_interaction',
       targetId: interaction.interactionId,
-      metadata: { kind: interaction.kind, targetId: interaction.targetId, tokenHash: interaction.tokenHash },
+      metadata: { kind: interaction.kind, targetId: interaction.targetId },
       createdAt: now,
     })
     return clone(interaction)

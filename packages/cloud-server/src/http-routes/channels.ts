@@ -2,14 +2,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { sanitizeLogMessage } from '@open-cowork/shared'
 import { handleChannelDirectoryRoute } from './channel-directory.ts'
 import { handleChannelDeliveriesSse, type ChannelDeliverySseTools } from './channel-delivery-sse.ts'
+import { handleChannelSessionRoutes } from './channel-sessions.ts'
 import type { ChannelProviderId, SessionCommandRecord } from '../control-plane-store.ts'
 import type { CloudHttpServerOptions } from '../http-contracts.ts'
 import { publicChannelIdentity } from '../public-channel-records.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 
-type RouteContext = {
+export type RouteContext = {
   principal: CloudPrincipal
   url: URL
+  segments: string[]
 }
 
 export type ChannelRouteTools = ChannelDeliverySseTools & {
@@ -34,6 +36,13 @@ export type ChannelRouteTools = ChannelDeliverySseTools & {
     beforeProjectionSequence: number,
     extraBody?: Record<string, unknown>,
   ): Promise<void>
+  handleSessionSse(
+    req: IncomingMessage,
+    res: ServerResponse,
+    options: CloudHttpServerOptions,
+    context: RouteContext,
+    sessionId: string,
+  ): Promise<void>
 }
 
 export async function handleChannelsApiRoute(input: {
@@ -56,6 +65,16 @@ export async function handleChannelsApiRoute(input: {
     itemAction,
     tools,
   } = input
+
+  if (collection === 'sessions' && await handleChannelSessionRoutes({
+    req,
+    res,
+    options,
+    context,
+    itemId,
+    itemAction,
+    tools,
+  })) return true
 
   if (await handleChannelDirectoryRoute({ req, res, options, context, collection, itemId, tools })) return true
 
@@ -159,7 +178,6 @@ export async function handleChannelsApiRoute(input: {
       return true
     }
     const identity = await options.service.domains.channels.resolveChannelIdentity(context.principal, {
-      identityId: tools.readString(body.identityId),
       provider,
       channelBindingId: tools.readString(body.channelBindingId),
       externalWorkspaceId: body.externalWorkspaceId === undefined ? undefined : tools.readString(body.externalWorkspaceId),
@@ -171,88 +189,6 @@ export async function handleChannelsApiRoute(input: {
     })
     tools.writeJson(res, 200, { identity: publicChannelIdentity(identity) }, options.corsOrigin)
     return true
-  }
-
-  if (collection === 'sessions') {
-    if (itemId === 'bind' && !itemAction && req.method === 'POST') {
-      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const channelBindingId = tools.readString(body.channelBindingId)
-      const provider = tools.readChannelProvider(body.provider)
-      const externalChatId = tools.readString(body.externalChatId)
-      const externalThreadId = tools.readString(body.externalThreadId)
-      if (!channelBindingId || !provider || !externalChatId || !externalThreadId) {
-        tools.writeError(res, 400, 'Channel session binding requires channelBindingId, provider, externalChatId, and externalThreadId.', options.corsOrigin)
-        return true
-      }
-      const bound = await options.service.domains.channels.bindChannelSession(context.principal, {
-        identityId: tools.readString(body.identityId),
-        externalUserId: tools.readString(body.externalUserId),
-        externalWorkspaceId: tools.readString(body.externalWorkspaceId),
-        channelBindingId,
-        provider,
-        externalChatId,
-        externalThreadId,
-        sessionId: tools.readString(body.sessionId),
-        title: tools.readString(body.title),
-        lastEventSequence: tools.readNonNegativeInteger(body.lastEventSequence),
-        lastWorkspaceSequence: tools.readNonNegativeInteger(body.lastWorkspaceSequence),
-        lastChatMessageId: tools.readString(body.lastChatMessageId),
-      })
-      tools.writeJson(res, 200, bound, options.corsOrigin)
-      return true
-    }
-    if (itemId === 'by-thread' && !itemAction && req.method === 'GET') {
-      const provider = tools.readChannelProvider(context.url.searchParams.get('provider'))
-      const externalChatId = context.url.searchParams.get('externalChatId')
-      const externalThreadId = context.url.searchParams.get('externalThreadId')
-      if (!provider || !externalChatId || !externalThreadId) {
-        tools.writeError(res, 400, 'Channel thread lookup requires provider, externalChatId, and externalThreadId.', options.corsOrigin)
-        return true
-      }
-      const found = await options.service.domains.channels.getChannelSessionByThread(context.principal, {
-        provider,
-        externalWorkspaceId: context.url.searchParams.get('externalWorkspaceId'),
-        externalChatId,
-        externalThreadId,
-      })
-      if (!found) {
-        tools.writeError(res, 404, 'Channel session binding was not found.', options.corsOrigin)
-        return true
-      }
-      tools.writeJson(res, 200, found, options.corsOrigin)
-      return true
-    }
-    if (itemId === 'prompt' && !itemAction && req.method === 'POST') {
-      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const bindingId = tools.readString(body.bindingId)
-      const text = tools.readString(body.text)
-      if (!bindingId || !text) {
-        tools.writeError(res, 400, 'Channel prompt requires bindingId and text.', options.corsOrigin)
-        return true
-      }
-      const result = await options.service.domains.channels.enqueueChannelPrompt(context.principal, {
-        bindingId,
-        text,
-        agent: tools.readString(body.agent),
-        commandId: tools.readString(body.commandId),
-        identityId: tools.readString(body.identityId),
-        provider: tools.readChannelProvider(body.provider),
-        externalWorkspaceId: tools.readString(body.externalWorkspaceId),
-        externalUserId: tools.readString(body.externalUserId),
-      })
-      const processed = await tools.processSessionCommandIfConfigured(options, context.principal.tenantId, result.binding.sessionId)
-      await tools.writeSessionCommandMutationResponse(
-        res,
-        options,
-        context.principal,
-        result.binding.sessionId,
-        result.command,
-        processed,
-        result.beforeProjectionSequence,
-        { binding: result.binding },
-      )
-      return true
-    }
   }
 
   if (collection === 'cursor' && !itemId && req.method === 'POST') {
@@ -280,6 +216,7 @@ export async function handleChannelsApiRoute(input: {
     if (!itemId && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const agentId = tools.readString(body.agentId)
+      const sessionBindingId = tools.readString(body.sessionBindingId)
       const sessionForInteraction = tools.readString(body.sessionId)
       const provider = tools.readChannelProvider(body.provider)
       const kind = tools.readEnum(body.kind, ['permission', 'question'] as const)
@@ -291,12 +228,12 @@ export async function handleChannelsApiRoute(input: {
       const issued = await options.service.domains.channels.createChannelInteraction(context.principal, {
         interactionId: tools.readString(body.interactionId),
         agentId,
+        sessionBindingId,
         sessionId: sessionForInteraction,
         provider,
         kind,
         targetId,
         externalInteractionId: tools.readString(body.externalInteractionId),
-        createdByIdentityId: tools.readString(body.createdByIdentityId),
         expiresAt: tools.readOptionalDate(body.expiresAt),
         tokenSecret: tools.readString(body.tokenSecret),
       })
@@ -447,6 +384,7 @@ export async function handleChannelsApiRoute(input: {
       }
       const delivery = await options.service.domains.channels.ackChannelDelivery(context.principal, {
         deliveryId: itemId,
+        channelBindingId: tools.readString(body.channelBindingId),
         claimedBy: tools.readString(body.claimedBy) || context.url.searchParams.get('claimedBy') || context.principal.tokenId || context.principal.userId,
         status,
         lastError: tools.readString(body.lastError),
@@ -460,7 +398,11 @@ export async function handleChannelsApiRoute(input: {
       return true
     }
     if (itemId && itemAction === 'retry' && req.method === 'POST') {
-      const delivery = await options.service.domains.channels.retryChannelDelivery(context.principal, itemId)
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const delivery = await options.service.domains.channels.retryChannelDelivery(context.principal, {
+        deliveryId: itemId,
+        channelBindingId: tools.readString(body.channelBindingId),
+      })
       if (!delivery) {
         tools.writeError(res, 404, 'Channel delivery was not found.', options.corsOrigin)
         return true
@@ -472,6 +414,7 @@ export async function handleChannelsApiRoute(input: {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const delivery = await options.service.domains.channels.deadLetterChannelDelivery(context.principal, {
         deliveryId: itemId,
+        channelBindingId: tools.readString(body.channelBindingId),
         lastError: tools.readString(body.lastError),
       })
       if (!delivery) {

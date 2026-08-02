@@ -113,5 +113,5 @@ Before enabling hosted browser writes:
 - `OPENWIKI_PUBLIC_ORIGIN` matches the external HTTPS origin.
 - `OPENWIKI_TRUST_PROXY_ORIGIN=1` is used only when the same proxy strips and
   rewrites forwarded origin headers.
-- `openwiki deploy preflight --deploy-profile kubernetes-enterprise --root /data/wiki`
-  passes.
+- `openwiki --root /data/wiki doctor --profile hosted --json` has no failed
+  runtime or security check.

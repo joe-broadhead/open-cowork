@@ -55,6 +55,7 @@ export async function renderQuestionRequest(input: RenderQuestionRequestInput): 
   const issued = await input.cloud.createChannelInteraction({
     interactionId: `gw_question_${randomBytes(9).toString('base64url')}`,
     agentId: input.binding.agentId,
+    sessionBindingId: input.binding.bindingId,
     sessionId: input.binding.sessionId,
     provider: input.binding.provider,
     kind: 'question',

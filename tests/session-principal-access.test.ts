@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import type { CloudPrincipal } from '@open-cowork/cloud-server/session-service'
 import {
   principalCanManageBilling,
+  principalCanManageApiTokens,
   principalCanManageOrg,
   principalCanViewDiagnostics,
   principalCanViewOperations,
@@ -40,6 +41,28 @@ test('cloud management requires an org admin/owner role', () => {
   assert.equal(principalCanManageOrg(principal({ authSource: 'cloud', role: 'member' })), false)
 })
 
+test('custom-role permissions authoritatively upgrade and downgrade human management', () => {
+  const upgradedMember = principal({
+    authSource: 'user',
+    role: 'member',
+    customRoleKey: 'billing-manager',
+    permissions: ['billing:manage', 'api_tokens:read'],
+  })
+  assert.equal(principalCanManageBilling(upgradedMember), true)
+  assert.equal(principalCanManageApiTokens(upgradedMember, 'api_tokens:read'), true)
+  assert.equal(principalCanManageApiTokens(upgradedMember, 'api_tokens:manage'), false)
+
+  const downgradedAdmin = principal({
+    authSource: 'user',
+    role: 'admin',
+    customRoleKey: 'restricted-admin',
+    permissions: [],
+  })
+  assert.equal(principalCanManageBilling(downgradedAdmin), false)
+  assert.equal(principalCanManageApiTokens(downgradedAdmin, 'api_tokens:read'), false)
+  assert.equal(principalCanManageOrg(downgradedAdmin), false)
+})
+
 test('api_token management requires BOTH an admin role AND an admin token scope', () => {
   // Admin role + admin scope → allowed.
   assert.equal(principalCanManageBilling(principal({ authSource: 'api_token', role: 'admin', tokenScopes: ['admin'] })), true)
@@ -49,11 +72,55 @@ test('api_token management requires BOTH an admin role AND an admin token scope'
   assert.equal(principalCanManageBilling(principal({ authSource: 'api_token', role: 'member', tokenScopes: ['admin'] })), false)
 })
 
+test('api_token management intersects scope with authoritative custom-role permissions', () => {
+  const restrictedAdmin = principal({
+    authSource: 'api_token',
+    role: 'admin',
+    tokenScopes: ['admin'],
+    customRoleKey: 'restricted-admin',
+    permissions: [],
+  })
+  assert.equal(principalCanManageBilling(restrictedAdmin), false)
+  assert.equal(principalCanManageApiTokens(restrictedAdmin), false)
+  assert.equal(principalCanManageOrg(restrictedAdmin), false)
+
+  const delegatedBilling = principal({
+    authSource: 'api_token',
+    role: 'member',
+    tokenScopes: ['admin'],
+    customRoleKey: 'billing-manager',
+    permissions: ['billing:manage'],
+  })
+  assert.equal(principalCanManageBilling(delegatedBilling), true)
+  assert.equal(principalCanManageApiTokens(delegatedBilling), false)
+  assert.equal(principalCanManageOrg(delegatedBilling), false)
+
+  const unscopedBilling = principal({
+    ...delegatedBilling,
+    tokenScopes: ['desktop'],
+  })
+  assert.equal(principalCanManageBilling(unscopedBilling), false)
+})
+
 test('viewing operations: worker-internal scope, or admin role + operator scope', () => {
   assert.equal(principalCanViewOperations(principal({ authSource: 'api_token', role: 'member', tokenScopes: ['worker-internal'] })), true)
   assert.equal(principalCanViewOperations(principal({ authSource: 'api_token', role: 'admin', tokenScopes: ['operator'] })), true)
   assert.equal(principalCanViewOperations(principal({ authSource: 'api_token', role: 'member', tokenScopes: ['operator'] })), false)
   assert.equal(principalCanViewOperations(principal({ authSource: 'cloud', role: 'admin' })), false)
+  assert.equal(principalCanViewOperations(principal({
+    authSource: 'api_token',
+    role: 'member',
+    tokenScopes: ['operator'],
+    customRoleKey: 'operations-reader',
+    permissions: ['operations:view'],
+  })), true)
+  assert.equal(principalCanViewOperations(principal({
+    authSource: 'api_token',
+    role: 'admin',
+    tokenScopes: ['operator'],
+    customRoleKey: 'restricted-admin',
+    permissions: [],
+  })), false)
 })
 
 test('viewing diagnostics requires admin role + operator scope for api tokens', () => {
@@ -61,6 +128,20 @@ test('viewing diagnostics requires admin role + operator scope for api tokens', 
   assert.equal(principalCanViewDiagnostics(principal({ authSource: 'api_token', role: 'admin', tokenScopes: [] })), false)
   assert.equal(principalCanViewDiagnostics(principal({ authSource: 'api_token', role: 'member', tokenScopes: ['operator'] })), false)
   assert.equal(principalCanViewDiagnostics(principal({ authSource: 'cloud', role: 'owner' })), false)
+  assert.equal(principalCanViewDiagnostics(principal({
+    authSource: 'api_token',
+    role: 'member',
+    tokenScopes: ['operator'],
+    customRoleKey: 'diagnostics-reader',
+    permissions: ['diagnostics:view'],
+  })), true)
+  assert.equal(principalCanViewDiagnostics(principal({
+    authSource: 'api_token',
+    role: 'admin',
+    tokenScopes: ['operator'],
+    customRoleKey: 'restricted-admin',
+    permissions: [],
+  })), false)
 })
 
 test('principalEmailDomain extracts the lowercased domain', () => {

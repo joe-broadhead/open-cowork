@@ -79,6 +79,7 @@ function makeServices(identityPolicy: CloudIdentityPolicy) {
     emailSender: null,
     ensurePrincipal,
     assertOrgAdmin: (principal) => principalService.assertOrgAdmin(principal),
+    assertPermission: (principal, permission) => principalService.assertPermission(principal, permission),
     principalOrgId,
   })
   const roleService = new CloudRoleService({
@@ -126,7 +127,7 @@ test('single-org mode funnels every principal into the one bootstrapped org', as
 // -- Custom roles + permission enforcement + revocation ------------------------
 
 test('custom roles: CRUD, effective permissions on the principal, and permission enforcement', async () => {
-  const { store, principalService, roleService } = makeServices({ allowSelfServiceSignup: true })
+  const { store, principalService, memberService, roleService } = makeServices({ allowSelfServiceSignup: true })
   const owner = await bootstrapOrg(store, principalService)
 
   const role = await roleService.createCustomRole(owner, { roleKey: 'analyst', name: 'Analyst', baseRole: 'member', permissions: ['sessions:read', 'members:read'] })
@@ -156,6 +157,7 @@ test('custom roles: CRUD, effective permissions on the principal, and permission
   const limitedAdmin: CloudPrincipal = { tenantId: 't1', userId: 'adm-1', accountId: 'adm-1', email: 'adm-1@example.test', authSource: 'user' }
   await principalService.ensurePrincipal(limitedAdmin)
   assert.throws(() => principalService.assertOrgAdmin(limitedAdmin), /org:manage/)
+  assert.equal((await memberService.listOrgMembers(limitedAdmin)).length, 3)
 })
 
 test('credential revocation: assigning a narrower role revokes the member\'s tokens immediately', async () => {

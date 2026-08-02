@@ -8,7 +8,7 @@ and operate.
 
 ```sh
 corepack enable
-corepack prepare pnpm@11.4.0 --activate
+corepack prepare pnpm@10.32.1 --activate
 pnpm install --frozen-lockfile
 pnpm validate
 ```
@@ -19,10 +19,9 @@ describing source checkout development.
 
 Requirements:
 
-- Node.js `>=22.22.3` (Node 24 recommended)
-- pnpm `11.4.0`
+- Node.js `>=22.22.3`; use the exact version in the monorepo root `.nvmrc`
+- pnpm `10.32.1`
 - Git
-- Docker for deployment/image changes
 - Python 3.12 for docs builds
 
 ## Common Commands
@@ -72,7 +71,7 @@ DATABASE_URL=postgres://openwiki:openwiki@127.0.0.1:5432/openwiki pnpm test:post
 - Run `pnpm docs:reference` after changing CLI help, MCP tools, operations,
   JSON schemas, package manifests, or error model entries.
 - Schema changes should update JSON Schemas, fixtures, and validation tests together.
-- Deployment changes should update the relevant deployment docs and tests.
+- Runtime and distribution changes should update the relevant docs and tests.
 
 ## Pull Request Checklist
 
@@ -83,7 +82,7 @@ DATABASE_URL=postgres://openwiki:openwiki@127.0.0.1:5432/openwiki pnpm test:post
 - [ ] Docs are updated for public behavior changes.
 - [ ] Tests cover new behavior or risk.
 - [ ] Security-sensitive changes explain the trust boundary.
-- [ ] Deployment changes have render/smoke coverage where practical.
+- [ ] Runtime and distribution changes have focused smoke coverage.
 - [ ] Schemas and examples stay in sync.
 
 ## Security

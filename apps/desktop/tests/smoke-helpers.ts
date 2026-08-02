@@ -1,8 +1,8 @@
-import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { createServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   _electron as electron,
@@ -472,10 +472,14 @@ async function waitForCdpAppPage(browser: Browser, timeoutMs = 30_000) {
   throw new Error(`Timed out waiting for packaged app shell page\nDiagnostics: ${JSON.stringify(diagnostics)}`)
 }
 
-async function waitForPackagedProbeFile(targetPath: string, timeoutMs = 90_000): Promise<PackagedMacProbe> {
+async function waitForPackagedProbeFile(
+  targetPath: string,
+  timeoutMs = 90_000,
+  signal?: AbortSignal,
+): Promise<PackagedMacProbe> {
   const deadline = Date.now() + timeoutMs
   let lastReadError: string | null = null
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && !signal?.aborted) {
     try {
       const parsed = JSON.parse(readFileSync(targetPath, 'utf8')) as PackagedMacProbeFile
       if (!parsed.ok) {
@@ -491,6 +495,7 @@ async function waitForPackagedProbeFile(targetPath: string, timeoutMs = 90_000):
     }
     await delay(250)
   }
+  if (signal?.aborted) return new Promise<never>(() => {})
   throw new Error(`Timed out waiting for packaged probe file ${targetPath}${lastReadError ? `; last error: ${lastReadError}` : ''}`)
 }
 
@@ -516,19 +521,94 @@ function runCommand(command: string, args: string[], timeoutMs = 10_000) {
   })
 }
 
-async function withLaunchServicesEnvironment<T>(env: Record<string, string>, fn: () => Promise<T>): Promise<T> {
-  const appliedKeys: string[] = []
+function restoreLaunchServicesEnvironmentSync(previousValues: Map<string, string | null>) {
+  for (const [key, previousValue] of Array.from(previousValues.entries()).reverse()) {
+    const restore = previousValue === null
+      ? ['unsetenv', key]
+      : ['setenv', key, previousValue]
+    spawnSync('launchctl', restore, {
+      stdio: 'ignore',
+      timeout: 2_000,
+    })
+  }
+}
+
+export async function withLaunchServicesEnvironment<T>(env: Record<string, string>, fn: () => Promise<T>): Promise<T> {
+  const previousValues = new Map<string, string | null>()
+  let restored = false
+  const restoreOnExit = () => {
+    if (restored) return
+    restored = true
+    restoreLaunchServicesEnvironmentSync(previousValues)
+  }
+  const signalHandlers = new Map<NodeJS.Signals, () => void>()
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    const handler = () => {
+      restoreOnExit()
+      process.removeListener(signal, handler)
+      process.kill(process.pid, signal)
+    }
+    signalHandlers.set(signal, handler)
+    process.once(signal, handler)
+  }
+  process.once('exit', restoreOnExit)
+
   try {
     for (const [key, value] of Object.entries(env)) {
+      previousValues.set(key, readLaunchServicesEnvironment(key))
       await runCommand('launchctl', ['setenv', key, value])
-      appliedKeys.push(key)
     }
     return await fn()
   } finally {
-    for (const key of appliedKeys.reverse()) {
-      await runCommand('launchctl', ['unsetenv', key]).catch(() => {})
+    for (const [signal, handler] of signalHandlers) {
+      process.removeListener(signal, handler)
+    }
+    process.removeListener('exit', restoreOnExit)
+    if (!restored) {
+      restored = true
+      for (const [key, previousValue] of Array.from(previousValues.entries()).reverse()) {
+        const restore = previousValue === null
+          ? ['unsetenv', key]
+          : ['setenv', key, previousValue]
+        await runCommand('launchctl', restore)
+      }
     }
   }
+}
+
+function readLaunchServicesEnvironment(key: string) {
+  const result = spawnSync('launchctl', ['getenv', key], {
+    encoding: 'utf8',
+    timeout: 2_000,
+  })
+  if (result.status !== 0) return null
+  const value = result.stdout.replace(/[\r\n]+$/, '')
+  return value || null
+}
+
+async function openMacCandidate(
+  macAppBundlePath: string,
+  executablePath: string,
+  argEnvironment: string[],
+  port: number,
+) {
+  return withLaunchServicesEnvironment({ [E2E_ARG_ENV_ENABLE_KEY]: '1' }, async () => {
+    await runCommand('open', [
+      '-n',
+      '-g',
+      '-j',
+      macAppBundlePath,
+      '--args',
+      // Prevent an unsigned, isolated first launch from blocking Electron's
+      // main thread on a macOS Keychain authorization dialog that the hidden
+      // smoke candidate cannot answer. This is Chromium's test-only keychain;
+      // production launches never receive the switch.
+      '--use-mock-keychain',
+      ...argEnvironment,
+      `--remote-debugging-port=${port}`,
+    ])
+    return waitForMacCandidateProcess(executablePath, port)
+  })
 }
 
 async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = DEFAULT_APP_SHELL_TIMEOUT_MS) {
@@ -558,38 +638,145 @@ export async function launchPackagedMacProbe(
   if (!macAppBundlePath) {
     throw new Error(`Packaged macOS executable is not inside an app bundle: ${executablePath}`)
   }
-
+  const port = await getAvailablePort()
   const action = options?.action || 'surface'
   const readyFile = join(paths.tempRoot, `packaged-mac-probe-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
-  const launchEnvironment = getLaunchServicesEnvironment(paths, {
+  const probeEnvironment = getLaunchServicesEnvironment(paths, {
     OPEN_COWORK_E2E_ALLOW_SETTINGS_MUTATION: '1',
     OPEN_COWORK_E2E_PROBE_ACTION: action,
     OPEN_COWORK_E2E_READY_FILE: readyFile,
+    OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
   })
+  const argEnvironment = buildE2EArgEnvironment(probeEnvironment)
+  let processId: number | null = null
 
   try {
-    return await withLaunchServicesEnvironment(launchEnvironment, async () => {
-      await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
-      await delay(1_000)
-      await runCommand('open', [
-        '-n',
-        '-g',
-        '-j',
-        macAppBundlePath,
-      ])
-      return await waitForPackagedProbeFile(readyFile, options?.timeoutMs ?? 90_000)
-    })
+    await quiesceMacCandidateBundle(executablePath)
+    processId = await openMacCandidate(macAppBundlePath, executablePath, argEnvironment, port)
+    return await waitForProbeOrProcessExit(readyFile, options?.timeoutMs ?? 90_000, processId)
+  } catch (error) {
+    const candidateAlive = processId === null ? false : processIsAlive(processId)
+    const listenerProcessId = findProcessListeningOnPort(port)
+    const renderer = processId !== null && listenerProcessId === processId
+      ? await getOwnedCdpDiagnostics(port)
+      : null
+    const diagnostics = {
+      action,
+      arch: process.arch,
+      candidateAlive,
+      candidateObserved: processId !== null,
+      cdpOwnedByCandidate: processId !== null && listenerProcessId === processId,
+      bundle: relative(repoRoot, macAppBundlePath),
+      candidateArchitecture: readMacExecutableArchitectures(executablePath),
+      candidateVersion: readMacBundleVersion(macAppBundlePath),
+      executable: relative(repoRoot, executablePath),
+      label: 'mac',
+      platform: process.platform,
+      readyFileCreated: existsSync(readyFile),
+      renderer,
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Packaged mac probe failed: ${message}\nDiagnostics: ${JSON.stringify(diagnostics)}`, { cause: error })
   } finally {
-    await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
-    await delay(1_000)
+    processId ??= findMacCandidateProcess(executablePath, port)
+    if (processId !== null && findProcessListeningOnPort(port) === processId) {
+      const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`).catch(() => null)
+      if (browser) {
+        await closeCdpSmokeApp(browser, port, processId, executablePath)
+      } else {
+        await stopExactProcess(processId, () => findMacCandidateProcess(executablePath, port) === processId)
+      }
+    } else if (processId !== null) {
+      await stopExactProcess(processId, () => findMacCandidateProcess(executablePath, port) === processId)
+    }
   }
 }
 
-// Shared spawn-based packaged probe used on Linux and Windows. It launches the
-// packaged binary with the E2E probe action + ready file and resolves as soon as
-// the preload surface is captured — it deliberately does NOT wait for the managed
-// runtime to become ready, so it works against unsigned CI smoke builds that ship
-// without the trusted runtime component manifest.
+async function quiesceMacCandidateBundle(executablePath: string) {
+  for (const processId of findMacCandidateProcesses(executablePath)) {
+    await stopExactProcess(
+      processId,
+      () => findMacCandidateProcesses(executablePath).includes(processId),
+    )
+  }
+  if (findMacCandidateProcesses(executablePath).length > 0) {
+    throw new Error('The exact packaged macOS candidate did not quiesce before launch')
+  }
+}
+
+function readMacExecutableArchitectures(executablePath: string) {
+  const result = spawnSync('/usr/bin/lipo', ['-archs', executablePath], {
+    encoding: 'utf8',
+    timeout: 2_000,
+  })
+  if (result.status !== 0) return 'unknown'
+  const architectures = result.stdout.trim().split(/\s+/).filter(Boolean)
+  return architectures.length > 0 ? architectures.join(',') : 'unknown'
+}
+
+function readMacBundleVersion(macAppBundlePath: string) {
+  const result = spawnSync('/usr/libexec/PlistBuddy', [
+    '-c',
+    'Print :CFBundleShortVersionString',
+    join(macAppBundlePath, 'Contents', 'Info.plist'),
+  ], {
+    encoding: 'utf8',
+    timeout: 2_000,
+  })
+  return result.status === 0 && result.stdout.trim() ? result.stdout.trim() : 'unknown'
+}
+
+async function getOwnedCdpDiagnostics(port: number) {
+  const http = await readCdpHttpDiagnostics(port)
+  const browser = await withSmokeTimeout(
+    'connecting to packaged app for diagnostics',
+    chromium.connectOverCDP(`http://127.0.0.1:${port}`),
+    5_000,
+  ).catch((error) => ({
+    error: error instanceof Error ? error.message : String(error),
+  } as const))
+  if (!('contexts' in browser)) return { http, playwright: browser }
+  try {
+    const playwright = await withSmokeTimeout(
+      'reading packaged app diagnostics',
+      getCdpAppPageDiagnostics(browser),
+      5_000,
+    )
+    return { http, playwright }
+  } catch (error) {
+    return {
+      http,
+      playwright: { error: error instanceof Error ? error.message : String(error) },
+    }
+  } finally {
+    await withSmokeTimeout('closing packaged diagnostic connection', browser.close(), 2_000).catch(() => undefined)
+  }
+}
+
+async function readCdpHttpDiagnostics(port: number) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 2_000)
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/json/list`, {
+      signal: controller.signal,
+    })
+    const targets = await response.json() as Array<Record<string, unknown>>
+    return targets.map((target) => ({
+      description: typeof target.description === 'string' ? target.description : null,
+      title: typeof target.title === 'string' ? target.title : null,
+      type: typeof target.type === 'string' ? target.type : null,
+      url: typeof target.url === 'string' ? target.url : null,
+    }))
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+// Shared spawn-based packaged probe used on Linux and Windows. Launching the
+// exact candidate executable gives the harness a process handle for bounded
+// cleanup and actionable early-exit diagnostics.
 async function launchPackagedSpawnProbe(
   paths: SmokePaths,
   executablePath: string,
@@ -641,6 +828,20 @@ async function launchPackagedSpawnProbe(
       waitForPackagedProbeFile(readyFile, options.timeoutMs ?? 90_000),
       earlyExit,
     ])
+  } catch (error) {
+    const diagnostics = {
+      action,
+      arch: process.arch,
+      executable: relative(repoRoot, executablePath),
+      exitCode: child.exitCode,
+      label: options.label,
+      pid: child.pid ?? null,
+      platform: process.platform,
+      readyFileCreated: existsSync(readyFile),
+      signalCode: child.signalCode,
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Packaged ${options.label} probe failed: ${message}\nDiagnostics: ${JSON.stringify(diagnostics)}`, { cause: error })
   } finally {
     clearEarlyExit()
     await stopSpawnedSmokeProcess(child)
@@ -670,7 +871,12 @@ export async function launchPackagedWindowsProbe(
   return launchPackagedSpawnProbe(paths, executablePath, { ...options, label: 'windows', sandbox: false })
 }
 
-async function closeCdpSmokeApp(browser: Browser, port: number) {
+async function closeCdpSmokeApp(
+  browser: Browser,
+  port: number,
+  processId: number,
+  executablePath: string,
+) {
   try {
     const cdpSession = await browser.newBrowserCDPSession()
     await withSmokeTimeout('closing packaged app over CDP', cdpSession.send('Browser.close'), 2_000)
@@ -684,16 +890,154 @@ async function closeCdpSmokeApp(browser: Browser, port: number) {
     // The process may already be gone after Browser.close reaches CDP.
   }
 
-  for (let attempts = 0; attempts < 20; attempts += 1) {
-    if (!(await isCdpAvailable(port))) {
-      await delay(1_000)
-      return
-    }
+  const identityIsCurrent = () => findMacCandidateProcess(executablePath, port) === processId
+  if (await waitForExactProcessExit(processId, identityIsCurrent, 2_000)) return
+  await stopExactProcess(processId, identityIsCurrent)
+}
+
+function findProcessListeningOnPort(port: number) {
+  if (process.platform !== 'darwin') return null
+  const result = spawnSync('/usr/sbin/lsof', [
+    '-nP',
+    `-iTCP:${port}`,
+    '-sTCP:LISTEN',
+    '-t',
+  ], {
+    encoding: 'utf8',
+    timeout: 2_000,
+  })
+  if (result.status !== 0) return null
+  const processId = Number.parseInt(result.stdout.trim().split(/\s+/)[0] || '', 10)
+  return Number.isSafeInteger(processId) && processId > 1 ? processId : null
+}
+
+function findMacCandidateProcess(executablePath: string, port: number) {
+  const portArgument = `--remote-debugging-port=${port}`
+  return findMacCandidateProcesses(executablePath).find((processId) => {
+    const command = readMacProcessCommand(processId)
+    return command?.includes(portArgument)
+  }) ?? null
+}
+
+function findMacCandidateProcesses(executablePath: string) {
+  if (process.platform !== 'darwin') return []
+  const executablePaths = new Set([executablePath])
+  try {
+    executablePaths.add(realpathSync(executablePath))
+  } catch {
+    // The caller reports the missing/unreadable executable separately.
+  }
+  const result = spawnSync('/bin/ps', ['-axo', 'pid=,command='], {
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+    timeout: 2_000,
+  })
+  if (result.status !== 0) return []
+  const processIds: number[] = []
+  for (const line of result.stdout.split('\n')) {
+    const match = line.match(/^\s*(\d+)\s+(.+)$/)
+    if (!match) continue
+    if (![...executablePaths].some((candidatePath) => (
+      match[2] === candidatePath || match[2].startsWith(`${candidatePath} `)
+    ))) continue
+    const processId = Number.parseInt(match[1], 10)
+    if (Number.isSafeInteger(processId) && processId > 1) processIds.push(processId)
+  }
+  return processIds
+}
+
+function readMacProcessCommand(processId: number) {
+  const result = spawnSync('/bin/ps', ['-p', String(processId), '-o', 'command='], {
+    encoding: 'utf8',
+    timeout: 2_000,
+  })
+  return result.status === 0 ? result.stdout.trim() : null
+}
+
+function processIsAlive(processId: number) {
+  try {
+    process.kill(processId, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH'
+  }
+}
+
+async function waitForExactProcessExit(
+  processId: number,
+  identityIsCurrent: () => boolean,
+  timeoutMs: number,
+) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (!processIsAlive(processId) || !identityIsCurrent()) return true
+    await delay(100)
+  }
+  return !processIsAlive(processId) || !identityIsCurrent()
+}
+
+async function stopExactProcess(processId: number, identityIsCurrent: () => boolean) {
+  if (!processIsAlive(processId)) return
+  if (!identityIsCurrent()) {
+    throw new Error(`Packaged macOS smoke process ${processId} no longer matches the launched candidate`)
+  }
+  process.kill(processId, 'SIGTERM')
+  for (let attempts = 0; attempts < 8; attempts += 1) {
+    if (!processIsAlive(processId)) return
+    if (!identityIsCurrent()) return
     await delay(250)
   }
+  if (!identityIsCurrent()) return
+  process.kill(processId, 'SIGKILL')
+  for (let attempts = 0; attempts < 20; attempts += 1) {
+    if (!processIsAlive(processId)) return
+    if (!identityIsCurrent()) return
+    await delay(250)
+  }
+  throw new Error(`Packaged macOS smoke process ${processId} did not exit after SIGKILL`)
+}
 
-  await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
-  await delay(1_000)
+async function waitForMacCandidateProcess(executablePath: string, port: number, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const processId = findMacCandidateProcess(executablePath, port)
+    if (processId !== null) return processId
+    await delay(100)
+  }
+  throw new Error('The exact packaged macOS candidate process was not observed after launch')
+}
+
+async function waitForOwnedCdp(port: number, processId: number, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (!processIsAlive(processId)) {
+      throw new Error('The exact packaged macOS candidate exited before CDP became available')
+    }
+    const listenerProcessId = findProcessListeningOnPort(port)
+    if (listenerProcessId !== null && listenerProcessId !== processId) {
+      throw new Error('The packaged macOS CDP port is owned by an unexpected process')
+    }
+    if (listenerProcessId === processId && await isCdpAvailable(port)) return
+    await delay(100)
+  }
+  throw new Error(`Timed out waiting for the exact packaged macOS candidate CDP endpoint on 127.0.0.1:${port}`)
+}
+
+async function waitForProbeOrProcessExit(targetPath: string, timeoutMs: number, processId: number) {
+  const controller = new AbortController()
+  const monitor = async (): Promise<never> => {
+    while (!controller.signal.aborted && processIsAlive(processId)) await delay(100)
+    if (controller.signal.aborted) return new Promise<never>(() => {})
+    throw new Error('The exact packaged macOS candidate exited before writing the ready file')
+  }
+  try {
+    return await Promise.race([
+      waitForPackagedProbeFile(targetPath, timeoutMs, controller.signal),
+      monitor(),
+    ])
+  } finally {
+    controller.abort()
+  }
 }
 
 async function stopSpawnedSmokeProcess(child: ChildProcess) {
@@ -811,28 +1155,21 @@ export async function launchSmokeSession(
   options?: LaunchSmokeSessionOptions,
 ): Promise<SmokeSession> {
   const appShellTimeoutMs = options?.appShellTimeoutMs ?? smokeAppShellTimeoutMs()
-  const macAppBundlePath = options?.executablePath && process.platform === 'darwin'
-    ? getMacAppBundlePath(options.executablePath)
+  const packagedExecutablePath = options?.executablePath
+  const macAppBundlePath = packagedExecutablePath && process.platform === 'darwin'
+    ? getMacAppBundlePath(packagedExecutablePath)
     : null
 
-  if (macAppBundlePath) {
+  if (macAppBundlePath && packagedExecutablePath) {
     const port = await getAvailablePort()
     const e2eArgEnvironment = getMacE2EArgEnvironment(paths, {
       OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
     })
-    await runCommand('open', [
-      '-n',
-      '-g',
-      '-j',
-      macAppBundlePath,
-      '--args',
-      ...e2eArgEnvironment,
-      `--remote-debugging-port=${port}`,
-    ])
+    const processId = await openMacCandidate(macAppBundlePath, packagedExecutablePath, e2eArgEnvironment, port)
 
     let browser: Browser | null = null
     try {
-      await waitForCdp(port, appShellTimeoutMs)
+      await waitForOwnedCdp(port, processId, appShellTimeoutMs)
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
       await waitForCdpPage(browser, appShellTimeoutMs)
       const page = await waitForCdpAppPage(browser, appShellTimeoutMs)
@@ -843,11 +1180,15 @@ export async function launchSmokeSession(
       return {
         page,
         async close() {
-          if (browser) await closeCdpSmokeApp(browser, port)
+          if (browser) await closeCdpSmokeApp(browser, port, processId, packagedExecutablePath)
         },
       }
     } catch (error) {
-      if (browser) await closeCdpSmokeApp(browser, port)
+      if (browser) {
+        await closeCdpSmokeApp(browser, port, processId, packagedExecutablePath)
+      } else {
+        await stopExactProcess(processId, () => findMacCandidateProcess(packagedExecutablePath, port) === processId)
+      }
       throw error
     }
   }

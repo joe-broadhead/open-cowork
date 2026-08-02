@@ -9,6 +9,7 @@ import {
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
 import type { CloudTransportAdapter } from '@open-cowork/cloud-server/transport-adapter'
+import { CloudTransportError } from '@open-cowork/cloud-server/transport-adapter'
 import type { SessionView, WorkflowRun, WorkflowStatus, ManagedDesktopPolicyView } from '@open-cowork/shared'
 import {
   getActiveManagedPolicy,
@@ -16,6 +17,22 @@ import {
   resetActiveManagedPolicyCache,
 } from '@open-cowork/runtime-host/managed-policy'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
+
+const ENABLED_CLOUD_FEATURES = {
+  chat: true,
+  agents: true,
+  artifacts: true,
+  threadIndex: true,
+  workflows: true,
+  webhooks: true,
+  settings: true,
+  customSkills: true,
+  customAgents: true,
+  customMcps: true,
+  knowledge: true,
+  channels: true,
+  byok: true,
+} as const
 
 function workflowSummary(status: WorkflowStatus = 'active') {
   return {
@@ -90,7 +107,7 @@ function transport(): CloudTransportAdapter {
     getConfig: async () => ({
       role: 'web',
       profileName: 'default',
-      features: { sessions: true },
+      features: ENABLED_CLOUD_FEATURES,
       allowedAgents: ['data-analyst'],
       allowedTools: ['read'],
       allowedMcps: [],
@@ -481,6 +498,436 @@ function transport(): CloudTransportAdapter {
   }
 }
 
+test('cloud workspace adapter denies disabled chat before session transport or cache access', async () => {
+  const cache = new FileCloudWorkspaceCache({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-adapter-chat-policy-')), 'cloud-workspace-cache.json'),
+    mode: 'metadata-only',
+    secretStorage: {
+      mode: 'plaintext',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf-8'),
+      decryptString: (encrypted) => encrypted.toString('utf-8'),
+    },
+  })
+  const base = transport()
+  let sessionTransportCalls = 0
+  let sessionCacheReads = 0
+  const originalListSessions = cache.listSessions.bind(cache)
+  const originalGetEventCursor = cache.getEventCursor.bind(cache)
+  cache.listSessions = (workspaceId) => {
+    sessionCacheReads += 1
+    return originalListSessions(workspaceId)
+  }
+  cache.getEventCursor = (workspaceId, scope) => {
+    sessionCacheReads += 1
+    return originalGetEventCursor(workspaceId, scope)
+  }
+  const adapter = new CloudWorkspaceAdapter({
+    connection: {
+      id: 'cloud:disabled-chat',
+      baseUrl: 'https://cloud.example.test',
+      label: 'Disabled Chat',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    },
+    cache,
+    transport: {
+      ...base,
+      getConfig: async () => ({
+        ...(await base.getConfig()),
+        features: { ...ENABLED_CLOUD_FEATURES, chat: false },
+      }),
+      listSessions: async () => {
+        sessionTransportCalls += 1
+        return base.listSessions()
+      },
+      createSession: async (input) => {
+        sessionTransportCalls += 1
+        return base.createSession(input)
+      },
+      subscribeWorkspaceEvents: (input) => {
+        sessionTransportCalls += 1
+        return base.subscribeWorkspaceEvents(input)
+      },
+      subscribeSessionEvents: (sessionId, input) => {
+        sessionTransportCalls += 1
+        return base.subscribeSessionEvents(sessionId, input)
+      },
+    },
+  })
+  await adapter.policy()
+
+  for (const action of [
+    () => adapter.listSessions(),
+    () => adapter.createSession(),
+  ]) {
+    await assert.rejects(action, (error: unknown) => {
+      assert.equal((error as { code?: unknown }).code, 'chat.disabled')
+      return true
+    })
+  }
+  for (const action of [
+    () => adapter.subscribeWorkspaceEvents({ onEvent: () => {} }),
+    () => adapter.subscribeSessionEvents('session-1', { onEvent: () => {} }),
+  ]) {
+    assert.throws(action, (error: unknown) => {
+      assert.equal((error as { code?: unknown }).code, 'chat.disabled')
+      return true
+    })
+  }
+  assert.equal(sessionTransportCalls, 0)
+  assert.equal(sessionCacheReads, 0)
+})
+
+test('cloud workspace adapter coalesces resolved access and honors custom-role permissions', async () => {
+  const base = transport()
+  let accessCalls = 0
+  let roleCalls = 0
+  const adapter = new CloudWorkspaceAdapter({
+    connection: {
+      id: 'cloud:delegated-role-manager',
+      baseUrl: 'https://cloud.example.test',
+      label: 'Delegated role manager',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    },
+    cache: null,
+    transport: {
+      ...base,
+      getAdminAccess: async () => {
+        accessCalls += 1
+        await delay(5)
+        return {
+          role: 'member',
+          customRoleKey: 'role-manager',
+          permissions: ['roles:manage'],
+          email: 'manager@example.test',
+          ssoVerified: false,
+        }
+      },
+      listCustomRoles: async () => {
+        roleCalls += 1
+        return []
+      },
+    },
+  })
+
+  assert.deepEqual(await Promise.all([
+    adapter.listCustomRoles(),
+    adapter.listCustomRoles(),
+  ]), [[], []])
+  assert.equal(accessCalls, 1)
+  assert.equal(roleCalls, 2)
+})
+
+test('cloud workspace adapter preserves custom-role identity for role-or-permission actions', async () => {
+  const createAdapter = (
+    id: string,
+    access: Awaited<ReturnType<NonNullable<CloudTransportAdapter['getAdminAccess']>>>,
+  ) => new CloudWorkspaceAdapter({
+    connection: {
+      id,
+      baseUrl: 'https://cloud.example.test',
+      label: id,
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    },
+    cache: null,
+    transport: {
+      ...transport(),
+      getAdminAccess: async () => access,
+    },
+  })
+  const authorizeBilling = (adapter: CloudWorkspaceAdapter) => (
+    adapter as unknown as { authorize(action: 'billing.write'): Promise<void> }
+  ).authorize('billing.write')
+
+  await authorizeBilling(createAdapter('custom-billing-manager', {
+    role: 'member',
+    customRoleKey: 'billing-manager',
+    permissions: ['billing:manage'],
+    email: 'billing@example.test',
+    ssoVerified: false,
+  }))
+
+  await assert.rejects(
+    () => authorizeBilling(createAdapter('custom-restricted-admin', {
+      role: 'admin',
+      customRoleKey: 'restricted-admin',
+      permissions: [],
+      email: 'restricted@example.test',
+      ssoVerified: false,
+    })),
+    (error: unknown) => {
+      assert.equal((error as { code?: unknown }).code, 'authorization.principal_denied')
+      return true
+    },
+  )
+})
+
+test('cloud workspace adapter denies missing admin permission before target transport', async () => {
+  const base = transport()
+  let roleCalls = 0
+  const adapter = new CloudWorkspaceAdapter({
+    connection: {
+      id: 'cloud:limited-member',
+      baseUrl: 'https://cloud.example.test',
+      label: 'Limited member',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    },
+    cache: null,
+    transport: {
+      ...base,
+      getAdminAccess: async () => ({
+        role: 'member',
+        customRoleKey: null,
+        permissions: ['members:read'],
+        email: 'member@example.test',
+        ssoVerified: false,
+      }),
+      listCustomRoles: async () => {
+        roleCalls += 1
+        return []
+      },
+    },
+  })
+
+  await assert.rejects(
+    () => adapter.listCustomRoles(),
+    (error: unknown) => {
+      assert.equal((error as { code?: unknown }).code, 'authorization.principal_denied')
+      return true
+    },
+  )
+  assert.equal(roleCalls, 0)
+})
+
+test('cloud workspace adapter fails closed when access context is malformed', async () => {
+  const base = transport()
+  let auditCalls = 0
+  const adapter = new CloudWorkspaceAdapter({
+    connection: {
+      id: 'cloud:malformed-access',
+      baseUrl: 'https://cloud.example.test',
+      label: 'Malformed access',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    },
+    cache: null,
+    transport: {
+      ...base,
+      getAdminAccess: async () => ({
+        role: 'admin',
+        customRoleKey: null,
+        permissions: undefined,
+        email: 'admin@example.test',
+        ssoVerified: false,
+      } as never),
+      queryAudit: async () => {
+        auditCalls += 1
+        return { events: [], nextCursor: null }
+      },
+    },
+  })
+
+  await assert.rejects(() => adapter.queryAudit())
+  assert.equal(auditCalls, 0)
+})
+
+test('cloud workspace adapter denies disabled workflows and artifacts before transport or stale cache reads', async () => {
+  const cache = new FileCloudWorkspaceCache({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-adapter-domain-policy-')), 'cloud-workspace-cache.json'),
+    mode: 'metadata-only',
+    secretStorage: {
+      mode: 'plaintext',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf-8'),
+      decryptString: (encrypted) => encrypted.toString('utf-8'),
+    },
+  })
+  const base = transport()
+  let domainTransportCalls = 0
+  let domainCacheReads = 0
+  const originalGetWorkflowList = cache.getWorkflowList.bind(cache)
+  const originalListArtifacts = cache.listArtifacts.bind(cache)
+  cache.getWorkflowList = (workspaceId) => {
+    domainCacheReads += 1
+    return originalGetWorkflowList(workspaceId)
+  }
+  cache.listArtifacts = (workspaceId, sessionId) => {
+    domainCacheReads += 1
+    return originalListArtifacts(workspaceId, sessionId)
+  }
+  const adapter = new CloudWorkspaceAdapter({
+    connection: {
+      id: 'cloud:disabled-domains',
+      baseUrl: 'https://cloud.example.test',
+      label: 'Disabled Domains',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    },
+    cache,
+    transport: {
+      ...base,
+      getConfig: async () => ({
+        ...(await base.getConfig()),
+        features: { ...ENABLED_CLOUD_FEATURES, workflows: false, artifacts: false },
+      }),
+      listWorkflows: async () => {
+        domainTransportCalls += 1
+        return base.listWorkflows!()
+      },
+      listArtifacts: async (sessionId) => {
+        domainTransportCalls += 1
+        return base.listArtifacts!(sessionId)
+      },
+    },
+  })
+  await adapter.policy()
+
+  await assert.rejects(
+    () => adapter.listWorkflows(),
+    (error: unknown) => (error as { code?: unknown }).code === 'workflows.disabled',
+  )
+  await assert.rejects(
+    () => adapter.listArtifacts('session-1'),
+    (error: unknown) => (error as { code?: unknown }).code === 'artifacts.disabled',
+  )
+  assert.equal(domainTransportCalls, 0)
+  assert.equal(domainCacheReads, 0)
+})
+
+test('cloud workspace adapter never turns an authoritative server denial into stale cached success', async () => {
+  const cache = new FileCloudWorkspaceCache({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-adapter-server-policy-')), 'cloud-workspace-cache.json'),
+    mode: 'metadata-only',
+    secretStorage: {
+      mode: 'plaintext',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf-8'),
+      decryptString: (encrypted) => encrypted.toString('utf-8'),
+    },
+  })
+  const connection = {
+    id: 'cloud:server-policy',
+    baseUrl: 'https://cloud.example.test',
+    label: 'Server Policy',
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+    lastSyncedAt: null,
+  }
+  const seed = new CloudWorkspaceAdapter({ connection, cache, transport: transport() })
+  await seed.policy()
+  await seed.listSessions()
+
+  let staleCacheReads = 0
+  const originalListSessions = cache.listSessions.bind(cache)
+  cache.listSessions = (workspaceId) => {
+    staleCacheReads += 1
+    return originalListSessions(workspaceId)
+  }
+  const denied = new CloudTransportError({
+    kind: 'forbidden',
+    status: 403,
+    code: 'chat.disabled',
+    message: 'Chat is disabled for this cloud profile.',
+  })
+  const adapter = new CloudWorkspaceAdapter({
+    connection,
+    cache,
+    transport: {
+      ...transport(),
+      listSessions: async () => { throw denied },
+    },
+  })
+
+  await assert.rejects(() => adapter.listSessions(), (error) => error === denied)
+  assert.equal(staleCacheReads, 0)
+})
+
+test('cloud workspace adapter fails closed for missing and malformed cached feature snapshots', async () => {
+  const cache = new FileCloudWorkspaceCache({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-adapter-unknown-policy-')), 'cloud-workspace-cache.json'),
+    mode: 'metadata-only',
+    secretStorage: {
+      mode: 'plaintext',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf-8'),
+      decryptString: (encrypted) => encrypted.toString('utf-8'),
+    },
+  })
+  const base = transport()
+  let configCalls = 0
+  let transportCalls = 0
+  let cacheReads = 0
+  const originalListSessions = cache.listSessions.bind(cache)
+  cache.listSessions = (workspaceId) => {
+    cacheReads += 1
+    return originalListSessions(workspaceId)
+  }
+
+  for (const [id, featureSnapshot] of [
+    ['cloud:missing-snapshot', null],
+    ['cloud:malformed-snapshot', { chat: 'enabled' }],
+  ] as const) {
+    const connection = {
+      id,
+      baseUrl: 'https://cloud.example.test',
+      label: 'Unknown Policy',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    }
+    const cacheKey = cloudWorkspaceCacheKey(connection)
+    cache.upsertSessionList(cacheKey, [{
+      id: 'session-1',
+      title: 'Stale session',
+      directory: null,
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }])
+    if (featureSnapshot) {
+      cache.upsertFeatureSnapshot(cacheKey, featureSnapshot as never)
+    }
+    const adapter = new CloudWorkspaceAdapter({
+      connection,
+      cache,
+      transport: {
+        ...base,
+        getConfig: async () => {
+          configCalls += 1
+          throw new Error('policy source unavailable')
+        },
+        listSessions: async () => {
+          transportCalls += 1
+          return base.listSessions()
+        },
+        createSession: async (input) => {
+          transportCalls += 1
+          return base.createSession(input)
+        },
+      },
+    })
+
+    await assert.rejects(
+      () => adapter.listSessions(),
+      (error: unknown) => (error as { code?: unknown }).code === 'chat.disabled',
+    )
+    if (!featureSnapshot) {
+      await assert.rejects(
+        () => adapter.createSession(),
+        (error: unknown) => (error as { code?: unknown }).code === 'chat.disabled',
+      )
+    }
+  }
+  assert.equal(configCalls, 1)
+  assert.equal(transportCalls, 0)
+  assert.equal(cacheReads, 0)
+})
+
 function failingTransport(): CloudTransportAdapter {
   const fail = async () => {
     throw new Error('offline')
@@ -755,6 +1202,7 @@ test('cloud workspace adapter bounds sync hydration concurrency', async () => {
     },
   })
 
+  await adapter.policy()
   await adapter.sync()
 
   assert.equal(viewCalls, sessions.length)
@@ -843,6 +1291,7 @@ test('cloud workspace adapter sync is page-aware and refreshes only changed cach
     },
   })
 
+  await adapter.policy()
   await adapter.sync()
 
   assert.deepEqual(cursors, [null, '100'])
@@ -874,6 +1323,7 @@ test('cloud workspace adapter coalesces concurrent session view refreshes', asyn
     },
   })
 
+  await adapter.policy()
   const [first, second] = await Promise.all([
     adapter.getSessionView('session-1'),
     adapter.getSessionView('session-1'),
@@ -906,8 +1356,9 @@ test('cloud workspace adapter does not overwrite newer cached projections with s
   const seed = new CloudWorkspaceAdapter({
     connection,
     transport: transport(),
-    cache: null,
+    cache,
   })
+  await seed.policy()
   const fresh = {
     ...await seed.getSessionView('session-1'),
     revision: 99,
@@ -949,6 +1400,7 @@ test('cloud workspace adapter blocks local attachments in cloud prompts', async 
     cache: null,
   })
 
+  await adapter.policy()
   await assert.rejects(
     () => adapter.promptSession('session-1', {
       text: 'hello',
@@ -981,6 +1433,7 @@ test('cloud workspace adapter falls back to read-only cached state when transpor
     transport: transport(),
     cache,
   })
+  await online.policy()
   await online.listSessions()
   await online.getSessionView('session-1')
   await online.listWorkflows()
@@ -1048,6 +1501,7 @@ test('cloud workspace adapter isolates cached state by connection tenant user an
     cache,
   })
 
+  await online.policy()
   await online.listSessions()
   await online.getSessionView('session-1')
 
@@ -1062,7 +1516,7 @@ test('cloud workspace adapter isolates cached state by connection tenant user an
   assert.equal(cache.listSessions(cloudWorkspaceCacheKey(tenantB)), null)
   await assert.rejects(
     () => offlineOtherTenant.listSessions(),
-    /offline/,
+    (error: unknown) => (error as { code?: unknown }).code === 'chat.disabled',
   )
 })
 
@@ -1106,6 +1560,7 @@ test('cloud workspace adapter ignores cached session cursors until caller provid
     },
   })
 
+  await adapter.policy()
   adapter.subscribeSessionEvents('session-1', {
     onEvent: () => {},
   })
@@ -1158,10 +1613,10 @@ test('cloud workspace adapter resumes workspace event streams from cached cursor
     onEvent: () => {},
   })
 
-  assert.equal(observedAfterSequence, 100)
   // Event handling is now sequenced per subscription (audit P1-X2), so the cursor advances on the
   // next microtask rather than synchronously.
   await delay(0)
+  assert.equal(observedAfterSequence, 100)
   assert.equal(cache.getEventCursor(cacheKey, 'workspace'), 101)
 })
 
@@ -1185,6 +1640,7 @@ test('cloud workspace adapter refreshes snapshots and resets cursor on workspace
   }
   const base = transport()
   const cacheKey = cloudWorkspaceCacheKey(connection)
+  cache.upsertFeatureSnapshot(cacheKey, ENABLED_CLOUD_FEATURES)
   cache.setEventCursor(cacheKey, 'workspace', 100)
   let observedAfterSequence: number | undefined
   let listSessionsCount = 0
@@ -1282,6 +1738,7 @@ test('cloud workspace adapter delivers workspace events in order even when a sna
     lastSyncedAt: null,
   }
   const base = transport()
+  cache.upsertFeatureSnapshot(cloudWorkspaceCacheKey(connection), ENABLED_CLOUD_FEATURES)
   let releaseSync!: () => void
   const syncGate = new Promise<void>((resolve) => { releaseSync = resolve })
   let firstListSessions = true

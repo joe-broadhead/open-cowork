@@ -183,7 +183,10 @@ export class CloudByokService {
 
   private assertByokAllowed(principal: CloudPrincipal) {
     this.assertPermission(principal, 'policy:manage')
-    if (principal.authSource === 'api_token' && !principalHasPrivilegedTokenScope(principal, 'admin')) {
+    if (
+      principal.authSource === 'api_token'
+      && !principalHasPrivilegedTokenScope(principal, 'admin', ['policy:manage'])
+    ) {
       throw new CloudServiceError(403, 'BYOK credential administration with an API token requires the admin token scope.')
     }
   }

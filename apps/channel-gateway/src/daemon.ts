@@ -224,17 +224,26 @@ async function handleRequest(
       writeJson(res, 503, { ok: false, error: 'Cloud delivery listing is not available.' })
       return
     }
+    const body = await readRequestBody(req, config.server.maxRequestBodyBytes)
+    const payload = parseRequestBody(body.raw, req.headers['content-type'])
+    const bodyRecord = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload as Record<string, unknown>
+      : {}
+    const channelBindingId = stringField(bodyRecord.channelBindingId)
+      || stringField(url.searchParams.get('channelBindingId'))
     if (action === 'retry') {
       if (!cloud?.retryDelivery) {
         writeJson(res, 503, { ok: false, error: 'Cloud delivery retry is not available.' })
         return
       }
-      const scopedDelivery = await findConfiguredDelivery(config, cloud, deliveryId)
+      const scopedDelivery = await findConfiguredDelivery(config, cloud, deliveryId, channelBindingId)
       if (!scopedDelivery) {
         writeJson(res, 404, { ok: false, error: 'Delivery not found.' })
         return
       }
-      const delivery = await cloud.retryDelivery(deliveryId)
+      const delivery = await cloud.retryDelivery(deliveryId, {
+        channelBindingId: scopedDelivery.channelBindingId,
+      })
       writeJson(res, delivery ? 200 : 404, delivery ? { ok: true, delivery } : { ok: false, error: 'Delivery not found.' })
       return
     }
@@ -242,17 +251,16 @@ async function handleRequest(
       writeJson(res, 503, { ok: false, error: 'Cloud delivery dead-letter is not available.' })
       return
     }
-    const body = await readRequestBody(req, config.server.maxRequestBodyBytes)
-    const payload = parseRequestBody(body.raw, req.headers['content-type'])
-    const lastError = payload && typeof payload === 'object' && !Array.isArray(payload)
-      ? stringField((payload as Record<string, unknown>).lastError)
-      : null
-    const scopedDelivery = await findConfiguredDelivery(config, cloud, deliveryId)
+    const lastError = stringField(bodyRecord.lastError)
+    const scopedDelivery = await findConfiguredDelivery(config, cloud, deliveryId, channelBindingId)
     if (!scopedDelivery) {
       writeJson(res, 404, { ok: false, error: 'Delivery not found.' })
       return
     }
-    const delivery = await cloud.deadLetterDelivery(deliveryId, { lastError })
+    const delivery = await cloud.deadLetterDelivery(deliveryId, {
+      channelBindingId: scopedDelivery.channelBindingId,
+      lastError,
+    })
     writeJson(res, delivery ? 200 : 404, delivery ? { ok: true, delivery } : { ok: false, error: 'Delivery not found.' })
     return
   }
@@ -388,20 +396,28 @@ async function listConfiguredDeliveries(
     limit: input.limit,
   }) || []))
   const byId = new Map<string, ChannelDeliveryRecord>()
-  for (const delivery of pages.flat()) byId.set(delivery.deliveryId, delivery)
+  for (const delivery of pages.flat()) {
+    byId.set(`${delivery.channelBindingId}\0${delivery.deliveryId}`, delivery)
+  }
   return [...byId.values()]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.createdAt.localeCompare(left.createdAt))
     .slice(0, input.limit)
 }
 
-async function findConfiguredDelivery(config: GatewayConfig, cloud: CloudGateway, deliveryId: string) {
+async function findConfiguredDelivery(
+  config: GatewayConfig,
+  cloud: CloudGateway,
+  deliveryId: string,
+  channelBindingId?: string | null,
+) {
   const deliveries = await listConfiguredDeliveries(config, cloud, {
     deliveryId,
     status: null,
-    channelBindingId: null,
-    limit: 1,
+    channelBindingId: channelBindingId || null,
+    limit: 2,
   })
-  return deliveries.find((delivery) => delivery.deliveryId === deliveryId) || null
+  const matches = deliveries.filter((delivery) => delivery.deliveryId === deliveryId)
+  return matches.length === 1 ? matches[0]! : null
 }
 
 function configuredChannelBindingIds(config: GatewayConfig) {

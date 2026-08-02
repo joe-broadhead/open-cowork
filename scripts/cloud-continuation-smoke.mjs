@@ -387,24 +387,32 @@ async function setupGateway({ baseUrl, token, tokenId, adminClient, runId }) {
   const createHeadlessAgent = requireMethod(adminClient, 'createHeadlessAgent')
   const createChannelBinding = requireMethod(adminClient, 'createChannelBinding')
   const resolveChannelIdentity = requireMethod(adminClient, 'resolveChannelIdentity')
-  const agentId = `continuation-agent-${runId}`
-  const bindingId = `continuation-binding-${runId}`
+  const requestedAgentId = `continuation-agent-${runId}`
+  const requestedBindingId = `continuation-binding-${runId}`
   const externalUserId = `continuation-user-${runId}`
   const agent = await createHeadlessAgent({
-    agentId,
+    agentId: requestedAgentId,
     name: `Continuation smoke ${runId}`,
     profileName: argOrEnv('profile', 'OPEN_COWORK_CONTINUATION_SMOKE_PROFILE', 'full'),
     status: 'active',
     managed: false,
   })
+  const agentId = agent?.agentId
+  if (typeof agentId !== 'string' || !agentId) {
+    throw new Error('Cloud did not return the created headless agent id.')
+  }
   const channelBinding = await createChannelBinding({
-    bindingId,
+    bindingId: requestedBindingId,
     agentId,
     provider: 'cli',
     displayName: `Continuation fake channel ${runId}`,
     status: 'active',
     settings: { smoke: true },
   })
+  const bindingId = channelBinding?.bindingId
+  if (typeof bindingId !== 'string' || !bindingId) {
+    throw new Error('Cloud did not return the created channel binding id.')
+  }
   const grantApiTokenChannelBinding = requireMethod(adminClient, 'grantApiTokenChannelBinding')
   const grant = await grantApiTokenChannelBinding(tokenId, { channelBindingId: bindingId })
   if (!grant?.token?.channelBindingIds?.includes(bindingId)) {

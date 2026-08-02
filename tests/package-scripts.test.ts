@@ -75,6 +75,9 @@ const readmeDocs = readFileSync(new URL('../README.md', import.meta.url), 'utf8'
 const contributingDocs = readFileSync(new URL('../CONTRIBUTING.md', import.meta.url), 'utf8')
 const gettingStartedDocs = readFileSync(new URL('../docs/getting-started.md', import.meta.url), 'utf8')
 const firstContributionDocs = readFileSync(new URL('../docs/first-contribution.md', import.meta.url), 'utf8')
+const docsIndex = readFileSync(new URL('../docs/index.md', import.meta.url), 'utf8')
+const troubleshootingDocs = readFileSync(new URL('../docs/troubleshooting.md', import.meta.url), 'utf8')
+const agentInstructions = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8')
 const securityModelDocs = readFileSync(new URL('../docs/security-model.md', import.meta.url), 'utf8')
 const releaseChecklistDocs = readFileSync(new URL('../docs/release-checklist.md', import.meta.url), 'utf8')
 const mkdocsConfig = readFileSync(new URL('../mkdocs.yml', import.meta.url), 'utf8')
@@ -750,6 +753,13 @@ test('contributor setup docs and dependency update governance match enforced eng
   }
   assert.match(readmeDocs, /\[!\[pnpm 10\.32\.1\]/)
   assert.doesNotMatch(readmeDocs, /\[!\[pnpm 10\+\]/)
+  assert.match(readmeDocs, /\[!\[Node 22\.22\.3\+\]/)
+  assert.match(readmeDocs, /Node `>=22\.22\.3` \(supported monorepo floor\)/)
+  for (const docs of [readmeDocs, gettingStartedDocs, firstContributionDocs, docsIndex]) {
+    assert.match(docs, /Supported: v22\.22\.3 or newer; CI uses the exact \.nvmrc version/)
+  }
+  assert.match(troubleshootingDocs, /Verify Node is `v22\.22\.3\+`/)
+  assert.match(agentInstructions, /Node: see `\.nvmrc` \(\*\*≥22\.22\.3\*\*\)/)
   for (const workflow of [ciWorkflow, docsWorkflow, releaseWorkflow, monthlyMaintenanceWorkflow, weeklyGatewayWorkflow]) {
     assert.match(workflow, /version: 10\.32\.1/)
   }
@@ -1041,16 +1051,18 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
 
-  for (const expectedCall of [
-    'waitForCdp(port, appShellTimeoutMs)',
-    'waitForCdpPage(browser, appShellTimeoutMs)',
-    'waitForCdpAppPage(browser, appShellTimeoutMs)',
-  ]) {
+  const packagedCdpTimeoutCalls: Array<[string, number]> = [
+    ['waitForOwnedCdp(port, processId, appShellTimeoutMs)', 1],
+    ['waitForCdp(port, appShellTimeoutMs)', 1],
+    ['waitForCdpPage(browser, appShellTimeoutMs)', 2],
+    ['waitForCdpAppPage(browser, appShellTimeoutMs)', 2],
+  ]
+  for (const [expectedCall, expectedCount] of packagedCdpTimeoutCalls) {
     const matches = [...smokeHelpers.matchAll(new RegExp(expectedCall.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))]
     assert.equal(
       matches.length,
-      2,
-      `both packaged CDP launch paths must honor the packaged launch timeout via ${expectedCall}`,
+      expectedCount,
+      `packaged CDP launch paths must honor the packaged launch timeout via ${expectedCall}`,
     )
   }
 

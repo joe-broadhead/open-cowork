@@ -6,6 +6,10 @@ import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '@open-cowork
 import { CloudHttpError } from '@open-cowork/cloud-server/http-server'
 import { type CloudPrincipal } from '@open-cowork/cloud-server/session-service'
 import { KNOWLEDGE_AGENT_TOKEN_TTL_MS, signKnowledgeAgentToken } from '@open-cowork/cloud-server/knowledge-agent-token'
+import type {
+  CloudMetricRecord,
+  CloudObservabilityAdapter,
+} from '@open-cowork/cloud-server/observability'
 import { createFixture } from './helpers/cloud-http-fixture.ts'
 import {
   KNOWLEDGE_CAPABILITY_CONFIG,
@@ -123,7 +127,12 @@ test('cloud HTTP knowledge routes expose snapshot, proposal review, and version 
       body: JSON.stringify({ reviewedBy: 'member' }),
     })
     assert.equal(unauthorizedReview.status, 403)
-    assert.match(String((await readJson(unauthorizedReview)).error), /admin|review/i)
+    const unauthorizedReviewBody = asRecord(await readJson(unauthorizedReview))
+    assert.equal(
+      asRecord(unauthorizedReviewBody.verdict).policyCode,
+      'authorization.principal_denied',
+    )
+    assert.doesNotMatch(String(unauthorizedReviewBody.error), /admin|review|knowledge|proposal/i)
 
     const acceptedResponse = await fetch(`${baseUrl}/api/knowledge/proposals/${encodeURIComponent(String(proposal.id))}/accept`, {
       method: 'POST',
@@ -409,10 +418,17 @@ test('cloud HTTP knowledge agent-propose route fails closed without a secret or 
   }]
   try {
     for (const policyCase of policyCases) {
+      const metrics: CloudMetricRecord[] = []
+      const observability: CloudObservabilityAdapter = {
+        log() {},
+        metric(record) { metrics.push(record) },
+        span() {},
+      }
       const fixture = createFixture({
         appConfig: KNOWLEDGE_CAPABILITY_CONFIG,
         policy: policyCase.policy,
         knowledgeAgentTokenSecret: AGENT_SECRET,
+        observability,
       })
       const baseUrl = await fixture.server.listen()
       try {
@@ -431,6 +447,16 @@ test('cloud HTTP knowledge agent-propose route fails closed without a secret or 
             'knowledge.disabled',
           )
         }
+        const decisions = metrics.filter((record) => (
+          record.name === 'open_cowork_cloud_workspace_policy_decisions_total'
+          && record.attributes?.workspace_policy_action === 'knowledge.agentpropose'
+        ))
+        assert.equal(decisions.length, 1, `${policyCase.name}: ${JSON.stringify(metrics)}`)
+        assert.equal(
+          decisions[0]?.attributes?.workspace_policy_outcome,
+          policyCase.policy.features.knowledge ? 'allow' : 'deny',
+          policyCase.name,
+        )
       } finally {
         await fixture.server.close()
       }

@@ -8,8 +8,6 @@ trusted OpenWiki headers before forwarding the request to OpenWiki.
 
 See the [identity mapping guide](identity-mapping.md) for actor, group,
 principal, role, scope, service-account, and `group:all-users` semantics.
-For an apply-ready starting point, see
-`deploy/proxy/nginx-oauth2-proxy.conf` in the repository.
 
 ## Trusted Header Contract
 
@@ -182,13 +180,10 @@ state because clients, authorization codes, refresh tokens, and revocations
 would not be consistent across replicas. File-backed OAuth state is only for
 local loopback clients.
 
-Doctor and deploy-preflight expose an `oauth-state` check (JOE-979): when OAuth
+Doctor exposes an `oauth-state` check: when OAuth
 is enabled with file-backed state under hosted runtime mode, shared operational
 Postgres, or `OPENWIKI_WEB_REPLICAS` / `WEB_REPLICAS` > 1, the check fails closed
-and points operators at Postgres OAuth state. Helm also fails when
-`replicaCount > 1` with `oauthEnabled=true` unless
-`oauthStateBackend=postgres` or `operationalStateBackend=postgres` (and rejects
-an explicit `oauthStateBackend=file` multi-replica combo).
+and points operators at Postgres OAuth state.
 
 Supported OAuth routes:
 
@@ -359,10 +354,9 @@ The origin proxy still must strip inbound `x-openwiki-*` headers and add
 before deriving OpenWiki identity. Do not trust Cloudflare identity headers if
 clients can reach the origin directly.
 
-## Google IAP And Cloud Run
+## Google IAP
 
-For Google Cloud, put OpenWiki behind HTTPS Load Balancing with IAP or an
-equivalent Cloud Run/IAP boundary. IAP authenticates the user and forwards
+Google IAP can authenticate users at an HTTPS boundary and forward
 identity headers such as `x-goog-authenticated-user-email`.
 
 Reference mapping:
@@ -374,9 +368,9 @@ Reference mapping:
 | privileged group membership | `x-openwiki-role: maintainer` or `admin` |
 | default authenticated users | `x-openwiki-role: contributor` or `viewer` |
 
-Cloud Run should receive traffic only from the trusted load balancer or internal
-gateway that strips and rewrites OpenWiki headers. Set `OPENWIKI_PUBLIC_ORIGIN`
-to the external HTTPS URL, not the internal service URL.
+The OpenWiki origin should receive traffic only from the trusted boundary that
+strips and rewrites identity headers. Set `OPENWIKI_PUBLIC_ORIGIN` to the
+external HTTPS URL, not an internal service URL.
 
 ## AWS ALB OIDC
 

@@ -2,6 +2,7 @@ import { nowIso } from '../postgres-store-id-helpers.ts'
 import { normalizeNullableText, normalizeRecord, normalizeText } from '../postgres-store-normalizers.ts'
 import { normalizeChannelProviderId as normalizeProvider } from '../channel-provider-utils.ts'
 import { channelBindingFromRow } from '../postgres-domains/channels.ts'
+import { ControlPlaneIdConflictError } from '../control-plane-errors.ts'
 import { numberValue, type QueryResult, type QueryRow } from '../postgres-domains/shared.ts'
 import {
   ControlPlaneQuotaExceededError,
@@ -84,11 +85,12 @@ export class PostgresChannelBindingsRepository {
           now,
         ],
       )
-      const row = result.rows[0] || await this.one(
+      const row = result.rows[0] || await this.maybeOne(
         `SELECT * FROM cloud_channel_bindings WHERE org_id = $1 AND binding_id = $2`,
         [input.orgId, input.bindingId],
         client,
       )
+      if (!row) throw new ControlPlaneIdConflictError('channel_binding')
       const binding = channelBindingFromRow(row)
       if (result.rows[0]) {
         await this.options.recordAuditEvent(client, {
@@ -179,8 +181,12 @@ export class PostgresChannelBindingsRepository {
     return result.rows[0]
   }
 
-  private async maybeOne<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]) {
-    const result = await this.options.pool.query<Row>(text, values)
+  private async maybeOne<Row extends QueryRow = QueryRow>(
+    text: string,
+    values?: unknown[],
+    executor: PgExecutor = this.options.pool,
+  ) {
+    const result = await executor.query<Row>(text, values)
     return result.rows[0] || null
   }
 }

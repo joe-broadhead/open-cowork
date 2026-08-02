@@ -184,14 +184,14 @@ export class CloudSessionExecutionService {
     sessionId: string,
     payload: QuestionReplyPayload,
   ): Promise<SessionCommandRecord> {
-    await this.getSessionView(principal, sessionId)
     const commandId = this.ids.randomUUID()
-    await this.assertRemoteInteractionAllowed(principal, {
+    const policyInput = {
       sessionId,
       commandId,
-      interaction: 'question-reply',
+      interaction: 'question-reply' as const,
       targetId: payload.requestId,
-    })
+    }
+    await this.assertRemoteInteractionBeforeSessionLookup(principal, sessionId, policyInput)
     return this.store.enqueueSessionCommand({
       commandId,
       tenantId: principal.tenantId,
@@ -207,14 +207,14 @@ export class CloudSessionExecutionService {
     sessionId: string,
     payload: QuestionRejectPayload,
   ): Promise<SessionCommandRecord> {
-    await this.getSessionView(principal, sessionId)
     const commandId = this.ids.randomUUID()
-    await this.assertRemoteInteractionAllowed(principal, {
+    const policyInput = {
       sessionId,
       commandId,
-      interaction: 'question-reject',
+      interaction: 'question-reject' as const,
       targetId: payload.requestId,
-    })
+    }
+    await this.assertRemoteInteractionBeforeSessionLookup(principal, sessionId, policyInput)
     return this.store.enqueueSessionCommand({
       commandId,
       tenantId: principal.tenantId,
@@ -230,14 +230,14 @@ export class CloudSessionExecutionService {
     sessionId: string,
     payload: PermissionRespondPayload,
   ): Promise<SessionCommandRecord> {
-    await this.getSessionView(principal, sessionId)
     const commandId = this.ids.randomUUID()
-    await this.assertRemoteInteractionAllowed(principal, {
+    const policyInput = {
       sessionId,
       commandId,
-      interaction: 'permission-approval',
+      interaction: 'permission-approval' as const,
       targetId: payload.permissionId,
-    })
+    }
+    await this.assertRemoteInteractionBeforeSessionLookup(principal, sessionId, policyInput)
     return this.store.enqueueSessionCommand({
       commandId,
       tenantId: principal.tenantId,
@@ -246,6 +246,25 @@ export class CloudSessionExecutionService {
       kind: 'permission.respond',
       payload,
     })
+  }
+
+  private async assertRemoteInteractionBeforeSessionLookup(
+    principal: CloudPrincipal,
+    sessionId: string,
+    policyInput: RemoteInteractionPolicyInput,
+  ): Promise<void> {
+    // A profile-wide denial is independent of session state. Enforce it before
+    // resource lookup so an unauthorized remote response cannot distinguish an
+    // existing session from an absent or other-tenant session. When the profile
+    // permits remote responses, retain the normal ownership check before the
+    // target-specific policy/audit path.
+    if (this.policy.allowRemoteApprovalResponses === false) {
+      await this.assertRemoteInteractionAllowed(principal, policyInput)
+    }
+    await this.getSessionView(principal, sessionId)
+    if (this.policy.allowRemoteApprovalResponses !== false) {
+      await this.assertRemoteInteractionAllowed(principal, policyInput)
+    }
   }
 
   async executeCommand(

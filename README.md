@@ -3,7 +3,7 @@
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node 22.13+](https://img.shields.io/badge/node-22.13%2B-brightgreen.svg?logo=nodedotjs&logoColor=white)](.nvmrc)
+[![Node 22.22.3+](https://img.shields.io/badge/node-22.22.3%2B-brightgreen.svg?logo=nodedotjs&logoColor=white)](.nvmrc)
 [![pnpm 10.32.1](https://img.shields.io/badge/pnpm-10.32.1-F69220.svg?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/open-cowork/)
 [![CI](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml/badge.svg?branch=master&event=push)](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml)
@@ -207,7 +207,7 @@ renderer.
 
 ### Requirements
 
-- Node `>=22.13` (supported floor). For development and CI parity, use the
+- Node `>=22.22.3` (supported monorepo floor). For development and CI parity, use the
   exact version pinned in [`.nvmrc`](.nvmrc).
 - pnpm `10.32.1` via Corepack
 - Python `>=3.11` for docs builds
@@ -216,7 +216,7 @@ renderer.
 
 ```bash
 node -v
-# Supported: v22.13.0 or newer; CI uses the exact .nvmrc version
+# Supported: v22.22.3 or newer; CI uses the exact .nvmrc version
 
 corepack enable
 corepack prepare pnpm@10.32.1 --activate

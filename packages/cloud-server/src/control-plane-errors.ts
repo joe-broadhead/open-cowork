@@ -41,6 +41,21 @@ export class ControlPlaneQuotaExceededError extends Error {
   }
 }
 
+/**
+ * A caller-selected globally unique storage id collided with a row outside the
+ * caller's authority boundary. Store adapters throw the same typed error and
+ * never return the conflicting row or a backend-specific lookup failure.
+ */
+export class ControlPlaneIdConflictError extends Error {
+  readonly resource: 'headless_agent' | 'channel_binding' | 'channel_interaction'
+
+  constructor(resource: 'headless_agent' | 'channel_binding' | 'channel_interaction') {
+    super('The requested channel resource id is unavailable.')
+    this.name = 'ControlPlaneIdConflictError'
+    this.resource = resource
+  }
+}
+
 export function quotaExceeded(input: {
   message: string
   policyCode: QuotaPolicyCode | string

@@ -1,6 +1,7 @@
 import { clone, normalizeNullableText, normalizeText, nowIso, stableJson } from './store-helpers.ts'
 import { normalizeChannelProviderId as normalizeProvider } from '../channel-provider-utils.ts'
 import { quotaExceeded } from '../control-plane-errors.ts'
+import { ControlPlaneIdConflictError } from '../control-plane-errors.ts'
 import type {
   AuditEventRecord,
   ChannelBindingRecord,
@@ -37,7 +38,10 @@ export class InMemoryChannelBindingsDomain {
     const agent = this.host.getHeadlessAgent(input.orgId, input.agentId)
     if (!agent) throw new Error(`Unknown headless agent ${input.agentId}.`)
     const existing = this.channelBindings.get(input.bindingId)
-    if (existing) return clone(existing)
+    if (existing) {
+      if (existing.orgId !== input.orgId) throw new ControlPlaneIdConflictError('channel_binding')
+      return clone(existing)
+    }
     const bindingLimit = input.quota?.maxGatewayChannelBindingsPerOrg
     if (bindingLimit && bindingLimit > 0) {
       const activeBindings = Array.from(this.channelBindings.values())

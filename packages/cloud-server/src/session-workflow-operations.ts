@@ -26,7 +26,7 @@ import type {
   WorkflowTriggerType,
   WorkflowWebhookSecretMutationResult,
 } from '@open-cowork/shared'
-import { redactSecretText } from '@open-cowork/shared'
+import { evaluateWorkspaceCapabilityPolicy, redactSecretText } from '@open-cowork/shared'
 import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
@@ -66,6 +66,7 @@ import type { SecretAdapter } from './secret-adapter.ts'
 import {
   recordCloudLog,
   recordCloudMetric,
+  recordCloudWorkspacePolicyDecision,
   type CloudObservabilityAdapter,
 } from './observability.ts'
 
@@ -222,6 +223,7 @@ export class CloudWorkflowOperationsService {
     }
     assertWorkflowDraftAllowed(normalized, this.policy)
     const webhookTriggers = normalized.triggers.filter((trigger) => trigger.type === 'webhook')
+    if (webhookTriggers.length > 0) this.assertWebhooksEnabled()
     if (webhookTriggers.length > 1) {
       throw new CloudServiceError(400, 'A workflow can have at most one webhook trigger.')
     }
@@ -276,6 +278,7 @@ export class CloudWorkflowOperationsService {
   ): Promise<WorkflowWebhookSecretMutationResult | null> {
     await this.ensurePrincipal(principal)
     this.assertWorkflowsEnabled()
+    this.assertWebhooksEnabled()
     const workflow = await this.store.getWorkflow(principal.tenantId, principal.userId, workflowId)
     if (!workflow) return null
     const webhook = workflow.triggers.find((trigger) => trigger.type === 'webhook')
@@ -487,10 +490,6 @@ export class CloudWorkflowOperationsService {
     securityStore: WorkflowWebhookSecurityStore
     now?: Date
   }): Promise<CloudWorkflowStartResult> {
-    this.assertWorkflowsEnabled()
-    if (!this.policy.features.webhooks) {
-      throw new WebhookHttpError(404, 'Workflow webhook was not found.')
-    }
     if (input.auth.kind !== 'signature') {
       throw new WebhookHttpError(401, 'Workflow webhook signature authorization is required.')
     }
@@ -550,6 +549,17 @@ export class CloudWorkflowOperationsService {
     })
     if (!replayClaim) throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
     try {
+      const authorization = evaluateWorkspaceCapabilityPolicy({
+        action: 'workflows.webhookInvoke',
+        principal: { authSource: 'signed_workflow_webhook' },
+        features: this.policy.features,
+      })
+      await recordCloudWorkspacePolicyDecision(this.observability, authorization)
+      if (authorization.outcome === 'deny') {
+        throw new CloudServiceError(403, authorization.message, {
+          policyCode: authorization.code,
+        })
+      }
       const org = await this.store.ensureOrgForTenant({ tenantId: workflow.tenantId, name: workflow.tenantId })
       await this.assertWorkflowExecutionStartAllowed(workflow.tenantId, org.orgId)
       let run: CloudWorkflowRunRecord
@@ -916,6 +926,14 @@ export class CloudWorkflowOperationsService {
   private assertWorkflowsEnabled() {
     if (!this.policy.features.workflows) {
       throw new Error('Workflows are disabled for this cloud profile.')
+    }
+  }
+
+  private assertWebhooksEnabled() {
+    if (!this.policy.features.webhooks) {
+      throw new CloudServiceError(403, 'Webhooks are disabled for this cloud profile.', {
+        policyCode: 'webhooks.disabled',
+      })
     }
   }
 }

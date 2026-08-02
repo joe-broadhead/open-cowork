@@ -55,7 +55,9 @@
         "codesign",
         "gcloud",
         "gh",
+        "launchctl",
         "mkfifo",
+        "open",
         "ps",
         // Owner: Desktop Test. Windows process cleanup uses the operating-system
         // taskkill command from a cross-platform smoke harness.
@@ -83,6 +85,13 @@
         "tests/**/*.{ts,tsx}"
       ],
       "ignore": [],
+      // Owner: Desktop Test. The packaged macOS harness launches an exact app
+      // bundle through LaunchServices and temporarily supplies one restored
+      // authorization key; neither command is a package-manager binary.
+      "ignoreBinaries": [
+        "launchctl",
+        "open"
+      ],
       // Owner: Desktop Runtime. The shared renderer is composed through Vite's
       // source alias, electron-builder is invoked by the dist script, Google
       // auth stays external in the packaged main process, and OpenCode is

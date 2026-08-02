@@ -15,7 +15,7 @@ import {
 import { CloudServiceError } from '../cloud-service-error.ts'
 import { normalizeChannelProviderId } from '../channel-provider-utils.ts'
 import {
-  principalHasOrgAdminRole,
+  principalHasHumanPermissionOrAdminRole,
   principalHasPrivilegedTokenScope,
 } from '../principal-access.ts'
 import type { CloudApiRouteInput } from './types.ts'
@@ -184,8 +184,10 @@ export async function emitCloudTaskWatchEvents(
 function principalCanSetPrivilegedWatchRecipient(input: CloudApiRouteInput) {
   const principal = input.context.principal
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
+  if (principal.authSource === 'api_token') {
+    return principalHasPrivilegedTokenScope(principal, 'admin', ['org:manage'])
+  }
+  return principalHasHumanPermissionOrAdminRole(principal, ['org:manage'])
 }
 
 function assertPrivilegedWatchRecipientAllowed(input: CloudApiRouteInput, role: unknown) {

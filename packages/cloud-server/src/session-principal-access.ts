@@ -1,5 +1,9 @@
-import { principalHasOrgAdminRole, principalHasPrivilegedTokenScope } from './principal-access.ts'
+import {
+  principalHasHumanPermissionOrAdminRole,
+  principalHasPrivilegedTokenScope,
+} from './principal-access.ts'
 import type { CloudPrincipal } from './session-service.ts'
+import type { ControlPlanePermission } from './control-plane-store.ts'
 
 // Pure principal-authorization predicates for the cloud session service: who may
 // manage billing / API tokens / the org, and who may view operations /
@@ -8,20 +12,29 @@ import type { CloudPrincipal } from './session-service.ts'
 
 export function principalCanManageBilling(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
+  if (principal.authSource === 'api_token') {
+    return principalHasPrivilegedTokenScope(principal, 'admin', ['billing:manage'])
+  }
+  return principalHasHumanPermissionOrAdminRole(principal, ['billing:manage'])
 }
 
-export function principalCanManageApiTokens(principal: CloudPrincipal) {
+export function principalCanManageApiTokens(
+  principal: CloudPrincipal,
+  permission: Extract<ControlPlanePermission, 'api_tokens:read' | 'api_tokens:manage'> = 'api_tokens:manage',
+) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
+  if (principal.authSource === 'api_token') {
+    return principalHasPrivilegedTokenScope(principal, 'admin', [permission])
+  }
+  return principalHasHumanPermissionOrAdminRole(principal, [permission])
 }
 
 export function principalCanManageOrg(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
-  return principalHasOrgAdminRole(principal)
+  if (principal.authSource === 'api_token') {
+    return principalHasPrivilegedTokenScope(principal, 'admin', ['org:manage', 'members:manage'])
+  }
+  return principalHasHumanPermissionOrAdminRole(principal, ['org:manage', 'members:manage'])
 }
 
 export function principalEmailDomain(email: string | null | undefined) {
@@ -35,7 +48,7 @@ export function principalCanViewOperations(principal: CloudPrincipal) {
   if (principal.authSource === 'api_token') {
     return Boolean(
       principal.tokenScopes?.includes('worker-internal')
-      || (principalHasOrgAdminRole(principal) && principal.tokenScopes?.includes('operator'))
+      || principalHasPrivilegedTokenScope(principal, 'operator', ['operations:view'])
     )
   }
   return false
@@ -44,7 +57,7 @@ export function principalCanViewOperations(principal: CloudPrincipal) {
 export function principalCanViewDiagnostics(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') {
-    return principalHasOrgAdminRole(principal) && Boolean(principal.tokenScopes?.includes('operator'))
+    return principalHasPrivilegedTokenScope(principal, 'operator', ['diagnostics:view'])
   }
   return false
 }

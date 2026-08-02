@@ -10,7 +10,10 @@ import type {
   CloudPrincipal,
   CloudSessionView,
 } from '../session-service.ts'
-import { resolveGatewayChannelBindingScope } from './channel-binding-scope.ts'
+import {
+  resolveGatewayChannelBindingScope,
+  resolveGatewayChannelSessionBinding,
+} from './channel-binding-scope.ts'
 import {
   assertGatewayAccess,
   CHANNEL_HOUR_MS,
@@ -37,11 +40,11 @@ export async function bindChannelSession(
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const orgId = options.principalOrgId(principal)
+  await resolveGatewayChannelBindingScope(options, principal, [input.channelBindingId])
   const channelBinding = await options.store.getChannelBinding(orgId, input.channelBindingId)
-  if (!channelBinding) throw new CloudServiceError(404, 'Channel binding was not found.')
+  if (!channelBinding) throw new CloudServiceError(403, 'Gateway API token is not authorized for the requested channel binding.')
   if (channelBinding.status !== 'active') throw new CloudServiceError(403, 'Channel binding is not active.')
   if (channelBinding.provider !== input.provider) throw new CloudServiceError(400, 'Channel provider does not match binding.')
-  await resolveGatewayChannelBindingScope(options, principal, [channelBinding.bindingId])
   const actor = await requireChannelActor(options, principal, input, 'prompt', {
     provider: channelBinding.provider,
     externalWorkspaceId: channelBinding.externalWorkspaceId,
@@ -62,9 +65,7 @@ export async function bindChannelSession(
     externalThreadId: input.externalThreadId,
   })
   if (existing) {
-    if (existing.channelBindingId !== channelBinding.bindingId) {
-      throw new CloudServiceError(409, 'Channel thread is already bound to a different channel binding.')
-    }
+    assertChannelSessionBindingPostcondition(existing, channelBinding, agent.agentId, input.sessionId)
     const owned = await options.store.getSession(principal.tenantId, principal.userId, existing.sessionId)
     if (!owned) throw new CloudServiceError(403, 'Channel session binding requires a session owned by the gateway principal.')
     return {
@@ -119,6 +120,10 @@ export async function bindChannelSession(
     lastWorkspaceSequence: input.lastWorkspaceSequence,
     lastChatMessageId: input.lastChatMessageId,
   })
+  // The unique thread constraint is the serialization point. A concurrent
+  // bind can win after our preflight read; never trust the store's conflict
+  // row until it is proven to match the authority and session we just bound.
+  assertChannelSessionBindingPostcondition(binding, channelBinding, agent.agentId, sessionId)
   await options.store.recordAuditEvent({
     orgId,
     accountId: actor.accountId,
@@ -145,6 +150,7 @@ export async function getChannelSessionByThread(
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const orgId = options.principalOrgId(principal)
+  const scope = await resolveGatewayChannelBindingScope(options, principal)
   const binding = await options.store.findChannelSessionBindingByThread({
     orgId,
     provider: input.provider,
@@ -153,9 +159,15 @@ export async function getChannelSessionByThread(
     externalThreadId: input.externalThreadId,
   })
   if (!binding) return null
-  await resolveGatewayChannelBindingScope(options, principal, [binding.channelBindingId])
+  if (scope.channelBindingIds && !scope.channelBindingIds.includes(binding.channelBindingId)) {
+    return null
+  }
+  const channelBinding = await options.store.getChannelBinding(orgId, binding.channelBindingId)
+  if (!channelBinding || channelBinding.status !== 'active') {
+    return null
+  }
   const session = await options.store.getSession(principal.tenantId, principal.userId, binding.sessionId)
-  if (!session) throw new CloudServiceError(403, 'Channel thread lookup requires a session owned by the gateway principal.')
+  if (!session) return null
   return {
     binding,
     session: {
@@ -178,9 +190,7 @@ export async function updateChannelCursor(
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const orgId = options.principalOrgId(principal)
-  const binding = await options.store.getChannelSessionBinding(orgId, input.bindingId)
-  if (!binding) return { ok: false, reason: 'not_found' }
-  await resolveGatewayChannelBindingScope(options, principal, [binding.channelBindingId])
+  await resolveGatewayChannelSessionBinding(options, principal, input.bindingId)
   return options.store.updateChannelCursor({
     orgId,
     bindingId: input.bindingId,
@@ -197,17 +207,14 @@ export async function enqueueChannelPrompt(
     bindingId: string
     text: string
     agent?: string | null
-    commandId?: string | null
   },
 ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const orgId = options.principalOrgId(principal)
-  const binding = await options.store.getChannelSessionBinding(orgId, input.bindingId)
-  if (!binding || binding.status !== 'active') throw new CloudServiceError(404, 'Channel session binding was not found.')
+  const binding = await resolveGatewayChannelSessionBinding(options, principal, input.bindingId)
   const channelBinding = await options.store.getChannelBinding(orgId, binding.channelBindingId)
-  if (!channelBinding) throw new CloudServiceError(404, 'Channel binding was not found.')
-  await resolveGatewayChannelBindingScope(options, principal, [channelBinding.bindingId])
+  if (!channelBinding || channelBinding.status !== 'active') throw new CloudServiceError(403, 'Gateway API token is not authorized for the requested channel binding.')
   const actor = await requireChannelActor(options, principal, input, 'prompt', {
     provider: binding.provider,
     externalWorkspaceId: channelBinding.externalWorkspaceId,
@@ -235,7 +242,10 @@ export async function enqueueChannelPrompt(
   let command: SessionCommandRecord
   try {
     command = await options.store.enqueueSessionCommand({
-      commandId: input.commandId || options.ids.randomUUID(),
+      // Command ids are server-owned. A caller-controlled global id could
+      // otherwise probe whether a command exists in another session through
+      // the store's idempotency mismatch response.
+      commandId: options.ids.randomUUID(),
       tenantId: principal.tenantId,
       userId: session.userId,
       sessionId: binding.sessionId,
@@ -273,4 +283,21 @@ export async function enqueueChannelPrompt(
     })
   }
   return { binding, command, beforeProjectionSequence }
+}
+
+function assertChannelSessionBindingPostcondition(
+  binding: ChannelSessionBindingRecord,
+  channelBinding: { bindingId: string, externalWorkspaceId: string | null, provider: ChannelProviderId },
+  agentId: string,
+  sessionId?: string | null,
+) {
+  if (
+    binding.channelBindingId !== channelBinding.bindingId
+    || binding.agentId !== agentId
+    || binding.provider !== channelBinding.provider
+    || binding.externalWorkspaceId !== channelBinding.externalWorkspaceId
+    || (sessionId && binding.sessionId !== sessionId)
+  ) {
+    throw new CloudServiceError(409, 'Channel thread is already bound to a different channel authority.')
+  }
 }

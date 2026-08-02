@@ -82,6 +82,8 @@ export function channelInteractionFromRow(row: QueryRow): ChannelInteractionReco
     interactionId: String(row.interaction_id),
     orgId: String(row.org_id),
     agentId: String(row.agent_id),
+    channelBindingId: stringOrNull(row.channel_binding_id),
+    sessionBindingId: stringOrNull(row.session_binding_id),
     sessionId: String(row.session_id),
     provider: String(row.provider) as ChannelProviderId,
     externalInteractionId: stringOrNull(row.external_interaction_id),
@@ -99,7 +101,9 @@ export function channelInteractionFromRow(row: QueryRow): ChannelInteractionReco
 
 export function channelDeliveryFromRow(row: QueryRow): ChannelDeliveryRecord {
   return {
-    deliveryId: String(row.delivery_id),
+    // `delivery_id` is an internal collision-safe storage key. The public
+    // idempotency key is scoped by org + binding and remains API-compatible.
+    deliveryId: String(row.public_delivery_id ?? row.delivery_id),
     orgId: String(row.org_id),
     agentId: String(row.agent_id),
     channelBindingId: String(row.channel_binding_id),
@@ -121,9 +125,11 @@ export function channelDeliveryFromRow(row: QueryRow): ChannelDeliveryRecord {
 }
 
 export function channelProviderEventFromRow(row: QueryRow): ChannelProviderEventRecord {
+  const storedChannelBindingId = stringOrNull(row.channel_binding_id)
   return {
     eventId: String(row.event_id),
     orgId: String(row.org_id),
+    channelBindingId: storedChannelBindingId === '__open_cowork_unscoped__' ? null : storedChannelBindingId,
     provider: String(row.provider) as ChannelProviderId,
     providerInstanceId: String(row.provider_instance_id),
     externalWorkspaceId: stringOrNull(row.external_workspace_id),

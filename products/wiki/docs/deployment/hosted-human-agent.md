@@ -1,7 +1,7 @@
 # Hosted Humans And Agents
 
-Use this cookbook when OpenWiki is reachable through a company hostname and both
-people and agents need access. The production shape is deliberately split:
+Use this cookbook when evaluating OpenWiki through a company hostname and both
+people and agents need access. The operator-owned topology is deliberately split:
 humans authenticate at an organization SSO or reverse-proxy boundary, while
 remote agents authenticate to Streamable HTTP MCP with scoped service-account
 bearer tokens. Local personal agents should keep using stdio MCP by default.
@@ -23,9 +23,8 @@ flowchart LR
   Web --> Obj["Optional object storage"]
 ```
 
-The hosted baseline is provider-neutral:
+The source-operated hosted baseline is provider-neutral:
 
-- container image pinned by digest
 - `OPENWIKI_PUBLIC_ORIGIN=https://wiki.example.com`
 - persistent POSIX Git workspace
 - trusted SSO or reverse proxy for browser writes
@@ -162,40 +161,11 @@ OPENWIKI_QUEUE_BACKEND=postgres
 
 Without shared operational state, Streamable HTTP MCP sessions and rate-limit
 windows are process-local. That is acceptable for local single-process testing,
-but it is not production grade for multi-replica hosted deployments.
+but it is not suitable for multi-process hosted evaluation.
 
-## Deployment Profiles
+## Runtime Check
 
-### Cloud Run Or Equivalent
-
-Use Cloud Run style platforms for read-mostly or preview deployments unless you
-provide a real POSIX Git workspace. Put OpenWiki behind IAP or an equivalent
-identity-aware proxy, block direct origin access, set `OPENWIKI_PUBLIC_ORIGIN`
-to the external HTTPS hostname, and use service-account bearer tokens for hosted
-agents. Cloud storage FUSE alone is not a production writable Git backend.
-
-### Kubernetes Or Helm
-
-Use ingress plus an SSO proxy such as oauth2-proxy, Envoy external auth, IAP, or
-an enterprise gateway. Mount a persistent Git workspace, run with a digest-pinned
-image, use Postgres for write coordination and operational state, and keep the
-app service private to the cluster or authenticated ingress.
-
-### Docker Or Compose
-
-Use Docker or Compose for a small private team behind a trusted reverse proxy,
-VPN, or private network. Configure the same trusted headers and service-account
-tokens as Kubernetes. Before expanding beyond one process, move rate/session
-state, write coordination, and queues to Postgres.
-
-### Local Personal
-
-Keep local personal usage on loopback and stdio MCP. HTTP MCP can be useful for
-testing clients, but it is not the default local agent path.
-
-## Preflight
-
-Run preflight with the same environment shape the server will use:
+Run doctor with the same environment shape the source-operated server will use:
 
 ```sh
 OPENWIKI_TRUST_AUTH_HEADERS=1 \
@@ -205,16 +175,13 @@ OPENWIKI_TRUST_PROXY_ORIGIN_SECRET=<long-random-shared-secret> \
 OPENWIKI_RATE_LIMIT_ENABLED=1 \
 OPENWIKI_OPERATIONAL_STATE_BACKEND=postgres \
 OPENWIKI_WRITE_COORDINATOR_BACKEND=postgres \
-openwiki --root /data/wiki deploy preflight \
-  --deploy-profile hosted-enterprise \
-  --public-origin https://wiki.example.com \
-  --image ghcr.io/joe-broadhead/open-wiki@sha256:<digest>
+openwiki --root /data/wiki doctor --profile hosted --json
 ```
 
-The automated checks cover public origin, trusted proxy secrets, rate limits,
-image digest pinning, write coordination, operational state, backup readiness,
-and hosted MCP token readiness. These checks do not prove that your identity
-provider is correctly configured.
+The checks cover public origin, trusted proxy secrets, rate limits, write
+coordination, operational state, backup readiness, and hosted MCP token
+readiness. They do not prove that your identity provider or infrastructure is
+correctly configured.
 
 Manual checks that remain operator-owned:
 
@@ -230,7 +197,7 @@ Manual checks that remain operator-owned:
 
 ## Smoke Checks
 
-After deployment:
+After starting the source-operated runtime:
 
 1. Visit `/readyz` and `/metrics` through the authenticated hostname.
 2. Sign in through SSO and confirm the top bar identity chip shows the expected
@@ -241,26 +208,6 @@ After deployment:
 5. Repeat the MCP call with an invalid token and confirm it fails.
 6. Run `openwiki backup create --verify`, then `openwiki backup rehearse latest`
    against an empty restore target.
-
-For a repeatable hosted runtime contract check, run the hosted readiness
-evidence runner against the same Postgres-backed environment shape:
-
-```sh
-pnpm evidence:hosted-readiness -- --dry-run
-
-OPENWIKI_DATABASE_URL="postgres://..." \
-OPENWIKI_HOSTED_EVIDENCE_PROVIDER="aws|gcp|local|other" \
-OPENWIKI_HOSTED_EVIDENCE_REGION="..." \
-pnpm evidence:hosted-readiness -- --enforce
-```
-
-The runner writes `artifacts/openwiki-hosted-readiness-evidence.json`. Live
-mode creates a temporary hosted fixture, migrates and fully syncs Postgres,
-starts two HTTP replicas, verifies Postgres-backed index/search/page/graph
-reads, proves Streamable HTTP MCP sessions work across replicas, runs a
-Postgres-queued worker job, verifies Postgres write-lock contention, and proves
-rate-limit windows are shared through Postgres operational state. It records
-the database URL only by environment-variable name.
 
 ## Failure Modes
 

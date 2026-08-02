@@ -68,7 +68,7 @@ export class CloudPrincipalService {
     principal.customRoleKey = null
   }
 
-  async ensurePrincipal(principal: CloudPrincipal) {
+  private async resolveAuthorizationMembership(principal: CloudPrincipal) {
     this.applySingleOrgMode(principal)
     const signupMode = resolvedSignupMode(this.identityPolicy)
     const allowedDomains = (this.identityPolicy.allowedEmailDomains || [])
@@ -99,6 +99,50 @@ export class CloudPrincipalService {
         throw new CloudServiceError(403, 'Cloud membership is not active.')
       }
     }
+    if (
+      existingMembership
+      && principal.authSource !== 'local'
+      && existingMembership.org.status !== 'active'
+    ) {
+      throw new CloudServiceError(403, 'Cloud org is not active.')
+    }
+    return { existingMembership, requiresExistingMembership, signupMode }
+  }
+
+  /**
+   * Attach the read-only identity context needed by the central capability
+   * matrix. This deliberately performs no bootstrap writes; allowed resource
+   * handlers retain ownership of `ensurePrincipal` and its idempotent setup.
+   */
+  async hydrateAuthorizationPrincipal(principal: CloudPrincipal) {
+    const { existingMembership, signupMode } = await this.resolveAuthorizationMembership(principal)
+    if (!existingMembership) {
+      principal.permissions = builtinRolePermissions(principal.role || 'member')
+      principal.customRoleKey = null
+      return principal
+    }
+    const invitedLoginMayActivate = existingMembership.membership.status === 'invited'
+      && principal.authSource === 'user'
+      && signupMode === 'invite'
+    if (existingMembership.membership.status !== 'active' && !invitedLoginMayActivate) {
+      throw new CloudServiceError(403, 'Cloud membership is not active.')
+    }
+    principal.tenantId = existingMembership.org.tenantId
+    principal.orgId = existingMembership.org.orgId
+    principal.tenantName = existingMembership.org.name
+    principal.accountId = existingMembership.account.accountId
+    principal.email = existingMembership.account.email
+    principal.role = existingMembership.membership.role
+    await this.applyEffectivePermissions(principal)
+    return principal
+  }
+
+  async ensurePrincipal(principal: CloudPrincipal) {
+    const {
+      existingMembership,
+      requiresExistingMembership,
+      signupMode,
+    } = await this.resolveAuthorizationMembership(principal)
     // Fast path: once a (tenant, account) has been bootstrapped within the TTL,
     // skip the idempotent bootstrap WRITES below. Every security gate is still
     // enforced on THIS request from the fresh `existingMembership` read above —
@@ -133,9 +177,7 @@ export class CloudPrincipalService {
       name: principal.tenantName || principal.tenantId,
       orgId: principal.orgId,
     })
-    if (principal.authSource !== 'local' && org.status !== 'active') {
-      throw new CloudServiceError(403, 'Cloud org is not active.')
-    }
+    if (principal.authSource !== 'local' && org.status !== 'active') throw new CloudServiceError(403, 'Cloud org is not active.')
     const account = await this.store.createAccount({
       accountId: existingMembership?.account.accountId || principal.accountId || principal.userId,
       idpSubject: principal.userId,

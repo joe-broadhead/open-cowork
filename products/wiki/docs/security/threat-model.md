@@ -182,22 +182,11 @@ validation can prove the main boundaries directly.
 
 ## Supply-Chain Assurance
 
-Public pull requests run `pnpm audit --audit-level high` for dependency and
-lockfile changes. Repositories that enable GitHub dependency graph and
-dependency review should add dependency review as an additional blocking gate.
-Release validation also runs the focused security tests and high-severity
-audit.
-
-Image publication is blocked by:
-
-- read-only-root container smoke;
-- Trivy scan for high and critical vulnerabilities;
-- BuildKit SBOM generation;
-- BuildKit provenance;
-- keyless Cosign signing;
-- GitHub build provenance attestation for public repository releases.
-
-Production deployments should pin image digests, not mutable tags.
+Pull requests run the root dependency audit, focused security tests, typecheck,
+and Wiki tests. Tagged Wiki releases build a CLI tarball, install it in a clean
+temporary project, exercise the standalone binary, and publish a checksum with
+the GitHub release asset. The project does not currently publish an
+npm-registry package or container image.
 
 ## Documentation JavaScript
 
@@ -275,8 +264,8 @@ before the full fix lands.
 
 - Built-in human login is intentionally out of scope. Hosted deployments must
   provide SSO or an equivalent trusted boundary.
-- Kubernetes, Terraform, and cloud modules are reference starting points and
-  require operator review for DNS, TLS, state, secrets, backup, and ingress.
+- Source-hosted operation requires operator-owned DNS, TLS, process supervision,
+  persistent storage, secrets, backup, and authenticated ingress.
 - Local filesystem mode is not a multi-process clustered write store.
 - Static export is the recommended default for public unauthenticated content.
   Do not expose write-capable HTTP or MCP endpoints publicly without auth.

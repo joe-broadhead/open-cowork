@@ -100,16 +100,6 @@ test("backup rehearse restores a local destination and records doctor evidence",
     assert.equal(check?.status, "pass");
     assert.equal(check?.details?.backup_id, backup.backup_id);
 
-    const preflight = await runCliJson<{ checks: Array<{ name: string; status: string }> }>([
-      "--root",
-      root,
-      "deploy",
-      "preflight",
-      "--deploy-profile",
-      "local-personal",
-      "--json",
-    ]);
-    assert.equal(preflight.checks.find((candidate) => candidate.name === "restore-rehearsal")?.status, "pass");
   } finally {
     await rm(root, { recursive: true, force: true });
     await rm(backups, { recursive: true, force: true });

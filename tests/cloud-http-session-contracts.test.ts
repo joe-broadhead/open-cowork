@@ -239,21 +239,39 @@ test('cloud HTTP direct question and approval responses fail closed unless the p
     }))
     const sessionId = String(asRecord(created.session).sessionId)
 
-    const denied = await fetch(`${baseUrl}/api/sessions/${sessionId}/permission-respond`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ permissionId: 'permission-1', response: { allowed: true } }),
-    })
-    assert.equal(denied.status, 403)
-    const body = await readJson(denied)
-    assert.equal(asRecord(body.verdict).policyCode, 'cloud-remote-approval-disabled')
+    const cases = [
+      { route: 'permission-respond', body: { permissionId: 'permission-1', response: { allowed: true } } },
+      { route: 'question-reply', body: { requestId: 'question-1', answers: [{ value: 'yes' }] } },
+      { route: 'question-reject', body: { requestId: 'question-2' } },
+    ]
+    for (const entry of cases) {
+      const deniedMissing = await fetch(`${baseUrl}/api/sessions/missing-session/${entry.route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(entry.body),
+      })
+      const deniedExisting = await fetch(`${baseUrl}/api/sessions/${sessionId}/${entry.route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(entry.body),
+      })
+      assert.equal(deniedMissing.status, 403)
+      assert.equal(deniedExisting.status, 403)
+      const missingBody = await readJson(deniedMissing)
+      const existingBody = await readJson(deniedExisting)
+      assert.deepEqual(existingBody, missingBody)
+      assert.equal(asRecord(existingBody.verdict).policyCode, 'cloud-remote-approval-disabled')
+    }
 
     assert.equal(await fixture.worker.processAllSessionCommands(), 0)
     const auditEvents = await fixture.store.listAuditEvents('tenant-1')
-    const deniedAudit = auditEvents.find((event) => event.eventType === 'cloud_interaction.remote_policy.denied')
-    assert.ok(deniedAudit)
-    assert.equal(asRecord(deniedAudit.metadata).policyReasonCode, 'cloud-remote-approval-disabled')
-    assert.equal(asRecord(deniedAudit.metadata).interaction, 'permission-approval')
+    const deniedAudits = auditEvents.filter((event) => event.eventType === 'cloud_interaction.remote_policy.denied')
+    assert.equal(deniedAudits.length, cases.length * 2)
+    assert.deepEqual(
+      [...new Set(deniedAudits.map((event) => asRecord(event.metadata).interaction))].sort(),
+      ['permission-approval', 'question-reject', 'question-reply'],
+    )
+    assert.equal(deniedAudits.every((event) => asRecord(event.metadata).policyReasonCode === 'cloud-remote-approval-disabled'), true)
   } finally {
     await fixture.server.close()
   }
@@ -373,6 +391,18 @@ test('cloud HTTP channel approval responses fail closed unless the profile opts 
     assert.equal(interactionResponse.status, 201)
     const issuedInteraction = await readJson(interactionResponse)
 
+    const deniedMissing = await fetch(`${baseUrl}/api/channels/interactions/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        token: 'occi_missing_secret',
+        response: { allowed: true },
+      }),
+    })
+    assert.equal(deniedMissing.status, 403)
+    const missingBody = await readJson(deniedMissing)
+
     const denied = await fetch(`${baseUrl}/api/channels/interactions/resolve`, {
       method: 'POST',
       headers,
@@ -384,6 +414,7 @@ test('cloud HTTP channel approval responses fail closed unless the profile opts 
     })
     assert.equal(denied.status, 403)
     const body = await readJson(denied)
+    assert.deepEqual(body, missingBody)
     assert.equal(asRecord(body.verdict).policyCode, 'gateway-remote-approval-disabled')
 
     assert.equal(await fixture.worker.processAllSessionCommands(), 0)
@@ -854,7 +885,10 @@ test('cloud HTTP usage analytics require operations or billing permission', asyn
   try {
     const deniedEvents = await fetch(`${baseUrl}/api/usage/events`)
     assert.equal(deniedEvents.status, 403)
-    assert.match(String((await readJson(deniedEvents)).error), /operations:view|billing:manage/)
+    assert.equal(
+      asRecord(asRecord(await readJson(deniedEvents)).verdict).policyCode,
+      'authorization.principal_denied',
+    )
     const deniedSummary = await fetch(`${baseUrl}/api/usage/summary`)
     assert.equal(deniedSummary.status, 403)
 

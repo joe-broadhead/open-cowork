@@ -46,6 +46,7 @@ export async function renderApprovalRequest(input: RenderApprovalRequestInput): 
   const issued = await input.cloud.createChannelInteraction({
     interactionId: channelInteractionId(input.event, permissionId, 'permission'),
     agentId: input.binding.agentId,
+    sessionBindingId: input.binding.bindingId,
     sessionId: input.binding.sessionId,
     provider: input.binding.provider,
     kind: 'permission',

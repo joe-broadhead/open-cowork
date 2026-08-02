@@ -517,11 +517,6 @@ test('provider connection test IPC syncs saved API auth and validates live model
             },
           }
         },
-        wait: async (input: unknown, options: unknown) => {
-          temporarySessionCalls.push('wait')
-          temporarySessionSignals.push((options as { signal: AbortSignal }).signal)
-          assert.equal((input as { sessionID: string }).sessionID, 'connection-check-session')
-        },
         messages: async (input: unknown, options: unknown) => {
           temporarySessionCalls.push('messages')
           temporarySessionSignals.push((options as { signal: AbortSignal }).signal)
@@ -637,8 +632,8 @@ test('provider connection test IPC syncs saved API auth and validates live model
     assert.ok(nativeCatalogSignals.every((signal) => signal instanceof AbortSignal))
     assert.equal(new Set(nativeCatalogSignals).size, 1, 'native catalog loading should share one phase deadline')
     assert.notEqual(nativeCredentialSignals[0], nativeCatalogSignals[0])
-    assert.deepEqual(temporarySessionCalls, ['create', 'prompt', 'wait', 'messages', 'delete'])
-    assert.equal(new Set(temporarySessionSignals).size, 5, 'each connection-check operation needs an independent timeout')
+    assert.deepEqual(temporarySessionCalls, ['create', 'prompt', 'messages', 'delete'])
+    assert.equal(new Set(temporarySessionSignals).size, 4, 'each connection-check operation needs an independent timeout')
     assert.equal(getEffectiveSettings().setupComplete, true)
 
     const credentialTimeout = new Error('credential sync timed out')

@@ -135,7 +135,7 @@ test("root runtime dependencies stay limited to source-run launcher requirements
   assert.deepEqual(
     Object.keys(rootPackage.dependencies ?? {}).sort(),
     ["tsx"],
-    "Root production dependencies are installed into Docker after prune; add package runtime deps to the importing workspace package instead.",
+    "The standalone CLI installs production dependencies from the importing workspace package; declare runtime dependencies there.",
   );
 });
 

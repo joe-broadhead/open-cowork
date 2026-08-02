@@ -3,11 +3,6 @@ import type { CloudApiRouteInput } from './types.ts'
 export async function handleSettingsApiRoute(input: CloudApiRouteInput): Promise<boolean> {
   const { req, res, options, context, itemId: settingId, tools } = input
 
-  if (!options.policy.features.settings) {
-    tools.writePolicyError(res, 403, 'Settings are disabled for this cloud profile.', 'settings.disabled', options.corsOrigin)
-    return true
-  }
-
   const settingKey = settingId ? decodeURIComponent(settingId) : null
   if (!settingKey && req.method === 'GET') {
     tools.writeJson(res, 200, {

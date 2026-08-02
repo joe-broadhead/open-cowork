@@ -53,7 +53,6 @@ test('cloud core has enforceable domain module boundaries', () => {
   }
 
   const expectedRoutes = [
-    'access-policy.ts',
     'admin.ts',
     'artifacts.ts',
     'api-tokens.ts',
@@ -65,6 +64,8 @@ test('cloud core has enforceable domain module boundaries', () => {
     'settings.ts',
     'threads.ts',
     'workspace.ts',
+    'workspace-authorization.ts',
+    'workspace-policy.ts',
   ]
   for (const file of expectedRoutes) {
     assert.equal(existsSync(join(cloudRoot, 'http-routes', file)), true, `${file} route module is missing`)

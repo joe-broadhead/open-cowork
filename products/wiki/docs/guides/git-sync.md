@@ -56,8 +56,8 @@ openwiki --root ~/openwiki-personal sync connect git \
 openwiki --root ~/openwiki-personal sync check-remote
 ```
 
-For hosted deployments, prefer an SSH deploy key or provider-managed secret
-that configures Git credentials at container startup. OpenWiki stores the remote
+For source-hosted runtimes, prefer an SSH deploy key or provider-managed secret
+that configures Git credentials before process startup. OpenWiki stores the remote
 name and branch in `openwiki.json`; it never needs the raw token.
 
 ## GitLab Private Repository
@@ -105,8 +105,8 @@ openwiki --root /data/wiki sync connect git \
 openwiki --root /data/wiki sync check-remote
 ```
 
-Make sure the deployment environment mounts the SSH key read-only and that the
-server host key is pinned through `known_hosts`.
+Make sure the runtime host exposes the SSH key read-only and that the server
+host key is pinned through `known_hosts`.
 
 ## Local Bare Remote
 
@@ -123,7 +123,7 @@ openwiki --root ~/openwiki-personal sync connect git \
 openwiki --root ~/openwiki-personal sync now --push --message "Initial private wiki sync"
 ```
 
-Local filesystem remotes are disabled by default because hosted deployments
+Local filesystem remotes are disabled by default because source-hosted runtimes
 should only accept HTTPS or SSH Git URLs. Use
 `OPENWIKI_ALLOW_LOCAL_GIT_REMOTE=1` only for local development, home-lab, NAS,
 or air-gapped workflows where the operator controls both paths.
@@ -133,7 +133,7 @@ use `openwiki backup create` for restorable point-in-time artifacts.
 
 ## SSH Deploy Key
 
-For a personal wiki or a single hosted deployment, prefer an SSH deploy key
+For a personal wiki or a single source-hosted runtime, prefer an SSH deploy key
 scoped to one repository:
 
 ```sh
@@ -141,7 +141,7 @@ ssh-keygen -t ed25519 -C "openwiki-sync" -f ~/.ssh/openwiki-sync
 ```
 
 Add the public key to the private repository as a deploy key. Mount or copy the
-private key only onto the machine or container that runs OpenWiki, then point
+private key only onto the machine that runs OpenWiki, then point
 Git at it through normal SSH config:
 
 ```sshconfig
@@ -160,13 +160,12 @@ openwiki --root /data/wiki sync connect git \
   --branch main
 ```
 
-## Hosted And Container Deployments
+## Source-Hosted Runtimes
 
-In Docker, Cloud Run, Kubernetes, or VM deployments:
+For a source-operated network runtime:
 
 - keep the workspace on durable storage
-- mount SSH keys or configure a credential helper through the platform secret
-  manager
+- load SSH keys or a credential helper through the operator secret manager
 - keep `runtime.sync` in `openwiki.json`, but never raw credentials
 - run sync through `openwiki sync now` so the write coordinator blocks agent and
   human writes during pull/push

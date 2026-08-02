@@ -10,8 +10,7 @@ import { backupProviderReadinessChecks } from "../backup-credentials.ts";
 import { backupRehearsalDiagnostic } from "../backup-rehearsal-diagnostics.ts";
 import type { CliOptions } from "../args.ts";
 import { doctorProfileFor, doctorProfileRequirements } from "../doctor-profiles.ts";
-import type { DeploymentProfileRequirement } from "../deployment-profiles.ts";
-import { oauthStateDiagnostic } from "../hosted-auth-diagnostics.ts";
+import { hostedRuntimeDiagnostics, oauthStateDiagnostic } from "../hosted-auth-diagnostics.ts";
 import { checkPostgresRuntimeIntegrity, postgresRuntimeConfigured } from "@openwiki/postgres-runtime";
 import { MIN_NODE_VERSION, execFileAsync, exists } from "../utils.ts";
 import { automationServiceDiagnostics } from "./service.ts";
@@ -21,13 +20,13 @@ import {
   publicOriginDiagnostic,
   trustedHeaderDiagnostic,
   rateLimitDiagnostic,
-  imageDigestDiagnostic,
   writeCoordinatorDiagnostic,
   requirementFrom,
   requirementStatus,
   resolveRootOptional,
   compareSemver,
   type DiagnosticCheck,
+  type DiagnosticRequirement,
   type DiagnosticStatus,
 } from "../doctor-diagnostics.ts";
 
@@ -42,12 +41,10 @@ export async function doctorCommand(options: CliOptions): Promise<void> {
   checks.push(await executableDiagnostic("pnpm", ["--version"], "pnpm is required for source checkout development.", "warn"));
   checks.push(await executableDiagnostic("corepack", ["--version"], "Corepack keeps pnpm version resolution reproducible.", "warn"));
   checks.push(await nodeSqliteDiagnostic());
-  checks.push(await executableDiagnostic("docker", ["--version"], "Docker is optional, but needed for local compose and image smoke tests.", "warn"));
-  if (profile === "hosted" || profile === "kubernetes") {
+  if (profile === "hosted") {
     checks.push(publicOriginDiagnostic(options.publicOrigin ?? process.env.OPENWIKI_PUBLIC_ORIGIN, requirements.publicOrigin));
     checks.push(trustedHeaderDiagnostic(options));
     checks.push(rateLimitDiagnostic(requirements.rateLimits));
-    checks.push(imageDigestDiagnostic(options.image ?? process.env.OPENWIKI_IMAGE, requirements.imageDigest));
     checks.push(writeCoordinatorDiagnostic(requirements.writeCoordinator));
   }
 
@@ -61,6 +58,9 @@ export async function doctorCommand(options: CliOptions): Promise<void> {
     checks.push(await sqliteReadinessDiagnostic(root));
     checks.push(await postgresDiagnostic(root, requirements.postgres));
     checks.push(postgresBackupDiagnostic(requirements.postgres));
+    if (profile === "hosted") {
+      checks.push(...await hostedRuntimeDiagnostics(root));
+    }
     if (profile !== undefined) {
       checks.push(await gitRemoteDiagnostic(root, requirements.gitRemote));
     }
@@ -170,7 +170,7 @@ export async function sqliteReadinessDiagnostic(root: string): Promise<Diagnosti
   }
 }
 
-export async function postgresDiagnostic(root: string, required: DeploymentProfileRequirement | boolean = false): Promise<DiagnosticCheck> {
+export async function postgresDiagnostic(root: string, required: DiagnosticRequirement | boolean = false): Promise<DiagnosticCheck> {
   const requirement = requirementFrom(required);
   if (!postgresRuntimeConfigured()) {
     return {
@@ -178,9 +178,9 @@ export async function postgresDiagnostic(root: string, required: DeploymentProfi
       status: requirementStatus(requirement),
       message:
         requirement === "required"
-          ? "This deployment profile requires OPENWIKI_DATABASE_URL or DATABASE_URL."
+          ? "This runtime profile requires OPENWIKI_DATABASE_URL or DATABASE_URL."
           : requirement === "warn"
-            ? "Postgres is recommended for this deployment profile before scaling writes, workers, or search."
+            ? "Postgres is recommended for this runtime profile before scaling writes, workers, or search."
             : "Postgres is not configured; skipping.",
     };
   }
@@ -449,7 +449,7 @@ export async function agentMcpConfigDiagnostic(root: string): Promise<Diagnostic
 }
 
 export function postgresBackupDiagnostic(
-  required: DeploymentProfileRequirement | boolean = false,
+  required: DiagnosticRequirement | boolean = false,
   env: NodeJS.ProcessEnv = process.env,
 ): DiagnosticCheck {
   const requirement = requirementFrom(required);
@@ -488,14 +488,14 @@ export function postgresBackupDiagnostic(
 export function objectStorageBackupDiagnostic(
   storage: OpenWikiStorageConfig | undefined,
   env: NodeJS.ProcessEnv = process.env,
-  required: DeploymentProfileRequirement | boolean = "warn",
+  required: DiagnosticRequirement | boolean = "warn",
 ): DiagnosticCheck {
   const requirement = requirementFrom(required);
   const backend = storage?.backend ?? "local";
   if (backend === "local") {
     const hostedStorageMessage = requirement === "required"
-      ? "This deployment profile requires external object storage with provider-native backup evidence."
-      : "External object storage is recommended before this deployment stores hosted captures, attachments, or backups outside the workspace.";
+      ? "This runtime profile requires external object storage with provider-native backup evidence."
+      : "External object storage is recommended before this runtime stores hosted captures, attachments, or backups outside the workspace.";
     if (requirement !== "skip") {
       return { name: "object-storage-backup", status: requirementStatus(requirement), message: hostedStorageMessage };
     }
@@ -527,7 +527,7 @@ export function objectStorageBackupDiagnostic(
   };
 }
 
-export async function gitRemoteDiagnostic(root: string, required: DeploymentProfileRequirement | boolean): Promise<DiagnosticCheck> {
+export async function gitRemoteDiagnostic(root: string, required: DiagnosticRequirement | boolean): Promise<DiagnosticCheck> {
   const requirement = requirementFrom(required);
   try {
     const status = await gitRemoteStatus(root);
@@ -574,10 +574,7 @@ export {
   publicOriginDiagnostic,
   trustedHeaderDiagnostic,
   rateLimitDiagnostic,
-  imageDigestDiagnostic,
   writeCoordinatorDiagnostic,
-  staticExportArtifactsDiagnostic,
-  deploymentProfileDiagnostic,
   requirementFrom,
   requirementStatus,
   summarizeDiagnosticStatus,
@@ -585,3 +582,4 @@ export {
   resolveRootOptional,
   compareSemver,
 } from "../doctor-diagnostics.ts";
+export type { DiagnosticRequirement } from "../doctor-diagnostics.ts";

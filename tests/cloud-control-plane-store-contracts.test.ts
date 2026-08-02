@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createHash, randomUUID } from 'node:crypto'
 
 import {
+  ControlPlaneIdConflictError,
   ControlPlaneQuotaExceededError,
   hashScimToken,
   type ControlPlaneStore,
@@ -11,12 +12,23 @@ import { InMemoryControlPlaneStore } from '@open-cowork/cloud-server/in-memory-c
 import { createPostgresControlPlaneStore } from '@open-cowork/cloud-server/postgres-control-plane-store'
 import { createPglitePool } from './helpers/pglite-pool.ts'
 import type { WorkflowDraft } from '@open-cowork/shared'
+import { encodeChannelDeliveryIdentity } from '../packages/cloud-server/src/channel-delivery-identity.ts'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
   || process.env.OPEN_COWORK_CLOUD_TEST_POSTGRES_URL
 const POSTGRES_SKIP = POSTGRES_URL
   ? false
   : 'Set OPEN_COWORK_TEST_POSTGRES_URL to run real Postgres control-plane contract tests.'
+
+test('channel delivery identity tuples cannot collide through embedded separators', () => {
+  const first = ['org', 'binding', 'suffix\0delivery'] as const
+  const second = ['org', 'binding\0suffix', 'delivery'] as const
+  assert.equal(first.join('\0'), second.join('\0'))
+  assert.notEqual(
+    encodeChannelDeliveryIdentity(...first),
+    encodeChannelDeliveryIdentity(...second),
+  )
+})
 
 runControlPlaneDomainContracts('in-memory', async () => new InMemoryControlPlaneStore())
 // Runs the *real* Postgres store SQL against an in-process PostgreSQL (pglite),
@@ -1269,6 +1281,277 @@ function runControlPlaneDomainContracts(
       })
       assert.equal(binding.sessionId, sessionId)
       assert.equal((await store.getChannelIdentity(org.orgId, identity.identityId))?.role, 'approver')
+
+      const secondChannelBinding = await store.createChannelBinding({
+        orgId: org.orgId,
+        agentId,
+        bindingId: `${prefix}-channel-binding-2`,
+        provider: 'webhook',
+        externalWorkspaceId: 'workspace-2',
+        displayName: 'Webhook 2',
+      })
+      const secondSessionBinding = await store.bindChannelSession({
+        bindingId: `${prefix}-session-binding-2`,
+        orgId: org.orgId,
+        agentId,
+        channelBindingId: secondChannelBinding.bindingId,
+        provider: 'webhook',
+        externalWorkspaceId: 'workspace-2',
+        externalChatId: 'chat-2',
+        externalThreadId: 'thread-2',
+        sessionId,
+      })
+
+      // The physical primary keys are global in both adapters. A collision in
+      // another org must produce the same typed postcondition failure instead
+      // of returning the foreign row (or leaking a backend-specific error).
+      const collisionTenantId = `${prefix}-collision-tenant`
+      await store.createTenant({ tenantId: collisionTenantId, name: 'Collision tenant' })
+      const collisionOrg = await store.ensureOrgForTenant({
+        tenantId: collisionTenantId,
+        orgId: `${prefix}-collision-org`,
+        name: 'Collision org',
+      })
+      const collisionOrgAgent = await store.createHeadlessAgent({
+        orgId: collisionOrg.orgId,
+        tenantId: collisionTenantId,
+        agentId: `${prefix}-collision-org-agent`,
+        profileName: 'default',
+        name: 'Collision org agent',
+      })
+      await assert.rejects(
+        async () => { await store.createHeadlessAgent({
+          orgId: collisionOrg.orgId,
+          tenantId: collisionTenantId,
+          agentId,
+          profileName: 'default',
+          name: 'Must not return the other org agent',
+        }) },
+        ControlPlaneIdConflictError,
+      )
+      assert.equal(await store.getHeadlessAgent(collisionOrg.orgId, agentId), null)
+      await assert.rejects(
+        async () => { await store.createChannelBinding({
+          orgId: collisionOrg.orgId,
+          agentId: collisionOrgAgent.agentId,
+          bindingId: channelBindingId,
+          provider: 'webhook',
+          externalWorkspaceId: 'collision-workspace',
+          displayName: 'Must not return the other org binding',
+        }) },
+        ControlPlaneIdConflictError,
+      )
+      assert.equal(await store.getChannelBinding(collisionOrg.orgId, channelBindingId), null)
+
+      const sharedInteractionId = `${prefix}-shared-interaction-id`
+      const mainInteraction = await store.createChannelInteraction({
+        interactionId: sharedInteractionId,
+        orgId: org.orgId,
+        agentId,
+        channelBindingId,
+        sessionBindingId: binding.bindingId,
+        sessionId,
+        provider: 'webhook',
+        kind: 'permission',
+        targetId: `${prefix}-main-permission`,
+        expiresAt: new Date('2031-01-01T00:00:00.000Z'),
+        tokenSecret: `${prefix}-main-interaction-secret`,
+      })
+      const sharedExternalInteractionId = `${prefix}-shared-external-interaction`
+      const mainExternalInteraction = await store.createChannelInteraction({
+        interactionId: `${prefix}-main-external-interaction`,
+        orgId: org.orgId,
+        agentId,
+        channelBindingId,
+        sessionBindingId: binding.bindingId,
+        sessionId,
+        provider: 'webhook',
+        externalInteractionId: sharedExternalInteractionId,
+        kind: 'permission',
+        targetId: `${prefix}-main-external-permission`,
+        expiresAt: new Date('2031-01-01T00:00:00.000Z'),
+      })
+      const secondExternalInteraction = await store.createChannelInteraction({
+        interactionId: `${prefix}-second-external-interaction`,
+        orgId: org.orgId,
+        agentId,
+        channelBindingId: secondChannelBinding.bindingId,
+        sessionBindingId: secondSessionBinding.bindingId,
+        sessionId,
+        provider: 'webhook',
+        externalInteractionId: sharedExternalInteractionId,
+        kind: 'permission',
+        targetId: `${prefix}-second-external-permission`,
+        expiresAt: new Date('2031-01-01T00:00:00.000Z'),
+      })
+      assert.equal((await store.findChannelInteraction({
+        orgId: org.orgId,
+        provider: 'webhook',
+        externalInteractionId: sharedExternalInteractionId,
+        channelBindingIds: [channelBindingId],
+        now: new Date('2030-01-01T00:00:00.000Z'),
+      }))?.interactionId, mainExternalInteraction.interaction.interactionId)
+      assert.equal((await store.findChannelInteraction({
+        orgId: org.orgId,
+        provider: 'webhook',
+        externalInteractionId: sharedExternalInteractionId,
+        channelBindingIds: [secondChannelBinding.bindingId],
+        now: new Date('2030-01-01T00:00:00.000Z'),
+      }))?.interactionId, secondExternalInteraction.interaction.interactionId)
+      assert.equal(await store.findChannelInteraction({
+        orgId: org.orgId,
+        provider: 'webhook',
+        externalInteractionId: sharedExternalInteractionId,
+        now: new Date('2030-01-01T00:00:00.000Z'),
+      }), null)
+      const collisionUserId = `${prefix}-collision-user`
+      const collisionSessionId = `${prefix}-collision-session`
+      await store.ensureUser({
+        tenantId: collisionTenantId,
+        userId: collisionUserId,
+        email: `${collisionUserId}@example.test`,
+      })
+      await store.createSession({
+        tenantId: collisionTenantId,
+        userId: collisionUserId,
+        sessionId: collisionSessionId,
+        opencodeSessionId: `${prefix}-collision-opencode-session`,
+        profileName: 'default',
+      })
+      const collisionChannelBinding = await store.createChannelBinding({
+        orgId: collisionOrg.orgId,
+        agentId: collisionOrgAgent.agentId,
+        bindingId: `${prefix}-collision-channel-binding`,
+        provider: 'webhook',
+        externalWorkspaceId: 'collision-workspace',
+        displayName: 'Collision webhook',
+      })
+      const collisionSessionBinding = await store.bindChannelSession({
+        bindingId: `${prefix}-collision-session-binding`,
+        orgId: collisionOrg.orgId,
+        agentId: collisionOrgAgent.agentId,
+        channelBindingId: collisionChannelBinding.bindingId,
+        provider: 'webhook',
+        externalWorkspaceId: 'collision-workspace',
+        externalChatId: 'collision-chat',
+        externalThreadId: 'collision-thread',
+        sessionId: collisionSessionId,
+      })
+      await assert.rejects(
+        async () => { await store.createChannelInteraction({
+          interactionId: sharedInteractionId,
+          orgId: collisionOrg.orgId,
+          agentId: collisionOrgAgent.agentId,
+          channelBindingId: collisionChannelBinding.bindingId,
+          sessionBindingId: collisionSessionBinding.bindingId,
+          sessionId: collisionSessionId,
+          provider: 'webhook',
+          kind: 'permission',
+          targetId: `${prefix}-collision-permission`,
+          expiresAt: new Date('2031-01-01T00:00:00.000Z'),
+          tokenSecret: `${prefix}-collision-interaction-secret`,
+        }) },
+        ControlPlaneIdConflictError,
+      )
+      assert.equal((await store.findChannelInteraction({
+        orgId: org.orgId,
+        token: mainInteraction.plaintextToken,
+        now: new Date('2030-01-01T00:00:00.000Z'),
+      }))?.orgId, org.orgId)
+
+      // Provider event ids are scoped to the authenticated binding. Identical
+      // provider ids from two bindings must both be claimable, while a repeat
+      // on the same binding remains a duplicate on both store implementations.
+      const scopedProviderEventInput = {
+        orgId: org.orgId,
+        provider: 'webhook' as const,
+        providerInstanceId: 'shared-provider-instance',
+        externalWorkspaceId: 'shared-workspace',
+        providerEventId: `${prefix}-binding-scoped-provider-event`,
+        eventType: 'message' as const,
+        ttlMs: 30_000,
+        now: new Date('2026-01-01T00:10:00.000Z'),
+      }
+      const firstBindingProviderEvent = await store.claimChannelProviderEvent({
+        ...scopedProviderEventInput,
+        channelBindingId,
+        claimedBy: 'gateway-binding-1',
+      })
+      const secondBindingProviderEvent = await store.claimChannelProviderEvent({
+        ...scopedProviderEventInput,
+        channelBindingId: secondChannelBinding.bindingId,
+        claimedBy: 'gateway-binding-2',
+      })
+      assert.equal(firstBindingProviderEvent.claimed, true)
+      assert.equal(secondBindingProviderEvent.claimed, true)
+      assert.notEqual(firstBindingProviderEvent.event.eventId, secondBindingProviderEvent.event.eventId)
+      assert.equal((await store.claimChannelProviderEvent({
+        ...scopedProviderEventInput,
+        channelBindingId,
+        claimedBy: 'gateway-binding-1-duplicate',
+      })).duplicate, true)
+      assert.equal(await store.completeChannelProviderEvent({
+        orgId: org.orgId,
+        eventId: firstBindingProviderEvent.event.eventId,
+        channelBindingIds: [secondChannelBinding.bindingId],
+        claimedBy: 'gateway-binding-1',
+        status: 'processed',
+      }), null)
+      assert.equal((await store.completeChannelProviderEvent({
+        orgId: org.orgId,
+        eventId: firstBindingProviderEvent.event.eventId,
+        channelBindingIds: [channelBindingId],
+        claimedBy: 'gateway-binding-1',
+        status: 'processed',
+      }))?.status, 'processed')
+
+      // Delivery ids are public idempotency keys scoped by org + binding. A
+      // collision must neither return the first binding's row nor make an
+      // unscoped mutation choose one arbitrarily.
+      const scopedDeliveryId = `${prefix}-binding-scoped-delivery`
+      const firstBindingDelivery = await store.createChannelDelivery({
+        deliveryId: scopedDeliveryId,
+        orgId: org.orgId,
+        agentId,
+        channelBindingId,
+        provider: 'webhook',
+        target: { externalChatId: 'chat-1' },
+        eventType: 'workflow.completed',
+        payload: { binding: 1 },
+      })
+      const secondBindingDelivery = await store.createChannelDelivery({
+        deliveryId: scopedDeliveryId,
+        orgId: org.orgId,
+        agentId,
+        channelBindingId: secondChannelBinding.bindingId,
+        provider: 'webhook',
+        target: { externalChatId: 'chat-2' },
+        eventType: 'workflow.completed',
+        payload: { binding: 2 },
+      })
+      assert.equal(firstBindingDelivery.channelBindingId, channelBindingId)
+      assert.equal(secondBindingDelivery.channelBindingId, secondChannelBinding.bindingId)
+      assert.deepEqual(firstBindingDelivery.payload, { binding: 1 })
+      assert.deepEqual(secondBindingDelivery.payload, { binding: 2 })
+      assert.equal(await store.ackChannelDelivery({
+        orgId: org.orgId,
+        deliveryId: scopedDeliveryId,
+        status: 'sent',
+      }), null)
+      assert.equal((await store.ackChannelDelivery({
+        orgId: org.orgId,
+        deliveryId: scopedDeliveryId,
+        channelBindingId: secondChannelBinding.bindingId,
+        channelBindingIds: [channelBindingId, secondChannelBinding.bindingId],
+        status: 'sent',
+      }))?.channelBindingId, secondChannelBinding.bindingId)
+      assert.equal((await store.ackChannelDelivery({
+        orgId: org.orgId,
+        deliveryId: scopedDeliveryId,
+        channelBindingId,
+        channelBindingIds: [channelBindingId, secondChannelBinding.bindingId],
+        status: 'sent',
+      }))?.channelBindingId, channelBindingId)
 
       // Channel-delivery claim parity (audit P1-O6): a delivery is claimable only at its nextAttemptAt,
       // then exactly one claimer wins (the prod cross-gateway delivery guarantee) — identically on both.

@@ -6,6 +6,12 @@ export type ChannelProviderEventStatus = 'received' | 'processing' | 'processed'
 export type ChannelProviderEventRecord = {
   eventId: string
   orgId: string
+  /**
+   * Binding authority that accepted the provider event. Legacy rows created
+   * before binding-scoped deduplication may be null, but every service-created
+   * event supplies this value.
+   */
+  channelBindingId: string | null
   provider: ChannelProviderId
   providerInstanceId: string
   externalWorkspaceId: string | null

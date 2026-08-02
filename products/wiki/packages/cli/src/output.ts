@@ -18,19 +18,16 @@ const MAIN_HELP = `OpenWiki local CLI
 Usage:
   openwiki help [command]
   openwiki --version
-  openwiki version --check [--json]
-  openwiki upgrade [--json]
+  openwiki version [--json]
   openwiki self-check [--json]
   openwiki completion bash|zsh|fish
-  openwiki doctor [--root <path>] [--profile personal|hosted|kubernetes] [--json]
+  openwiki doctor [--root <path>] [--profile personal|hosted] [--json]
   openwiki setup personal [path] [--title "Personal Wiki"] [--agent opencode|generic|none] [--tools read|proposal|write] [--git-remote URL] [--branch main] [--backup-path folder] [--config-out path] [--create-token --token-out path] [--confirm-write-tools] [--json]
   openwiki setup team [path] [--title "Team Wiki"] [--admin-principal principal] [--team-group group:team] [--space-title "Team Knowledge"] [--json]
   openwiki agent providers list [--json]
   openwiki agent install --provider opencode --profile personal-curator|researcher|reviewer|maintainer|wiki-curator|developer|global [--out-dir <path>] [--wiki-root <path>] [--json]
   openwiki [--root <path>] agent configure --client opencode|generic [--transport stdio|http] [--server-url URL] [--tools read|proposal|write] [--token-env ENV|--token-file path|--create-token --token-out path] [--config-out path] [--json]
   openwiki [--root <path>] mcp install opencode|generic --mode read|proposal|write [--output path] [--confirm-write-tools] [--json]
-  openwiki deploy profile list [--json]
-  openwiki [--root <path>] deploy preflight [--deploy-profile local-personal|public-static|docker-private|hosted-enterprise|kubernetes-enterprise|aws-ecs-efs|gcp-gke|cloud-run-readmostly] [--public-origin URL] [--image image@sha256:...] [--out-dir public] [--json]
   openwiki init <path> [--title "My Wiki"] [--template team-wiki|basic|personal-wiki|company-wiki|public-encyclopedia|github-pages] [--json]
   openwiki [--root <path>] index [--json]
   openwiki [--root <path>] db rebuild|sync-postgres [--full]|migrate|schema postgres|check|summary|postgres-summary|write-lease|recover-write-lease|records|edges [--type page|page_source] [--limit N] [--lock-name name] [--json]
@@ -218,13 +215,6 @@ Usage:
   openwiki [--root <path>] mcp --stdio [--tools read|proposal|write] [--token-env ENV|--token-file path|--role role|--scope scope|--principal principal]
 
 Use stdio MCP for local agents and Streamable HTTP MCP from the served wiki for hosted deployments. Proposal mode is the default for autonomous agents.`,
-  deploy: `OpenWiki deploy
-
-Usage:
-  openwiki deploy profile list [--json]
-  openwiki [--root <path>] deploy preflight [--deploy-profile local-personal|public-static|docker-private|hosted-enterprise|kubernetes-enterprise|aws-ecs-efs|gcp-gke|cloud-run-readmostly] [--public-origin URL] [--image image@sha256:...] [--out-dir public] [--json]
-
-Runs deployment readiness checks. Production hosted profiles require digest-pinned images, auth boundary secrets, Postgres backends, backups, and restore rehearsal evidence.`,
   backup: `OpenWiki backup
 
 Usage:
@@ -308,9 +298,6 @@ export function commandHelpText(command?: string): string {
 
 function commandHelpKey(command: string): string | undefined {
   const normalized = command.trim();
-  if (normalized === "publish" || normalized === "export") {
-    return "deploy";
-  }
   if (normalized === "policy") {
     return "spaces";
   }

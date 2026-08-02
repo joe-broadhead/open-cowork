@@ -12,8 +12,6 @@ import {
   resolveAgentProvider,
   type AgentProviderConfigInput as AgentClientConfigInput,
 } from "../agent-providers.ts";
-import { DEPLOYMENT_PROFILE_NAMES, deploymentProfileFor } from "../deployment-profiles.ts";
-import { hostedHumanAgentDiagnostics } from "../hosted-auth-diagnostics.ts";
 import { printJson } from "../output.ts";
 import { createWorkspace, loadRepository } from "@openwiki/repo";
 import { buildSearchIndex } from "@openwiki/search";
@@ -26,23 +24,10 @@ import type { ServiceAccountTokenProfile } from "@openwiki/workflows";
 import { resolveRoot } from "../utils.ts";
 import { connectGitSync } from "./sync.ts";
 import {
-  deploymentProfileDiagnostic,
   gitRemoteDiagnostic,
-  imageDigestDiagnostic,
-  objectStorageBackupDiagnostic,
-  postgresDiagnostic,
-  postgresBackupDiagnostic,
-  printDiagnosticReport,
-  publicOriginDiagnostic,
-  rateLimitDiagnostic,
-  resolveRootOptional,
-  sqliteReadinessDiagnostic,
-  staticExportArtifactsDiagnostic,
   summarizeDiagnosticStatus,
-  trustedHeaderDiagnostic,
   writableWorkspaceDiagnostic,
   workspaceRuntimeConfigDiagnostics,
-  writeCoordinatorDiagnostic,
   agentMcpConfigDiagnostic,
   type DiagnosticCheck,
 } from "./doctor.ts";
@@ -343,78 +328,6 @@ export async function agentCommand(args: string[], options: CliOptions): Promise
     return;
   }
   printAgentSummary(result);
-}
-
-export async function deployCommand(args: string[], options: CliOptions): Promise<void> {
-  const [subcommand, resource] = args;
-  if ((subcommand === "profile" || subcommand === "profiles") && (resource === undefined || resource === "list")) {
-    const profiles = DEPLOYMENT_PROFILE_NAMES.map((name) => {
-      const profile = deploymentProfileFor(name);
-      return {
-        name: profile.name,
-        status: profile.status,
-        trust_boundary: profile.trustBoundary,
-        persistence_model: profile.persistenceModel,
-        backup_model: profile.backupModel,
-        scaling_path: profile.scalingPath,
-      };
-    });
-    if (options.json) {
-      printJson({ profiles });
-      return;
-    }
-    for (const profile of profiles) {
-      console.log(`${profile.name}\t${profile.status}\t${profile.trust_boundary}`);
-    }
-    return;
-  }
-  if (subcommand !== "preflight") {
-    throw new Error(`Usage: openwiki deploy profile list [--json]\n       openwiki [--root <path>] deploy preflight [--deploy-profile ${DEPLOYMENT_PROFILE_NAMES.join("|")}] [--public-origin URL] [--image image@sha256:...] [--out-dir public] [--json]`);
-  }
-  const profile = deploymentProfileFor(options.deployProfile ?? "local-personal");
-  const checks: DiagnosticCheck[] = [];
-  checks.push(deploymentProfileDiagnostic(profile));
-  if (profile.previewWarning !== undefined) {
-    checks.push({ name: "profile-preview", status: "warn", message: profile.previewWarning });
-  }
-  checks.push(publicOriginDiagnostic(options.publicOrigin ?? process.env.OPENWIKI_PUBLIC_ORIGIN, profile.publicOrigin));
-  checks.push(trustedHeaderDiagnostic(options));
-  checks.push(rateLimitDiagnostic(profile.rateLimits));
-  checks.push(imageDigestDiagnostic(options.image ?? process.env.OPENWIKI_IMAGE, profile.imageDigest));
-  checks.push(writeCoordinatorDiagnostic(profile.writeCoordinator));
-
-  const root = await resolveRootOptional(options);
-  if (root === undefined) {
-    checks.push({ name: "workspace", status: profile.name === "local-personal" ? "warn" : "fail", message: "No OpenWiki workspace was found. Pass --root for deployment checks that need repository state." });
-  } else {
-    checks.push({ name: "workspace", status: "pass", message: `Workspace resolved at ${root}`, details: { root } });
-    const repo = await loadRepository(root);
-    checks.push(await writableWorkspaceDiagnostic(root));
-    checks.push(...await workspaceRuntimeConfigDiagnostics(root));
-    checks.push(...await hostedHumanAgentDiagnostics(root, profile));
-    checks.push(await sqliteReadinessDiagnostic(root));
-    checks.push(await gitRemoteDiagnostic(root, profile.gitRemote));
-    checks.push(await postgresDiagnostic(root, profile.postgres));
-    checks.push(postgresBackupDiagnostic(profile.postgres));
-    checks.push(objectStorageBackupDiagnostic(repo.config.runtime?.storage, process.env, profile.objectStorageBackup));
-    if (profile.staticArtifacts) {
-      checks.push(await staticExportArtifactsDiagnostic(root, options.outDir));
-    }
-  }
-
-  printDiagnosticReport({
-    command: "deploy-preflight",
-    status: summarizeDiagnosticStatus(checks),
-    deployment_profile: {
-      name: profile.name,
-      status: profile.status,
-      trust_boundary: profile.trustBoundary,
-      persistence_model: profile.persistenceModel,
-      backup_model: profile.backupModel,
-      scaling_path: profile.scalingPath,
-    },
-    checks,
-  }, options);
 }
 
 export async function configureAgentForRoot(

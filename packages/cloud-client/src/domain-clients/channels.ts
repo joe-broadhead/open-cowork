@@ -40,8 +40,10 @@ import type {
   CloudChannelInteractionMutationResponse,
   CloudChannelProviderId as ChannelProviderId,
   CloudSessionView,
+  CloudTransportSessionEvent,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
+  SessionArtifactAttachment,
   CloudTransportSubscription,
 } from '../contracts.js'
 import type { CloudDomainClientContext } from '../domains/shared.js'
@@ -50,6 +52,7 @@ import {
   subscribeCloudEvents,
   type CloudTransportSseContext,
 } from './transport.js'
+import { normalizeCloudArtifactAttachment } from '../domains/artifact-normalizers.js'
 
 export type CloudChannelsClientContext = CloudDomainClientContext & CloudTransportSseContext
 
@@ -99,7 +102,6 @@ export type CloudChannelsClient = {
     externalUserId: string
     channelBindingId?: string | null
     externalWorkspaceId?: string | null
-    identityId?: string | null
     accountId?: string | null
     role?: ChannelIdentityRole
     status?: ChannelIdentityStatus
@@ -119,11 +121,23 @@ export type CloudChannelsClient = {
     externalChatId: string
     externalThreadId: string
   }): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView } | null>
+  getChannelSessionSnapshot(sessionBindingId: string): Promise<CloudSessionView>
+  readChannelArtifactAttachment(
+    sessionBindingId: string,
+    artifactId: string,
+  ): Promise<SessionArtifactAttachment>
+  subscribeChannelSessionEvents(
+    sessionBindingId: string,
+    input: {
+      afterSequence?: number
+      onEvent: (event: CloudTransportSessionEvent) => void
+      onError?: (error: unknown) => void
+    },
+  ): CloudTransportSubscription
   promptChannelSession(input: ChannelActorInput & {
     bindingId: string
     text: string
     agent?: string | null
-    commandId?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
   claimChannelProviderEvent(input: {
     provider: ChannelProviderId
@@ -151,12 +165,12 @@ export type CloudChannelsClient = {
   }): Promise<ChannelCursorUpdateResult>
   createChannelInteraction(input: {
     agentId: string
+    sessionBindingId: string
     sessionId: string
     provider: ChannelProviderId
     kind: ChannelInteractionRecord['kind']
     targetId: string
     externalInteractionId?: string | null
-    createdByIdentityId?: string | null
     expiresAt?: string | null
     interactionId?: string | null
   }): Promise<IssuedChannelInteractionRecord>
@@ -179,6 +193,7 @@ export type CloudChannelsClient = {
     nextAttemptAt?: string | null
   }): Promise<ChannelDeliveryRecord>
   ackChannelDelivery(deliveryId: string, input: {
+    channelBindingId?: string | null
     claimedBy?: string | null
     status: Extract<CloudChannelDeliveryStatus, 'sent' | 'failed' | 'dead'>
     lastError?: string | null
@@ -190,8 +205,8 @@ export type CloudChannelsClient = {
     channelBindingId?: string | null
     limit?: number | null
   }): Promise<ChannelDeliveryRecord[]>
-  retryChannelDelivery(deliveryId: string): Promise<ChannelDeliveryRecord | null>
-  deadLetterChannelDelivery(deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
+  retryChannelDelivery(deliveryId: string, input?: { channelBindingId?: string | null }): Promise<ChannelDeliveryRecord | null>
+  deadLetterChannelDelivery(deliveryId: string, input?: { channelBindingId?: string | null, lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
   channelDeliveriesUrl(input?: { claimedBy?: string, ttlMs?: number, channelBindingIds?: readonly string[] }): string
   subscribeChannelDeliveries(input: {
     claimedBy?: string
@@ -277,6 +292,21 @@ export function createCloudChannelsClient(context: CloudChannelsClientContext): 
         throw error
       }
     },
+    getChannelSessionSnapshot(sessionBindingId) {
+      return request(`/api/channels/sessions/${encodePath(sessionBindingId)}/snapshot`)
+    },
+    async readChannelArtifactAttachment(sessionBindingId, artifactId) {
+      return normalizeCloudArtifactAttachment(await request<{ artifact: unknown }>(
+        `/api/channels/sessions/${encodePath(sessionBindingId)}/artifacts/${encodePath(artifactId)}`,
+      ))
+    },
+    subscribeChannelSessionEvents(sessionBindingId, input) {
+      const path = `${context.baseUrl}/api/channels/sessions/${encodePath(sessionBindingId)}/events${queryString({ after: input.afterSequence })}`
+      return subscribeCloudEvents(context, path, {
+        onEvent: input.onEvent,
+        onError: input.onError,
+      })
+    },
     promptChannelSession(input) {
       return request('/api/channels/sessions/prompt', {
         method: 'POST',
@@ -337,10 +367,10 @@ export function createCloudChannelsClient(context: CloudChannelsClientContext): 
     async listChannelDeliveries(input = {}) {
       return (await request<{ deliveries: ChannelDeliveryRecord[] }>(`/api/channels/deliveries${queryString(input)}`)).deliveries
     },
-    async retryChannelDelivery(deliveryId) {
+    async retryChannelDelivery(deliveryId, input = {}) {
       return (await request<{ delivery: ChannelDeliveryRecord | null }>(`/api/channels/deliveries/${encodePath(deliveryId)}/retry`, {
         method: 'POST',
-        body: {},
+        body: input,
       })).delivery
     },
     async deadLetterChannelDelivery(deliveryId, input = {}) {

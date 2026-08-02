@@ -21,6 +21,7 @@ export {
   normalizeAuditQueryLimit,
 } from './audit-query.ts'
 export {
+  ControlPlaneIdConflictError,
   ControlPlaneQuotaExceededError,
   publicQuotaMessage,
   quotaExceeded,

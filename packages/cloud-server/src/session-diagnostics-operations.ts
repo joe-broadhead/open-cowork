@@ -23,7 +23,7 @@ export type CloudDiagnosticsOperationsServiceOptions = {
   getBillingSubscription: (
     principal: CloudPrincipal,
   ) => ReturnType<CloudBillingOperationsService['getBillingSubscription']>
-  getUsageSummary: (principal: CloudPrincipal, limit?: number) => Promise<CloudUsageSummary>
+  getUsageSummary: (orgId: string, limit?: number) => Promise<CloudUsageSummary>
 }
 
 export class CloudDiagnosticsOperationsService {
@@ -54,7 +54,10 @@ export class CloudDiagnosticsOperationsService {
     const deliverySampleLimit = 200
     const [billing, usage, byok, heartbeats, agents, deliveries] = await Promise.all([
       this.getBillingSubscription(principal),
-      this.getUsageSummary(principal, 200),
+      // Diagnostics already authorized this principal above. Read the
+      // org-scoped usage projection directly so a diagnostics-only role is not
+      // incorrectly reinterpreted as an operations-analytics request.
+      this.getUsageSummary(orgId, 200),
       this.byokService.listSecretMetadataForOrg(orgId),
       this.store.listWorkerHeartbeats(),
       this.store.listHeadlessAgents(orgId),

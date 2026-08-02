@@ -617,15 +617,13 @@ test("started HTTP API exposes an idempotent graceful close helper", async () =>
   }
 });
 
-test("operations documentation covers Prometheus, request logs, and deployment defaults", async () => {
+test("operations documentation covers Prometheus, request logs, and runtime defaults", async () => {
   const operations = [
     await readFile(path.join(process.cwd(), "docs", "deployment", "operations.md"), "utf8"),
     await readFile(path.join(process.cwd(), "docs", "deployment", "operations", "monitoring.md"), "utf8"),
   ].join("\n");
   const observability = await readFile(path.join(process.cwd(), "docs", "deployment", "observability.md"), "utf8");
   const runbooks = await readFile(path.join(process.cwd(), "docs", "deployment", "runbooks.md"), "utf8");
-  const dashboard = JSON.parse(await readFile(path.join(process.cwd(), "deploy", "observability", "grafana-dashboard.json"), "utf8")) as { panels?: unknown[]; title?: string };
-  const alerts = await readFile(path.join(process.cwd(), "deploy", "observability", "prometheus-rules.yaml"), "utf8");
   assert.match(operations, /OPENWIKI_RATE_LIMIT_ENABLED/);
   assert.match(operations, /OPENWIKI_RATE_LIMIT_POLICY/);
   assert.match(operations, /OPENWIKI_RATE_LIMIT_INBOX/);
@@ -642,14 +640,9 @@ test("operations documentation covers Prometheus, request logs, and deployment d
   assert.match(operations, /Local personal wiki/);
   assert.match(operations, /Enterprise\/shared HTTP MCP/);
   assert.match(observability, /openwiki_http_request_duration_seconds/);
-  assert.match(observability, /deploy\/observability\/prometheus-rules\.yaml/);
   for (const heading of ["Auth Exposure", "Stuck Write Lock", "Stale Derived Store", "Failing Source Fetch", "Queue Backlog", "Restore Drill"]) {
     assert.match(runbooks, new RegExp(`## ${heading}`));
   }
-  assert.equal(dashboard.title, "OpenWiki Operations");
-  assert.ok((dashboard.panels?.length ?? 0) >= 6);
-  assert.match(alerts, /OpenWikiNotReady/);
-  assert.match(alerts, /OpenWikiSourceFetchFailures/);
 });
 
 async function configureSourceFetchBudget(root: string, sourceFetch: Record<string, number>): Promise<void> {

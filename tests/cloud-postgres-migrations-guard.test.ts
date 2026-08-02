@@ -4,6 +4,8 @@ import assert from 'node:assert/strict'
 import { runPostgresControlPlaneMigrations } from '../packages/cloud-server/src/postgres-migrations.ts'
 import {
   CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
+  CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_MIGRATION_ID,
+  CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID,
   CLOUD_CONTROL_PLANE_CONCURRENT_INDEX_NAMES,
   CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
   CLOUD_CONTROL_PLANE_MIGRATIONS,
@@ -245,24 +247,38 @@ test('cloud schema keeps its clean baseline and explicit additive upgrade migrat
     [
       CLOUD_CONTROL_PLANE_BASELINE_MIGRATION_ID,
       CLOUD_CONTROL_PLANE_WORKFLOW_SECRET_MIGRATION_ID,
+      CLOUD_CONTROL_PLANE_CHANNEL_INTERACTION_SCOPE_MIGRATION_ID,
+      CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID,
       CLOUD_CONTROL_PLANE_CONCURRENT_INDEXES_MIGRATION_ID,
     ],
   )
 
   const baseline = CLOUD_CONTROL_PLANE_MIGRATIONS[0]!
   const workflowSecrets = CLOUD_CONTROL_PLANE_MIGRATIONS[1]!
-  const concurrent = CLOUD_CONTROL_PLANE_MIGRATIONS[2]!
+  const interactionScope = CLOUD_CONTROL_PLANE_MIGRATIONS[2]!
+  const idempotencyScope = CLOUD_CONTROL_PLANE_MIGRATIONS[3]!
+  const concurrent = CLOUD_CONTROL_PLANE_MIGRATIONS[4]!
   const baselineSql = baseline.statements.join('\n')
 
   assert.equal(baseline.transactional, undefined)
   assert.equal(workflowSecrets.transactional, undefined)
+  assert.equal(interactionScope.transactional, undefined)
+  assert.equal(idempotencyScope.transactional, undefined)
   assert.equal(concurrent.transactional, false)
   assert.match(workflowSecrets.statements.join('\n'), /CREATE TABLE IF NOT EXISTS cloud_workflow_webhook_secrets/)
+  assert.match(interactionScope.statements.join('\n'), /ADD COLUMN IF NOT EXISTS session_binding_id/)
   assert.doesNotMatch(baselineSql, /\bALTER TABLE\b/)
   assert.doesNotMatch(baselineSql, /\bDELETE FROM\b/)
   assert.doesNotMatch(baselineSql, /INSERT INTO cloud_(?:orgs|accounts|memberships)\b/)
   assert.doesNotMatch(baselineSql, /GREATEST\(0, cloud_concurrency_counters\.value/)
-  assert.doesNotMatch(CLOUD_CONTROL_PLANE_MIGRATIONS.flatMap((migration) => migration.statements).join('\n'), /\bDROP INDEX\b/)
+  assert.match(idempotencyScope.statements.join('\n'), /DROP INDEX IF EXISTS cloud_channel_provider_events_dedupe_idx/)
+  assert.doesNotMatch(
+    CLOUD_CONTROL_PLANE_MIGRATIONS
+      .filter((migration) => migration.id !== CLOUD_CONTROL_PLANE_CHANNEL_IDEMPOTENCY_SCOPE_MIGRATION_ID)
+      .flatMap((migration) => migration.statements)
+      .join('\n'),
+    /\bDROP INDEX\b/,
+  )
   for (const statement of concurrent.statements) {
     assert.match(statement, /^CREATE (?:UNIQUE )?INDEX CONCURRENTLY IF NOT EXISTS /)
   }
