@@ -31,13 +31,13 @@
     "security": "pnpm audit --prod --audit-level high"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@opencode-ai/sdk": "1.18.1",
     "electron-updater": "^6.8.9",
-    "google-auth-library": "^10.9.0",
+    "google-auth-library": "^10.9.1",
     "opencode-ai": "1.18.1",
     "semver": "^7.8.5",
-    "vega": "^6.2.0",
+    "vega": "^6.3.1",
     "vega-lite": "^6.4.3"
   },
   "devDependencies": {
@@ -47,10 +47,10 @@
     "@open-cowork/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.20.1",
-    "@vitejs/plugin-react": "^6.0.3",
+    "@vitejs/plugin-react": "^6.0.5",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.7",
-    "playwright-core": "^1.61.1",
+    "playwright-core": "^1.62.0",
     "typescript": "^6.0.3",
     "vite": "^8.1.5",
     "vite-plugin-electron": "^1.1.0"

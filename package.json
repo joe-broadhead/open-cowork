@@ -140,12 +140,12 @@
     }
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1079.0",
+    "@aws-sdk/client-s3": "^3.1098.0",
     "@open-cowork/runtime-host": "workspace:*",
     "@open-cowork/shared": "workspace:*",
     "@opencode-ai/sdk": "1.18.1",
     "ajv": "^8.20.0",
-    "google-auth-library": "^10.9.0",
+    "google-auth-library": "^10.9.1",
     "opencode-ai": "1.18.1",
     "pg": "^8.22.0"
   },
@@ -159,13 +159,13 @@
     "@typescript-eslint/parser": "^8.65.0",
     "electron": "^43.2.0",
     "esbuild": "^0.28.1",
-    "eslint": "^10.6.0",
+    "eslint": "^10.8.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-no-unsanitized": "^4.1.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-security": "^4.0.1",
-    "globals": "^17.7.0",
-    "knip": "^6.24.0",
+    "globals": "^17.8.0",
+    "knip": "^6.29.0",
     "semver": "^7.8.5",
     "zod": "^4.4.3"
   }

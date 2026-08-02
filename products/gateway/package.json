@@ -52,7 +52,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@open-cowork/gateway-channel": "workspace:*",
     "@open-cowork/gateway-provider-discord": "workspace:*",
     "@open-cowork/gateway-provider-telegram": "workspace:*",
@@ -62,13 +62,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.5",
+    "@biomejs/biome": "2.5.6",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "^4.1.10",
     "fast-check": "4.9.0",
-    "knip": "^6.24.0",
+    "knip": "^6.29.0",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"

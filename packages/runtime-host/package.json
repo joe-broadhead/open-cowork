@@ -441,7 +441,7 @@
     "@open-cowork/shared": "workspace:*",
     "@opencode-ai/sdk": "1.18.1",
     "ajv": "^8.20.0",
-    "google-auth-library": "^10.9.0",
+    "google-auth-library": "^10.9.1",
     "opencode-ai": "1.18.1"
   },
   "devDependencies": {
