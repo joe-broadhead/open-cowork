@@ -231,6 +231,20 @@ export * from './cloud-session-projection.js'
 export * from './conversation-context.js'
 export * from './coordination.js'
 export * from './custom-content.js'
+export * from './wiki.js'
+import type {
+  WikiConnectRequest,
+  WikiConnectTokenRequest,
+  WikiDocument,
+  WikiGraph,
+  WikiGraphNeighbors,
+  WikiOverview,
+  WikiPageIndexEntry,
+  WikiRemoteConnectionSummary,
+  WikiSearchResult,
+  WikiSourceResult,
+  WikiSourceState,
+} from './wiki.js'
 export * from './design-tokens.js'
 export * from './destructive-actions.js'
 export * from './desktop-pairing.js'
@@ -652,6 +666,29 @@ export interface CoworkAPI {
     exportSetupBundle: (options?: RuntimeContextOptions) => Promise<SetupBundle>
     importSetupBundle: (bundle: unknown, options?: SetupBundleImportOptions) => Promise<SetupBundleImportResult>
   }
+  wiki: {
+    overview: () => Promise<WikiOverview>
+    listPages: () => Promise<WikiPageIndexEntry[]>
+    readPage: (id: string) => Promise<WikiDocument | null>
+    search: (query: string) => Promise<WikiSearchResult[]>
+    /** Whole-workspace graph index (read-oriented; node/edge limits handled client-side). */
+    graph: () => Promise<WikiGraph>
+    /** Neighbors (backlinks + related + outgoing) around a single page. */
+    graphNeighbors: (id: string) => Promise<WikiGraphNeighbors | null>
+    /** Current wiki source (local CLI or active remote connection) + saved connections. */
+    getSource: () => Promise<WikiSourceState>
+    /** Start the OAuth PKCE connect flow for a hosted wiki origin. */
+    connectRemote: (request: WikiConnectRequest) => Promise<WikiSourceResult>
+    /** Save a scoped service-account bearer token for a hosted wiki origin. */
+    connectRemoteWithToken: (request: WikiConnectTokenRequest) => Promise<WikiSourceResult>
+    /** Remove a saved remote connection. */
+    removeRemoteConnection: (id: string) => Promise<WikiSourceResult>
+    /** Activate a saved connection (null = local wiki). */
+    setActiveSource: (connectionId: string | null) => Promise<WikiSourceResult>
+    /** All saved remote connections. */
+    listRemoteConnections: () => Promise<WikiRemoteConnectionSummary[]>
+  }
+
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => () => void
     notification: (callback: (event: RuntimeNotification) => void) => () => void

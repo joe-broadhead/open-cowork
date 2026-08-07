@@ -103,7 +103,7 @@ function extractCodeText(button: HTMLButtonElement) {
   return code?.textContent ?? ''
 }
 
-function renderHtml(text: string, streaming: boolean) {
+function renderHtml(text: string, streaming: boolean, rewrite?: (markdown: string) => string) {
   if (!text) return ''
 
   try {
@@ -116,7 +116,8 @@ function renderHtml(text: string, streaming: boolean) {
           return cached.html
         }
 
-        const parsed = marked.parse(block.src) as string
+        const source = rewrite ? rewrite(block.src) : block.src
+        const parsed = marked.parse(source) as string
         const safe = sanitizeHtml(parsed)
         touchCache(key, { html: safe })
         return safe
@@ -131,14 +132,20 @@ export function MarkdownContent({
   text,
   className = '',
   streaming = false,
+  rewrite,
+  onInternalWikiLink,
 }: {
   text: string
   className?: string
   streaming?: boolean
+  /** Optional raw-markdown rewrite applied before parsing (e.g. wikilinks). */
+  rewrite?: (markdown: string) => string
+  /** Called when a rewritten in-app wiki link (data-wiki-link) is clicked. */
+  onInternalWikiLink?: (pageId: string) => void
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const copyResetTimersRef = useRef(new Map<HTMLButtonElement, number>())
-  const html = useMemo(() => renderHtml(text, streaming), [text, streaming])
+  const html = useMemo(() => renderHtml(text, streaming, rewrite), [text, streaming, rewrite])
 
   useLayoutEffect(() => {
     const container = rootRef.current
@@ -180,6 +187,17 @@ export function MarkdownContent({
     const handleClick = async (event: MouseEvent) => {
       const target = event.target
       if (!(target instanceof Element)) return
+
+      const wikiLink = target.closest('[data-wiki-link]')
+      if (wikiLink instanceof HTMLElement) {
+        const pageId = wikiLink.getAttribute('data-wiki-link')
+        if (pageId && onInternalWikiLink) {
+          event.preventDefault()
+          onInternalWikiLink(pageId)
+        }
+        return
+      }
+
       const button = target.closest('[data-slot="markdown-copy-button"]')
       if (!(button instanceof HTMLButtonElement)) return
       const content = extractCodeText(button)
@@ -203,7 +221,7 @@ export function MarkdownContent({
       for (const timer of timers.values()) window.clearTimeout(timer)
       timers.clear()
     }
-  }, [])
+  }, [onInternalWikiLink])
 
   return (
     <div

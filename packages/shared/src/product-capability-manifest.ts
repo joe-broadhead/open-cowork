@@ -15,6 +15,7 @@ export type ProductSurfaceId =
   | 'tools'
   | 'settings'
   | 'knowledge'
+  | 'wiki'
   | 'approvals'
   | 'channels'
   | 'artifacts'
@@ -95,6 +96,14 @@ const surfaces = [
     featureKey: 'knowledge',
     availability: 'default-off',
     outcome: 'Propose and review shared in-app knowledge.',
+  },
+  {
+    id: 'wiki',
+    label: 'Wiki',
+    route: 'wiki',
+    featureKey: null,
+    availability: 'always',
+    outcome: 'Browse and read the linked local OpenWiki team knowledge base.',
   },
   {
     id: 'approvals',

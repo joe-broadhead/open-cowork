@@ -1,0 +1,172 @@
+# OpenWiki hosted reference stack (Phase 2 packaging).
+#
+#   cp .env.example .env        # fill OPENWIKI_PUBLIC_ORIGIN + secrets
+#   docker compose up -d        # postgres + wiki (serve) + worker + cron
+#   docker compose --profile s3 up -d   # + MinIO (S3 backups)
+#   docker compose --profile git up -d  # + self-hosted Git remote (SSH)
+#
+# Identity default: generic OIDC is handled at your reverse proxy (SSO) and
+# signed into OpenWiki with the x-openwiki-* headers (OPENWIKI_TRUST_AUTH_HEADERS_SECRET);
+# agents authenticate with OAuth 2.1/PKCE or scoped service-account tokens
+# (openwiki auth token create). See packaging/README.md.
+#
+# All OpenWiki services share the wiki root volume and the Postgres backends;
+# writes are coordinated through Postgres write leases.
+
+name: openwiki
+
+x-openwiki-env: &openwiki-env
+  OPENWIKI_ROOT: /data/wiki
+  OPENWIKI_PUBLIC_ORIGIN: ${OPENWIKI_PUBLIC_ORIGIN:?set OPENWIKI_PUBLIC_ORIGIN in .env}
+  OPENWIKI_DATABASE_URL: postgres://openwiki:${OPENWIKI_DATABASE_PASSWORD:?set OPENWIKI_DATABASE_PASSWORD in .env}@postgres:5432/openwiki
+  OPENWIKI_QUEUE_BACKEND: postgres
+  OPENWIKI_OPERATIONAL_STATE_BACKEND: postgres
+  OPENWIKI_WRITE_COORDINATOR_BACKEND: postgres
+  OPENWIKI_READ_BACKEND: postgres
+  OPENWIKI_SEARCH_BACKEND: postgres
+  # Rate limits: required by `doctor --profile hosted` before exposing to
+  # untrusted networks. Defaults are conservative; tune per policy docs.
+  OPENWIKI_RATE_LIMIT_ENABLED: "1"
+  # OAuth 2.1 for agents/API (ADR 0008). Issuer defaults to OPENWIKI_PUBLIC_ORIGIN.
+  OPENWIKI_OAUTH_ENABLED: ${OPENWIKI_OAUTH_ENABLED:-0}
+  OPENWIKI_OAUTH_ISSUER: ${OPENWIKI_OAUTH_ISSUER:-}
+  OPENWIKI_OAUTH_CSRF_SECRET: ${OPENWIKI_OAUTH_CSRF_SECRET:-}
+  OPENWIKI_OAUTH_STATE_BACKEND: postgres
+  # Trusted-header SSO (ADR 0004): set to a long random secret to enable.
+  OPENWIKI_TRUST_AUTH_HEADERS_SECRET: ${OPENWIKI_TRUST_AUTH_HEADERS_SECRET:-}
+  # Backup destination (mounted volume).
+  OPENWIKI_BACKUP_PATH: /data/backups
+  # Git sync remote (source of truth): e.g. git@git-server:/srv/git/wiki.git
+  # or git@github.com:org/wiki.git. Leave empty to skip automation.
+  OPENWIKI_SYNC_REMOTE: ${OPENWIKI_SYNC_REMOTE:-}
+  OPENWIKI_GIT_REMOTE_SCHEMES: ${OPENWIKI_GIT_REMOTE_SCHEMES:-https,ssh}
+  # Pass-through knobs.
+  OPENWIKI_ADMIN_TOKEN: ${OPENWIKI_ADMIN_TOKEN:-}
+  OPENWIKI_WORKER_MAX_JOBS: ${OPENWIKI_WORKER_MAX_JOBS:-1}
+  OPENWIKI_WORKER_POLL_MS: ${OPENWIKI_WORKER_POLL_MS:-2000}
+  OPENWIKI_BACKUP_INTERVAL_SECONDS: ${OPENWIKI_BACKUP_INTERVAL_SECONDS:-3600}
+  OPENWIKI_POSTGRES_MIGRATE: ${OPENWIKI_POSTGRES_MIGRATE:-1}
+  TZ: ${TZ:-UTC}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: openwiki
+      POSTGRES_USER: openwiki
+      POSTGRES_PASSWORD: ${OPENWIKI_DATABASE_PASSWORD:?set OPENWIKI_DATABASE_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openwiki -d openwiki"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  wiki:
+    build:
+      context: ${OPENWIKI_BUILD_CONTEXT:-../..}
+      dockerfile: products/wiki/packaging/Dockerfile
+    image: openwiki:${OPENWIKI_IMAGE_TAG:-local}
+    command: ["serve"]
+    environment: *openwiki-env
+    ports:
+      - "${OPENWIKI_HTTP_PORT:-3030}:3030"
+    volumes:
+      - wiki-data:/data/wiki
+      - backups-data:/data/backups
+      - ${OPENWIKI_SSH_KEY_DIR:-./secrets/ssh}:/root/.ssh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3030/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    image: openwiki:${OPENWIKI_IMAGE_TAG:-local}
+    command: ["worker"]
+    environment: *openwiki-env
+    volumes:
+      - wiki-data:/data/wiki
+      - backups-data:/data/backups
+      - ${OPENWIKI_SSH_KEY_DIR:-./secrets/ssh}:/root/.ssh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cron:
+    image: openwiki:${OPENWIKI_IMAGE_TAG:-local}
+    command: ["cron"]
+    environment: *openwiki-env
+    volumes:
+      - wiki-data:/data/wiki
+      - backups-data:/data/backups
+      - ${OPENWIKI_SSH_KEY_DIR:-./secrets/ssh}:/root/.ssh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---- Optional: S3-compatible object-storage backups (docker compose --profile s3 up -d) ----
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    profiles: ["s3"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-openwiki}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD for --profile s3}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    profiles: ["s3"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done
+        mc mb --ignore-existing local/openwiki
+        echo "minio bucket ready"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-openwiki}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD for --profile s3}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+  # ---- Optional: self-hosted Git remote (SSH) so wiki sync stays fully on-prem ----
+  git-server:
+    image: openwiki-git-server:${OPENWIKI_IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: products/wiki/packaging/git-server/Dockerfile
+    profiles: ["git"]
+    volumes:
+      - git-data:/srv/git
+    ports:
+      - "${OPENWIKI_GIT_SSH_PORT:-2222}:22"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  wiki-data:
+  backups-data:
+  minio-data:
+  git-data:

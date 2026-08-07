@@ -822,6 +822,23 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
     // -- custom (local FS imports + custom content mutations) --------------
     custom: createBrowserCustomApi(),
 
+    // -- wiki (OpenWiki optional sibling; browser runtime has no local CLI) --
+    wiki: {
+      overview: async () => ({ status: 'unavailable', root: null, cli: null, pageCount: 0, error: 'Wiki is only available in the desktop runtime.', source: 'local', origin: null }),
+      listPages: async () => [],
+      readPage: async () => null,
+      search: async () => [],
+      graph: async () => ({ nodes: [], edges: [] }),
+      graphNeighbors: async () => null,
+      getSource: async () => ({ kind: 'local', connectionId: null, connection: null, connections: [] }),
+      listRemoteConnections: async () => [],
+      connectRemote: async () => ({ ok: false, error: 'Wiki is only available in the desktop runtime.', kind: 'local', connectionId: null, connection: null, connections: [] }),
+      connectRemoteWithToken: async () => ({ ok: false, error: 'Wiki is only available in the desktop runtime.', kind: 'local', connectionId: null, connection: null, connections: [] }),
+      removeRemoteConnection: async () => ({ ok: false, error: 'Wiki is only available in the desktop runtime.', kind: 'local', connectionId: null, connection: null, connections: [] }),
+      setActiveSource: async () => ({ ok: false, error: 'Wiki is only available in the desktop runtime.', kind: 'local', connectionId: null, connection: null, connections: [] }),
+    },
+
+
     // -- on.* (SSE demux) --------------------------------------------------
     on: {
       sessionPatch: (callback) => hub.subscribe('sessionPatch', callback),

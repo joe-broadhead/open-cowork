@@ -12,6 +12,7 @@ import { useSessionStore } from '../../stores/session'
 const ChatView = lazy(() => import('../chat/ChatView').then((module) => ({ default: module.ChatView })))
 const ProjectsBoardPage = lazy(() => import('../projects/ProjectsBoardPage').then((module) => ({ default: module.ProjectsBoardPage })))
 const KnowledgePage = lazy(() => import('../studio/KnowledgePage').then((module) => ({ default: module.KnowledgePage })))
+const WikiPage = lazy(() => import('../studio/WikiPage').then((module) => ({ default: module.WikiPage })))
 const WorkflowsPage = lazy(() => import('../workflows/WorkflowsPage').then((module) => ({ default: module.WorkflowsPage })))
 const AgentsPage = lazy(() => import('../agents/AgentsPage').then((module) => ({ default: module.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('../capabilities/CapabilitiesPage').then((module) => ({ default: module.CapabilitiesPage })))
@@ -95,6 +96,11 @@ export function AppRoutes({
       {view === 'knowledge' && (
         <Suspense fallback={<RouteFallback />}>
           <KnowledgePage featureValueDiscoveryEnabled={featureValueDiscoveryEnabled} />
+        </Suspense>
+      )}
+      {view === 'wiki' && (
+        <Suspense fallback={<RouteFallback />}>
+          <WikiPage onOpenCapabilities={() => onNavigate('tools')} />
         </Suspense>
       )}
       {view === 'approvals' && (

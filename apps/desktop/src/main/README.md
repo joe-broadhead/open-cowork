@@ -17,6 +17,9 @@ domain that owns the behavior.
   intake, and the local Workflows MCP bridge.
 - `workspace/` — cloud-workspace cache safety and Gateway credential-state
   helpers shared by the desktop workspace authority.
+- `wiki/` — desktop wiki connectors: local OpenWiki CLI mappers, the remote
+  hosted-wiki client (read surface over the OpenWiki HTTP API), OAuth PKCE
+  connect flow, and safeStorage-encrypted remote connection state.
 
 Thread indexing now lives in `packages/runtime-host/src/thread-index/` so the
 desktop and cloud paths share one runtime substrate.

@@ -121,6 +121,7 @@ nav:
           - Decision Matrix: deployment/profiles.md
           - Local Personal: deployment/profiles/local-personal.md
           - Local Team: deployment/profiles/local-team.md
+          - Hosted Compose (Docker): deployment/profiles/hosted-compose.md
           - Public Static: deployment/profiles/public-static.md
       - SSO And Reverse Proxy Auth: deployment/auth-boundaries.md
       - Hosted Humans And Agents: deployment/hosted-human-agent.md

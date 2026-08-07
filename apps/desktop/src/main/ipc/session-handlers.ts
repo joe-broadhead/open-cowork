@@ -17,6 +17,7 @@ import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from 'node:fs'
 import { getProviderDescriptor } from '@open-cowork/runtime-host/config'
+import { toOpenCodeRuntimeProviderId } from '@open-cowork/runtime-host/runtime-config-builder'
 import { forgetSubmittedPrompt, rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
 import { markSessionPromptAdmitted } from '../durable-session-events.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
@@ -253,18 +254,25 @@ function resolvePromptModel(
     ? modelId.slice(prefix.length)
     : modelId
   const configuredModel = stripProviderPrefix(composerModelId || settings.effectiveModel)
+  // The desktop chat/session path speaks OpenCode's runtime provider ids, not
+  // the app-level ids used for settings/BYOK. OpenRouter is registered in the
+  // runtime as `OPENCODE_OPENROUTER_RUNTIME_PROVIDER_ID` ("or"); any other id
+  // (e.g. "openrouter") makes the model unresolvable and every prompt dies with
+  // SessionRunnerModel.ModelUnavailableError. Mirror connection-validation.ts.
+  const runtimeProviderId = toOpenCodeRuntimeProviderId(settings.effectiveProviderId)
   const runtimeModels = runtimeProvider?.models || null
   const runtimeDefault = runtimeProvider?.defaultModel ? stripProviderPrefix(runtimeProvider.defaultModel) : undefined
-  const modelID = runtimeModels
-    && !Object.prototype.hasOwnProperty.call(runtimeModels, configuredModel)
-    && runtimeDefault
-    ? runtimeDefault
-    : configuredModel
+  let modelID = configuredModel
+  if (runtimeModels && !Object.prototype.hasOwnProperty.call(runtimeModels, configuredModel)) {
+    modelID = runtimeDefault && Object.prototype.hasOwnProperty.call(runtimeModels, runtimeDefault)
+      ? runtimeDefault
+      : (Object.keys(runtimeModels)[0] ?? configuredModel)
+  }
   if (modelID !== configuredModel) {
-    log('provider', `Selected model ${settings.effectiveProviderId}/${configuredModel} is not in the live OpenCode catalog; using default ${settings.effectiveProviderId}/${modelID}`)
+    log('provider', `Selected model ${settings.effectiveProviderId}/${configuredModel} is not in the live OpenCode runtime provider ${runtimeProviderId}; using ${runtimeProviderId}/${modelID}`)
   }
   return {
-    providerID: settings.effectiveProviderId,
+    providerID: runtimeProviderId,
     modelID,
   }
 }
@@ -563,7 +571,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         sessionId,
         data: { type: 'busy' },
       })
-      const runtimeProvider = await getSelectedRuntimeProvider(client, settings.effectiveProviderId)
+      const runtimeProvider = settings.effectiveProviderId
+        ? await getSelectedRuntimeProvider(client, toOpenCodeRuntimeProviderId(settings.effectiveProviderId))
+        : null
       await assertSelectedProviderReadyForPrompt(client, settings, runtimeProvider)
       const promptModel = resolvePromptModel(settings, runtimeProvider, record?.composerModelId)
       const requestedVariant = promptOptions.variant ?? record?.composerReasoningVariant ?? undefined

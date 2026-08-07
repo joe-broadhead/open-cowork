@@ -1,0 +1,26 @@
+{
+  "name": "@open-cowork/mcp-wiki",
+  "version": "0.0.0",
+  "description": "OpenWiki MCP server bridge for Open Cowork: search, recall, read, and propose edits across the shared wiki (incl. private spaces).",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "mcps/wiki"
+  },
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node ../build.mjs",
+    "dev": "node ../build.mjs",
+    "typecheck": "tsc --noEmit --rootDir ../..",
+    "test": "node ../../scripts/workspace-build-freshness.mjs --self",
+    "security": "pnpm audit --prod --audit-level high"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^6.0.3"
+  }
+}

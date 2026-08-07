@@ -416,6 +416,14 @@
       "project": [
         "src/**/*.ts"
       ]
+    },
+    "mcps/wiki": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
     }
   }
 }

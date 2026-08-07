@@ -41,6 +41,7 @@ const PRIMARY_NAV_ITEMS: SidebarNavItem[] = [
   { view: 'home', icon: 'home', labelKey: 'sidebar.home', fallback: 'Home' },
   { view: 'projects', icon: 'folder', labelKey: 'sidebar.projects', fallback: 'Projects' },
   { view: 'knowledge', icon: 'book-open', labelKey: 'sidebar.knowledge', fallback: 'Knowledge' },
+  { view: 'wiki', icon: 'file-text', labelKey: 'sidebar.wiki', fallback: 'Wiki' },
   { view: 'approvals', icon: 'circle-help', labelKey: 'sidebar.approvals', fallback: 'Approvals' },
 ]
 

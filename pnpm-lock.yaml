@@ -338,6 +338,15 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  mcps/wiki:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   mcps/workflows:
     dependencies:
       '@modelcontextprotocol/sdk':

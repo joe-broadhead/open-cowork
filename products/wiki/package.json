@@ -64,7 +64,8 @@
     "test": "node --no-warnings --import tsx --test tests/*.test.ts packages/*/test/*.test.ts",
     "validate": "pnpm typecheck && pnpm test",
     "validate:prod": "pnpm lint && pnpm build && pnpm docs:build && pnpm check:bundle && pnpm test:ui && pnpm test:ui-quality && pnpm coverage && pnpm audit:high && pnpm test:postgres",
-    "test:postgres": "node --no-warnings --import tsx --test tests/postgres-runtime.integration.test.ts tests/postgres-search-conformance.integration.test.ts"
+    "test:postgres": "node --no-warnings --import tsx --test tests/postgres-runtime.integration.test.ts tests/postgres-search-conformance.integration.test.ts",
+    "smoke:wiki-standalone": "node --no-warnings packaging/smoke-hosted-compose.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",

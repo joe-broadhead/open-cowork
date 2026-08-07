@@ -24,6 +24,7 @@ import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coord
 import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { registerKnowledgeHandlers } from '../apps/desktop/src/main/ipc/knowledge-handlers.ts'
 import { registerVoiceHandlers } from '../apps/desktop/src/main/ipc/voice-handlers.ts'
+import { registerWikiHandlers } from '../apps/desktop/src/main/ipc/wiki-handlers.ts'
 import { registerAdoptionHandlers } from '../apps/desktop/src/main/ipc/adoption-handlers.ts'
 import { clearConfigCaches } from '@open-cowork/runtime-host/config'
 import { createIpcHandlerHarness } from './support/ipc-handler-harness.ts'
@@ -160,6 +161,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerKnowledgeHandlers(context)
   registerAdoptionHandlers(context)
   registerVoiceHandlers(context)
+  registerWikiHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)

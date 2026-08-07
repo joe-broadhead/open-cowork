@@ -92,6 +92,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       'tools',
       'updates',
       'voice',
+      'wiki',
       'workflows',
       'workspace',
     ])

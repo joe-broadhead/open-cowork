@@ -36,6 +36,7 @@ import { registerCoordinationHandlers } from './ipc/coordination-handlers.ts'
 import { registerChannelHandlers } from './ipc/channel-handlers.ts'
 import { registerWorkflowHandlers } from './ipc/workflow-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
+import { registerWikiHandlers } from './ipc/wiki-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
 import { registerAdminHandlers } from './ipc/admin-handlers.ts'
@@ -442,6 +443,7 @@ export function setupIpcHandlers(
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
+  registerWikiHandlers(context)
   registerExplorerHandlers(context)
 
   // Smoke/eval only: synthetic permission broadcast (see e2e-eval-handlers.ts).
