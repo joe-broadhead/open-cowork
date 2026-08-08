@@ -151,7 +151,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "2.31.1",
-    "@electron/asar": "3.4.1",
+    "@electron/asar": "4.2.1",
     "@electric-sql/pglite": "^0.5.4",
     "@eslint/js": "^10.0.1",
     "@open-cowork/cloud-server": "workspace:*",
