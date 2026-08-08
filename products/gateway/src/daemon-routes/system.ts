@@ -85,6 +85,7 @@ export const SYSTEM_API_ROUTE_CONTRACTS = defineApiRouteContracts([
   { method: 'POST', path: '/restart', requestBody: false, responses: [200] },
   { method: 'POST', path: '/gateway/leadership/recover', requestBody: false, responses: [200, 409] },
   { method: 'GET', path: '/readiness', responses: [200, 503] },
+  { method: 'GET', path: '/progressz', responses: [200, 503] },
   { method: 'POST', path: '/operator/actions', bodySchema: zOperatorActionBody, responses: [200, 400] },
   { method: 'POST', path: '/operator/runs/{runId}/actions', bodySchema: zActiveRunControlBody, responses: [200, 400, 404, 409, 422] },
   { method: 'GET', path: '/artifacts', responses: [200, 400, 404] },
@@ -108,10 +109,25 @@ export const SYSTEM_API_ROUTE_CONTRACTS = defineApiRouteContracts([
   { method: 'POST', path: '/storage/restore', bodySchema: zStorageRestoreBody, responses: [200, 400, 428] },
 ] as const)
 
-export function systemRoutes(): RouteHandler[] {
+export function systemRoutes(options: { progressSnapshot?: () => unknown } = {}): RouteHandler[] {
   return [async ({ req, url, client, channels }) => {
     if (req.method === 'GET' && url.pathname === '/health') {
       return json({ status: 'ok', uptime: process.uptime() })
+    }
+
+    if (req.method === 'GET' && url.pathname === '/progressz') {
+      try {
+        return json(options.progressSnapshot?.() || {
+          mode: 'off',
+          status: 'disabled',
+          generation: 0,
+          counts: { healthy: 0, waiting: 0, suspect: 0, stalled: 0 },
+          samples: [],
+          truncated: false,
+        })
+      } catch {
+        return json({ error: 'progress_snapshot_unavailable' }, 503)
+      }
     }
 
     if (req.method === 'GET' && url.pathname === '/gateway/health') {

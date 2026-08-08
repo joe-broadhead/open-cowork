@@ -67,6 +67,7 @@ type GatewayEventName =
   | 'run.lifecycle.lease_renewed'
   | 'run.lifecycle.operator_controlled'
   | 'run.lifecycle.started'
+  | 'runtime.progress_watchdog.decision'
   | 'security.audit.recorded'
   | 'storage.recovery.completed'
   | 'storage.recovery.started'
@@ -237,6 +238,7 @@ const LEGACY_WORK_EVENT_TO_GATEWAY_EVENT: Record<string, GatewayEventDescriptor>
   'runtime.capability_grant.validated': descriptor('workflow.runtime_capability_grant.validated', 'security', 'support', ['dashboard', 'support_bundle', 'evidence_ledger']),
   'runtime.profile.rejected': descriptor('workflow.runtime_profile.rejected', 'security', 'support', ['dashboard', 'support_bundle']),
   'runtime.profile.validated': descriptor('workflow.runtime_profile.validated', 'security', 'support', ['dashboard', 'support_bundle']),
+  'runtime.progress_watchdog.decision': descriptor('runtime.progress_watchdog.decision', 'system', 'evidence', ['dashboard', 'support_bundle', 'evidence_ledger', 'scheduler']),
   'soak.failure_injection.recovered': descriptor('workflow.soak.recovered', 'system', 'evidence', ['dashboard', 'support_bundle', 'evidence_ledger']),
   'storage.recovery_drill.completed': descriptor('storage.recovery.completed', 'system', 'evidence', ['dashboard', 'support_bundle', 'evidence_ledger']),
   'storage.recovery_drill.started': descriptor('storage.recovery.started', 'system', 'evidence', ['dashboard', 'support_bundle', 'evidence_ledger']),

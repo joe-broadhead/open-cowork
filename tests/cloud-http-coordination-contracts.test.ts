@@ -949,6 +949,7 @@ test('cloud gateway principals cannot create or mutate coordination watches', as
     })
     assert.equal(ownerLegacyWatch.recipient ?? null, null)
 
+    assert.equal(await fixture.worker.processSessionCommands('tenant-1', gatewaySessionId), 0)
     const appended = await fixture.worker.appendRuntimeEvent('tenant-1', gatewaySessionId, {
       type: 'permission.requested',
       payload: {

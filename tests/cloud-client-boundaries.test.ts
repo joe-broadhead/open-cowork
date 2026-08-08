@@ -26,6 +26,7 @@ test('cloud client package boundary and desktop transport compatibility re-expor
   const desktopTransport = readFileSync(join(root, 'packages/cloud-server/src/transport-adapter.ts'), 'utf8')
   const readme = readFileSync(join(root, 'packages/cloud-client/README.md'), 'utf8')
   const docs = readFileSync(join(root, 'docs/cloud-client.md'), 'utf8')
+  const sharedReadme = readFileSync(join(root, 'packages/shared/README.md'), 'utf8')
 
   assert.equal(packageJson.name, '@open-cowork/cloud-client')
   assert.equal(packageJson.private, true)
@@ -70,10 +71,18 @@ test('cloud client package boundary and desktop transport compatibility re-expor
   assert.equal(sharedPackageJson.name, '@open-cowork/shared')
   assert.equal(sharedPackageJson.private, true)
   assert.equal(sharedPackageJson.publishConfig, undefined)
-  // '.' is the browser-safe barrel; './node' is the Node-only runtime substrate
-  // (node:fs/node:crypto helpers) shared by the Electron main process and the cloud
-  // server — it must never be imported from a browser bundle.
-  assert.deepEqual(Object.keys(sharedPackageJson.exports || {}).sort(), ['.', './ipc-security-errors', './node', './package.json'])
+  // '.' and './progress-watchdog' are browser-safe calculations/contracts;
+  // './node' is the Node-only runtime substrate (node:fs/node:crypto helpers)
+  // shared by Electron main and servers and must never enter a browser bundle.
+  assert.deepEqual(Object.keys(sharedPackageJson.exports || {}).sort(), [
+    '.',
+    './ipc-security-errors',
+    './node',
+    './package.json',
+    './progress-watchdog',
+  ])
+  assert.match(sharedReadme, /@open-cowork\/shared\/progress-watchdog/)
+  assert.match(sharedReadme, /pure|browser-safe/i)
   assert.deepEqual(sharedPackageJson.files, ['dist'])
   assert.equal(sharedPackageJson.sideEffects, false)
   for (const dependencyName of Object.keys(packageJson.dependencies || {})) {

@@ -33,6 +33,7 @@ describe('generated HTTP API reference', () => {
     expect(openapi.paths['/gateway/leadership/recover'].post.responses).toHaveProperty('409')
     expect(openapi.paths['/storage/doctor'].get.responses).toHaveProperty('503')
     expect(openapi.paths['/readiness'].get.responses).toHaveProperty('503')
+    expect(openapi.paths['/progressz'].get.responses).toHaveProperty('503')
     expect(openapi.paths['/live/events'].get.responses).toHaveProperty('503')
     expect(openapi.paths['/personas'].post.responses).toHaveProperty('422')
   })
@@ -77,6 +78,7 @@ describe('generated HTTP API reference', () => {
   it('publishes runtime capability auth and bounded message-query contracts', () => {
     for (const [method, routePath, runtimePath] of [
       ['get', '/readiness', '/readiness'],
+      ['get', '/progressz', '/progressz'],
       ['post', '/alerts/evaluate', '/alerts/evaluate'],
       ['post', '/blueprints/preview', '/blueprints/preview'],
       ['post', '/blueprints/apply', '/blueprints/apply'],

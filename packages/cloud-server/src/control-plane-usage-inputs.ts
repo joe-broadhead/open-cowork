@@ -1,7 +1,10 @@
 import type { CloudBillingEntitlements } from '@open-cowork/shared'
 import type { QuotaPolicyCode } from './control-plane-errors.ts'
 import type { BillingSubscriptionStatus, UsageEventType, UsageUnit } from './control-plane-enums.ts'
-import type { ArtifactUploadReservationStatus } from './control-plane-usage-records.ts'
+import type {
+  ArtifactUploadCleanupReason,
+  ArtifactUploadPublicationMetadata,
+} from './control-plane-usage-records.ts'
 
 // The control-plane's session / usage / billing / rate-limit / auth-backoff
 // operation input shapes, extracted from the 4k-line in-memory store. Pure types
@@ -46,31 +49,97 @@ export type CreateArtifactUploadReservationInput = {
   sessionId: string
   artifactId: string
   objectKey: string
+  stagingObjectKey?: string
+  finalObjectKey?: string
   filename: string
   contentType?: string | null
+  checksumSha256?: string | null
+  /** Optional only while the pre-saga upload caller is being migrated. */
+  publication?: ArtifactUploadPublicationMetadata
   reservedBytes: number
   expiresAt: Date | string
   quota?: ConsumeUsageQuotaInput | null
   createdAt?: Date
 }
 
-export type SettleArtifactUploadReservationInput = {
+export type ArtifactUploadReservationIdentity = {
   orgId: string
   tenantId: string
   sessionId: string
   artifactId: string
-  actualBytes: number
-  quota?: ConsumeUsageQuotaInput | null
+}
+
+export type ClaimArtifactUploadFinalizationInput = ArtifactUploadReservationIdentity & {
+  claimOwner: string
+  claimToken: string
+  claimTtlMs: number
   now?: Date
 }
 
-export type ReleaseArtifactUploadReservationInput = {
-  orgId: string
-  tenantId: string
-  sessionId: string
-  artifactId: string
-  status: Extract<ArtifactUploadReservationStatus, 'expired' | 'failed'>
+export type CompleteArtifactUploadFinalizationInput = ArtifactUploadReservationIdentity & {
+  claimOwner: string
+  claimToken: string
   now?: Date
+}
+
+export type ReleaseArtifactUploadClaimInput = ArtifactUploadReservationIdentity & {
+  claimOwner: string
+  claimToken: string
+  errorCode: string
+  retryAt: Date | string
+  cleanupNotBefore: Date | string
+  maxAttempts: number
+  /**
+   * Provider/publication uncertainty must remain retryable instead of eventually
+   * authorizing destructive cleanup of an object that may already be published.
+   */
+  cleanupOnExhaustion?: boolean
+  now?: Date
+}
+
+export type RequestArtifactUploadCleanupInput = ArtifactUploadReservationIdentity & {
+  reason: ArtifactUploadCleanupReason
+  claimOwner: string
+  claimToken: string
+  claimTtlMs: number
+  cleanupNotBefore?: Date | string | null
+  expectedFinalizationClaimOwner?: string | null
+  expectedFinalizationClaimToken?: string | null
+  now?: Date
+}
+
+export type CompleteArtifactUploadCleanupInput = ArtifactUploadReservationIdentity & {
+  claimOwner: string
+  claimToken: string
+  now?: Date
+}
+
+export type DeferArtifactUploadCleanupInput = ArtifactUploadReservationIdentity & {
+  claimOwner: string
+  claimToken: string
+  retryAt: Date | string
+  now?: Date
+}
+
+export type FailArtifactUploadCleanupInput = ArtifactUploadReservationIdentity & {
+  claimOwner: string
+  claimToken: string
+  errorCode: string
+  retryAt: Date | string
+  now?: Date
+}
+
+export type ClaimArtifactUploadReconciliationInput = {
+  claimOwner: string
+  claimToken: string
+  claimTtlMs: number
+  limit: number
+  now?: Date
+}
+
+export type PruneArtifactUploadReservationsInput = {
+  olderThan: Date
+  limit: number
 }
 
 export type RecordUsageEventInput = {

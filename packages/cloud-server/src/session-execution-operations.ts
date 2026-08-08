@@ -13,10 +13,12 @@ import type {
   SessionRecord,
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
-import type {
-  CloudRuntimeAdapter,
-  CloudRuntimeEvent,
-  CloudRuntimeExecutionContext,
+import {
+  cloudRuntimeLeaseEpoch,
+  type CloudRuntimeGenerationFence,
+  type CloudRuntimeAdapter,
+  type CloudRuntimeEvent,
+  type CloudRuntimeExecutionContext,
 } from './runtime-adapter.ts'
 import { type CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudAbuseConfig } from '@open-cowork/shared'
@@ -68,6 +70,13 @@ export type CloudSessionExecutionServiceOptions = {
 export type CloudSessionCommandExecutionOptions = {
   signal?: AbortSignal
   deferAck?: boolean
+}
+
+export type CloudStalledSessionRecoveryInput = {
+  lease: WorkerLeaseRecord
+  expected: CloudRuntimeGenerationFence
+  isDecisionCurrent: () => boolean
+  signal?: AbortSignal
 }
 
 export class CloudSessionExecutionService {
@@ -390,6 +399,65 @@ export class CloudSessionExecutionService {
       eventId: input.event.eventId,
       payload: input.event.payload,
       leaseToken: input.leaseToken,
+    })
+  }
+
+  async withRuntimeExecutionScope<T>(lease: WorkerLeaseRecord, callback: () => Promise<T>): Promise<T> {
+    if (!this.runtime.withExecutionScope) return callback()
+    return this.runtime.withExecutionScope({
+      tenantId: lease.tenantId,
+      sessionId: lease.sessionId,
+      lease: {
+        owner: lease.leasedBy,
+        epoch: cloudRuntimeLeaseEpoch(lease.leaseToken),
+      },
+    }, callback)
+  }
+
+  async recoverStalledSession(input: CloudStalledSessionRecoveryInput) {
+    if (!this.runtime.recoverStalledSession) return 'fenced-stale' as const
+    const session = await this.store.getSessionForTenant(input.lease.tenantId, input.lease.sessionId)
+    if (!session?.opencodeSessionId) return 'fenced-stale' as const
+    // The durable lookup above yields. Recheck the watchdog revision after it,
+    // then carry the same fence to the exact runtime abort boundary.
+    if (!input.isDecisionCurrent()) return 'fenced-stale' as const
+    return this.runtime.recoverStalledSession({
+      sessionId: session.opencodeSessionId,
+      context: {
+        ...this.runtimeContext(session),
+        lease: {
+          owner: input.lease.leasedBy,
+          epoch: cloudRuntimeLeaseEpoch(input.lease.leaseToken),
+        },
+      },
+      expected: input.expected,
+      isDecisionCurrent: input.isDecisionCurrent,
+      signal: input.signal,
+    })
+  }
+
+  runtimeEventMatchesLeaseAndGeneration(lease: WorkerLeaseRecord, event: CloudRuntimeEvent) {
+    if (!this.runtime.requiresWorkerContext) return true
+    const provenance = event.provenance
+    if (
+      !provenance
+      || provenance.scopeId !== lease.tenantId
+      || provenance.sessionId !== lease.sessionId
+      || provenance.leaseOwner !== lease.leasedBy
+      || provenance.leaseEpoch !== cloudRuntimeLeaseEpoch(lease.leaseToken)
+      || !this.runtime.isRuntimeGenerationCurrent
+    ) return false
+    return this.runtime.isRuntimeGenerationCurrent({
+      context: {
+        tenantId: lease.tenantId,
+        sessionId: lease.sessionId,
+        lease: { owner: provenance.leaseOwner, epoch: provenance.leaseEpoch },
+      },
+      expected: {
+        runtimeGeneration: provenance.runtimeGeneration,
+        executionGeneration: provenance.executionGeneration,
+        runId: provenance.runId,
+      },
     })
   }
 

@@ -230,6 +230,7 @@ export const WORKSPACE_ACTION_DEFINITIONS = {
   'artifacts.list': desktopAction('artifacts', 'artifacts'),
   'artifacts.upload': desktopAction('artifacts', 'artifacts'),
   'artifacts.finalize': desktopAction('artifacts', 'artifacts'),
+  'artifacts.abort': desktopAction('artifacts', 'artifacts'),
   'artifacts.update': desktopAction('artifacts', 'artifacts'),
   'artifacts.read': desktopAction('artifacts', 'artifacts'),
 

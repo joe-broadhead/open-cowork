@@ -47,6 +47,17 @@ function runtimeEventMessageId(event: CloudRuntimeEvent) {
   return typeof event.payload.messageId === 'string' ? event.payload.messageId : ''
 }
 
+function sameRuntimeProvenance(left: CloudRuntimeEvent, right: CloudRuntimeEvent) {
+  if (!left.provenance || !right.provenance) return left.provenance === right.provenance
+  return left.provenance.scopeId === right.provenance.scopeId
+    && left.provenance.sessionId === right.provenance.sessionId
+    && left.provenance.runId === right.provenance.runId
+    && left.provenance.runtimeGeneration === right.provenance.runtimeGeneration
+    && left.provenance.executionGeneration === right.provenance.executionGeneration
+    && left.provenance.leaseOwner === right.provenance.leaseOwner
+    && left.provenance.leaseEpoch === right.provenance.leaseEpoch
+}
+
 export function createRuntimeDeltaCoalescer(options: {
   route: (event: CloudRuntimeEvent) => Promise<void>
   flushDelayMs?: number
@@ -87,7 +98,7 @@ export function createRuntimeDeltaCoalescer(options: {
     if (sessionId && isAppendDeltaEvent(event)) {
       const messageId = runtimeEventMessageId(event)
       const pending = pendingBySession.get(sessionId)
-      if (pending && pending.messageId === messageId) {
+      if (pending && pending.messageId === messageId && sameRuntimeProvenance(pending.event, event)) {
         // Same streaming message: concatenate the delta onto the buffered append. The
         // timer keeps running (window, not debounce) so the stream still flushes on cadence.
         pending.event = {

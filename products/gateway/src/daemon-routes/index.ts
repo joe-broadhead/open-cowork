@@ -6,10 +6,10 @@ import { opencodeRoutes } from './opencode.js'
 import { systemRoutes } from './system.js'
 import { workRoutes } from './work.js'
 
-export function createJsonRoutes(): RouteHandler[] {
+export function createJsonRoutes(options: { progressSnapshot?: () => unknown } = {}): RouteHandler[] {
   return [
     daemonLeadershipMutationGuard(),
-    ...systemRoutes(),
+    ...systemRoutes(options),
     ...channelRoutes(),
     ...workRoutes(),
     ...opencodeRoutes(),

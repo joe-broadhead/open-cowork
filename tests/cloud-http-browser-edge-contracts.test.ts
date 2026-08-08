@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { CloudArtifactService } from '@open-cowork/cloud-server/artifact-service'
+import { ArtifactUploadLifecycle } from '@open-cowork/cloud-server/artifact-upload-lifecycle'
 import {
   CloudHttpError,
   createCloudHttpServer,
@@ -203,14 +205,20 @@ function createPresignCapableObjectStore(): ObjectStoreAdapter {
     presignedUpload: {
       enforcement: 'exact-content-length',
       maxBytes: 25 * 1024 * 1024,
-      async presignPut(input) {
+      origin: PRESIGN_OBJECT_STORE_ORIGIN,
+      verifyCleanupSafety: async () => true,
+      verifyBrowserPostSafety: async (origin) => origin === 'https://cloud.example.test',
+      async presignPost(input) {
         return {
-          method: 'PUT',
-          url: `${PRESIGN_OBJECT_STORE_ORIGIN}/${input.key}`,
-          headers: input.contentType ? { 'content-type': input.contentType } : {},
-          expiresAt: new Date(Date.now() + 900_000).toISOString(),
+          method: 'POST',
+          url: `${PRESIGN_OBJECT_STORE_ORIGIN}/upload`,
+          fields: { key: input.key },
+          expiresAt: new Date(Date.now() + input.expiresSeconds * 1_000).toISOString(),
         }
       },
+      inspect: async () => null,
+      promote: async () => undefined,
+      delete: (key) => base.deleteObject(key),
     },
     async presignGet(key) {
       return {
@@ -223,14 +231,35 @@ function createPresignCapableObjectStore(): ObjectStoreAdapter {
   }
 }
 
-// SEC-2: when the object store can presign, the browser shim PUTs F4 uploads directly to
-// that cross-origin store, so the served renderer's CSP connect-src must allow its origin
-// (else the PUT is silently blocked and direct transfer is dead in the browser). Gated on
-// the renderer build, which isn't produced in every CI lane.
+// The direct-upload origin enters CSP only when provider, durability, and cleanup ownership
+// are all available; provider support alone remains fail-closed.
 test('cloud HTTP server adds the presigned object-store origin to the renderer CSP connect-src', {
   skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
 }, async () => {
-  const fixture = createFixture({ objectStore: createPresignCapableObjectStore() })
+  const fixture = createFixture({
+    objectStore: createPresignCapableObjectStore(),
+    artifactServiceFactory({ service, objectStore, store, ids }) {
+      Object.defineProperty(store, 'artifactUploadLifecycleCapability', {
+        value: { persistence: 'durable', reconciliation: 'bounded-claims' },
+      })
+      return new CloudArtifactService(service, objectStore, ids, {
+        directUpload: {
+          config: {
+            mode: 'enabled',
+            requested: true,
+            configStatus: 'valid',
+            reason: 'enabled',
+            cleanupBatchSize: 100,
+            cleanupIntervalMs: 60_000,
+          },
+          lifecycle: new ArtifactUploadLifecycle({ store, provider: objectStore.presignedUpload! }),
+          browserOrigin: 'https://cloud.example.test',
+          claimOwner: 'web-test',
+          cleanupOwnerReady: () => true,
+        },
+      })
+    },
+  })
   const baseUrl = await fixture.server.listen()
   try {
     for (const path of ['/', '/app']) {
@@ -240,9 +269,53 @@ test('cloud HTTP server adds the presigned object-store origin to the renderer C
       assert.match(
         csp,
         new RegExp(`connect-src 'self' ${PRESIGN_OBJECT_STORE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
-        `${path} CSP allows the object-store origin for the presigned PUT`,
+        `${path} CSP allows the attested direct-upload origin`,
       )
     }
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server advertises direct upload after cleanup ownership becomes ready', {
+  skip: browserRendererBuildExists() ? false : 'packages/app/dist-browser is not built',
+}, async () => {
+  let cleanupReady = false
+  const fixture = createFixture({
+    objectStore: createPresignCapableObjectStore(),
+    artifactServiceFactory({ service, objectStore, store, ids }) {
+      Object.defineProperty(store, 'artifactUploadLifecycleCapability', {
+        value: { persistence: 'durable', reconciliation: 'bounded-claims' },
+      })
+      return new CloudArtifactService(service, objectStore, ids, {
+        directUpload: {
+          config: {
+            mode: 'enabled',
+            requested: true,
+            configStatus: 'valid',
+            reason: 'enabled',
+            cleanupBatchSize: 100,
+            cleanupIntervalMs: 60_000,
+          },
+          lifecycle: new ArtifactUploadLifecycle({ store, provider: objectStore.presignedUpload! }),
+          browserOrigin: 'https://cloud.example.test',
+          claimOwner: 'web-test',
+          cleanupOwnerReady: () => cleanupReady,
+        },
+      })
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const before = await fetch(`${baseUrl}/`)
+    assert.doesNotMatch(before.headers.get('content-security-policy') || '', /objects\.example\.test/)
+
+    cleanupReady = true
+    const after = await fetch(`${baseUrl}/`)
+    assert.match(after.headers.get('content-security-policy') || '', /objects\.example\.test/)
+    const shell = await after.text()
+    const bootstrapMatch = shell.match(/<script id="cowork-bootstrap" type="application\/json">([\s\S]*?)<\/script>/)
+    assert.equal(JSON.parse(bootstrapMatch?.[1] || '{}').artifactDirectUpload, true)
   } finally {
     await fixture.server.close()
   }
@@ -313,6 +386,27 @@ test('cloud HTTP server gates presigned artifact upload BEGIN behind the billing
     billing,
     billingAdapter: createStubBillingAdapter(billing),
     objectStore: createPresignCapableObjectStore(),
+    artifactServiceFactory({ service, objectStore, store, ids }) {
+      Object.defineProperty(store, 'artifactUploadLifecycleCapability', {
+        value: { persistence: 'durable', reconciliation: 'bounded-claims' },
+      })
+      return new CloudArtifactService(service, objectStore, ids, {
+        directUpload: {
+          config: {
+            mode: 'enabled',
+            requested: true,
+            configStatus: 'valid',
+            reason: 'enabled',
+            cleanupBatchSize: 100,
+            cleanupIntervalMs: 60_000,
+          },
+          lifecycle: new ArtifactUploadLifecycle({ store, provider: objectStore.presignedUpload! }),
+          browserOrigin: 'https://cloud.example.test',
+          claimOwner: 'web-test',
+          cleanupOwnerReady: () => true,
+        },
+      })
+    },
     auth: () => ({
       tenantId: 'tenant-1',
       orgId: 'tenant-1',
@@ -347,7 +441,13 @@ test('cloud HTTP server gates presigned artifact upload BEGIN behind the billing
     const allowed = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ filename: 'chart.png', contentType: 'image/png', expectedSize: 5 }),
+      body: JSON.stringify({
+        artifactId: '00000000-0000-4000-8000-000000000001',
+        filename: 'chart.png',
+        contentType: 'image/png',
+        expectedSize: 5,
+        checksumSha256: 'a'.repeat(64),
+      }),
     })
     assert.equal(allowed.status, 200)
     assert.equal(asRecord((await readJson(allowed)).upload).transfer, 'presigned')
@@ -365,7 +465,13 @@ test('cloud HTTP server gates presigned artifact upload BEGIN behind the billing
     const blocked = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts?transfer=presigned`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ filename: 'chart.png', contentType: 'image/png', expectedSize: 5 }),
+      body: JSON.stringify({
+        artifactId: '00000000-0000-4000-8000-000000000002',
+        filename: 'chart.png',
+        contentType: 'image/png',
+        expectedSize: 5,
+        checksumSha256: 'a'.repeat(64),
+      }),
     })
     assert.equal(blocked.status, 402)
     assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'billing.subscription_inactive')
@@ -815,7 +921,8 @@ test('cloud HTTP OIDC browser login redirects through callback and issues sessio
       const bootstrapMatch = shell.match(/<script id="cowork-bootstrap" type="application\/json">([\s\S]*?)<\/script>/)
       assert.ok(bootstrapMatch, 'renderer shell carries its public bootstrap')
       const bootstrap = JSON.parse(bootstrapMatch[1] || '{}') as Record<string, unknown>
-      assert.deepEqual(Object.keys(bootstrap).sort(), ['authRequired', 'sessionEventTypes'])
+      assert.deepEqual(Object.keys(bootstrap).sort(), ['artifactDirectUpload', 'authRequired', 'sessionEventTypes'])
+      assert.equal(bootstrap.artifactDirectUpload, false)
       assert.equal(bootstrap.authRequired, true)
       assert.equal(Array.isArray(bootstrap.sessionEventTypes), true)
       assert.doesNotMatch(JSON.stringify(bootstrap), /cookie|secret|tenant|provider/i)

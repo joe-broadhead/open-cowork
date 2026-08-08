@@ -325,6 +325,31 @@
         }
       }
     },
+    "/progressz": {
+      "get": {
+        "summary": "Bounded, privacy-safe progress-watchdog state. Reports mode, aggregate healthy/waiting/suspect/stalled counts, age/source/generation samples, and truncation only; it never returns run, Session, lease, tenant, filename, or payload identifiers.",
+        "tags": [
+          "Service"
+        ],
+        "security": [
+          {
+            "gatewayBearer": []
+          }
+        ],
+        "x-required-capability": "read",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
     "/operator/status": {
       "get": {
         "summary": "Redacted beta operator cockpit with scheduler safety, queue state, attention, channel scope, and deferred release gates.",
@@ -861,7 +886,7 @@
     },
     "/metrics": {
       "get": {
-        "summary": "Prometheus-format runtime, scheduler, auth, channel, alert, and bounded live-stream metrics for local scraping.",
+        "summary": "Prometheus-format runtime, scheduler, auth, channel, alert, bounded live-stream, and progress-watchdog outcome metrics for local scraping.",
         "tags": [
           "Service"
         ],

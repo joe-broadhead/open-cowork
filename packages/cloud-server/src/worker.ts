@@ -10,7 +10,14 @@ import { recordCloudWorkerMetric } from './observability.ts'
 import type { CloudRuntimeEvent } from './runtime-adapter.ts'
 import type { CloudSessionService } from './session-service.ts'
 import type { CloudAbuseConfig } from '@open-cowork/shared'
+import type { ProgressWatchdogDecision } from '@open-cowork/shared/progress-watchdog'
 import { isDeferrableRuntimeCapacityError } from './runtime-capacity.ts'
+import { cloudRuntimeLeaseEpoch } from './runtime-adapter.ts'
+import {
+  type CloudProgressWatchdogAuditEvent,
+  type CloudProgressWatchdogRecoveryOutcome,
+} from './progress-watchdog.ts'
+import { stableCloudId } from './session-input-validation.ts'
 
 export type CloudWorkerCheckpointHooks = {
   /**
@@ -25,6 +32,10 @@ const MAX_STALE_CHECKPOINT_RETRIES = 3
 
 function isStaleCheckpointError(error: unknown) {
   return error instanceof Error && /checkpoint version is stale/i.test(error.message)
+}
+
+function isStaleWorkerLeaseError(error: unknown) {
+  return error instanceof Error && /(worker lease is stale|stale worker lease)/i.test(error.message)
 }
 
 export class CloudWorkerLeaseLostError extends Error {
@@ -78,6 +89,7 @@ export class CloudWorker {
   private readonly leases = new Map<string, WorkerLeaseRecord>()
   private readonly maxLeases: number
   private readonly activeCommands = new Map<string, ActiveWorkerCommand>()
+  private progressRecoveries: Map<string, Promise<CloudProgressWatchdogRecoveryOutcome>> | null = null
   private readonly store: ControlPlaneStore
   private readonly service: CloudSessionService
   private readonly workerId: string
@@ -351,18 +363,96 @@ export class CloudWorker {
 
   async appendRuntimeEvent(tenantId: string, sessionId: string, event: CloudRuntimeEvent): Promise<boolean> {
     if (this.shutdownStarted) return false
-    let lease = await this.getOrClaimLease(tenantId, sessionId)
-    if (!lease) return false
-    await this.service.appendRuntimeEvent({
-      tenantId,
-      sessionId,
-      event,
-      leaseToken: lease.leaseToken,
-    })
-    lease = await this.checkpointLease(lease)
-    await this.checkpointHooks.saveAfterCommand?.(lease)
-    this.touchLease(this.leaseKey(tenantId, sessionId), lease)
-    return true
+    const leaseKey = this.leaseKey(tenantId, sessionId)
+    let lease = this.leases.get(leaseKey)
+    if (!lease || !this.service.runtimeEventMatchesLeaseAndGeneration(lease, event)) return false
+    try {
+      lease = await this.store.renewSessionLease(lease, new Date(), this.leaseTtlMs)
+      if (!this.service.runtimeEventMatchesLeaseAndGeneration(lease, event)) return false
+      await this.service.appendRuntimeEvent({
+        tenantId,
+        sessionId,
+        event,
+        leaseToken: lease.leaseToken,
+      })
+      lease = await this.checkpointLease(lease)
+      await this.checkpointHooks.saveAfterCommand?.(lease)
+      this.touchLease(leaseKey, lease)
+      return true
+    } catch (error) {
+      if (!isStaleWorkerLeaseError(error)) throw error
+      this.leases.delete(leaseKey)
+      return false
+    }
+  }
+
+  async recoverStalledSession(
+    decision: ProgressWatchdogDecision,
+    isDecisionCurrent: () => boolean,
+  ): Promise<CloudProgressWatchdogRecoveryOutcome> {
+    if (this.shutdownStarted) return 'fenced-stale'
+    const recoveryKey = [
+      decision.scopeId,
+      decision.sessionId,
+      decision.runId,
+      decision.runtimeGeneration,
+      decision.executionGeneration,
+      decision.revision,
+      decision.leaseOwner,
+      decision.leaseEpoch,
+    ].join('\0')
+    const progressRecoveries = this.progressRecoveries || new Map()
+    this.progressRecoveries = progressRecoveries
+    const existing = progressRecoveries.get(recoveryKey)
+    if (existing) return existing
+    const recovery = this.performStalledSessionRecovery(decision, isDecisionCurrent)
+      .finally(() => {
+        progressRecoveries.delete(recoveryKey)
+        if (progressRecoveries.size === 0 && this.progressRecoveries === progressRecoveries) {
+          this.progressRecoveries = null
+        }
+      })
+    progressRecoveries.set(recoveryKey, recovery)
+    return recovery
+  }
+
+  async recordProgressWatchdogAudit(event: CloudProgressWatchdogAuditEvent): Promise<void> {
+    try {
+      const { decision } = event
+      const session = await this.store.getSessionForTenant(decision.scopeId, decision.sessionId)
+      if (!session) return
+      const orgId = await this.store.resolveOrgIdForTenant(decision.scopeId)
+      if (!orgId) return
+      await this.store.recordAuditEvent({
+        eventId: stableCloudId(
+          'audit_watchdog',
+          event.mode,
+          decision.scopeId,
+          decision.sessionId,
+          decision.runId,
+          String(decision.runtimeGeneration),
+          String(decision.executionGeneration),
+          String(decision.revision),
+          decision.leaseOwner,
+          decision.leaseEpoch,
+          decision.state,
+          decision.source,
+          event.outcome,
+        ),
+        orgId,
+        actorType: 'system',
+        actorId: 'progress-watchdog',
+        eventType: 'runtime.progress_watchdog.decision',
+        metadata: {
+          mode: event.mode,
+          state: decision.state,
+          outcome: event.outcome,
+          source: decision.source,
+        },
+      })
+    } catch {
+      // The durable audit sink is best-effort and cannot alter watchdog recovery.
+    }
   }
 
   getActiveCommandCount() {
@@ -386,6 +476,7 @@ export class CloudWorker {
     }
     this.shutdownStarted = true
     this.shutdownCompleted = true
+    await Promise.allSettled(this.progressRecoveries?.values() || [])
     const now = input.now || new Date()
     const active = this.snapshotActiveCommands()
     const forced = !input.drained || active.length > 0
@@ -440,6 +531,49 @@ export class CloudWorker {
     }
     this.activeCommands.set(active.key, active)
     return active
+  }
+
+  private async performStalledSessionRecovery(
+    decision: ProgressWatchdogDecision,
+    isDecisionCurrent: () => boolean,
+  ): Promise<CloudProgressWatchdogRecoveryOutcome> {
+    if (!isDecisionCurrent() || decision.leaseOwner !== this.workerId) return 'fenced-stale'
+    const leaseKey = this.leaseKey(decision.scopeId, decision.sessionId)
+    const current = this.leases.get(leaseKey)
+    if (
+      !current
+      || current.leasedBy !== decision.leaseOwner
+      || cloudRuntimeLeaseEpoch(current.leaseToken) !== decision.leaseEpoch
+    ) return 'fenced-stale'
+
+    let renewed: WorkerLeaseRecord
+    try {
+      renewed = await this.store.renewSessionLease(current, new Date(), this.leaseTtlMs)
+    } catch {
+      this.leases.delete(leaseKey)
+      return 'fenced-stale'
+    }
+    this.touchLease(leaseKey, renewed)
+    if (
+      this.shutdownStarted
+      || renewed.leasedBy !== decision.leaseOwner
+      || cloudRuntimeLeaseEpoch(renewed.leaseToken) !== decision.leaseEpoch
+      || !isDecisionCurrent()
+    ) return 'fenced-stale'
+
+    try {
+      return await this.service.recoverStalledSession({
+        lease: renewed,
+        expected: {
+          runtimeGeneration: decision.runtimeGeneration,
+          executionGeneration: decision.executionGeneration,
+          runId: decision.runId,
+        },
+        isDecisionCurrent,
+      })
+    } catch {
+      return 'failed'
+    }
   }
 
   private snapshotActiveCommands() {

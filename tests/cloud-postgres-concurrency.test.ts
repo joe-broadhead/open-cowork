@@ -624,6 +624,75 @@ test('real Postgres cloud store enforces quota counters under concurrent request
   })
 })
 
+test('real Postgres artifact reservations charge replays once and never oversubscribe byte quota', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const now = new Date('2026-01-01T00:00:00.000Z')
+    const reservation = (artifactId: string, bytes: number) => ({
+      orgId: ids.tenantId,
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      sessionId: ids.sessionId,
+      artifactId,
+      objectKey: `${ids.tenantId}/artifacts/${artifactId}`,
+      stagingObjectKey: `${ids.tenantId}/staging/${artifactId}`,
+      finalObjectKey: `${ids.tenantId}/artifacts/${artifactId}`,
+      filename: `${artifactId}.bin`,
+      contentType: 'application/octet-stream',
+      checksumSha256: 'a'.repeat(64),
+      publication: {
+        kind: 'document',
+        artifactStatus: 'in-review',
+        authorAgentId: 'agent-writer',
+        projectId: 'project-1',
+        taskId: 'task-1',
+        statusUpdatedBy: ids.userId,
+        statusUpdatedAt: now.toISOString(),
+      },
+      reservedBytes: bytes,
+      expiresAt: new Date(now.getTime() + 15 * 60_000),
+      quota: {
+        orgId: ids.tenantId,
+        quotaKey: 'artifact_bytes:day',
+        limit: 100,
+        quantity: bytes,
+        windowMs: 86_400_000,
+        now,
+        policyCode: 'quota.artifact_bytes_per_day_exceeded',
+      },
+      createdAt: now,
+    } as const)
+
+    const replayInput = reservation(`${ids.tenantId}-artifact-replay`, 40)
+    const replays = await Promise.all(Array.from({ length: 8 }, () => (
+      store.createArtifactUploadReservation(replayInput)
+    )))
+    assert.equal(replays.every((result) => result.reservation?.artifactId === replayInput.artifactId), true)
+    assert.equal(replays.filter((result) => result.quota?.allowed === true).length, 1)
+    assert.equal(replays.filter((result) => result.quota === null).length, 7)
+    assert.equal(
+      (await store.listUsageQuotaCounters(ids.tenantId))
+        .find((counter) => counter.quotaKey === 'artifact_bytes:day')?.quantity,
+      40,
+    )
+
+    const distinct = await Promise.allSettled(Array.from({ length: 4 }, (_, index) => (
+      store.createArtifactUploadReservation(reservation(`${ids.tenantId}-artifact-${index}`, 30))
+    )))
+    assert.deepEqual(distinct.filter((result) => result.status === 'rejected'), [])
+    const attempts = distinct.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+    assert.equal(attempts.length, 4)
+    assert.equal(attempts.filter((result) => result.reservation !== null).length, 2)
+    assert.equal(attempts.filter((result) => result.quota?.allowed === false).length, 2)
+    assert.equal(
+      (await store.listUsageQuotaCounters(ids.tenantId))
+        .find((counter) => counter.quotaKey === 'artifact_bytes:day')?.quantity,
+      100,
+    )
+  })
+})
+
 test('real Postgres cloud store assigns unique ordered event sequences under concurrent writes', {
   skip: POSTGRES_SKIP,
 }, async () => {

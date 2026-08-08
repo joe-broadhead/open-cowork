@@ -59,6 +59,7 @@ const routes = [
   ['POST', '/api/sessions/session-1/artifacts', 'artifacts.upload'],
   ['GET', '/api/sessions/session-1/artifacts/artifact-1', 'artifacts.read'],
   ['POST', '/api/sessions/session-1/artifacts/artifact-1/finalize', 'artifacts.finalize'],
+  ['POST', '/api/sessions/session-1/artifacts/artifact-1/abort', 'artifacts.abort'],
   ['POST', '/api/sessions/session-1/artifacts/artifact-1/status', 'artifacts.update'],
 
   // Workflow lifecycle and the internal scheduler callback.

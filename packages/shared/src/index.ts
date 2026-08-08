@@ -15,6 +15,8 @@ import type {
   CoordinationWatchInput,
   CoordinationWatchUpdateInput,
 } from './coordination.js'
+
+export * from './progress-watchdog.js'
 import type {
   WorkflowDetail,
   WorkflowListPayload,

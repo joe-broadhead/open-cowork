@@ -74,6 +74,7 @@ import {
   createDeferredVoiceHostStatus,
 } from '@open-cowork/shared'
 import { createBrowserAdminApi } from './cowork-api-admin'
+import { createBrowserArtifactUpload } from './cowork-api-artifact-upload'
 import { createBrowserCustomApi } from './cowork-api-custom'
 import {
   browserCloudWorkspaceSupport,
@@ -82,7 +83,6 @@ import {
 import { createBrowserChannelsApi } from './cowork-api-channels'
 
 import {
-  base64ToBytes,
   browserUnavailable,
   cloudViewToSessionInfo,
   createTransport,
@@ -90,7 +90,6 @@ import {
   readBootstrapFromWindow,
   unwrap,
   type BrowserCoworkApiBootstrap,
-  type PresignedUploadBegin,
 } from './cowork-api-transport'
 export type { BrowserCoworkApiBootstrap } from './cowork-api-transport'
 export { createTransport } from './cowork-api-transport'
@@ -109,6 +108,12 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
   const hub = new CloudEventHub(transport)
 
   const channels = createBrowserChannelsApi({ request, endpoint, withQuery })
+  const artifactUpload = createBrowserArtifactUpload({
+    directUploadEnabled: resolvedBootstrap.artifactDirectUpload === true,
+    request,
+    endpoint,
+    withQuery,
+  })
 
   return {
     // -- workspace ---------------------------------------------------------
@@ -471,71 +476,7 @@ export function createBrowserCoworkApi(bootstrap?: BrowserCoworkApiBootstrap): C
           'artifact',
           null as never,
         ),
-      upload: async (req): Promise<SessionArtifact> => {
-        // Buffered upload: base64 the whole artifact through the cloud API. This is the
-        // default-safe path and the unchanged behaviour the renderer has always seen.
-        const bufferedUpload = async (): Promise<SessionArtifact> =>
-          unwrap(await request(endpoint('sessionArtifacts', { sessionId: req.sessionId }), { method: 'POST', body: req }), 'artifact', null as never)
-
-        // Cloud/browser optimization: when the server advertises presigned upload support, push
-        // the bytes straight to object storage (begin -> direct PUT -> finalize) so they never
-        // base64-buffer through the web pod. A begin failure is a real API failure and must remain
-        // visible; buffered fallback is reserved for an explicit unsupported response or a failed
-        // object-store PUT. (Electron implements `upload` over IPC and never reaches this code.)
-        const uploadBytes = base64ToBytes(req.dataBase64)
-        if (uploadBytes.byteLength === 0) return bufferedUpload()
-        const begun = unwrap<PresignedUploadBegin | null>(
-          await request(withQuery(endpoint('sessionArtifacts', { sessionId: req.sessionId }), { transfer: 'presigned' }), {
-            method: 'POST',
-            body: {
-              filename: req.filename,
-              contentType: req.contentType ?? null,
-              expectedSize: uploadBytes.byteLength,
-            },
-          }),
-          'upload',
-          null,
-        )
-        if (!begun || begun.transfer !== 'presigned' || !begun.uploadUrl || !begun.artifactId) {
-          return bufferedUpload()
-        }
-
-        let putOk: boolean
-        try {
-          const putResponse = await fetch(begun.uploadUrl, {
-            method: begun.uploadMethod || 'PUT',
-            headers: begun.uploadHeaders || {},
-            // Uint8Array is a valid runtime BodyInit; the cast bridges the typed-array generics
-            // friction in the DOM lib's BufferSource definition.
-            body: uploadBytes as unknown as BodyInit,
-          })
-          putOk = putResponse.ok
-        } catch {
-          putOk = false
-        }
-        if (!putOk) return bufferedUpload()
-
-        // The bytes are in the store; record the metadata row. Finalize errors propagate (a
-        // buffered retry here would re-upload the bytes under a second artifact id).
-        return unwrap(
-          await request(endpoint('sessionArtifactFinalize', { sessionId: req.sessionId, artifactId: begun.artifactId }), {
-            method: 'POST',
-            body: {
-              filename: req.filename,
-              contentType: req.contentType ?? null,
-              kind: req.kind ?? null,
-              status: req.status ?? null,
-              authorAgentId: req.authorAgentId ?? null,
-              projectId: req.projectId ?? null,
-              taskId: req.taskId ?? null,
-              statusUpdatedBy: req.statusUpdatedBy ?? null,
-              statusUpdatedAt: req.statusUpdatedAt ?? null,
-            },
-          }),
-          'artifact',
-          null as never,
-        )
-      },
+      upload: artifactUpload,
       open: async () => null,
       export: async () => null,
       reveal: async () => false,

@@ -77,6 +77,50 @@ describe('OpenCode session runtime', () => {
     expect(v2Options).toMatchObject({ throwOnError: true, signal })
   })
 
+  it('requires an acknowledged interrupt for fail-closed recovery while preserving best-effort aborts', async () => {
+    const transportError = new Error('interrupt transport unavailable')
+    const throwOnError: boolean[] = []
+    const runtime = createOpenCodeSessionRuntime({
+      v2: {
+        session: {
+          async interrupt(_request: unknown, options: { throwOnError: boolean }) {
+            throwOnError.push(options.throwOnError)
+            throw transportError
+          },
+        },
+      },
+    } as any)
+
+    await expect(runtime.abort('session-1')).resolves.toBeUndefined()
+    await expect(runtime.abort('session-1', undefined, { requireConfirmation: true })).rejects.toBe(transportError)
+    expect(throwOnError).toEqual([false, true])
+
+    const classicTransportError = new Error('classic abort transport unavailable')
+    const classicThrowOnError: Array<boolean | undefined> = []
+    const classicRuntime = createOpenCodeSessionRuntime({
+      session: {
+        async abort(request: { throwOnError?: boolean }) {
+          classicThrowOnError.push(request.throwOnError)
+          if (request.throwOnError) throw classicTransportError
+          return { error: classicTransportError }
+        },
+      },
+    } as any)
+    await expect(classicRuntime.abort('session-1')).resolves.toBeUndefined()
+    await expect(classicRuntime.abort(
+      'session-1',
+      undefined,
+      { requireConfirmation: true },
+    )).rejects.toBe(classicTransportError)
+    expect(classicThrowOnError).toEqual([undefined, true])
+
+    await expect(createOpenCodeSessionRuntime({} as any).abort(
+      'session-1',
+      undefined,
+      { requireConfirmation: true },
+    )).rejects.toThrow('OpenCode session interrupt is unavailable.')
+  })
+
   it('deletes sessions through the runtime port and verifies absence', async () => {
     const fake = createFakeOpencodeClient()
     setDaemonClient(fake.client)

@@ -13,6 +13,17 @@ const SECRET_OBJECT_KEY_PATTERN = /^(botToken|accessToken|verifyToken|appSecret|
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/g
 const TELEGRAM_TOKEN_PATTERN = /\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g
 const KEY_VALUE_SECRET_PATTERN = /\b(token|secret|password|api[_-]?key|credential)=([^\s&]+)/gi
+const PROGRESS_WATCHDOG_SERVICE_ENV = [
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_MODE',
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_SUSPECT_MS',
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_STALLED_MS',
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_SWEEP_MS',
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_MAX_ENTRIES',
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_MAX_SNAPSHOT_ENTRIES',
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_OBSERVE_EVIDENCE_REF',
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_OPERATOR_OWNER',
+  'OPENCODE_GATEWAY_PROGRESS_WATCHDOG_ROLLBACK_MODE',
+] as const
 
 export function redactSecret(value?: string): string {
   if (!value) return 'not configured'
@@ -99,13 +110,23 @@ function repairExistingTokenFile(filePath: string): void {
   try { fs.chmodSync(filePath, 0o600) } catch {}
 }
 
-export function gatewayServiceEnvironment(config: Pick<GatewayConfig, 'httpPort' | 'opencodeUrl'>, options: { adminTokenFile?: string } = {}): Record<string, string> {
+export function gatewayServiceEnvironment(config: Pick<GatewayConfig, 'httpPort' | 'opencodeUrl'>, options: { adminTokenFile?: string; sourceEnv?: NodeJS.ProcessEnv } = {}): Record<string, string> {
   return assertNoServiceSecrets({
     PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin',
     GATEWAY_HTTP_PORT: String(config.httpPort),
     OPENCODE_GATEWAY_URL: config.opencodeUrl,
     ...(options.adminTokenFile ? { OPENCODE_GATEWAY_HTTP_ADMIN_TOKEN_FILE: options.adminTokenFile } : {}),
+    ...allowlistedProgressWatchdogServiceEnvironment(options.sourceEnv || process.env),
   })
+}
+
+function allowlistedProgressWatchdogServiceEnvironment(source: NodeJS.ProcessEnv): Record<string, string> {
+  const output: Record<string, string> = {}
+  for (const key of PROGRESS_WATCHDOG_SERVICE_ENV) {
+    const value = source[key]
+    if (value && value.length <= 500 && /^[\x20-\x7e]+$/.test(value)) output[key] = value
+  }
+  return output
 }
 
 export function assertNoServiceSecrets(env: Record<string, string>): Record<string, string> {

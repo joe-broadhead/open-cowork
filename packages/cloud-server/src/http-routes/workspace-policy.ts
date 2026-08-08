@@ -149,6 +149,7 @@ function resolveSessionRoute(method: string, segments: readonly string[]): Cloud
   if (!artifactId && method === 'GET' && length === 4) return route('artifacts.list')
   if (!artifactId && method === 'POST' && length === 4) return route('artifacts.upload')
   if (artifactId && artifactAction === 'finalize' && method === 'POST' && length === 6) return route('artifacts.finalize')
+  if (artifactId && artifactAction === 'abort' && method === 'POST' && length === 6) return route('artifacts.abort')
   if (artifactId && artifactAction === 'status' && method === 'POST' && length === 6) return route('artifacts.update')
   if (artifactId && !artifactAction && method === 'GET' && length === 5) return route('artifacts.read')
   return null

@@ -6,6 +6,7 @@ export type CloudRuntimeCapacityReason =
   | 'provision_timeout'
   | 'cleanup_pending'
   | 'adapter_closing'
+  | 'execution_active'
 
 export class CloudRuntimeCapacityError extends Error {
   readonly code = 'cloud_runtime_capacity_exhausted'

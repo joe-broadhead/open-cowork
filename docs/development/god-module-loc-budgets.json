@@ -33,21 +33,21 @@
   "exceptions": [
     {
       "path": "packages/cloud-server/src/in-memory-control-plane-store.ts",
-      "maxLines": 1600,
+      "maxLines": 1547,
       "ratchetTargetLines": 1499,
       "owner": "cloud-server",
       "reason": "In-memory control-plane compatibility store retained for deterministic local and contract execution."
     },
     {
       "path": "packages/cloud-server/src/postgres-control-plane-store.ts",
-      "maxLines": 1960,
+      "maxLines": 1932,
       "ratchetTargetLines": 1499,
       "owner": "cloud-server",
       "reason": "Postgres control-plane facade delegates to domain repositories but remains the transaction composition boundary."
     },
     {
       "path": "packages/cloud-server/src/worker-scoped-runtime-adapter.ts",
-      "maxLines": 1600,
+      "maxLines": 1537,
       "ratchetTargetLines": 1499,
       "owner": "cloud-server",
       "reason": "Worker-scoped runtime adapter currently owns the bounded Cloud-to-OpenCode execution translation seam."
@@ -70,21 +70,21 @@
     },
     {
       "path": "packages/cloud-server/src/app.ts",
-      "maxLines": 1472,
+      "maxLines": 1467,
       "ratchetTargetLines": 1400,
       "owner": "cloud-server",
       "reason": "Cloud application composition root is below the soft target after JOE-1208 extraction and must not regrow."
     },
     {
       "path": "packages/cloud-server/src/http-server.ts",
-      "maxLines": 1230,
+      "maxLines": 1206,
       "ratchetTargetLines": 1200,
       "owner": "cloud-server",
       "reason": "Cloud HTTP composition facade is below the soft target after JOE-1200 route and stream extraction and must not regrow."
     },
     {
       "path": "packages/cloud-server/src/session-service.ts",
-      "maxLines": 1144,
+      "maxLines": 1133,
       "ratchetTargetLines": 1100,
       "owner": "cloud-server",
       "reason": "Cloud session facade stays bounded after BYOK policy and orchestration behavior moved to domain services."

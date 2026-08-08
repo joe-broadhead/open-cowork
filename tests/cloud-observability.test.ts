@@ -103,6 +103,27 @@ test('cloud metric attributes preserve every closed workspace policy denial code
   })
 })
 
+test('cloud watchdog metric dimensions are closed and identifier-free', () => {
+  assert.deepEqual(sanitizeCloudMetricAttributes({
+    watchdog_state: 'suspect',
+    watchdog_outcome: 'observed',
+    tenant_id: 'tenant-secret',
+    session_id: 'session-secret',
+    run_id: 'run-secret',
+    lease_owner: 'worker-secret',
+  }), {
+    watchdog_state: 'suspect',
+    watchdog_outcome: 'observed',
+  })
+  assert.deepEqual(sanitizeCloudMetricAttributes({
+    watchdog_state: 'tenant-controlled-state',
+    watchdog_outcome: 'tenant-controlled-outcome',
+  }), {
+    watchdog_state: 'other',
+    watchdog_outcome: 'other',
+  })
+})
+
 test('cloud console observability writes structured JSON records', async () => {
   const lines: string[] = []
   const adapter = createConsoleCloudObservability({
@@ -189,6 +210,54 @@ test('cloud HTTP request observation emits log, metric, and span records', async
   })
   assert.equal((spans[0] as Record<string, unknown>).name, 'cloud.http.request')
   assert.equal((spans[0] as Record<string, unknown>).status, 'ok')
+})
+
+test('cloud HTTP request observation templates direct-upload identifiers before emitting telemetry', async () => {
+  const logs: unknown[] = []
+  const spans: unknown[] = []
+  const adapter: CloudObservabilityAdapter = {
+    log(record) { logs.push(record) },
+    metric() {},
+    span(record) { spans.push(record) },
+  }
+  const sessionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  const artifactId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  const routes = [
+    {
+      path: `/api/sessions/${sessionId}/artifacts`,
+      template: '/api/sessions/:sessionId/artifacts',
+    },
+    {
+      path: `/api/sessions/${sessionId}/artifacts/${artifactId}/finalize`,
+      template: '/api/sessions/:sessionId/artifacts/:artifactId/finalize',
+    },
+    {
+      path: `/api/sessions/${sessionId}/artifacts/${artifactId}/abort`,
+      template: '/api/sessions/:sessionId/artifacts/:artifactId/abort',
+    },
+  ]
+
+  for (const route of routes) {
+    await recordCloudHttpRequest(adapter, {
+      requestId: 'req-1',
+      method: 'POST',
+      path: route.path,
+      statusCode: 200,
+      durationMs: 1,
+      role: 'web',
+      profileName: 'full',
+    })
+  }
+
+  assert.deepEqual(logs.map((record) => (
+    ((record as Record<string, unknown>).attributes as Record<string, unknown>)['url.path']
+  )), routes.map((route) => route.template))
+  assert.deepEqual(spans.map((record) => (
+    ((record as Record<string, unknown>).attributes as Record<string, unknown>)['url.path']
+  )), routes.map((route) => route.template))
+  const telemetry = JSON.stringify({ logs, spans })
+  assert.equal(telemetry.includes(sessionId), false)
+  assert.equal(telemetry.includes(artifactId), false)
 })
 
 test('cloud observability helpers sanitize records before custom adapters receive them', async () => {

@@ -20,15 +20,23 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
   }
   if (!artifactId && req.method === 'POST') {
     // Opt-in direct-to-store upload (begin phase). The service mints a URL only when the
-    // object-store adapter explicitly enforces the positive declared expectedSize and its own
-    // maximum. Otherwise reply transfer:'unsupported' so the client uses the bounded buffered
-    // path. The begin request carries only metadata (no bytes), so it stays small.
+    // provider enforces the exact declared size and checksum. Otherwise reply
+    // transfer:'unsupported' so the client uses the bounded buffered path.
     if (context.url.searchParams.get('transfer') === 'presigned') {
       const beginBody = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const begun = await options.artifacts.presignSessionArtifactUpload(context.principal, sessionId, {
+        artifactId: tools.readString(beginBody.artifactId) || '',
         filename: tools.readString(beginBody.filename) || '',
         contentType: tools.readString(beginBody.contentType),
+        checksumSha256: tools.readString(beginBody.checksumSha256) || '',
         expectedSize: readOptionalNumber(beginBody.expectedSize),
+        kind: tools.readString(beginBody.kind) as ArtifactKind | null,
+        status: tools.readString(beginBody.status) as ArtifactStatus | null,
+        authorAgentId: tools.readString(beginBody.authorAgentId),
+        projectId: tools.readString(beginBody.projectId),
+        taskId: tools.readString(beginBody.taskId),
+        statusUpdatedBy: tools.readString(beginBody.statusUpdatedBy),
+        statusUpdatedAt: tools.readString(beginBody.statusUpdatedAt),
       })
       if (begun) {
         tools.writeJson(res, 200, {
@@ -37,7 +45,7 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
             artifactId: begun.artifactId,
             uploadUrl: begun.presigned.url,
             uploadMethod: begun.presigned.method,
-            uploadHeaders: begun.presigned.headers,
+            uploadFields: begun.presigned.fields,
             uploadExpiresAt: begun.presigned.expiresAt,
           },
         }, options.corsOrigin)
@@ -66,9 +74,8 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
   const artifactSubaction = context.segments[5]
   if (artifactId && artifactSubaction === 'finalize' && req.method === 'POST') {
     // Finalize phase of the direct-to-store upload: the bytes are already in object storage
-    // (the client PUT them to the presigned URL); record the metadata row, reusing the same
-    // write the buffered upload performs. Size/content-type are read authoritatively from the
-    // store via headObject in the service, so the request body carries only descriptive metadata.
+    // (the client POSTed them under an exact provider policy); promote only after the
+    // provider attestation matches the durable reservation.
     const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
     const finalized = await options.artifacts.finalizeSessionArtifactUpload(context.principal, sessionId, {
       artifactId,
@@ -83,6 +90,16 @@ export async function handleSessionArtifactsApiRoute(input: CloudApiRouteInput):
       statusUpdatedAt: tools.readString(body.statusUpdatedAt),
     })
     tools.writeJson(res, 201, { artifact: options.artifacts.publicArtifact(finalized) }, options.corsOrigin)
+    return true
+  }
+  if (artifactId && artifactSubaction === 'abort' && req.method === 'POST') {
+    const result = await options.artifacts.abortSessionArtifactUpload(context.principal, sessionId, artifactId)
+    tools.writeJson(res, 200, {
+      upload: {
+        artifactId,
+        state: result?.outcome || 'not_found',
+      },
+    }, options.corsOrigin)
     return true
   }
   if (artifactId && artifactSubaction === 'status' && req.method === 'POST') {

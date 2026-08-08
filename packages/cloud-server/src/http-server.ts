@@ -46,6 +46,7 @@ import {
   type CloudHttpServerOptions,
 } from './http-contracts.ts'
 import { CloudServiceError, type CloudPrincipal } from './session-service.ts'
+import { handleCloudHealthRoute } from './http-health-routes.ts'
 import {
   firstHeader,
   parseLimit,
@@ -87,13 +88,12 @@ import {
   requestSource,
   webhookAuthScope,
 } from './http-request-context.ts'
-import type { CloudReadinessReport } from './readiness.ts'
 import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
 import {
   recordCloudHttpRequest,
   recordCloudLog,
   recordCloudMetric,
-  recordCloudWorkspacePolicyDecision,
+  recordCloudWorkspacePolicyDecision, templateCloudHttpPath,
 } from './observability.ts'
 import {
   currentSessionProjectionSequence,
@@ -998,6 +998,12 @@ export class CloudHttpServer {
       // relaxed-but-script-strict CSP (writeBrowserRendererHtml) because the SPA injects
       // its surface stylesheet via a runtime-created <style> element.
       if ((url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/app' || url.pathname === '/app/') && req.method === 'GET') {
+        // SEC-2: only a size-enforced upload capability with a currently attested
+        // cleanup owner contributes a cross-origin target or asks the browser to
+        // allocate/hash direct-upload bytes.
+        const objectStoreOrigin = this.options.artifacts
+          ? await this.options.artifacts.presignedUploadOrigin()
+          : null
         // Minimal public bootstrap: the shim derives the same-origin endpoint
         // base from window.location and reads the CSRF token from /auth/me.
         const html = browserRendererHtml({
@@ -1005,16 +1011,12 @@ export class CloudHttpServer {
           // sign-in, never cookie secrets, provider configuration, or tenant data.
           authRequired: Boolean(this.options.sessionCookies && this.options.browserAuth),
           sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES],
+          artifactDirectUpload: objectStoreOrigin !== null,
         })
         if (html === null) {
           writeError(res, 404, 'Unified renderer browser build was not found.', requestOptions.corsOrigin)
           return
         }
-        // SEC-2: only a size-enforced upload capability contributes a cross-origin
-        // connect-src target; unqualified presigned PUT support remains buffered.
-        const objectStoreOrigin = this.options.artifacts
-          ? await this.options.artifacts.presignedUploadOrigin()
-          : null
         writeBrowserRendererHtml(res, 200, html, requestOptions.corsOrigin, objectStoreOrigin)
         return
       }
@@ -1048,40 +1050,15 @@ export class CloudHttpServer {
         return
       }
 
-      if (url.pathname === '/livez') {
-        writeJson(res, 200, {
-          ok: true,
-          role: this.options.policy.role,
-          profileName: this.options.policy.profileName,
-        }, requestOptions.corsOrigin)
-        return
-      }
-
-      if (url.pathname === '/readyz') {
-        if (this.draining) {
-          writeJson(res, 503, {
-            ok: false,
-            role: this.options.policy.role,
-            profileName: this.options.policy.profileName,
-            checks: [{ name: 'draining', status: 'error', detail: 'Server is shutting down.' }],
-          }, requestOptions.corsOrigin)
-          return
-        }
-        const readiness = this.options.readiness
-          ? await this.options.readiness()
-          : {
-              ok: false,
-              role: this.options.policy.role,
-              profileName: this.options.policy.profileName,
-              checks: [{
-                name: 'readiness_config',
-                status: 'error',
-                detail: 'Readiness checks are not configured for this server.',
-              }],
-            } satisfies CloudReadinessReport
-        writeJson(res, readiness.ok ? 200 : 503, readiness, requestOptions.corsOrigin)
-        return
-      }
+      if (await handleCloudHealthRoute({
+        pathname: url.pathname,
+        res,
+        corsOrigin: requestOptions.corsOrigin,
+        policy: this.options.policy,
+        draining: this.draining,
+        readiness: this.options.readiness,
+        progress: this.options.progress,
+      })) return
 
       if (url.pathname.startsWith('/webhooks/workflows/')) {
         await handleCloudWorkflowWebhook(req, res, requestOptions, url)
@@ -1211,15 +1188,14 @@ export class CloudHttpServer {
       await recordCloudLog(this.options.observability, {
         level: 'error',
         name: 'cloud.http.unexpected_error',
-        message: error instanceof Error ? error.message : String(error),
+        message: 'Unexpected cloud HTTP request failure.',
         attributes: {
           request_id: requestId,
           'http.request.method': req.method || 'GET',
-          'url.path': url.pathname,
+          'url.path': templateCloudHttpPath(url.pathname),
           'cloud.role': this.options.policy.role,
           'cloud.profile': this.options.policy.profileName,
-          error_name: error instanceof Error ? error.name : typeof error,
-          error_message: error instanceof Error ? error.message : String(error),
+          error_code: 'unexpected_http_error',
         },
       })
       writeError(res, 500, 'Internal server error.', requestOptions.corsOrigin)

@@ -55,6 +55,35 @@ describe.sequential('daemon JSON routes', () => {
     expect(response?.body).toMatchObject({ status: 'ok' })
   })
 
+  it('serves the bounded privacy-safe progress snapshot independently of health', async () => {
+    const progressRoutes = createJsonRoutes({
+      progressSnapshot: () => ({
+        mode: 'observe',
+        status: 'valid',
+        generation: 3,
+        counts: { healthy: 1, waiting: 0, suspect: 0, stalled: 0 },
+        samples: [{ state: 'healthy', ageMs: 25, source: 'output_advance', generation: 3 }],
+        truncated: false,
+      }),
+    })
+    const response = await dispatchRoute(progressRoutes, context('GET', '/progressz'))
+
+    expect(response?.status).toBe(200)
+    expect(response?.body).toMatchObject({
+      mode: 'observe',
+      generation: 3,
+      counts: { healthy: 1 },
+      samples: [{ state: 'healthy', ageMs: 25, source: 'output_advance', generation: 3 }],
+    })
+    const serialized = JSON.stringify(response?.body)
+    expect(serialized).not.toMatch(/sessionId|runId|leaseOwner|tenant|filename/i)
+
+    const failed = await dispatchRoute(createJsonRoutes({
+      progressSnapshot: () => { throw new Error('token=must-not-leak') },
+    }), context('GET', '/progressz'))
+    expect(failed).toMatchObject({ status: 503, body: { error: 'progress_snapshot_unavailable' } })
+  })
+
   it('returns HTTP 503 when readiness is not_ready', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('OpenCode unavailable'))
     try {

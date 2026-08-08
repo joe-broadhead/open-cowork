@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   canAdvanceArtifactStatus,
   cloudArtifactFilePath,
@@ -13,13 +13,20 @@ import {
   type ArtifactStatus,
   type ArtifactStatusUpdateRequest,
 } from '@open-cowork/shared'
-import type { CloudArtifactIndexRecord } from './control-plane-store.ts'
+import type {
+  ArtifactUploadReservationRecord,
+  CloudArtifactIndexRecord,
+} from './control-plane-store.ts'
+import type { CloudArtifactDirectUploadConfig } from './artifact-direct-upload-config.ts'
+import { ArtifactUploadLifecycle } from './artifact-upload-lifecycle.ts'
 import type {
   ObjectStoreAdapter,
+  ObjectStorePresignedPostRequest,
   ObjectStorePresignedRequest,
   ObjectStorePresignedUploadCapability,
 } from './object-store.ts'
 import { artifactObjectKey } from './object-store.ts'
+import { recordCloudMetric, type CloudObservabilityAdapter } from './observability.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
 
 export type CloudArtifactRecord = {
@@ -86,12 +93,19 @@ type CloudArtifactMetadataInput = {
 }
 
 export type CloudArtifactPresignUploadInput = {
+  artifactId: string
   filename: string
   contentType?: string | null
+  checksumSha256: string
   expiresSeconds?: number
-  // Client-declared exact upload size, in bytes. Size-enforced object-store adapters bind
-  // their direct PUT request to this value; begin reserves it and finalize settles actual size.
   expectedSize?: number
+  kind?: ArtifactKind | null
+  status?: ArtifactStatus | null
+  authorAgentId?: string | null
+  projectId?: string | null
+  taskId?: string | null
+  statusUpdatedBy?: string | null
+  statusUpdatedAt?: string | null
 }
 
 export type CloudArtifactFinalizeUploadInput = {
@@ -110,6 +124,21 @@ export type CloudArtifactFinalizeUploadInput = {
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
 const MAX_ARTIFACT_INDEX_LIMIT = 500
 const MAX_SESSION_ARTIFACT_INDEX_LIMIT = 500
+const DIRECT_UPLOAD_CREDENTIAL_TTL_SECONDS = 15 * 60
+const DIRECT_UPLOAD_RESERVATION_GRACE_MS = 30_000
+const DIRECT_UPLOAD_CLAIM_TTL_MS = 30_000
+
+export type CloudArtifactDirectUploadOptions = {
+  config: CloudArtifactDirectUploadConfig
+  lifecycle: ArtifactUploadLifecycle
+  finalizationAvailable?: boolean
+  browserOrigin: string | null
+  claimOwner: string
+  claimTtlMs?: number
+  now?: () => Date
+  observability?: CloudObservabilityAdapter | null
+  cleanupOwnerReady?: () => boolean | Promise<boolean>
+}
 
 function boundedFilename(value: unknown) {
   if (typeof value !== 'string') throw new CloudServiceError(400, 'Artifact filename is required.')
@@ -161,6 +190,51 @@ function boundedExpectedSize(value: unknown): number {
   return value
 }
 
+function boundedChecksumSha256(value: unknown) {
+  if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value)) {
+    throw new CloudServiceError(400, 'Artifact checksumSha256 is invalid.')
+  }
+  return value
+}
+
+function canonicalHttpOrigin(value: unknown) {
+  if (typeof value !== 'string' || !value) return null
+  try {
+    const url = new URL(value)
+    if (
+      (url.protocol !== 'https:' && url.protocol !== 'http:')
+      || url.username
+      || url.password
+      || url.pathname !== '/'
+      || url.search
+      || url.hash
+    ) return null
+    return url.origin
+  } catch {
+    return null
+  }
+}
+
+function directUploadOriginsCompatible(providerOrigin: string, browserOrigin: string) {
+  const provider = canonicalHttpOrigin(providerOrigin)
+  const browser = canonicalHttpOrigin(browserOrigin)
+  return Boolean(provider && browser && (!browser.startsWith('https:') || provider.startsWith('https:')))
+}
+
+function validPresignedPostFields(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return false
+  const entries = Object.entries(value)
+  if (entries.length === 0 || entries.length > 64) return false
+  let totalBytes = 0
+  for (const [key, fieldValue] of entries) {
+    if (!key || key.length > 256 || typeof fieldValue !== 'string' || fieldValue.length > 16_384) return false
+    totalBytes += Buffer.byteLength(key, 'utf8') + Buffer.byteLength(fieldValue, 'utf8')
+  }
+  return totalBytes <= 64 * 1024
+}
+
 function sizeEnforcedPresignedUpload(
   objectStore: ObjectStoreAdapter,
 ): ObjectStorePresignedUploadCapability | null {
@@ -170,7 +244,13 @@ function sizeEnforcedPresignedUpload(
     || capability.enforcement !== 'exact-content-length'
     || !Number.isSafeInteger(capability.maxBytes)
     || capability.maxBytes <= 0
-    || typeof capability.presignPut !== 'function'
+    || !canonicalHttpOrigin(capability.origin)
+    || typeof capability.verifyCleanupSafety !== 'function'
+    || typeof capability.verifyBrowserPostSafety !== 'function'
+    || typeof capability.presignPost !== 'function'
+    || typeof capability.inspect !== 'function'
+    || typeof capability.promote !== 'function'
+    || typeof capability.delete !== 'function'
   ) {
     return null
   }
@@ -195,15 +275,77 @@ function boundedStatus(value: unknown, fallback: ArtifactStatus) {
 function boundedArtifactId(value: unknown) {
   if (typeof value !== 'string') throw new CloudServiceError(400, 'Artifact id is required.')
   const trimmed = value.trim()
-  if (!trimmed || trimmed.length > 128 || !/^[A-Za-z0-9._-]+$/.test(trimmed)) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed)) {
     throw new CloudServiceError(400, 'Artifact id is invalid.')
   }
-  return trimmed
+  return trimmed.toLowerCase()
+}
+
+function opaqueDirectUploadKey(input: {
+  tenantId: string
+  sessionId: string
+  artifactId: string
+  stage: 'staging' | 'final'
+}) {
+  const digest = createHash('sha256')
+    .update('open-cowork-direct-upload-v1')
+    .update('\0')
+    .update(input.tenantId)
+    .update('\0')
+    .update(input.sessionId)
+    .update('\0')
+    .update(input.artifactId)
+    .digest('hex')
+  return `artifact-uploads/${input.stage}/${digest}`
+}
+
+function directUploadLifecycleAvailable(
+  objectStore: ObjectStoreAdapter,
+  options: CloudArtifactDirectUploadOptions | null,
+) {
+  if (
+    !options
+    || options.finalizationAvailable === false
+    || options.lifecycle.capability.persistence !== 'durable'
+    || options.lifecycle.capability.reconciliation !== 'bounded-claims'
+  ) return null
+  return objectStore.directUploadLifecycle || objectStore.presignedUpload || null
+}
+
+function directUploadIssuanceAvailable(
+  objectStore: ObjectStoreAdapter,
+  options: CloudArtifactDirectUploadOptions | null,
+) {
+  const lifecycle = directUploadLifecycleAvailable(objectStore, options)
+  const capability = sizeEnforcedPresignedUpload(objectStore)
+  if (
+    !lifecycle
+    || !capability
+    || !options
+    || options.config.mode !== 'enabled'
+    || options.config.configStatus !== 'valid'
+    || !options.browserOrigin
+    || !directUploadOriginsCompatible(capability.origin, options.browserOrigin)
+  ) return null
+  return capability
+}
+
+function directUploadCredentialSeconds(
+  reservation: ArtifactUploadReservationRecord,
+  now: Date,
+) {
+  const remainingMs = Date.parse(reservation.expiresAt) - now.getTime() - DIRECT_UPLOAD_RESERVATION_GRACE_MS
+  if (!Number.isFinite(remainingMs) || remainingMs < 1_000) return 0
+  return Math.min(DIRECT_UPLOAD_CREDENTIAL_TTL_SECONDS, Math.floor(remainingMs / 1_000))
 }
 
 // Validate + normalize the artifact metadata both upload paths persist, so the buffered upload
 // and the presigned finalize agree on bounds and on the derived defaults (kind/status/statusUpdatedAt).
-function resolveArtifactMetadataFields(input: CloudArtifactMetadataInput, createdAt: string) {
+function resolveArtifactMetadataFields(
+  input: CloudArtifactMetadataInput,
+  createdAt: string,
+  options: { deriveStatusTimestamp?: boolean } = {},
+) {
   const filename = boundedFilename(input.filename)
   const contentType = boundedContentType(input.contentType)
   const kind = boundedKind(input.kind, inferArtifactKind({ filename, mime: contentType }))
@@ -213,7 +355,10 @@ function resolveArtifactMetadataFields(input: CloudArtifactMetadataInput, create
   const taskId = boundedNullableString(input.taskId, 'Task id')
   const statusUpdatedBy = boundedNullableString(input.statusUpdatedBy, 'Status updated by')
   const explicitStatusUpdatedAt = boundedNullableIsoDate(input.statusUpdatedAt, 'Status updated at')
-  const statusUpdatedAt = explicitStatusUpdatedAt ?? ((input.status || input.statusUpdatedBy) ? createdAt : null)
+  const statusUpdatedAt = explicitStatusUpdatedAt
+    ?? (options.deriveStatusTimestamp === false
+      ? null
+      : (input.status || input.statusUpdatedBy) ? createdAt : null)
   return { filename, contentType, kind, status, authorAgentId, projectId, taskId, statusUpdatedBy, statusUpdatedAt }
 }
 
@@ -393,19 +538,18 @@ export class CloudArtifactService {
   private readonly sessionService: CloudSessionService
   private readonly objectStore: ObjectStoreAdapter
   private readonly ids: { randomUUID: () => string }
-  // Cached serialized origin of the object store's presigned URLs (or null when the store
-  // cannot presign). The store config is fixed for the server's lifetime, so this is
-  // computed once. See presignedUploadOrigin (SEC-2).
-  private cachedPresignedUploadOrigin: string | null | undefined
+  private readonly directUpload: CloudArtifactDirectUploadOptions | null
 
   constructor(
     sessionService: CloudSessionService,
     objectStore: ObjectStoreAdapter,
     ids: { randomUUID: () => string } = { randomUUID },
+    options: { directUpload?: CloudArtifactDirectUploadOptions | null } = {},
   ) {
     this.sessionService = sessionService
     this.objectStore = objectStore
     this.ids = ids
+    this.directUpload = options.directUpload || null
   }
 
   async uploadSessionArtifact(
@@ -443,56 +587,119 @@ export class CloudArtifactService {
     })
   }
 
-  // Begin a direct-to-store upload only for an adapter that explicitly enforces both the declared
-  // exact content length and a maximum. The client then calls finalizeSessionArtifactUpload to
-  // record the metadata row. An unqualified adapter returns null so the route signals "unsupported"
-  // and the client falls back to the bounded buffered uploadSessionArtifact path.
+  // Authenticate first, then bind one client idempotency key to durable quota, metadata,
+  // opaque staging/final keys, checksum, and expiry before any credentials can escape.
   async presignSessionArtifactUpload(
     principal: CloudPrincipal,
     sessionId: string,
     input: CloudArtifactPresignUploadInput,
-  ): Promise<{ artifactId: string, key: string, presigned: ObjectStorePresignedRequest } | null> {
-    const uploadCapability = sizeEnforcedPresignedUpload(this.objectStore)
-    if (!uploadCapability) return null
+  ): Promise<{ artifactId: string, presigned: ObjectStorePresignedPostRequest } | null> {
     await this.sessionService.getSessionView(principal, sessionId)
-    const filename = boundedFilename(input.filename)
-    const contentType = boundedContentType(input.contentType)
+    const uploadCapability = directUploadIssuanceAvailable(this.objectStore, this.directUpload)
+    if (!uploadCapability || !this.directUpload) return null
+    if (this.directUpload.cleanupOwnerReady && !await this.directUpload.cleanupOwnerReady()) return null
+    const now = this.directUpload.now?.() || new Date()
+    const artifactId = boundedArtifactId(input.artifactId)
+    // Reservation rows are eventually pruned, but a published artifact identity remains
+    // durable. Never let a later begin reuse its deterministic keys, event id, or usage id.
+    if (await this.findSessionArtifact(principal, sessionId, artifactId)) {
+      throw new CloudServiceError(409, 'Cloud artifact identity is already published.')
+    }
+    const checksumSha256 = boundedChecksumSha256(input.checksumSha256)
+    const replay = await this.sessionService.domains.usage.getArtifactUploadReservation(principal, {
+      sessionId,
+      artifactId,
+    })
+    const meta = resolveArtifactMetadataFields(input, replay?.createdAt || now.toISOString())
     const expectedBytes = boundedExpectedSize(input.expectedSize)
     if (expectedBytes > uploadCapability.maxBytes) throw new CloudServiceError(413, 'Artifact is too large.')
-    const artifactId = this.ids.randomUUID()
-    const key = artifactObjectKey({
+    const stagingObjectKey = opaqueDirectUploadKey({
       tenantId: principal.tenantId,
       sessionId,
       artifactId,
-      filename,
+      stage: 'staging',
     })
-    const presigned = await uploadCapability.presignPut({
-      key,
-      contentType,
-      expectedSize: expectedBytes,
-      expiresSeconds: input.expiresSeconds,
-    })
-    if (!presigned || presigned.method !== 'PUT') return null
-    // SEC-1: the minted PUT URL writes bytes STRAIGHT to the object store, bypassing the
-    // pod. Reserve quota before returning it; finalize settles only the delta between this
-    // expected-size reservation and the authoritative stored size.
-    await this.sessionService.domains.usage.reserveArtifactUploadQuota(principal, {
+    const finalObjectKey = opaqueDirectUploadKey({
+      tenantId: principal.tenantId,
       sessionId,
       artifactId,
-      objectKey: key,
-      filename,
-      contentType,
-      expectedBytes,
-      expiresAt: presigned.expiresAt,
+      stage: 'final',
     })
-    return { artifactId, key, presigned }
+    const requestedCredentialSeconds = Math.min(
+      DIRECT_UPLOAD_CREDENTIAL_TTL_SECONDS,
+      Math.max(1, Math.floor(input.expiresSeconds || DIRECT_UPLOAD_CREDENTIAL_TTL_SECONDS)),
+    )
+    const reservation = await this.sessionService.domains.usage.reserveArtifactUploadQuota(principal, {
+      sessionId,
+      artifactId,
+      objectKey: finalObjectKey,
+      stagingObjectKey,
+      finalObjectKey,
+      filename: meta.filename,
+      contentType: meta.contentType,
+      checksumSha256,
+      expectedBytes,
+      createdAt: now,
+      expiresAt: new Date(
+        now.getTime() + requestedCredentialSeconds * 1_000 + DIRECT_UPLOAD_RESERVATION_GRACE_MS,
+      ).toISOString(),
+      publication: {
+        kind: meta.kind,
+        artifactStatus: meta.status,
+        authorAgentId: meta.authorAgentId,
+        projectId: meta.projectId,
+        taskId: meta.taskId,
+        statusUpdatedBy: meta.statusUpdatedBy,
+        statusUpdatedAt: meta.statusUpdatedAt,
+      },
+    })
+    if (reservation.status !== 'reserved') {
+      throw new CloudServiceError(409, `Cloud artifact upload reservation is ${reservation.status}.`)
+    }
+    const credentialSeconds = directUploadCredentialSeconds(reservation, this.directUpload.now?.() || new Date())
+    if (credentialSeconds <= 0) {
+      await this.abortDirectUpload(principal, sessionId, artifactId)
+      await this.recordDirectUploadOutcome('expired')
+      throw new CloudServiceError(409, 'Cloud artifact upload reservation expired.')
+    }
+    try {
+      const presigned = await uploadCapability.presignPost({
+        key: reservation.stagingObjectKey,
+        contentType: reservation.contentType,
+        expectedSize: reservation.reservedBytes,
+        checksumSha256: reservation.checksumSha256 || '',
+        browserOrigin: this.directUpload.browserOrigin!,
+        expiresSeconds: credentialSeconds,
+      })
+      if (
+        !presigned
+        || presigned.method !== 'POST'
+        || !validPresignedPostFields(presigned.fields)
+      ) {
+        throw new Error('Direct-upload provider returned an invalid credential contract.')
+      }
+      const credentialExpiresAtMs = Date.parse(presigned.expiresAt)
+      const reservationCredentialLimitMs = Date.parse(reservation.expiresAt) - DIRECT_UPLOAD_RESERVATION_GRACE_MS
+      const presignedUrl = new URL(presigned.url)
+      if (
+        !Number.isFinite(credentialExpiresAtMs)
+        || credentialExpiresAtMs <= (this.directUpload.now?.() || new Date()).getTime()
+        || credentialExpiresAtMs > reservationCredentialLimitMs
+        || presignedUrl.username
+        || presignedUrl.password
+        || presignedUrl.origin !== canonicalHttpOrigin(uploadCapability.origin)
+      ) {
+        throw new Error('Direct-upload provider returned an invalid credential contract.')
+      }
+      await this.recordDirectUploadOutcome('reserved')
+      return { artifactId, presigned }
+    } catch {
+      await this.abortDirectUpload(principal, sessionId, artifactId)
+      await this.recordDirectUploadOutcome('rejected')
+      throw new CloudServiceError(503, 'Cloud artifact direct upload is temporarily unavailable.')
+    }
   }
 
-  // Record the artifact row after a presigned direct PUT has landed the bytes in object storage.
-  // The object key is re-derived server-side from the (validated) artifact id + filename — the
-  // client's reported key is never trusted. headObject confirms the PUT actually happened and
-  // yields the authoritative stored size/content-type, which drives quota + usage attribution
-  // exactly like the buffered path. A missing object throws 409 so the client can retry/fall back.
   async finalizeSessionArtifactUpload(
     principal: CloudPrincipal,
     sessionId: string,
@@ -500,53 +707,118 @@ export class CloudArtifactService {
   ): Promise<CloudArtifactRecord> {
     await this.sessionService.getSessionView(principal, sessionId)
     const artifactId = boundedArtifactId(input.artifactId)
-    const createdAt = new Date().toISOString()
-    const meta = resolveArtifactMetadataFields(input, createdAt)
-    const key = artifactObjectKey({
-      tenantId: principal.tenantId,
+    const uploadCapability = directUploadLifecycleAvailable(this.objectStore, this.directUpload)
+    if (!uploadCapability || !this.directUpload) {
+      throw new CloudServiceError(409, 'Cloud artifact direct upload is not enabled.')
+    }
+    const issuanceAvailable = sizeEnforcedPresignedUpload(this.objectStore) !== null
+    const cleanupSafe = issuanceAvailable
+      && this.directUpload.config.mode === 'enabled'
+      && this.directUpload.cleanupOwnerReady
+      ? await this.directUpload.cleanupOwnerReady()
+      : await uploadCapability.verifyCleanupSafety()
+    if (!cleanupSafe) {
+      throw new CloudServiceError(503, 'Cloud artifact upload cleanup safety is not attested.')
+    }
+    const reservation = await this.sessionService.domains.usage.getArtifactUploadReservation(principal, { sessionId, artifactId })
+    if (!reservation) throw new CloudServiceError(409, 'Cloud artifact upload reservation was not found.')
+    const requested = resolveArtifactMetadataFields(input, reservation.createdAt)
+    if (!this.directUploadMetadataMatches(requested, reservation)) {
+      await this.abortDirectUpload(principal, sessionId, artifactId)
+      await this.recordDirectUploadOutcome('rejected')
+      throw new CloudServiceError(409, 'Cloud artifact upload metadata does not match its reservation.')
+    }
+    let result: Awaited<ReturnType<ArtifactUploadLifecycle['finalize']>>
+    try {
+      result = await this.directUpload.lifecycle.finalize({
+        orgId: reservation.orgId,
+        tenantId: reservation.tenantId,
+        sessionId,
+        artifactId,
+        claimOwner: this.directUpload.claimOwner,
+        claimTtlMs: this.directUpload.claimTtlMs || DIRECT_UPLOAD_CLAIM_TTL_MS,
+      })
+    } catch {
+      await this.recordDirectUploadOutcome('cleanup_failed')
+      throw new CloudServiceError(503, 'Cloud artifact upload finalization is temporarily unavailable.')
+    }
+    if (result.outcome !== 'finalized' && result.outcome !== 'already_finalized') {
+      await this.recordDirectUploadOutcome(result.outcome === 'rejected' ? 'rejected' : 'cleanup_failed')
+      throw new CloudServiceError(409, 'Cloud artifact upload is not ready to finalize.')
+    }
+    const finalized = result.reservation || reservation
+    const published = await this.findSessionArtifact(principal, sessionId, artifactId)
+      || await this.sessionService.publishFinalizedArtifactUpload(finalized)
+    await this.recordDirectUploadOutcome('finalized')
+    this.sessionService.auditPrincipalAction(principal, {
+      eventType: 'artifact.uploaded',
+      targetType: 'artifact',
+      targetId: artifactId,
+      metadata: { sessionId, size: finalized.reservedBytes, mode: 'direct' },
+    })
+    return published
+  }
+
+  async abortSessionArtifactUpload(
+    principal: CloudPrincipal,
+    sessionId: string,
+    artifactIdInput: string,
+  ) {
+    await this.sessionService.getSessionView(principal, sessionId)
+    const artifactId = boundedArtifactId(artifactIdInput)
+    const result = await this.abortDirectUpload(principal, sessionId, artifactId)
+    if (result) {
+      await this.recordDirectUploadOutcome(
+        result.outcome === 'cleaned' || result.outcome === 'cleanup_pending' ? 'aborted' : 'cleanup_failed',
+      )
+    }
+    return result
+  }
+
+  private async abortDirectUpload(
+    principal: CloudPrincipal,
+    sessionId: string,
+    artifactId: string,
+  ) {
+    if (!this.directUpload) return null
+    const reservation = await this.sessionService.domains.usage.getArtifactUploadReservation(principal, {
       sessionId,
       artifactId,
-      filename: meta.filename,
     })
-    const existing = await this.findSessionArtifact(principal, sessionId, artifactId)
-    if (existing) return existing
-    const head = await this.objectStore.headObject(key)
-    if (!head) throw new CloudServiceError(409, 'Cloud artifact upload was not found in object storage.')
-    const reservation = await this.sessionService.domains.usage.getArtifactUploadReservation(principal, { sessionId, artifactId })
-    if (!reservation) {
-      await this.objectStore.deleteObject(key)
-      throw new CloudServiceError(409, 'Cloud artifact upload reservation was not found.')
-    }
-    if (reservation.status === 'expired' || Date.parse(reservation.expiresAt) <= Date.now()) {
-      await this.objectStore.deleteObject(key)
-      await this.sessionService.domains.usage.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'expired' })
-      throw new CloudServiceError(409, 'Cloud artifact upload reservation expired.')
-    }
-    if (reservation.status === 'failed') {
-      await this.objectStore.deleteObject(key)
-      throw new CloudServiceError(409, 'Cloud artifact upload reservation failed.')
-    }
-    if (head.size > MAX_ARTIFACT_BYTES) {
-      await this.objectStore.deleteObject(key)
-      await this.sessionService.domains.usage.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'failed' })
-      throw new CloudServiceError(413, 'Artifact is too large.')
-    }
-    try {
-      await this.sessionService.domains.usage.settleArtifactUploadQuotaReservation(principal, { sessionId, artifactId, actualBytes: head.size })
-    } catch (error) {
-      if (error instanceof CloudServiceError) {
-        await this.objectStore.deleteObject(key)
-        await this.sessionService.domains.usage.releaseArtifactUploadQuotaReservation(principal, { sessionId, artifactId, status: 'failed' })
-      }
-      throw error
-    }
-    return this.persistUploadedArtifact(principal, sessionId, {
-      ...meta,
-      contentType: meta.contentType ?? head.contentType ?? null,
+    if (!reservation) return null
+    return this.directUpload.lifecycle.abort({
+      orgId: reservation.orgId,
+      tenantId: reservation.tenantId,
+      sessionId,
       artifactId,
-      size: head.size,
-      key,
-      createdAt,
+      claimOwner: this.directUpload.claimOwner,
+      claimTtlMs: this.directUpload.claimTtlMs || DIRECT_UPLOAD_CLAIM_TTL_MS,
+    })
+  }
+
+  private directUploadMetadataMatches(
+    requested: ReturnType<typeof resolveArtifactMetadataFields>,
+    reservation: ArtifactUploadReservationRecord,
+  ) {
+    return requested.filename === reservation.filename
+      && requested.contentType === reservation.contentType
+      && requested.kind === reservation.publication.kind
+      && requested.status === reservation.publication.artifactStatus
+      && requested.authorAgentId === reservation.publication.authorAgentId
+      && requested.projectId === reservation.publication.projectId
+      && requested.taskId === reservation.publication.taskId
+      && requested.statusUpdatedBy === reservation.publication.statusUpdatedBy
+      && requested.statusUpdatedAt === reservation.publication.statusUpdatedAt
+  }
+
+  private recordDirectUploadOutcome(
+    outcome: 'reserved' | 'finalized' | 'aborted' | 'expired' | 'rejected' | 'cleanup_failed',
+  ) {
+    return recordCloudMetric(this.directUpload?.observability, {
+      name: 'open_cowork_cloud_artifact_direct_upload_outcomes_total',
+      value: 1,
+      unit: '1',
+      attributes: { upload_outcome: outcome },
     })
   }
 
@@ -780,29 +1052,22 @@ export class CloudArtifactService {
     })
   }
 
-  // SEC-2: the serialized origin (scheme://host[:port]) the object store's size-enforced
-  // presigned PUT URLs target, so the served renderer's CSP connect-src can allow the browser
-  // shim's direct transfer to that cross-origin store. Derived by signing a throwaway probe key and
-  // reading its URL origin (presigning is a local, side-effect-free computation; the probe
-  // URL is never used). Returns null without the qualified capability, so the caller leaves
-  // connect-src 'self'. Cached because the store configuration is fixed for the server lifetime.
+  // Read the provider's fixed origin without minting a throwaway credential. The origin is
+  // advertised only when the complete durable direct-upload contract is enabled and its
+  // cleanup owner is currently ready. Readiness is intentionally re-evaluated: caching a
+  // transient false result would permanently disable the browser path after startup.
   async presignedUploadOrigin(): Promise<string | null> {
-    if (this.cachedPresignedUploadOrigin !== undefined) return this.cachedPresignedUploadOrigin
     let origin: string | null = null
-    const uploadCapability = sizeEnforcedPresignedUpload(this.objectStore)
-    if (uploadCapability) {
+    const uploadCapability = directUploadIssuanceAvailable(this.objectStore, this.directUpload)
+    if (uploadCapability && this.directUpload?.browserOrigin) {
       try {
-        const probe = await uploadCapability.presignPut({
-          key: 'csp-origin-probe',
-          contentType: null,
-          expectedSize: 1,
-        })
-        origin = probe?.method === 'PUT' ? new URL(probe.url).origin : null
+        const cleanupReady = !this.directUpload?.cleanupOwnerReady
+          || await this.directUpload.cleanupOwnerReady()
+        origin = cleanupReady ? new URL(uploadCapability.origin).origin : null
       } catch {
         origin = null
       }
     }
-    this.cachedPresignedUploadOrigin = origin
     return origin
   }
 }

@@ -10,6 +10,7 @@ import type { CompiledCloudRuntimeCapabilityPolicy } from './cloud-runtime-capab
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import type { CloudReadinessReport } from './readiness.ts'
+import type { CloudProgressWatchdogSnapshot } from './progress-watchdog.ts'
 import type {
   CloudCookieSession,
   CloudSessionCookieManager,
@@ -85,6 +86,7 @@ export type CloudHttpServerOptions = {
   trustProxyHeaders?: boolean
   trustedProxyCidrs?: readonly string[] | null
   readiness?: () => Promise<CloudReadinessReport> | CloudReadinessReport
+  progress?: () => Promise<CloudProgressWatchdogSnapshot> | CloudProgressWatchdogSnapshot
   knowledgeDataDir?: string | null
   /**
    * Backend for cloud knowledge wiki reads/writes. When omitted, the server

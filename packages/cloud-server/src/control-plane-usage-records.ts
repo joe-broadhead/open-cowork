@@ -1,4 +1,5 @@
 import type { CloudBillingEntitlements } from '@open-cowork/shared'
+import type { ArtifactKind, ArtifactStatus } from '@open-cowork/shared'
 import type { QuotaPolicyCode } from './control-plane-errors.ts'
 import type { BillingSubscriptionStatus, UsageEventType, UsageUnit } from './control-plane-enums.ts'
 
@@ -52,7 +53,29 @@ export type UsageQuotaCounterRecord = {
   quantity: number
 }
 
-export type ArtifactUploadReservationStatus = 'reserved' | 'settled' | 'expired' | 'failed'
+export type ArtifactUploadReservationStatus =
+  | 'reserved'
+  | 'finalizing'
+  | 'finalized'
+  | 'cleanup_pending'
+  | 'cleaned'
+
+export type ArtifactUploadCleanupReason = 'aborted' | 'expired' | 'mismatch' | 'failed'
+
+export type ArtifactUploadLifecycleCapability = {
+  persistence: 'ephemeral' | 'durable'
+  reconciliation: 'bounded-claims'
+}
+
+export type ArtifactUploadPublicationMetadata = {
+  kind: ArtifactKind
+  artifactStatus: ArtifactStatus
+  authorAgentId: string | null
+  projectId: string | null
+  taskId: string | null
+  statusUpdatedBy: string | null
+  statusUpdatedAt: string | null
+}
 
 export type ArtifactUploadReservationRecord = {
   orgId: string
@@ -61,17 +84,41 @@ export type ArtifactUploadReservationRecord = {
   sessionId: string
   artifactId: string
   objectKey: string
+  stagingObjectKey: string
+  finalObjectKey: string
   filename: string
   contentType: string | null
+  checksumSha256: string | null
+  stagingCleanedAt: string | null
+  publication: ArtifactUploadPublicationMetadata
   quotaKey: string | null
   quotaWindowMs: number | null
   quotaWindowStartedAtMs: number | null
   reservedBytes: number
-  settledBytes: number | null
   status: ArtifactUploadReservationStatus
+  cleanupReason: ArtifactUploadCleanupReason | null
+  cleanupRequestedAt: string | null
+  claimOwner: string | null
+  claimToken: string | null
+  claimExpiresAt: string | null
+  cleanupAttempts: number
+  cleanupPasses: number
+  finalizationAttempts: number
+  nextCleanupAttemptAt: string | null
+  lastErrorCode: string | null
   expiresAt: string
   createdAt: string
   updatedAt: string
+}
+
+export type ArtifactUploadReconciliationClaim = {
+  action: 'finalize' | 'cleanup' | 'cleanup_staging'
+  reservation: ArtifactUploadReservationRecord
+}
+
+export type ArtifactUploadReconciliationStats = {
+  pendingCount: number
+  oldestPendingAgeMs: number
 }
 
 export type RateLimitClaimRecord = {

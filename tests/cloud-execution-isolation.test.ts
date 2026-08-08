@@ -44,6 +44,7 @@ import {
   CloudRuntimeCapacityError,
   createWorkerScopedRuntimeAdapter,
 } from '@open-cowork/cloud-server/worker-scoped-runtime-adapter'
+import type { CloudRuntimeEventListener } from '@open-cowork/cloud-server/runtime-adapter'
 import type { SandboxRuntimeCommandRunner } from '@open-cowork/cloud-server/runtime-portability'
 import { sandboxWorkerOwnerHash } from '../packages/cloud-server/src/sandbox-orphan-cleanup.ts'
 
@@ -2912,6 +2913,12 @@ test('concurrent callers wait until the shared runtime event subscription is rea
       return {
         async promptSession() {
           promptCalls += 1
+          return {
+            events: [{
+              type: 'session.idle' as const,
+              payload: { sessionId: 'native-session' },
+            }],
+          }
         },
         async abortSession() {},
         async subscribeEvents() {
@@ -2945,6 +2952,104 @@ test('concurrent callers wait until the shared runtime event subscription is rea
     assert.equal(promptCalls, 2)
   } finally {
     releaseSubscription()
+    await runtime.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('overlapping prompt admission is rejected without replacing the active execution generation', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-isolation-prompt-admission-'))
+  const store = new InMemoryControlPlaneStore()
+  store.ensureOrgForTenant({ tenantId: 'tenant-a', name: 'Tenant A' })
+  let emitEvent: CloudRuntimeEventListener | null = null
+  const promptCalls: string[] = []
+  let markFirstAdmissionStarted!: () => void
+  const firstAdmissionStarted = new Promise<void>((resolve) => {
+    markFirstAdmissionStarted = resolve
+  })
+  let releaseFirstAdmission!: () => void
+  const firstAdmissionGate = new Promise<void>((resolve) => {
+    releaseFirstAdmission = resolve
+  })
+  const runtime = createWorkerScopedRuntimeAdapter({
+    paths: createCloudPathProvider(root),
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+    }),
+    env: {},
+    config: DEFAULT_CONFIG,
+    byokSecrets: createByokSecretStore(
+      store,
+      createEnvelopeSecretAdapter('prompt-admission-test-key'),
+    ),
+    runtimeFactory() {
+      return {
+        async promptSession(input) {
+          const runId = input.messageId || ''
+          promptCalls.push(runId)
+          if (runId === 'run-1') {
+            markFirstAdmissionStarted()
+            await firstAdmissionGate
+            return { admissionId: runId, admittedSequence: 1 }
+          }
+          return {
+            events: [{
+              type: 'session.idle' as const,
+              payload: { sessionId: input.sessionId },
+            }],
+          }
+        },
+        async abortSession() {},
+        subscribeEvents(listener) {
+          emitEvent = listener
+          return () => { emitEvent = null }
+        },
+        async close() {},
+      }
+    },
+  })
+  const context = {
+    tenantId: 'tenant-a',
+    sessionId: 'session-a',
+    lease: { owner: 'worker-a', epoch: 'lease-a' },
+  }
+  const prompt = (messageId: string) => runtime.promptSession({
+    sessionId: 'native-session', parts: [], agent: 'build', messageId, context,
+  })
+
+  try {
+    await runtime.subscribeEvents?.(() => undefined)
+    const first = prompt('run-1')
+    await firstAdmissionStarted
+    let secondError: unknown
+    let secondSettled = false
+    const second = prompt('run-2')
+      .catch((error: unknown) => { secondError = error })
+      .finally(() => { secondSettled = true })
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20))
+    assert.deepEqual(promptCalls, ['run-1'])
+    assert.equal(secondSettled, false)
+
+    releaseFirstAdmission()
+    await first
+    await second
+    assert.equal(
+      secondError instanceof CloudRuntimeCapacityError && secondError.reason === 'execution_active',
+      true,
+    )
+    assert.deepEqual(promptCalls, ['run-1'])
+
+    assert.ok(emitEvent)
+    await emitEvent!({
+      eventId: 'run-1-terminal',
+      type: 'session.idle',
+      payload: { sessionId: 'native-session' },
+    })
+    await prompt('run-3')
+    assert.deepEqual(promptCalls, ['run-1', 'run-3'])
+  } finally {
+    releaseFirstAdmission()
     await runtime.close?.()
     rmSync(root, { recursive: true, force: true })
   }
