@@ -140,32 +140,32 @@
     }
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1079.0",
+    "@aws-sdk/client-s3": "^3.1117.0",
     "@open-cowork/runtime-host": "workspace:*",
     "@open-cowork/shared": "workspace:*",
     "@opencode-ai/sdk": "1.18.1",
     "ajv": "^8.20.0",
     "google-auth-library": "^10.9.0",
     "opencode-ai": "1.18.1",
-    "pg": "^8.22.0"
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@changesets/cli": "2.31.1",
     "@electron/asar": "3.4.1",
-    "@electric-sql/pglite": "^0.5.4",
+    "@electric-sql/pglite": "^0.5.7",
     "@eslint/js": "^10.0.1",
     "@open-cowork/cloud-server": "workspace:*",
-    "@typescript-eslint/eslint-plugin": "^8.65.0",
-    "@typescript-eslint/parser": "^8.65.0",
+    "@typescript-eslint/eslint-plugin": "^8.68.0",
+    "@typescript-eslint/parser": "^8.68.0",
     "electron": "^43.2.0",
-    "esbuild": "^0.28.1",
-    "eslint": "^10.6.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.9.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-no-unsanitized": "^4.1.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-security": "^4.0.1",
-    "globals": "^17.7.0",
-    "knip": "^6.24.0",
+    "globals": "^17.11.0",
+    "knip": "^6.32.2",
     "semver": "^7.8.5",
     "zod": "^4.4.3"
   }
