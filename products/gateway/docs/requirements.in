@@ -4,5 +4,5 @@ mkdocs==1.6.1
 mkdocs-material==9.7.7
 mkdocs-minify-plugin==0.8.0
 # GHSA-9XWG-3R6F-JCX2: path traversal in b64 extension; fixed in 11.0.0+.
-pymdown-extensions==11.0.0
+pymdown-extensions==11.0.1
 Pygments==2.20.0
