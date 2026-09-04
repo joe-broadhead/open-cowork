@@ -810,14 +810,14 @@ jobs:
             > dist-oci/open-cowork-gateway.image.cosign-verify.json
 
       - name: Attest cloud image provenance
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ steps.cloud-meta.outputs.image }}
           subject-digest: ${{ steps.cloud-meta.outputs.digest }}
           push-to-registry: true
 
       - name: Attest gateway image provenance
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ steps.gateway-meta.outputs.image }}
           subject-digest: ${{ steps.gateway-meta.outputs.digest }}
@@ -1042,7 +1042,7 @@ jobs:
           test -s dist-artifacts/SHA256SUMS.txt.asc
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist-artifacts/**/*.dmg
@@ -1060,19 +1060,19 @@ jobs:
 
       - name: Attest detached checksum signature
         if: hashFiles('dist-artifacts/SHA256SUMS.txt.asc') != ''
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist-artifacts/SHA256SUMS.txt.asc
 
       - name: Attest signed macOS update feed metadata
         if: needs.build-macos.outputs.signing-mode == 'signed'
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist-artifacts/release-macos/latest-mac.yml
 
       - name: Attest signed Windows update feed metadata
         if: needs.build-windows.outputs.signing-mode == 'signed'
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist-artifacts/release-windows/latest.yml
 
