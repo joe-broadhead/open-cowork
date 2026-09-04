@@ -758,7 +758,7 @@ jobs:
           echo "digest_ref=${image}@${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Generate cloud image SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ${{ steps.cloud-meta.outputs.digest_ref }}
           format: cyclonedx-json
@@ -767,7 +767,7 @@ jobs:
           upload-release-assets: false
 
       - name: Generate gateway image SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ${{ steps.gateway-meta.outputs.digest_ref }}
           format: cyclonedx-json
@@ -990,7 +990,7 @@ jobs:
           tar -czf dist-artifacts/THIRD_PARTY_LICENSES.tar.gz -C source THIRD_PARTY_LICENSES
 
       - name: Generate CycloneDX SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: source
           format: cyclonedx-json
@@ -999,7 +999,7 @@ jobs:
           upload-release-assets: false
 
       - name: Generate SPDX SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: source
           format: spdx-json
