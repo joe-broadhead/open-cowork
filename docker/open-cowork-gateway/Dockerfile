@@ -1,4 +1,4 @@
-FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS build
+FROM node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS build
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN pnpm --filter "@open-cowork/channel-gateway..." run build
 # tests, MCPs, desktop artifacts, or release scripts ship in the public image.
 RUN node scripts/prune-gateway-runtime.mjs /runtime
 
-FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+FROM node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 
 WORKDIR /app
 
